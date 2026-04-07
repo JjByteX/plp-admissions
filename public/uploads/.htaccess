@@ -1,0 +1,9 @@
+# Block direct execution of any uploaded file
+# Only images and PDFs are served; PHP files are blocked.
+
+<FilesMatch "\.(php|php3|php4|php5|phtml|shtml|cgi|pl|py|rb)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+Options -Indexes

@@ -1,0 +1,32 @@
+Options -Indexes
+
+# Block direct access to sensitive directories
+<FilesMatch "\.(php|sql|log|env)$">
+    # Allow only index.php through the router
+</FilesMatch>
+
+RewriteEngine On
+
+# Serve existing files/dirs directly (CSS, JS, images, fonts)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Route everything else through index.php
+RewriteRule ^ index.php [QSA,L]
+
+# Prevent directory listing
+Options -Indexes
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Block access to hidden files
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
