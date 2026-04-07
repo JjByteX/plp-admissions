@@ -8,7 +8,7 @@ require_once CORE_PATH . '/bootstrap.php';
 
 // Already logged in — redirect home
 if (Auth::check()) {
-    redirect(Auth::homeUrl());
+    header("Location: " . Auth::homeUrl()); exit;
 }
 
 $errors = [];
@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($user && password_verify($password, $user['password_hash'])) {
             Auth::login($user);
-            redirect(Auth::homeUrl());
+            header("Location: " . Auth::homeUrl()); exit;
         } else {
             $errors['general'] = 'Incorrect email or password.';
         }

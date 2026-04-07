@@ -84,7 +84,7 @@ $showStepper  = $showStepper ?? false;
                     </svg>
                 </div>
                 <div class="dropdown-menu">
-                    <a href="<?= url('/student/settings') ?>" class="dropdown-item">
+                    <a href="<?= url(($userRole === 'student') ? '/student/settings' : (($userRole === 'staff') ? '/staff/settings' : '/admin/settings')) ?>" class="dropdown-item">
                         <?php include __DIR__ . '/../partials/icons/settings.svg.php'; ?>
                         Settings
                     </a>
@@ -107,33 +107,6 @@ $showStepper  = $showStepper ?? false;
          MAIN
     ==================================================== -->
     <div class="main">
-
-        <!-- Top bar -->
-        <header class="topbar">
-            <!-- Mobile hamburger -->
-            <button id="sidebar-toggle" class="btn-ghost btn btn-sm" aria-label="Open menu" style="display:none">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 6h18M3 12h18M3 18h18"/>
-                </svg>
-            </button>
-
-            <span class="topbar-title"><?= e($pageTitle) ?></span>
-
-            <div class="topbar-actions">
-                <!-- Theme toggle -->
-                <button class="theme-toggle" onclick="Theme.toggle()" aria-label="Toggle theme">
-                    <!-- Sun icon (shown in dark mode) -->
-                    <svg data-theme-icon="dark" class="hidden" width="16" height="16" fill="none" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/>
-                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                    </svg>
-                    <!-- Moon icon (shown in light mode) -->
-                    <svg data-theme-icon="light" width="16" height="16" fill="none" viewBox="0 0 24 24">
-                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                    </svg>
-                </button>
-            </div>
-        </header>
 
         <!-- Progress Stepper — students only -->
         <?php if ($showStepper && $userRole === 'student'): ?>

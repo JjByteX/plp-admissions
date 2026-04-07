@@ -18,18 +18,23 @@ define('PUBLIC_PATH', ROOT_PATH . '/public');
 define('UPLOAD_PATH', PUBLIC_PATH . '/uploads');
 
 // -- URL ---------------------------------------------------------
-// Change to your InfinityFree subdomain in production
-define('BASE_URL', APP_ENV === 'production'
-    ? 'https://plp-admissions.rf.gd'
-    : 'http://localhost/plp-admissions/public'
-);
+if (APP_ENV === 'production') {
+    define('BASE_URL', 'https://plp-admissions.rf.gd');
+} else {
+    $__scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $__host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $__script = $_SERVER['SCRIPT_NAME'] ?? '/plp-admissions/public/index.php';
+    $__base   = rtrim(dirname(dirname($__script)), '/\\');
+    define('BASE_URL', $__scheme . '://' . $__host . $__base . '/public');
+    unset($__scheme, $__host, $__script, $__base);
+}
 
 // -- Session -----------------------------------------------------
 define('SESSION_NAME',    'plp_session');
-define('SESSION_LIFETIME', 7200);   // 2 hours inactivity timeout (seconds)
+define('SESSION_LIFETIME', 7200);
 
 // -- File uploads ------------------------------------------------
-define('MAX_UPLOAD_BYTES', 5 * 1024 * 1024);   // 5 MB per document
+define('MAX_UPLOAD_BYTES', 5 * 1024 * 1024);
 define('ALLOWED_MIME_TYPES', ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 
 // -- Roles -------------------------------------------------------
@@ -47,7 +52,7 @@ define('DOCS_CORE', [
     'psa_birth_cert'     => 'PSA Birth Certificate',
     'report_card'        => 'Report Card (Form 138 / SF9)',
     'good_moral'         => 'Certificate of Good Moral Character',
-    'id_pictures'        => 'ID Pictures (1×1 or 2×2)',
+    'id_pictures'        => 'ID Pictures (1x1 or 2x2)',
     'hs_diploma'         => 'High School Diploma / Certificate of Graduation',
 ]);
 

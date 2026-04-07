@@ -85,7 +85,8 @@ class Auth
     public static function homeUrl(): string
     {
         return match (self::role()) {
-            ROLE_STAFF, ROLE_ADMIN => url('/staff/dashboard'),
+            ROLE_ADMIN => url("/admin/dashboard"),
+            ROLE_STAFF => url("/staff/dashboard"),
             default                => url('/student/dashboard'),
         };
     }

@@ -5,7 +5,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF);
+Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
 
 $db      = db();
 $userId  = Auth::id();

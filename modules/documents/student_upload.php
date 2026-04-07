@@ -237,7 +237,7 @@ $pct      = $total > 0 ? round(($uploaded / $total) * 100) : 0;
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>
-        <form method="POST" enctype="multipart/form-data">
+        <form method="POST" action="<?= url('/student/documents') ?>" enctype="multipart/form-data">
             <?= csrf_field() ?>
             <input type="hidden" name="doc_slug" id="modal-slug">
             <div class="modal-body">

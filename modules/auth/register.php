@@ -6,7 +6,7 @@
 
 require_once CORE_PATH . '/bootstrap.php';
 
-if (Auth::check()) redirect(Auth::homeUrl());
+if (Auth::check()) { header("Location: " . Auth::homeUrl()); exit; }
 
 $errors = [];
 $old    = [];
