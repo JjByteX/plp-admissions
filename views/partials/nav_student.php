@@ -3,12 +3,10 @@
 $nav = $activeNav ?? '';
 
 $items = [
-    ['href' => '/student/dashboard',  'key' => 'dashboard',  'label' => 'Dashboard',  'icon' => 'home'],
-    ['href' => '/student/documents',  'key' => 'documents',  'label' => 'Documents',  'icon' => 'file'],
+    ['href' => '/student/documents',  'key' => 'documents',  'label' => 'Documents',    'icon' => 'file'],
     ['href' => '/student/exam',       'key' => 'exam',       'label' => 'Entrance Exam','icon' => 'edit'],
-    ['href' => '/student/interview',  'key' => 'interview',  'label' => 'Interview',  'icon' => 'calendar'],
-    ['href' => '/student/result',     'key' => 'result',     'label' => 'My Result',  'icon' => 'award'],
-    ['href' => '/student/settings',   'key' => 'settings',   'label' => 'Settings',   'icon' => 'settings'],
+    ['href' => '/student/interview',  'key' => 'interview',  'label' => 'Interview',    'icon' => 'calendar'],
+    ['href' => '/student/result',     'key' => 'result',     'label' => 'My Result',    'icon' => 'award'],
 ];
 ?>
 <?php foreach ($items as $item): ?>

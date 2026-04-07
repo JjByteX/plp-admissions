@@ -10,7 +10,7 @@ Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
 csrf_check();
 
 $db     = db();
-$id     = (int)($routeParams['id'] ?? 0);
+$id     = (int)($_GET['id'] ?? 0);
 $action = $_POST['action'] ?? '';
 $staffId = Auth::id();
 
@@ -21,12 +21,28 @@ switch ($action) {
             'UPDATE documents SET status="approved", staff_remarks=NULL, reviewed_by=? WHERE id=?'
         );
         $stmt->execute([$staffId, $id]);
-        Session::flash('success', 'Document approved.');
-        // Redirect back to applicant review
+
+        // Get the applicant ID for this document
         $stmt = $db->prepare('SELECT applicant_id FROM documents WHERE id=?');
         $stmt->execute([$id]);
         $row = $stmt->fetch();
-        redirect('/staff/applicants/' . ($row['applicant_id'] ?? 0));
+        $applicantId = $row['applicant_id'] ?? 0;
+
+        // Auto-advance to exam stage if all documents are now approved
+        $stmt = $db->prepare(
+            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != "approved"'
+        );
+        $stmt->execute([$applicantId]);
+        $pendingCount = $stmt->fetchColumn();
+
+        if ($pendingCount == 0) {
+            $db->prepare(
+                'UPDATE applicants SET overall_status="exam" WHERE id=? AND overall_status NOT IN ("exam","interview","result")'
+            )->execute([$applicantId]);
+        }
+
+        Session::flash('success', 'Document approved.');
+        redirect('/staff/applicants/' . $applicantId);
         break;
 
     case 'reject':
@@ -52,7 +68,7 @@ switch ($action) {
     case 'advance_to_exam':
         // $id here is the applicant_id (see route: POST /staff/documents/{id})
         $stmt = $db->prepare(
-            'UPDATE applicants SET overall_status="exam" WHERE id=? AND overall_status="documents"'
+            'UPDATE applicants SET overall_status="exam" WHERE id=? AND overall_status IN ("pending","documents")'
         );
         $stmt->execute([$id]);
         Session::flash('success', 'Applicant advanced to entrance exam stage.');

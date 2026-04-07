@@ -13,13 +13,14 @@ $userId = Auth::id();
 $stmt = $db->prepare('SELECT * FROM applicants WHERE user_id=? ORDER BY id DESC LIMIT 1');
 $stmt->execute([$userId]);
 $applicant = $stmt->fetch();
-if (!$applicant) { redirect('/student/dashboard'); }
+if (!$applicant) { redirect('/student/documents'); }
 $applicantId = $applicant['id'];
 
-// Exam only available once docs approved
+// Stepper current step (always 'exam' here since that's the guard above)
+$stepperCurrent = 'exam';
 if ($applicant['overall_status'] !== 'exam') {
     Session::flash('error', 'You are not yet eligible to take the entrance exam.');
-    redirect('/student/dashboard');
+    redirect('/student/documents');
 }
 
 // Check if already submitted
@@ -27,7 +28,7 @@ $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $existing = $stmt->fetch();
 if ($existing) {
-    redirect('/student/dashboard');
+    redirect('/student/interview');
 }
 
 // Fetch active exam
@@ -84,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'Exam submitted! You scored %d out of %d.',
         $score, count($questions)
     ));
-    redirect('/student/dashboard');
+    redirect('/student/interview');
 }
 
 // ----------------------------------------------------------------
@@ -207,6 +208,12 @@ const interval = setInterval(() => {
 }, 1000);
 <?php endif; ?>
 </script>
+
+<!-- Step navigation -->
+<div class="step-nav" style="margin-top:var(--space-4)">
+    <a href="<?= url('/student/documents') ?>" class="btn btn-ghost">← Documents</a>
+    <span></span><!-- Next not available — exam has its own Submit button -->
+</div>
 
 <?php
 $content     = ob_get_clean();

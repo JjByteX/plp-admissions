@@ -13,13 +13,24 @@ $userId = Auth::id();
 $stmt = $db->prepare('SELECT * FROM applicants WHERE user_id=? ORDER BY id DESC LIMIT 1');
 $stmt->execute([$userId]);
 $applicant = $stmt->fetch();
-if (!$applicant) { redirect('/student/dashboard'); }
+if (!$applicant) { redirect('/student/documents'); }
 $applicantId = $applicant['id'];
+
+// Stepper current step
+$stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
+$stmt->execute([$applicantId]);
+$_examResult = $stmt->fetch() ?: null;
+
+$stmt = $db->prepare('SELECT * FROM admission_results WHERE applicant_id=? LIMIT 1');
+$stmt->execute([$applicantId]);
+$_admissionResult = $stmt->fetch() ?: null;
 
 // Check existing slot
 $stmt = $db->prepare('SELECT * FROM interview_slots WHERE assigned_applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $mySlot = $stmt->fetch() ?: null;
+
+$stepperCurrent = current_step($applicant, $_examResult, $mySlot, $_admissionResult);
 
 $errors = [];
 
@@ -64,13 +75,6 @@ $openSlots = $stmt->fetchAll();
 
 ob_start();
 ?>
-
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Interview</h1>
-        <p class="page-description">Book your admissions interview slot.</p>
-    </div>
-</div>
 
 <?php foreach ($errors as $err): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($err) ?></div>
@@ -142,6 +146,12 @@ ob_start();
         <button type="submit" class="btn btn-primary">Book Selected Slot</button>
     </form>
 <?php endif; ?>
+
+<!-- Step navigation -->
+<div class="step-nav">
+    <a href="<?= url('/student/documents') ?>" class="btn btn-ghost">← Documents</a>
+    <a href="<?= url('/student/result') ?>" class="btn btn-primary">My Result →</a>
+</div>
 
 <?php
 $content     = ob_get_clean();

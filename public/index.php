@@ -21,7 +21,6 @@ $router->get( '/reset-password',  'auth/reset_password');
 $router->post('/reset-password',  'auth/reset_password');
 
 // -- Student -----------------------------------------------------
-$router->get('/student/dashboard',  'auth/student/dashboard');
 $router->get('/student/documents',  'documents/student_upload');
 $router->post('/student/documents', 'documents/student_upload');
 $router->get('/student/exam',       'exam/take');

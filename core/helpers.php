@@ -111,7 +111,7 @@ function current_step(array $applicant, ?array $examResult, ?array $interviewSlo
 {
     if ($admissionResult)                          return 'result';
     if ($interviewSlot && $interviewSlot['status'] !== 'open') return 'interview';
-    if ($examResult)                               return 'exam';
+    if ($examResult)                               return 'interview';
     if ($applicant['overall_status'] === 'exam')   return 'exam';
     if ($applicant['overall_status'] === 'documents') return 'documents';
     return 'documents';

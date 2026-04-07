@@ -14,7 +14,7 @@ $db     = db();
 $stmt = $db->prepare('SELECT * FROM applicants WHERE user_id = ? ORDER BY id DESC LIMIT 1');
 $stmt->execute([$userId]);
 $applicant = $stmt->fetch();
-if (!$applicant) { redirect('/student/dashboard'); }
+if (!$applicant) { redirect('/student/documents'); }
 $applicantId = $applicant['id'];
 
 // Fetch existing document rows
@@ -26,6 +26,10 @@ $requiredDocs = docs_for_type($applicant['applicant_type']);
 
 $errors   = [];
 $success  = [];
+
+// Detect AJAX upload
+$isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+    && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
 // ----------------------------------------------------------------
 // POST — handle file upload
@@ -108,6 +112,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success[] = $requiredDocs[$docSlug] . ' uploaded successfully.';
         }
     }
+
+    // Return JSON for AJAX requests
+    if ($isAjax) {
+        header('Content-Type: application/json');
+        if (empty($errors)) {
+            echo json_encode(['ok' => true, 'message' => $success[0] ?? 'Uploaded successfully.']);
+        } else {
+            echo json_encode(['ok' => false, 'message' => implode(' ', $errors)]);
+        }
+        exit;
+    }
 }
 
 // Count statuses
@@ -115,18 +130,26 @@ $statusCounts = array_count_values(array_column($docRows, 'status'));
 $allApproved  = count($docRows) === count($requiredDocs)
     && ($statusCounts['approved'] ?? 0) === count($requiredDocs);
 
+// Stepper current step
+$stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
+$stmt->execute([$applicantId]);
+$_examResult = $stmt->fetch() ?: null;
+
+$stmt = $db->prepare('SELECT * FROM interview_slots WHERE assigned_applicant_id=? LIMIT 1');
+$stmt->execute([$applicantId]);
+$_interviewSlot = $stmt->fetch() ?: null;
+
+$stmt = $db->prepare('SELECT * FROM admission_results WHERE applicant_id=? LIMIT 1');
+$stmt->execute([$applicantId]);
+$_admissionResult = $stmt->fetch() ?: null;
+
+$stepperCurrent = current_step($applicant, $_examResult, $_interviewSlot, $_admissionResult);
+
 // ----------------------------------------------------------------
 // View
 // ----------------------------------------------------------------
 ob_start();
 ?>
-
-<div class="page-header">
-    <div>
-        <h1 class="page-title">My Documents</h1>
-        <p class="page-description">Upload all required documents to advance your application.</p>
-    </div>
-</div>
 
 <?php foreach ($errors as $err): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-4)">
@@ -142,10 +165,20 @@ ob_start();
     </div>
 <?php endforeach; ?>
 
-<?php if ($allApproved): ?>
+<?php if ($allApproved && !$_examResult): ?>
+    <div class="alert alert-success" style="margin-bottom:var(--space-6);display:flex;align-items:center;justify-content:space-between;gap:var(--space-4)">
+        <div style="display:flex;align-items:center;gap:var(--space-2)">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span><strong>All documents approved!</strong> You may now proceed to the entrance exam.</span>
+        </div>
+        <a href="<?= url('/student/exam') ?>" class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0">
+            Take Entrance Exam →
+        </a>
+    </div>
+<?php elseif ($allApproved && $_examResult): ?>
     <div class="alert alert-success" style="margin-bottom:var(--space-6)">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <strong>All documents approved!</strong> You may now proceed to the entrance exam.
+        <span><strong>All documents approved</strong> and entrance exam completed. Proceed to your interview scheduling.</span>
     </div>
 <?php endif; ?>
 
@@ -215,7 +248,7 @@ $pct      = $total > 0 ? round(($uploaded / $total) * 100) : 0;
             <!-- Upload button -->
             <?php if ($canUpload): ?>
                 <button class="btn btn-secondary btn-sm"
-                        onclick="openUploadModal('<?= $slug ?>', <?= json_encode($label) ?>)">
+                        onclick="openUploadModal('<?= $slug ?>', <?= htmlspecialchars(json_encode($label), ENT_QUOTES) ?>)">
                     <?= $status === 'rejected' ? 'Re-upload' : 'Upload' ?>
                 </button>
             <?php elseif ($doc && $doc['file_path']): ?>
@@ -237,54 +270,185 @@ $pct      = $total > 0 ? round(($uploaded / $total) * 100) : 0;
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>
-        <form method="POST" action="<?= url('/student/documents') ?>" enctype="multipart/form-data">
+        <form id="upload-form" enctype="multipart/form-data">
             <?= csrf_field() ?>
             <input type="hidden" name="doc_slug" id="modal-slug">
             <div class="modal-body">
-                <div class="file-drop-zone" id="drop-zone">
-                    <input type="file" name="doc_file" id="file-input" class="file-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                <div class="file-drop-zone" id="drop-zone"
+                     data-no-auto-click style="cursor:pointer">
+                    <input type="file" name="doc_file" id="file-input" class="file-input"
+                           accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none">
                     <div class="file-drop-content" id="drop-content">
                         <svg width="32" height="32" fill="none" viewBox="0 0 24 24" style="color:var(--text-tertiary);margin-bottom:var(--space-3)"><path stroke="currentColor" stroke-width="1.5" d="M4 16l4-4 4 4 4-8 4 4"/><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 20h16"/></svg>
                         <p style="font-weight:var(--weight-medium)">Drop your file here</p>
-                        <p style="font-size:var(--text-sm);color:var(--text-tertiary)">or <span style="color:var(--accent);cursor:pointer" onclick="document.getElementById('file-input').click()">browse</span></p>
+                        <p style="font-size:var(--text-sm);color:var(--text-tertiary)">or <span style="color:var(--accent)">browse</span></p>
                         <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">PDF, JPG, PNG or WEBP · max 5 MB</p>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-ghost" onclick="closeUploadModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary">Upload</button>
+                <button type="button" id="upload-submit-btn" class="btn btn-primary" onclick="submitUpload()">Upload</button>
             </div>
         </form>
     </div>
 </div>
 
+<!-- Result popup (success / error) -->
+<div id="result-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
+    <div class="modal" style="max-width:380px;text-align:center">
+        <div class="modal-body" style="padding:var(--space-8) var(--space-6)">
+            <div id="result-icon" style="margin:0 auto var(--space-4);width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center"></div>
+            <div id="result-title" style="font-size:var(--text-lg);font-weight:var(--weight-semibold);color:var(--text-primary);margin-bottom:var(--space-2)"></div>
+            <div id="result-msg" style="font-size:var(--text-sm);color:var(--text-secondary)"></div>
+        </div>
+        <div class="modal-footer" style="justify-content:center">
+            <button class="btn btn-primary" onclick="closeResultModal()">Done</button>
+        </div>
+    </div>
+</div>
+
 <script>
+const UPLOAD_URL = '<?= url('/student/documents') ?>';
+const CSRF_TOKEN = document.querySelector('#upload-form [name="_token"]')?.value ?? '';
+
 function openUploadModal(slug, label) {
     document.getElementById('modal-slug').value = slug;
     document.getElementById('modal-doc-name').textContent = 'Upload: ' + label;
+    // Reset drop zone
+    document.getElementById('file-input').value = '';
+    document.getElementById('drop-content').innerHTML =
+        '<svg width="32" height="32" fill="none" viewBox="0 0 24 24" style="color:var(--text-tertiary);margin-bottom:var(--space-3)"><path stroke="currentColor" stroke-width="1.5" d="M4 16l4-4 4 4 4-8 4 4"/><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 20h16"/></svg>' +
+        '<p style="font-weight:var(--weight-medium)">Drop your file here</p>' +
+        '<p style="font-size:var(--text-sm);color:var(--text-tertiary)">or <span style="color:var(--accent)">browse</span></p>' +
+        '<p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">PDF, JPG, PNG or WEBP · max 5 MB</p>';
     const modal = document.getElementById('upload-modal');
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
 }
+
 function closeUploadModal() {
     const modal = document.getElementById('upload-modal');
     modal.style.display = 'none';
     modal.setAttribute('aria-hidden', 'true');
 }
+
+function showResultModal(ok, title, msg) {
+    const iconEl  = document.getElementById('result-icon');
+    const titleEl = document.getElementById('result-title');
+    const msgEl   = document.getElementById('result-msg');
+
+    if (ok) {
+        iconEl.style.background = 'var(--success-bg, #d1fae5)';
+        iconEl.innerHTML = '<svg width="28" height="28" fill="none" viewBox="0 0 24 24" style="color:var(--success,#059669)"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M5 13l4 4L19 7"/></svg>';
+    } else {
+        iconEl.style.background = 'var(--error-bg, #fee2e2)';
+        iconEl.innerHTML = '<svg width="28" height="28" fill="none" viewBox="0 0 24 24" style="color:var(--error,#dc2626)"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+    }
+
+    titleEl.textContent = title;
+    msgEl.textContent   = msg;
+
+    const modal = document.getElementById('result-modal');
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeResultModal() {
+    document.getElementById('result-modal').style.display = 'none';
+    document.getElementById('result-modal').setAttribute('aria-hidden', 'true');
+    // Reload page to reflect updated doc statuses
+    window.location.reload();
+}
+
+async function submitUpload() {
+    const fileInput = document.getElementById('file-input');
+    if (!fileInput.files.length) {
+        showResultModal(false, 'No file selected', 'Please choose a file before uploading.');
+        closeUploadModal();
+        return;
+    }
+
+    const btn = document.getElementById('upload-submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+
+    const formData = new FormData(document.getElementById('upload-form'));
+
+    try {
+        const res  = await fetch(UPLOAD_URL, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData,
+        });
+        const data = await res.json();
+        closeUploadModal();
+        if (data.ok) {
+            showResultModal(true, 'Upload successful!', data.message);
+        } else {
+            showResultModal(false, 'Upload failed', data.message);
+        }
+    } catch (err) {
+        closeUploadModal();
+        showResultModal(false, 'Network error', 'Something went wrong. Please try again.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Upload';
+    }
+}
+
+// Close upload modal on backdrop click
 document.getElementById('upload-modal').addEventListener('click', function(e) {
     if (e.target === this) closeUploadModal();
 });
-// Show chosen filename
-document.getElementById('file-input').addEventListener('change', function() {
-    const name = this.files[0]?.name;
-    if (name) {
-        document.getElementById('drop-content').innerHTML =
-            '<p style="font-weight:var(--weight-medium);color:var(--accent)">' + name + '</p>' +
-            '<p style="font-size:var(--text-sm);color:var(--text-tertiary)">Ready to upload</p>';
+
+// Drag-and-drop support
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent)'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = ''; });
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.style.borderColor = '';
+    const files = e.dataTransfer?.files;
+    if (files?.length) {
+        document.getElementById('file-input').files = files;
+        updateDropLabel(files[0].name);
     }
 });
+
+// Single click handler — open file picker once.
+// We handle it here so app.js FileDropZone doesn't fire a second input.click().
+dropZone.addEventListener('click', (e) => {
+    if (e.target !== document.getElementById('file-input')) {
+        e.stopPropagation();
+        document.getElementById('file-input').click();
+    }
+});
+
+// Show chosen filename
+document.getElementById('file-input').addEventListener('change', function() {
+    if (this.files[0]) updateDropLabel(this.files[0].name);
+});
+
+function updateDropLabel(name) {
+    document.getElementById('drop-content').innerHTML =
+        '<svg width="28" height="28" fill="none" viewBox="0 0 24 24" style="color:var(--accent);margin-bottom:var(--space-2)"><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/></svg>' +
+        '<p style="font-weight:var(--weight-medium);color:var(--accent)">' + name + '</p>' +
+        '<p style="font-size:var(--text-sm);color:var(--text-tertiary)">Ready to upload</p>';
+}
 </script>
+
+<!-- Step navigation -->
+<div class="step-nav">
+    <span></span>
+    <?php if ($_examResult): ?>
+        <a href="<?= url('/student/interview') ?>" class="btn btn-primary">Interview →</a>
+    <?php elseif ($allApproved): ?>
+        <a href="<?= url('/student/exam') ?>" class="btn btn-primary">Entrance Exam →</a>
+    <?php else: ?>
+        <span class="btn btn-primary" style="opacity:.4;cursor:not-allowed" title="All documents must be approved first">Entrance Exam →</span>
+    <?php endif; ?>
+</div>
 
 <?php
 $content     = ob_get_clean();

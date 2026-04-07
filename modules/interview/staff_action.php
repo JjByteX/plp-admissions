@@ -9,7 +9,7 @@ Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
 csrf_check();
 
 $db     = db();
-$slotId = (int)($routeParams['id'] ?? 0);
+$slotId = (int)($_GET['id'] ?? 0);
 $action = $_POST['action'] ?? '';
 
 switch ($action) {

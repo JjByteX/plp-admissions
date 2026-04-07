@@ -14,6 +14,7 @@ $userRole     = $authUser['role'] ?? 'student';
 $pageTitle    = $pageTitle ?? 'Dashboard';
 $activeNav    = $activeNav ?? '';
 $showStepper  = $showStepper ?? false;
+$isStudent    = ($userRole === 'student');
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
@@ -40,10 +41,67 @@ $showStepper  = $showStepper ?? false;
 </head>
 <body>
 
-<div class="layout">
+<div class="layout <?= $isStudent ? 'layout-student' : '' ?>">
+
+<?php if ($isStudent): ?>
 
     <!-- ====================================================
-         SIDEBAR
+         STUDENT HEADER (no sidebar)
+    ==================================================== -->
+    <header class="student-header">
+
+        <!-- Brand -->
+        <div class="student-header-brand">
+            <?php if ($schoolLogo): ?>
+                <img src="<?= e(url('/' . $schoolLogo)) ?>" alt="Logo" class="sidebar-logo">
+            <?php else: ?>
+                <div class="sidebar-logo-placeholder">
+                    <?php include __DIR__ . '/../partials/icons/school.svg.php'; ?>
+                </div>
+            <?php endif; ?>
+            <span class="sidebar-school-name"><?= e($schoolName) ?></span>
+        </div>
+
+        <!-- Progress Stepper — centered in header (students only) -->
+        <?php if ($showStepper && $isStudent): ?>
+            <div class="student-header-stepper">
+                <?php include __DIR__ . '/../partials/stepper.php'; ?>
+            </div>
+        <?php endif; ?>
+
+        <!-- Profile menu — avatar only, opens on click -->
+        <div class="dropdown student-header-profile">
+            <button class="student-header-avatar" data-dropdown type="button" aria-label="User menu" aria-haspopup="true">
+                <div class="user-avatar"><?= e($userInitials) ?></div>
+            </button>
+            <div class="dropdown-menu student-header-dropdown">
+                <div class="student-header-dropdown-info">
+                    <div class="user-name"><?= e($authUser['name'] ?? '') ?></div>
+                    <div class="user-role"><?= ucfirst(e($userRole)) ?></div>
+                </div>
+                <div class="dropdown-separator"></div>
+                <a href="<?= url('/student/settings') ?>" class="dropdown-item">
+                    <?php include __DIR__ . '/../partials/icons/settings.svg.php'; ?>
+                    Settings
+                </a>
+                <a href="#" class="dropdown-item">
+                    <?php include __DIR__ . '/../partials/icons/help.svg.php'; ?>
+                    Help &amp; About
+                </a>
+                <div class="dropdown-separator"></div>
+                <a href="<?= url('/logout') ?>" class="dropdown-item danger">
+                    <?php include __DIR__ . '/../partials/icons/logout.svg.php'; ?>
+                    Log out
+                </a>
+            </div>
+        </div>
+
+    </header>
+
+<?php else: ?>
+
+    <!-- ====================================================
+         SIDEBAR (staff / admin)
     ==================================================== -->
     <aside class="sidebar" id="sidebar">
 
@@ -61,9 +119,7 @@ $showStepper  = $showStepper ?? false;
 
         <!-- Navigation — rendered per role -->
         <nav class="sidebar-nav" aria-label="Main navigation">
-            <?php if ($userRole === 'student'): ?>
-                <?php include __DIR__ . '/../partials/nav_student.php'; ?>
-            <?php elseif ($userRole === 'staff'): ?>
+            <?php if ($userRole === 'staff'): ?>
                 <?php include __DIR__ . '/../partials/nav_staff.php'; ?>
             <?php elseif ($userRole === 'admin'): ?>
                 <?php include __DIR__ . '/../partials/nav_admin.php'; ?>
@@ -84,13 +140,13 @@ $showStepper  = $showStepper ?? false;
                     </svg>
                 </div>
                 <div class="dropdown-menu">
-                    <a href="<?= url(($userRole === 'student') ? '/student/settings' : (($userRole === 'staff') ? '/staff/settings' : '/admin/settings')) ?>" class="dropdown-item">
+                    <a href="<?= url($userRole === 'staff' ? '/staff/settings' : '/admin/settings') ?>" class="dropdown-item">
                         <?php include __DIR__ . '/../partials/icons/settings.svg.php'; ?>
                         Settings
                     </a>
                     <a href="#" class="dropdown-item">
                         <?php include __DIR__ . '/../partials/icons/help.svg.php'; ?>
-                        Help & About
+                        Help &amp; About
                     </a>
                     <div class="dropdown-separator"></div>
                     <a href="<?= url('/logout') ?>" class="dropdown-item danger">
@@ -103,15 +159,12 @@ $showStepper  = $showStepper ?? false;
 
     </aside>
 
+<?php endif; ?>
+
     <!-- ====================================================
          MAIN
     ==================================================== -->
     <div class="main">
-
-        <!-- Progress Stepper — students only -->
-        <?php if ($showStepper && $userRole === 'student'): ?>
-            <?php include __DIR__ . '/../partials/stepper.php'; ?>
-        <?php endif; ?>
 
         <!-- Flash messages -->
         <?php if (Session::hasFlash('success') || Session::hasFlash('error') || Session::hasFlash('info')): ?>
@@ -151,10 +204,13 @@ $showStepper  = $showStepper ?? false;
     // Inject accent from DB
     setAccentColor('<?= e($accentColor) ?>');
 
-    // Show hamburger on mobile
+    // Show hamburger on mobile (staff/admin only)
+    <?php if (!$isStudent): ?>
     if (window.innerWidth <= 768) {
-        document.getElementById('sidebar-toggle').style.display = 'flex';
+        const toggle = document.getElementById('sidebar-toggle');
+        if (toggle) toggle.style.display = 'flex';
     }
+    <?php endif; ?>
 </script>
 
 </body>

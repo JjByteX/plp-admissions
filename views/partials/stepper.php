@@ -7,7 +7,6 @@
 // ============================================================
 
 $steps = [
-    'register'  => 'Register',
     'documents' => 'Submit Documents',
     'exam'      => 'Entrance Exam',
     'interview' => 'Interview',
@@ -15,6 +14,8 @@ $steps = [
 ];
 
 $currentStep = $stepperCurrent ?? 'documents';
+// Treat 'register' as 'documents' since it's already done when the student is logged in
+if ($currentStep === 'register') $currentStep = 'documents';
 
 // Determine state for each step
 $stepKeys = array_keys($steps);
@@ -27,10 +28,10 @@ function stepState(int $idx, int $currentIdx): string {
 }
 
 // Step-to-URL map (students only)
+// exam is intentionally null — once submitted it cannot be revisited
 $stepUrls = [
-    'register'  => null,
     'documents' => url('/student/documents'),
-    'exam'      => url('/student/exam'),
+    'exam'      => null,
     'interview' => url('/student/interview'),
     'result'    => url('/student/result'),
 ];

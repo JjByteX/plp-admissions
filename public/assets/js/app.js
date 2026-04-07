@@ -104,48 +104,57 @@ const Sidebar = (() => {
 // File drop zone
 // ============================================================
 const FileDropZone = (() => {
-    function init() {
-        document.querySelectorAll('.file-drop').forEach(zone => {
-            const input = zone.querySelector('input[type="file"]');
-            const label = zone.querySelector('.file-drop-label');
+    function initZone(zone) {
+        const input = zone.querySelector('input[type="file"]');
+        const label = zone.querySelector('.file-drop-label');
 
-            if (!input) return;
+        if (!input) return;
 
-            // Click zone → open file picker
-            zone.addEventListener('click', () => input.click());
-
-            // Keyboard accessible
-            zone.setAttribute('tabindex', '0');
-            zone.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    input.click();
-                }
+        // Click zone → open file picker (skip if zone handles its own clicks)
+        if (!zone.hasAttribute('data-no-auto-click')) {
+            zone.addEventListener('click', (e) => {
+                if (e.target !== input) input.click();
             });
+        }
 
-            // Drag events
-            zone.addEventListener('dragover', (e) => {
+        // Keyboard accessible
+        zone.setAttribute('tabindex', '0');
+        zone.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                zone.classList.add('drag-over');
-            });
-
-            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-
-            zone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                zone.classList.remove('drag-over');
-                const files = e.dataTransfer?.files;
-                if (files?.length) {
-                    input.files = files;
-                    updateLabel(label, files[0]);
-                }
-            });
-
-            // File selected via picker
-            input.addEventListener('change', () => {
-                if (input.files?.[0]) updateLabel(label, input.files[0]);
-            });
+                input.click();
+            }
         });
+
+        // Drag events
+        zone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            zone.classList.add('drag-over');
+        });
+
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const files = e.dataTransfer?.files;
+            if (files?.length) {
+                input.files = files;
+                updateLabel(label, files[0]);
+                // Trigger change event so inline handlers fire
+                input.dispatchEvent(new Event('change'));
+            }
+        });
+
+        // File selected via picker
+        input.addEventListener('change', () => {
+            if (input.files?.[0]) updateLabel(label, input.files[0]);
+        });
+    }
+
+    function init() {
+        // Support both class variants
+        document.querySelectorAll('.file-drop, .file-drop-zone').forEach(zone => initZone(zone));
     }
 
     function updateLabel(label, file) {

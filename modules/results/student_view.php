@@ -13,22 +13,26 @@ $userId = Auth::id();
 $stmt = $db->prepare('SELECT * FROM applicants WHERE user_id=? ORDER BY id DESC LIMIT 1');
 $stmt->execute([$userId]);
 $applicant = $stmt->fetch();
-if (!$applicant) { redirect('/student/dashboard'); }
+if (!$applicant) { redirect('/student/documents'); }
 $applicantId = $applicant['id'];
 
 $stmt = $db->prepare('SELECT * FROM admission_results WHERE applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $result = $stmt->fetch() ?: null;
 
+// Stepper current step
+$stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
+$stmt->execute([$applicantId]);
+$_examResult = $stmt->fetch() ?: null;
+
+$stmt = $db->prepare('SELECT * FROM interview_slots WHERE assigned_applicant_id=? LIMIT 1');
+$stmt->execute([$applicantId]);
+$_interviewSlot = $stmt->fetch() ?: null;
+
+$stepperCurrent = current_step($applicant, $_examResult, $_interviewSlot, $result);
+
 ob_start();
 ?>
-
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Admission Result</h1>
-        <p class="page-description"><?= e(school_setting('school_name', 'PLP')) ?> &middot; <?= e($applicant['school_year']) ?></p>
-    </div>
-</div>
 
 <?php if (!$result): ?>
     <div style="text-align:center;padding:var(--space-16);color:var(--text-tertiary)">
@@ -91,6 +95,12 @@ ob_start();
         <?php endif; ?>
     </div>
 <?php endif; ?>
+
+<!-- Step navigation -->
+<div class="step-nav">
+    <a href="<?= url('/student/interview') ?>" class="btn btn-ghost">← Interview</a>
+    <span></span>
+</div>
 
 <?php
 $content     = ob_get_clean();

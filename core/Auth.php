@@ -87,7 +87,7 @@ class Auth
         return match (self::role()) {
             ROLE_ADMIN => url("/admin/dashboard"),
             ROLE_STAFF => url("/staff/dashboard"),
-            default                => url('/student/dashboard'),
+            default    => url('/student/documents'),
         };
     }
 }

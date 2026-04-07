@@ -9,7 +9,7 @@ Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
 csrf_check();
 
 $db          = db();
-$applicantId = (int)($routeParams['id'] ?? 0);
+$applicantId = (int)($_GET['id'] ?? 0);
 $decision    = $_POST['result']  ?? '';
 $remarks     = trim($_POST['remarks'] ?? '');
 $staffId     = Auth::id();
