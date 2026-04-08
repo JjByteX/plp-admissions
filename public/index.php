@@ -26,6 +26,7 @@ $router->post('/student/documents', 'documents/student_upload');
 $router->get('/student/exam',       'exam/take');
 $router->post('/student/exam',      'exam/take');
 $router->get('/student/interview',  'interview/student_view');
+$router->post('/student/interview', 'interview/student_view');
 $router->get('/student/result',     'results/student_view');
 $router->get('/student/settings',   'settings/student');
 $router->post('/student/settings',  'settings/student');

@@ -25,6 +25,15 @@ $stats = $pdo->prepare(
 $stats->execute([$schoolYear]);
 $totals = $stats->fetch();
 
+// Pipeline stage counts
+$pipeline = $pdo->prepare(
+    "SELECT overall_status, COUNT(*) as cnt
+     FROM applicants WHERE school_year = ?
+     GROUP BY overall_status"
+);
+$pipeline->execute([$schoolYear]);
+$pipelineCounts = array_column($pipeline->fetchAll(), 'cnt', 'overall_status');
+
 // User counts by role
 $userCounts = $pdo->query(
     "SELECT role, COUNT(*) as cnt FROM users WHERE is_active = 1 GROUP BY role"
@@ -49,14 +58,14 @@ ob_start();
         <div class="metric-value"><?= (int)$totals['total'] ?></div>
         <div class="metric-sub"><?= e($schoolYear) ?></div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card metric-card--success">
         <div class="metric-label">Accepted</div>
-        <div class="metric-value" style="color:var(--accent)"><?= (int)$totals['accepted'] ?></div>
+        <div class="metric-value"><?= (int)$totals['accepted'] ?></div>
         <div class="metric-sub">of <?= (int)$totals['released'] ?> released</div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card metric-card--warning">
         <div class="metric-label">Waitlisted</div>
-        <div class="metric-value" style="color:var(--warning)"><?= (int)$totals['waitlisted'] ?></div>
+        <div class="metric-value"><?= (int)$totals['waitlisted'] ?></div>
         <div class="metric-sub">&nbsp;</div>
     </div>
     <div class="metric-card">
@@ -66,27 +75,46 @@ ob_start();
     </div>
 </div>
 
+<!-- Pipeline overview -->
+<?php
+$stages = [
+    'pending'   => 'Pending',
+    'documents' => 'Documents',
+    'exam'      => 'Exam',
+    'interview' => 'Interview',
+    'released'  => 'Released',
+];
+?>
+<div class="pipeline-row">
+    <?php foreach ($stages as $key => $label): ?>
+    <div class="pipeline-stage">
+        <div class="pipeline-stage-count"><?= (int)($pipelineCounts[$key] ?? 0) ?></div>
+        <div class="pipeline-stage-label"><?= $label ?></div>
+    </div>
+    <?php endforeach; ?>
+</div>
+
 <!-- Quick actions -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-6)">
-    <div class="card">
-        <div class="card-title" style="margin-bottom:var(--space-3)">User Management</div>
+<div class="quick-actions">
+    <div class="card quick-action-card quick-action-card--users">
+        <div class="card-title" style="margin-bottom:var(--space-2)">User Management</div>
         <p class="card-description" style="margin-bottom:var(--space-4)">Create, deactivate, or reset staff and admin accounts.</p>
-        <a href="<?= url('/admin/users') ?>" class="btn btn-secondary">Manage users</a>
+        <a href="<?= url('/admin/users') ?>" class="btn btn-primary btn-sm">Manage users</a>
     </div>
-    <div class="card">
-        <div class="card-title" style="margin-bottom:var(--space-3)">School Year Reset</div>
+    <div class="card quick-action-card quick-action-card--year">
+        <div class="card-title" style="margin-bottom:var(--space-2)">School Year</div>
         <p class="card-description" style="margin-bottom:var(--space-4)">Archive applicant data and open a new admission cycle.</p>
-        <a href="<?= url('/admin/school-year') ?>" class="btn btn-secondary">Manage school year</a>
+        <a href="<?= url('/admin/school-year') ?>" class="btn btn-secondary btn-sm">Manage school year</a>
     </div>
-    <div class="card">
-        <div class="card-title" style="margin-bottom:var(--space-3)">Export Results</div>
+    <div class="card quick-action-card quick-action-card--export">
+        <div class="card-title" style="margin-bottom:var(--space-2)">Export Results</div>
         <p class="card-description" style="margin-bottom:var(--space-4)">Download the full admission results list as CSV.</p>
-        <a href="<?= url('/admin/results') ?>" class="btn btn-secondary">Export CSV</a>
+        <a href="<?= url('/admin/results') ?>" class="btn btn-secondary btn-sm">Export CSV</a>
     </div>
-    <div class="card">
-        <div class="card-title" style="margin-bottom:var(--space-3)">System Settings</div>
+    <div class="card quick-action-card quick-action-card--settings">
+        <div class="card-title" style="margin-bottom:var(--space-2)">System Settings</div>
         <p class="card-description" style="margin-bottom:var(--space-4)">Update school name, logo, and accent color.</p>
-        <a href="<?= url('/admin/settings') ?>" class="btn btn-secondary">Open settings</a>
+        <a href="<?= url('/admin/settings') ?>" class="btn btn-secondary btn-sm">Open settings</a>
     </div>
 </div>
 

@@ -14,6 +14,7 @@ $userRole     = $authUser['role'] ?? 'student';
 $pageTitle    = $pageTitle ?? 'Dashboard';
 $activeNav    = $activeNav ?? '';
 $showStepper  = $showStepper ?? false;
+$pageWide     = $pageWide ?? false;
 $isStudent    = ($userRole === 'student');
 ?>
 <!DOCTYPE html>
@@ -191,7 +192,7 @@ $isStudent    = ($userRole === 'student');
         <?php endif; ?>
 
         <!-- Page content injected here -->
-        <main class="page" id="main-content">
+        <main class="page <?= $pageWide ? 'page-wide' : '' ?>" id="main-content">
             <?= $content ?? '' ?>
         </main>
 

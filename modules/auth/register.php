@@ -191,20 +191,30 @@ ob_start();
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)">
             <div class="form-group" style="margin-bottom:0">
                 <label class="form-label" for="password">Password <span>*</span></label>
-                <input type="password" id="password" name="password"
-                    class="form-input <?= isset($errors['password']) ? 'error' : '' ?>"
-                    placeholder="Min. 8 characters"
-                    autocomplete="new-password" required>
+                <div class="input-wrapper has-suffix">
+                    <input type="password" id="password" name="password"
+                        class="form-input <?= isset($errors['password']) ? 'error' : '' ?>"
+                        placeholder="Min. 8 characters"
+                        autocomplete="new-password" required>
+                    <button type="button" class="input-suffix-icon btn-pw-toggle" onclick="togglePw('password',this)" tabindex="-1" aria-label="Show password">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                    </button>
+                </div>
                 <?php if (!empty($errors['password'])): ?>
                     <span class="form-error"><?= e($errors['password']) ?></span>
                 <?php endif; ?>
             </div>
             <div class="form-group" style="margin-bottom:0">
                 <label class="form-label" for="password_confirm">Confirm <span>*</span></label>
-                <input type="password" id="password_confirm" name="password_confirm"
-                    class="form-input <?= isset($errors['password_confirm']) ? 'error' : '' ?>"
-                    placeholder="Repeat password"
-                    autocomplete="new-password" required>
+                <div class="input-wrapper has-suffix">
+                    <input type="password" id="password_confirm" name="password_confirm"
+                        class="form-input <?= isset($errors['password_confirm']) ? 'error' : '' ?>"
+                        placeholder="Repeat password"
+                        autocomplete="new-password" required>
+                    <button type="button" class="input-suffix-icon btn-pw-toggle" onclick="togglePw('password_confirm',this)" tabindex="-1" aria-label="Show password">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                    </button>
+                </div>
                 <?php if (!empty($errors['password_confirm'])): ?>
                     <span class="form-error"><?= e($errors['password_confirm']) ?></span>
                 <?php endif; ?>
@@ -222,6 +232,14 @@ ob_start();
     </div>
 
 </div>
+<script>
+function togglePw(id, btn) {
+    const inp = document.getElementById(id);
+    const isText = inp.type === 'text';
+    inp.type = isText ? 'password' : 'text';
+    btn.querySelector('svg').style.opacity = isText ? '1' : '0.5';
+}
+</script>
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Create Account';

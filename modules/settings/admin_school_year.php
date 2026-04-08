@@ -86,18 +86,18 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div style="display:flex;flex-direction:column;gap:var(--space-6);max-width:600px">
+<div class="admin-form-stack">
 
     <!-- Current school year -->
-    <div class="card" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-5)">Current School Year</div>
+    <div class="card">
+        <div class="card-title" style="margin-bottom:var(--space-5)">Current School Year</div>
         <form method="POST">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="set_school_year">
             <div style="display:flex;gap:var(--space-3);align-items:flex-end">
                 <div style="flex:1">
                     <label class="form-label">School Year</label>
-                    <input type="text" name="school_year" class="form-control"
+                    <input type="text" name="school_year" class="form-input"
                            value="<?= e($currentYear) ?>" placeholder="e.g. 2025-2026">
                 </div>
                 <button type="submit" class="btn btn-primary">Update</button>
@@ -107,18 +107,18 @@ ob_start();
 
     <!-- Historical summary -->
     <?php if (!empty($statsByYear)): ?>
-    <div class="card" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-5)">Applicant History</div>
+    <div class="card">
+        <div class="card-title" style="margin-bottom:var(--space-5)">Applicant History</div>
         <div style="display:flex;flex-direction:column;gap:var(--space-4)">
         <?php foreach ($statsByYear as $year => $statuses):
             $total = array_sum($statuses);
         ?>
-            <div style="padding:var(--space-4);background:var(--neutral-50);border-radius:var(--radius-md)">
+            <div style="padding:var(--space-4);background:var(--bg-subtle);border-radius:var(--radius-md)">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3)">
                     <div>
                         <span style="font-weight:var(--weight-semibold)"><?= e($year) ?></span>
                         <?php if ($year === $currentYear): ?>
-                            <span class="badge badge-success" style="margin-left:var(--space-2)">Current</span>
+                            <span class="badge badge-approved" style="margin-left:var(--space-2)">Current</span>
                         <?php endif; ?>
                     </div>
                     <span style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= $total ?> total</span>
@@ -142,10 +142,10 @@ ob_start();
     </div>
     <?php endif; ?>
 
-    <!-- New cycle -->
-    <div class="card" style="padding:var(--space-6);border:1px solid var(--error-border, #fca5a5)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:4px;color:var(--error)">Start New Admission Cycle</div>
-        <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-5)">
+    <!-- New cycle — danger zone -->
+    <div class="card card-danger">
+        <div class="card-title" style="color:var(--error);margin-bottom:var(--space-1)">Start New Admission Cycle</div>
+        <p class="card-description" style="margin-bottom:var(--space-5)">
             This will switch the active school year and deactivate the current entrance exam.
             All existing applicant data is preserved. A new exam must be created for the new cycle.
         </p>
@@ -156,14 +156,14 @@ ob_start();
             <div style="display:flex;flex-direction:column;gap:var(--space-4)">
                 <div>
                     <label class="form-label">New School Year</label>
-                    <input type="text" name="new_year" class="form-control"
+                    <input type="text" name="new_year" class="form-input"
                            placeholder="e.g. 2026-2027" style="max-width:200px">
                 </div>
                 <div>
                     <label class="form-label">
                         Type <strong>START NEW CYCLE</strong> to confirm
                     </label>
-                    <input type="text" name="confirm_text" id="confirm-cycle-input" class="form-control"
+                    <input type="text" name="confirm_text" id="confirm-cycle-input" class="form-input"
                            placeholder="START NEW CYCLE" autocomplete="off">
                 </div>
             </div>

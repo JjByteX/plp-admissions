@@ -418,6 +418,12 @@ button { cursor: pointer; }
     padding: var(--space-8);
     max-width: var(--content-max-width);
     width: 100%;
+    margin: 0 auto;
+}
+
+/* Full-width page — for tables and data-heavy pages */
+.page-wide {
+    max-width: 100%;
 }
 
 .page-header {
@@ -576,6 +582,7 @@ a.step-dot:hover { opacity: 0.8; transform: scale(1.12); }
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
     color: var(--text-primary);
+    letter-spacing: -0.01em;
 }
 
 .form-label span { /* required asterisk */
@@ -583,55 +590,228 @@ a.step-dot:hover { opacity: 0.8; transform: scale(1.12); }
     margin-left: 2px;
 }
 
+/* ── Core input / select / textarea ───────────────────────── */
 .form-input,
 .form-select,
-.form-textarea {
+.form-textarea,
+.form-control {
     width: 100%;
-    padding: var(--space-2) var(--space-3);
-    background: var(--bg);
-    border: 1px solid var(--border);
+    min-height: 42px;
+    padding: 10px var(--space-4);
+    background: var(--bg-elevated);
+    border: 1.5px solid var(--border);
     border-radius: var(--radius-md);
     color: var(--text-primary);
     font-size: var(--text-sm);
+    font-family: var(--font-sans);
     line-height: var(--leading-normal);
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+        border-color var(--transition-fast),
+        box-shadow   var(--transition-fast),
+        background   var(--transition-fast);
     outline: none;
     appearance: none;
+    -webkit-appearance: none;
 }
 
 .form-input::placeholder,
-.form-textarea::placeholder { color: var(--text-placeholder); }
-
-.form-input:focus,
-.form-select:focus,
-.form-textarea:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.12);
+.form-textarea::placeholder,
+.form-control::placeholder {
+    color: var(--text-placeholder);
+    font-size: var(--text-sm);
 }
 
+/* Hover — subtle fill lift */
+.form-input:hover:not(:focus):not(:disabled),
+.form-select:hover:not(:focus):not(:disabled),
+.form-textarea:hover:not(:focus):not(:disabled),
+.form-control:hover:not(:focus):not(:disabled) {
+    border-color: var(--border-strong);
+}
+
+/* Focus — crisp accent ring */
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus,
+.form-control:focus {
+    border-color: var(--accent);
+    background: var(--bg-elevated);
+    box-shadow:
+        0 0 0 3px rgba(45, 106, 79, 0.10),
+        0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* Disabled */
+.form-input:disabled,
+.form-select:disabled,
+.form-textarea:disabled,
+.form-control:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background: var(--bg-subtle);
+}
+
+/* Error state */
 .form-input.error,
 .form-select.error,
-.form-textarea.error {
+.form-textarea.error,
+.form-control.error {
     border-color: var(--error);
+    background: var(--error-bg);
 }
 
 .form-input.error:focus,
-.form-select.error:focus {
-    box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.12);
+.form-select.error:focus,
+.form-textarea.error:focus,
+.form-control.error:focus {
+    border-color: var(--error);
+    box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.10);
+    background: var(--bg-elevated);
 }
 
-.form-select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%239a9a92' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+/* Success state */
+.form-input.success,
+.form-select.success,
+.form-textarea.success,
+.form-control.success {
+    border-color: var(--success);
+}
+
+/* ── Select — custom chevron ───────────────────────────────── */
+.form-select,
+select.form-control {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%239a9a92' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right var(--space-3) center;
-    padding-right: var(--space-8);
+    background-size: 16px 16px;
+    padding-right: calc(var(--space-3) + 24px);
 }
 
-.form-textarea { resize: vertical; min-height: 100px; }
+/* ── Exam take — short answer & paragraph inputs ────────────── */
+.short-answer-input,
+.paragraph-input {
+    width: 100%;
+    padding: 10px var(--space-4);
+    background: var(--bg-elevated);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    font-family: var(--font-sans);
+    line-height: var(--leading-normal);
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    transition:
+        border-color var(--transition-fast),
+        box-shadow   var(--transition-fast);
+}
 
+.short-answer-input { min-height: 42px; }
+
+.paragraph-input {
+    resize: vertical;
+    min-height: 100px;
+    padding-top: 10px;
+    line-height: var(--leading-relaxed);
+}
+
+.short-answer-input::placeholder,
+.paragraph-input::placeholder {
+    color: var(--text-placeholder);
+    font-size: var(--text-sm);
+}
+
+.short-answer-input:focus,
+.paragraph-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.10), 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* ── Textarea ──────────────────────────────────────────────── */
+.form-textarea {
+    resize: vertical;
+    min-height: 100px;
+    padding-top: 10px;
+    line-height: var(--leading-relaxed);
+}
+
+/* ── Input wrapper — for prefix icons / suffix buttons ─────── */
+.input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-wrapper .form-input,
+.input-wrapper .form-select {
+    flex: 1;
+}
+
+.input-prefix-icon,
+.input-suffix-icon {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    pointer-events: none;
+    width: 38px;
+    height: 100%;
+    top: 0;
+}
+
+.input-prefix-icon { left: 0; }
+.input-suffix-icon { right: 0; pointer-events: auto; }
+
+.input-prefix-icon svg,
+.input-suffix-icon svg { width: 16px; height: 16px; }
+
+.input-wrapper.has-prefix .form-input { padding-left: 38px; }
+.input-wrapper.has-suffix .form-input { padding-right: 38px; }
+
+/* Password toggle button */
+.btn-pw-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    transition: color var(--transition-fast);
+    padding: 0;
+}
+
+.btn-pw-toggle:hover { color: var(--text-primary); }
+.btn-pw-toggle svg   { width: 16px; height: 16px; pointer-events: none; }
+
+/* ── Form row — side-by-side fields ───────────────────────── */
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+}
+
+.form-row-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
+}
+
+@media (max-width: 600px) {
+    .form-row,
+    .form-row-3 { grid-template-columns: 1fr; }
+}
+
+/* ── Hint and error text ───────────────────────────────────── */
 .form-hint {
     font-size: var(--text-xs);
     color: var(--text-tertiary);
+    line-height: var(--leading-relaxed);
 }
 
 .form-error {
@@ -640,6 +820,42 @@ a.step-dot:hover { opacity: 0.8; transform: scale(1.12); }
     display: flex;
     align-items: center;
     gap: var(--space-1);
+    font-weight: var(--weight-medium);
+}
+
+/* ── Checkbox and radio ────────────────────────────────────── */
+.form-check {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    cursor: pointer;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+}
+
+.form-check input[type="checkbox"],
+.form-check input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    accent-color: var(--accent);
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+/* ── Field counter (textarea char count) ───────────────────── */
+.form-group-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.char-count {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
 }
 
 /* File upload */
@@ -1123,6 +1339,87 @@ tbody tr:hover { background: var(--bg-overlay); }
 /* ============================================================
    16. UTILITY CLASSES
    ============================================================ */
+
+/* Metric card semantic variants */
+.metric-card--success .metric-value { color: var(--success); }
+.metric-card--warning .metric-value { color: var(--warning); }
+.metric-card--error   .metric-value { color: var(--error); }
+.metric-card--info    .metric-value { color: var(--info); }
+
+/* Quick actions grid */
+.quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.quick-action-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    border-left-width: 3px;
+}
+
+.quick-action-card--users    { border-left-color: var(--info); }
+.quick-action-card--year     { border-left-color: var(--warning); }
+.quick-action-card--export   { border-left-color: var(--success); }
+.quick-action-card--settings { border-left-color: var(--border-strong); }
+
+/* Pipeline row */
+.pipeline-row {
+    display: flex;
+    gap: 0;
+    margin-bottom: var(--space-8);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.pipeline-stage {
+    flex: 1;
+    padding: var(--space-4) var(--space-4);
+    text-align: center;
+    border-right: 1px solid var(--border);
+    min-width: 0;
+}
+
+.pipeline-stage:last-child { border-right: none; }
+
+.pipeline-stage-count {
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+.pipeline-stage-label {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: var(--space-1);
+    white-space: nowrap;
+}
+
+/* Admin form stack */
+.admin-form-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Danger card */
+.card-danger {
+    border-color: var(--error);
+    border-width: 1px;
+    background: var(--error-bg);
+}
 
 .flex          { display: flex; }
 .flex-col      { flex-direction: column; }

@@ -99,23 +99,23 @@ ob_start();
         <div class="metric-value"><?= number_format($totalApplicants) ?></div>
         <div class="metric-sub"><?= e($schoolYear) ?></div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card metric-card--success">
         <div class="metric-label">Accepted</div>
-        <div class="metric-value" style="color:var(--success)"><?= number_format($resultCounts['accepted'] ?? 0) ?></div>
+        <div class="metric-value"><?= number_format($resultCounts['accepted'] ?? 0) ?></div>
         <div class="metric-sub">
             <?= $totalReleased ? round((($resultCounts['accepted'] ?? 0) / $totalReleased) * 100) : 0 ?>%
         </div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card metric-card--warning">
         <div class="metric-label">Waitlisted</div>
-        <div class="metric-value" style="color:var(--warning)"><?= number_format($resultCounts['waitlisted'] ?? 0) ?></div>
+        <div class="metric-value"><?= number_format($resultCounts['waitlisted'] ?? 0) ?></div>
         <div class="metric-sub">
             <?= $totalReleased ? round((($resultCounts['waitlisted'] ?? 0) / $totalReleased) * 100) : 0 ?>%
         </div>
     </div>
-    <div class="metric-card">
+    <div class="metric-card metric-card--error">
         <div class="metric-label">Not Accepted</div>
-        <div class="metric-value" style="color:var(--error)"><?= number_format($resultCounts['rejected'] ?? 0) ?></div>
+        <div class="metric-value"><?= number_format($resultCounts['rejected'] ?? 0) ?></div>
         <div class="metric-sub">
             <?= $totalReleased ? round((($resultCounts['rejected'] ?? 0) / $totalReleased) * 100) : 0 ?>%
         </div>
@@ -126,7 +126,7 @@ ob_start();
 <?php if ($totalReleased > 0): ?>
 <div class="card" style="padding:var(--space-6)">
     <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-5)">Result Breakdown</div>
-    <?php foreach (['accepted' => ['Forest Green','var(--success)'], 'waitlisted' => ['Waitlisted','var(--warning)'], 'rejected' => ['Not Accepted','var(--error)']] as $key => [$label, $color]):
+    <?php foreach (['accepted' => ['Accepted','var(--success)'], 'waitlisted' => ['Waitlisted','var(--warning)'], 'rejected' => ['Not Accepted','var(--error)']] as $key => [$label, $color]):
         $cnt = $resultCounts[$key] ?? 0;
         $pct = $totalReleased > 0 ? round(($cnt / $totalReleased) * 100) : 0;
     ?>
@@ -135,7 +135,7 @@ ob_start();
                 <span style="font-size:var(--text-sm);font-weight:var(--weight-medium)"><?= $label ?></span>
                 <span style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= $cnt ?> (<?= $pct ?>%)</span>
             </div>
-            <div style="height:10px;background:var(--neutral-100);border-radius:var(--radius-full);overflow:hidden">
+            <div style="height:10px;background:var(--bg-subtle);border-radius:var(--radius-full);overflow:hidden">
                 <div style="height:100%;width:<?= $pct ?>%;background:<?= $color ?>;border-radius:var(--radius-full)"></div>
             </div>
         </div>
@@ -151,4 +151,5 @@ ob_start();
 $content   = ob_get_clean();
 $pageTitle = 'Results Export';
 $activeNav = 'results';
+$pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

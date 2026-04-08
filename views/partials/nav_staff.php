@@ -5,9 +5,9 @@ $nav = $activeNav ?? '';
 $items = [
     ['href' => '/staff/dashboard',   'key' => 'dashboard',   'label' => 'Dashboard',     'icon' => 'home'],
     ['href' => '/staff/applicants',  'key' => 'applicants',  'label' => 'Applicants',    'icon' => 'users'],
+    ['href' => '/staff/exam',        'key' => 'exam',        'label' => 'Exam Manager',  'icon' => 'edit'],
     ['href' => '/staff/interviews',  'key' => 'interviews',  'label' => 'Interviews',    'icon' => 'calendar'],
     ['href' => '/staff/results',     'key' => 'results',     'label' => 'Release Results','icon' => 'award'],
-    ['href' => '/staff/exam',        'key' => 'exam',        'label' => 'Exam Manager',  'icon' => 'edit'],
     ['href' => '/staff/settings',    'key' => 'settings',    'label' => 'Settings',      'icon' => 'settings'],
 ];
 ?>
