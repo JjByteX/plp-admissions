@@ -78,11 +78,6 @@ $schoolLogo  = school_setting('school_logo', '');
 ob_start();
 ?>
 
-<div class="page-header">
-    <h1 class="page-title">System Settings</h1>
-    <p class="page-description">Global configuration, branding, and account security.</p>
-</div>
-
 <?php foreach ($errors as $e): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
 <?php endforeach; ?>

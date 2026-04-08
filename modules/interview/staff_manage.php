@@ -81,16 +81,6 @@ foreach ($slots as $slot) {
 ob_start();
 ?>
 
-<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4)">
-    <div>
-        <h1 class="page-title">Interview Schedule</h1>
-        <p class="page-description">Manage interview time slots.</p>
-    </div>
-    <button class="btn btn-primary" onclick="document.getElementById('create-slots-modal').style.display='flex'">
-        + Add Slots
-    </button>
-</div>
-
 <?php foreach ($errors as $e): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
 <?php endforeach; ?>
@@ -98,17 +88,23 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<!-- Filter tabs -->
-<div style="display:flex;gap:var(--space-1);margin-bottom:var(--space-5);border-bottom:1px solid var(--border)">
-    <?php foreach (['upcoming' => 'Upcoming', 'past' => 'Past'] as $val => $lbl): ?>
-        <a href="?filter=<?= $val ?>"
-           style="padding:var(--space-2) var(--space-4);border-bottom:2px solid <?= $filter===$val ? 'var(--accent)' : 'transparent' ?>;
-                  color:<?= $filter===$val ? 'var(--accent)' : 'var(--text-secondary)' ?>;
-                  font-size:var(--text-sm);font-weight:<?= $filter===$val ? 'var(--weight-semibold)' : '' ?>;
-                  text-decoration:none;white-space:nowrap">
-            <?= $lbl ?>
-        </a>
-    <?php endforeach; ?>
+<!-- Filter tabs + Add Slots on one line -->
+<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:var(--space-5);border-bottom:1px solid var(--border)">
+    <div style="display:flex;gap:var(--space-1)">
+        <?php foreach (['upcoming' => 'Upcoming', 'past' => 'Past'] as $val => $lbl): ?>
+            <a href="?filter=<?= $val ?>"
+               style="padding:var(--space-2) var(--space-4);border-bottom:2px solid <?= $filter===$val ? 'var(--accent)' : 'transparent' ?>;
+                      color:<?= $filter===$val ? 'var(--accent)' : 'var(--text-secondary)' ?>;
+                      font-size:var(--text-sm);font-weight:<?= $filter===$val ? 'var(--weight-semibold)' : '' ?>;
+                      text-decoration:none;white-space:nowrap;margin-bottom:-1px">
+                <?= $lbl ?>
+            </a>
+        <?php endforeach; ?>
+    </div>
+    <button class="btn btn-primary btn-sm" style="margin-bottom:var(--space-2)"
+            onclick="document.getElementById('create-slots-modal').style.display='flex'">
+        + Add Slots
+    </button>
 </div>
 
 <?php if (empty($byDate)): ?>
@@ -198,20 +194,104 @@ ob_start();
                 </div>
                 <div>
                     <label class="form-label">Times <span style="color:var(--error)">*</span></label>
-                    <input type="text" name="slot_times" class="form-control"
-                           placeholder="09:00, 10:00, 11:00, 13:00" required>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">
-                        Comma-separated 24h times. Each time = one slot.
+                    <!-- Hidden input that collects selected times for form submission -->
+                    <input type="hidden" name="slot_times" id="slot-times-value" required>
+                    <!-- Visual time grid -->
+                    <div id="time-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px"></div>
+                    <p id="time-selection-hint" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">
+                        Click to select one or more times.
                     </p>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-ghost" onclick="document.getElementById('create-slots-modal').style.display='none'">Cancel</button>
-                <button type="submit" class="btn btn-primary">Create Slots</button>
+                <button type="submit" class="btn btn-primary" id="create-slots-submit">Create Slots</button>
             </div>
         </form>
     </div>
 </div>
+<script>
+(function () {
+    // Generate time options from 07:00 to 18:30 in 30-min steps
+    const times = [];
+    for (let h = 7; h <= 18; h++) {
+        for (let m = 0; m < 60; m += 30) {
+            if (h === 18 && m > 30) break;
+            const hh = String(h).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            times.push(`${hh}:${mm}`);
+        }
+    }
+
+    const selected = new Set();
+    const grid = document.getElementById('time-grid');
+    const hidden = document.getElementById('slot-times-value');
+    const hint = document.getElementById('time-selection-hint');
+
+    function fmt(t) {
+        const [h, m] = t.split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 || 12;
+        return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+    }
+
+    function updateHidden() {
+        const vals = [...selected].sort();
+        hidden.value = vals.join(',');
+        const n = vals.length;
+        hint.textContent = n === 0
+            ? 'Click to select one or more times.'
+            : `${n} slot${n > 1 ? 's' : ''} selected: ${vals.map(fmt).join(', ')}`;
+    }
+
+    times.forEach(t => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = fmt(t);
+        btn.dataset.time = t;
+        btn.style.cssText = `
+            padding:6px 4px;border-radius:var(--radius-md);font-size:11px;
+            border:1.5px solid var(--border);background:var(--bg-secondary);
+            color:var(--text-primary);cursor:pointer;transition:all .15s;font-weight:500;
+        `;
+        btn.addEventListener('click', () => {
+            if (selected.has(t)) {
+                selected.delete(t);
+                btn.style.background = 'var(--bg-secondary)';
+                btn.style.borderColor = 'var(--border)';
+                btn.style.color = 'var(--text-primary)';
+            } else {
+                selected.add(t);
+                btn.style.background = 'var(--accent)';
+                btn.style.borderColor = 'var(--accent)';
+                btn.style.color = '#fff';
+            }
+            updateHidden();
+        });
+        grid.appendChild(btn);
+    });
+
+    // Clear selections when modal is closed
+    document.querySelector('[onclick*="create-slots-modal"]')?.addEventListener('click', () => {
+        selected.clear();
+        grid.querySelectorAll('button').forEach(b => {
+            b.style.background = 'var(--bg-secondary)';
+            b.style.borderColor = 'var(--border)';
+            b.style.color = 'var(--text-primary)';
+        });
+        updateHidden();
+    });
+
+    // Validate at least one time selected on submit
+    document.getElementById('create-slots-submit').addEventListener('click', function(e) {
+        if (selected.size === 0) {
+            e.preventDefault();
+            hint.textContent = 'Please select at least one time.';
+            hint.style.color = 'var(--error)';
+        }
+    });
+})();
+</script>
 
 <?php
 $content   = ob_get_clean();

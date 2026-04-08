@@ -51,11 +51,6 @@ $recentApplicants = $recent->fetchAll();
 ob_start();
 ?>
 
-<div class="page-header">
-    <h1 class="page-title">Dashboard</h1>
-    <p class="page-description">Admission cycle: <strong><?= e($schoolYear) ?></strong></p>
-</div>
-
 <!-- Metrics -->
 <div class="metrics-row">
     <div class="metric-card">

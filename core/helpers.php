@@ -85,10 +85,11 @@ function school_setting(string $key, string $default = ''): string
 function docs_for_type(string $applicantType): array
 {
     $docs = DOCS_CORE;
-    if ($applicantType === TYPE_TRANSFEREE) {
+    if ($applicantType === TYPE_FRESHMAN) {
+        $docs = array_merge($docs, DOCS_FRESHMAN);
+    } elseif ($applicantType === TYPE_TRANSFEREE) {
         $docs = array_merge($docs, DOCS_TRANSFEREE);
-    }
-    if ($applicantType === TYPE_FOREIGN) {
+    } elseif ($applicantType === TYPE_FOREIGN) {
         $docs = array_merge($docs, DOCS_FOREIGN);
     }
     return $docs;

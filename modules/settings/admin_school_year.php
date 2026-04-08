@@ -74,11 +74,6 @@ $currentYear = school_setting('current_school_year', '');
 ob_start();
 ?>
 
-<div class="page-header">
-    <h1 class="page-title">School Year</h1>
-    <p class="page-description">Manage admission cycles and school year settings.</p>
-</div>
-
 <?php foreach ($errors as $e): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
 <?php endforeach; ?>

@@ -73,11 +73,7 @@ $years = $db->query(
 ob_start();
 ?>
 
-<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
-    <div>
-        <h1 class="page-title">Results Export</h1>
-        <p class="page-description">Summary and CSV export of admission results.</p>
-    </div>
+<div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-6)">
     <a href="?export=csv&sy=<?= urlencode($schoolYear) ?>" class="btn btn-primary">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" style="margin-right:6px"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
         Export CSV

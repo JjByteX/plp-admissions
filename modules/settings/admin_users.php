@@ -75,11 +75,7 @@ $staffUsers = $stmt->fetchAll();
 ob_start();
 ?>
 
-<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
-    <div>
-        <h1 class="page-title">User Management</h1>
-        <p class="page-description">Staff and admin accounts.</p>
-    </div>
+<div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-6)">
     <button class="btn btn-primary" onclick="document.getElementById('create-user-modal').style.display='flex'">
         + New User
     </button>

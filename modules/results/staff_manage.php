@@ -46,18 +46,11 @@ $result = paginate(
 ob_start();
 ?>
 
-<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
-    <div>
-        <h1 class="page-title">Admission Results</h1>
-        <p class="page-description">Release decisions for completed applicants.</p>
-    </div>
-</div>
-
-<?php if (Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e(Session::getFlash('success')) ?></div>
+<?php if ($msg = Session::getFlash('success')): ?>
+    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
-<?php if (Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e(Session::getFlash('error')) ?></div>
+<?php if ($msg = Session::getFlash('error')): ?>
+    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 
 <!-- Filters -->

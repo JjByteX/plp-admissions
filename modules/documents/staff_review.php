@@ -30,25 +30,20 @@ if ($applicantId) {
 
     ob_start();
 ?>
-<div class="page-header" style="display:flex;align-items:center;gap:var(--space-4)">
-    <a href="<?= url('/staff/applicants') ?>" class="btn btn-ghost btn-sm">
+<div style="margin-bottom:var(--space-6)"><a href="<?= url('/staff/applicants') ?>" class="btn btn-ghost btn-sm">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M19 12H5m7-7-7 7 7 7"/></svg>
         Back
     </a>
-    <div>
-        <h1 class="page-title"><?= e($applicant['student_name']) ?></h1>
-        <p class="page-description"><?= e($applicant['email']) ?> &middot; <?= e(ucfirst($applicant['applicant_type'])) ?> &middot; <?= e($applicant['course_applied']) ?></p>
-    </div>
     <span class="badge badge-<?= $applicant['overall_status'] ?>" style="margin-left:auto">
         <?= e(ucfirst(str_replace('_',' ',$applicant['overall_status']))) ?>
     </span>
 </div>
 
-<?php if (Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e(Session::getFlash('success')) ?></div>
+<?php if ($msg = Session::getFlash('success')): ?>
+    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
-<?php if (Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e(Session::getFlash('error')) ?></div>
+<?php if ($msg = Session::getFlash('error')): ?>
+    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 
 <div style="display:flex;flex-direction:column;gap:var(--space-3)">
@@ -196,13 +191,6 @@ foreach (['pending','documents','exam','interview','released'] as $s) {
 ob_start();
 ?>
 
-<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4)">
-    <div>
-        <h1 class="page-title">Applicants</h1>
-        <p class="page-description"><?= number_format($result['total']) ?> total applicants</p>
-    </div>
-</div>
-
 <!-- Filter tabs -->
 <div style="display:flex;gap:var(--space-1);margin-bottom:var(--space-5);border-bottom:1px solid var(--border);overflow-x:auto">
     <?php
@@ -298,4 +286,5 @@ ob_start();
 $content   = ob_get_clean();
 $pageTitle = 'Applicants';
 $activeNav = 'applicants';
+$pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

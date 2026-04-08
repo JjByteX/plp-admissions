@@ -292,16 +292,6 @@ ob_start();
 }
 </style>
 
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Entrance Exam</h1>
-        <p class="page-description">Build and manage exam questions.</p>
-    </div>
-    <button class="btn btn-primary" onclick="openModal('create-exam-modal')">
-        + New Exam
-    </button>
-</div>
-
 <?php foreach ($errors as $e): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
 <?php endforeach; ?>
@@ -313,7 +303,13 @@ ob_start();
 
     <!-- ── Sidebar ── -->
     <div>
-        <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-3)">Exams</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3)">
+            <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary)">Exams</div>
+            <button onclick="openModal('create-exam-modal')" title="New Exam"
+                    style="display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:var(--radius-sm);border:none;background:transparent;color:var(--text-tertiary);font-size:16px;line-height:1;cursor:pointer;padding:0;transition:background var(--transition-fast),color var(--transition-fast)"
+                    onmouseover="this.style.background='var(--bg-overlay)';this.style.color='var(--text-primary)'"
+                    onmouseout="this.style.background='transparent';this.style.color='var(--text-tertiary)'">+</button>
+        </div>
         <?php if (empty($exams)): ?>
             <p style="font-size:var(--text-sm);color:var(--text-tertiary)">No exams yet.</p>
         <?php else: ?>
@@ -382,7 +378,13 @@ ob_start();
         <!-- Question list header -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4)">
             <div style="font-weight:var(--weight-semibold)">Questions</div>
-            <button class="btn btn-primary btn-sm" onclick="openAddQuestionModal()">+ Add Question</button>
+            <div style="display:flex;gap:var(--space-2)">
+                <button class="btn btn-secondary btn-sm" onclick="openAiImportModal()" style="display:flex;align-items:center;gap:5px">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2a7 7 0 017 7c0 2.5-1.3 4.7-3.3 6L12 22l-3.7-7C6.3 13.7 5 11.5 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>
+                    Import with AI
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="openAddQuestionModal()">+ Add Question</button>
+            </div>
         </div>
 
         <!-- Questions -->
@@ -958,6 +960,509 @@ updateScalePreview();
         fetch(location.href, {method:'POST', body: fd}).catch(()=>{});
     }
 })();
+</script>
+
+<!-- ════════════════════════════════════════════════════════════
+     AI IMPORT MODAL
+════════════════════════════════════════════════════════════ -->
+<div id="ai-import-modal" class="modal-backdrop" style="display:none">
+    <div class="modal" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column">
+        <div class="modal-header">
+            <div class="modal-title" style="display:flex;align-items:center;gap:8px">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2a7 7 0 017 7c0 2.5-1.3 4.7-3.3 6L12 22l-3.7-7C6.3 13.7 5 11.5 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>
+                Import Exam with AI
+            </div>
+            <button class="btn-icon" onclick="closeAiImportModal()">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <div class="modal-body" style="overflow-y:auto;display:flex;flex-direction:column;gap:var(--space-4)">
+
+            <!-- Step 0: Puter account notice -->
+            <div id="ai-step-account" style="display:flex;flex-direction:column;gap:var(--space-3)">
+                <div class="alert" style="background:linear-gradient(135deg,#e8f4fd,#f0f9ff);border:1px solid #bcd4e6;border-radius:var(--radius-md);padding:var(--space-4)">
+                    <div style="display:flex;gap:var(--space-3);align-items:flex-start">
+                        <div style="font-size:24px;line-height:1">🤖</div>
+                        <div>
+                            <div style="font-weight:var(--weight-semibold);margin-bottom:4px">Powered by Puter AI</div>
+                            <div style="font-size:var(--text-sm);color:var(--text-secondary);line-height:1.5">
+                                This feature uses <strong>Puter.js</strong> — a free AI service. Each user covers their own AI usage through their own Puter account. You won't be charged.
+                            </div>
+                            <a href="https://puter.com" target="_blank"
+                               style="display:inline-flex;align-items:center;gap:4px;margin-top:var(--space-2);font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--accent);text-decoration:none">
+                                Create a free Puter account →
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-warning" style="font-size:var(--text-sm)">
+                    <strong>⚠️ Important:</strong> AI-generated questions may not be 100% accurate. Please <strong>review all questions and answers carefully</strong> before saving them to your exam.
+                </div>
+            </div>
+
+            <!-- Step 1: Upload -->
+            <div id="ai-step-upload" style="display:flex;flex-direction:column;gap:var(--space-3)">
+                <div>
+                    <label class="form-label">Upload Exam File</label>
+                    <div id="ai-drop-zone"
+                         style="border:2px dashed var(--border);border-radius:var(--radius-md);padding:var(--space-8) var(--space-6);text-align:center;cursor:pointer;transition:border-color .15s,background .15s"
+                         onclick="document.getElementById('ai-file-input').click()"
+                         ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(45,106,79,.04)'"
+                         ondragleave="this.style.borderColor='';this.style.background=''"
+                         ondrop="handleAiFileDrop(event)">
+                        <div style="font-size:32px;margin-bottom:var(--space-2)">📄</div>
+                        <div style="font-weight:var(--weight-medium);margin-bottom:4px">Drop your file here or click to browse</div>
+                        <div style="font-size:var(--text-xs);color:var(--text-tertiary)">Supports: JPG, PNG, PDF, DOCX, TXT</div>
+                        <input type="file" id="ai-file-input"
+                               accept=".jpg,.jpeg,.png,.pdf,.docx,.txt,.doc"
+                               style="display:none"
+                               onchange="handleAiFileSelect(this)">
+                    </div>
+                    <div id="ai-file-name" style="margin-top:var(--space-2);font-size:var(--text-sm);color:var(--text-secondary);display:none"></div>
+                </div>
+
+                <div>
+                    <label class="form-label">Default Points per Question</label>
+                    <input type="number" id="ai-default-points" class="form-control" value="1" min="0" max="100" style="width:100px">
+                </div>
+            </div>
+
+            <!-- Step 2: Processing -->
+            <div id="ai-step-processing" style="display:none;flex-direction:column;align-items:center;gap:var(--space-4);padding:var(--space-8) 0">
+                <div id="ai-spinner" style="width:48px;height:48px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite"></div>
+                <div style="text-align:center">
+                    <div style="font-weight:var(--weight-medium)" id="ai-processing-label">Reading file…</div>
+                    <div style="font-size:var(--text-sm);color:var(--text-tertiary)">This may take a few seconds</div>
+                </div>
+            </div>
+
+            <!-- Step 3: Preview questions -->
+            <div id="ai-step-preview" style="display:none;flex-direction:column;gap:var(--space-3)">
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="font-weight:var(--weight-semibold)" id="ai-preview-count">0 questions generated</div>
+                    <button class="btn btn-ghost btn-sm" onclick="resetAiImport()">← Try again</button>
+                </div>
+                <div class="alert alert-warning" style="font-size:var(--text-sm)">
+                    ⚠️ Review each question before adding. AI can make mistakes — check answers carefully!
+                </div>
+                <div id="ai-questions-preview" style="display:flex;flex-direction:column;gap:var(--space-3);max-height:360px;overflow-y:auto"></div>
+            </div>
+
+            <!-- Step 4: Error -->
+            <div id="ai-step-error" style="display:none">
+                <div class="alert alert-error" id="ai-error-msg"></div>
+                <button class="btn btn-ghost btn-sm" style="margin-top:var(--space-2)" onclick="resetAiImport()">← Try again</button>
+            </div>
+
+        </div><!-- /modal-body -->
+
+        <div class="modal-footer" id="ai-modal-footer">
+            <button type="button" class="btn btn-ghost" onclick="closeAiImportModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" id="ai-process-btn" onclick="startAiProcessing()" disabled>
+                ✨ Generate Questions
+            </button>
+        </div>
+        <div class="modal-footer" id="ai-save-footer" style="display:none">
+            <button type="button" class="btn btn-ghost" onclick="closeAiImportModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" id="ai-save-btn" onclick="saveAiQuestions()">
+                💾 Add All Questions to Exam
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+.ai-q-preview-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface);
+    font-size: var(--text-sm);
+}
+.ai-q-preview-card .q-num {
+    font-size: var(--text-xs); color: var(--text-tertiary); margin-bottom: 4px;
+}
+.ai-q-preview-card .q-text {
+    font-weight: var(--weight-medium); margin-bottom: var(--space-2);
+}
+.ai-choice {
+    display: flex; align-items: center; gap: 6px;
+    padding: 2px 0; color: var(--text-secondary);
+}
+.ai-choice.correct { color: var(--success); font-weight: var(--weight-medium); }
+</style>
+
+<script>
+// ── Puter.js is loaded lazily on first use ─────────────────
+let puterLoaded = false;
+function loadPuter() {
+    return new Promise((resolve) => {
+        if (puterLoaded || window.puter) { puterLoaded = true; resolve(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://js.puter.com/v2/';
+        s.onload = () => { puterLoaded = true; resolve(); };
+        document.head.appendChild(s);
+    });
+}
+
+// ── PDF.js (for PDF text extraction) ──────────────────────
+function loadPdfJs() {
+    return new Promise((resolve) => {
+        if (window.pdfjsLib) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        s.onload = () => {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            resolve();
+        };
+        document.head.appendChild(s);
+    });
+}
+
+// ── Mammoth.js (for DOCX text extraction) ─────────────────
+function loadMammoth() {
+    return new Promise((resolve) => {
+        if (window.mammoth) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+        s.onload = resolve;
+        document.head.appendChild(s);
+    });
+}
+
+// ── State ──────────────────────────────────────────────────
+let aiSelectedFile = null;
+let aiGeneratedQuestions = [];
+
+function openAiImportModal() {
+    resetAiImport();
+    openModal('ai-import-modal');
+}
+function closeAiImportModal() {
+    closeModal('ai-import-modal');
+}
+
+function handleAiFileDrop(e) {
+    e.preventDefault();
+    document.getElementById('ai-drop-zone').style.borderColor = '';
+    document.getElementById('ai-drop-zone').style.background = '';
+    const file = e.dataTransfer.files[0];
+    if (file) setAiFile(file);
+}
+
+function handleAiFileSelect(input) {
+    if (input.files[0]) setAiFile(input.files[0]);
+}
+
+function setAiFile(file) {
+    aiSelectedFile = file;
+    const nameEl = document.getElementById('ai-file-name');
+    nameEl.textContent = '📎 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+    nameEl.style.display = 'block';
+    document.getElementById('ai-process-btn').disabled = false;
+
+    // Highlight drop zone
+    const dz = document.getElementById('ai-drop-zone');
+    dz.style.borderColor = 'var(--accent)';
+    dz.style.background = 'rgba(45,106,79,.04)';
+}
+
+function resetAiImport() {
+    aiSelectedFile = null;
+    aiGeneratedQuestions = [];
+    document.getElementById('ai-file-input').value = '';
+    document.getElementById('ai-file-name').style.display = 'none';
+    document.getElementById('ai-drop-zone').style.borderColor = '';
+    document.getElementById('ai-drop-zone').style.background = '';
+    document.getElementById('ai-process-btn').disabled = true;
+
+    showAiStep('upload');
+    document.getElementById('ai-modal-footer').style.display = '';
+    document.getElementById('ai-save-footer').style.display = 'none';
+}
+
+function showAiStep(step) {
+    ['account','upload','processing','preview','error'].forEach(s => {
+        const el = document.getElementById('ai-step-' + s);
+        if (el) el.style.display = 'none';
+    });
+    const target = document.getElementById('ai-step-' + step);
+    if (target) target.style.display = step === 'processing' || step === 'preview' ? 'flex' : '';
+    // keep account notice always visible except processing
+    if (step !== 'processing') {
+        document.getElementById('ai-step-account').style.display = '';
+    }
+}
+
+async function startAiProcessing() {
+    if (!aiSelectedFile) return;
+    showAiStep('processing');
+    document.getElementById('ai-modal-footer').style.display = 'none';
+
+    try {
+        await loadPuter();
+
+        const ext = aiSelectedFile.name.split('.').pop().toLowerCase();
+        let content = null;
+        let isImage = false;
+
+        setProcessingLabel('Reading file…');
+
+        if (['jpg','jpeg','png'].includes(ext)) {
+            // Image: read as data URL for vision AI
+            content = await readFileAsDataURL(aiSelectedFile);
+            isImage = true;
+        } else if (ext === 'pdf') {
+            setProcessingLabel('Extracting text from PDF…');
+            await loadPdfJs();
+            content = await extractPdfText(aiSelectedFile);
+        } else if (['docx','doc'].includes(ext)) {
+            setProcessingLabel('Extracting text from document…');
+            await loadMammoth();
+            content = await extractDocxText(aiSelectedFile);
+        } else {
+            // Plain text
+            content = await readFileAsText(aiSelectedFile);
+        }
+
+        if (!content || (typeof content === 'string' && content.trim().length < 5)) {
+            throw new Error('Could not extract readable content from this file. Try a different format.');
+        }
+
+        setProcessingLabel('Sending to AI… (a Puter sign-in popup may appear)');
+
+        const points = parseInt(document.getElementById('ai-default-points').value) || 1;
+        const questions = isImage
+            ? await callPuterAiWithImage(content, points)
+            : await callPuterAiWithText(content, points);
+
+        if (!questions || questions.length === 0) {
+            throw new Error('AI could not detect any questions in this file. Make sure the file contains exam questions.');
+        }
+
+        aiGeneratedQuestions = questions;
+        renderAiPreview(questions);
+        showAiStep('preview');
+        document.getElementById('ai-preview-count').textContent = questions.length + ' question' + (questions.length !== 1 ? 's' : '') + ' generated';
+        document.getElementById('ai-save-footer').style.display = '';
+
+    } catch (err) {
+        showAiStep('error');
+        document.getElementById('ai-error-msg').textContent = '❌ ' + (err.message || 'Something went wrong. Please try again.');
+        document.getElementById('ai-modal-footer').style.display = '';
+    }
+}
+
+function setProcessingLabel(text) {
+    document.getElementById('ai-processing-label').textContent = text;
+}
+
+// ── File reading helpers ───────────────────────────────────
+function readFileAsDataURL(file) {
+    return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+    });
+}
+
+function readFileAsText(file) {
+    return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsText(file);
+    });
+}
+
+async function extractPdfText(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let text = '';
+    for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
+        const page = await pdf.getPage(i);
+        const tc = await page.getTextContent();
+        text += tc.items.map(it => it.str).join(' ') + '\n';
+    }
+    return text.trim();
+}
+
+async function extractDocxText(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    return result.value;
+}
+
+// ── Puter AI calls ─────────────────────────────────────────
+const AI_SYSTEM_PROMPT = `You are an exam question extractor. Analyze the provided content and extract ALL exam questions and their answer choices. Return ONLY a valid JSON array (no markdown, no preamble) with this structure:
+[
+  {
+    "question_text": "Full question text here",
+    "question_type": "multiple_choice",
+    "choices": ["Choice A", "Choice B", "Choice C", "Choice D"],
+    "correct_index": 0,
+    "points": 1,
+    "description": ""
+  }
+]
+Rules:
+- question_type must be one of: multiple_choice, checkboxes, short_answer, paragraph
+- For multiple_choice/checkboxes: include choices array and correct_index (0-based)
+- For short_answer: set correct_answer field instead of choices
+- If you cannot determine the correct answer, set correct_index to 0 and note it in description
+- Keep question_text exactly as written in the source
+- Return [] if no questions found
+- Output ONLY the JSON array, nothing else`;
+
+async function callPuterAiWithText(text, points) {
+    // Truncate if too long
+    const truncated = text.length > 12000 ? text.substring(0, 12000) + '...[truncated]' : text;
+    const prompt = `Extract all exam questions from this content:\n\n${truncated}`;
+
+    const response = await puter.ai.chat(
+        [{ role: 'system', content: AI_SYSTEM_PROMPT },
+         { role: 'user', content: prompt }],
+        { model: 'claude-sonnet-4-6' }
+    );
+
+    const raw = response?.message?.content?.[0]?.text || response?.toString?.() || '';
+    return parseAiJsonResponse(raw, points);
+}
+
+async function callPuterAiWithImage(dataUrl, points) {
+    const prompt = [
+        { type: 'text', text: 'Extract all exam questions from this image. ' + AI_SYSTEM_PROMPT },
+        { type: 'image_url', image_url: { url: dataUrl } }
+    ];
+
+    const response = await puter.ai.chat(
+        [{ role: 'user', content: prompt }],
+        { model: 'claude-sonnet-4-6' }
+    );
+
+    const raw = response?.message?.content?.[0]?.text || response?.toString?.() || '';
+    return parseAiJsonResponse(raw, points);
+}
+
+function parseAiJsonResponse(raw, defaultPoints) {
+    // Strip markdown fences if present
+    let cleaned = raw.trim();
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+
+    let arr;
+    try {
+        arr = JSON.parse(cleaned);
+    } catch (e) {
+        // Try to find JSON array in response
+        const match = cleaned.match(/\[[\s\S]*\]/);
+        if (match) arr = JSON.parse(match[0]);
+        else throw new Error('AI response was not valid JSON. Please try again.');
+    }
+
+    if (!Array.isArray(arr)) throw new Error('Unexpected AI response format.');
+
+    return arr.map(q => ({
+        question_text:  q.question_text  || 'Untitled question',
+        question_type:  q.question_type  || 'multiple_choice',
+        description:    q.description    || '',
+        choices:        q.choices        || [],
+        correct_index:  typeof q.correct_index === 'number' ? q.correct_index : 0,
+        correct_answer: q.correct_answer || null,
+        correct_indices:q.correct_indices|| [],
+        points:         typeof q.points === 'number' ? q.points : defaultPoints,
+        is_required:    1,
+    }));
+}
+
+// ── Preview renderer ───────────────────────────────────────
+function renderAiPreview(questions) {
+    const container = document.getElementById('ai-questions-preview');
+    container.innerHTML = '';
+    const CHOICE_TYPES = ['multiple_choice','checkboxes','dropdown'];
+
+    questions.forEach((q, i) => {
+        const card = document.createElement('div');
+        card.className = 'ai-q-preview-card';
+
+        let choicesHtml = '';
+        if (CHOICE_TYPES.includes(q.question_type) && q.choices.length > 0) {
+            choicesHtml = q.choices.map((c, ci) => {
+                const isCorrect = q.question_type === 'checkboxes'
+                    ? (q.correct_indices || []).includes(ci)
+                    : ci === q.correct_index;
+                return `<div class="ai-choice ${isCorrect ? 'correct' : ''}">
+                    ${isCorrect
+                        ? '<svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M5 13l4 4L19 7"/></svg>'
+                        : '<span style="width:13px;height:13px;border:1.5px solid var(--border);border-radius:50%;display:inline-block;flex-shrink:0"></span>'}
+                    ${escHtml(c)}
+                </div>`;
+            }).join('');
+        } else if (q.question_type === 'short_answer' && q.correct_answer) {
+            choicesHtml = `<div style="color:var(--text-tertiary);font-style:italic">Expected: ${escHtml(q.correct_answer)}</div>`;
+        } else if (['short_answer','paragraph'].includes(q.question_type)) {
+            choicesHtml = `<div style="color:var(--text-tertiary);font-style:italic">${q.question_type === 'paragraph' ? 'Long answer' : 'Short answer'}</div>`;
+        }
+
+        card.innerHTML = `
+            <div class="q-num">Q${i + 1} · ${q.question_type.replace(/_/g,' ')} · ${q.points} pt${q.points !== 1 ? 's' : ''}</div>
+            <div class="q-text">${escHtml(q.question_text)}</div>
+            ${choicesHtml}
+        `;
+        container.appendChild(card);
+    });
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Save AI questions → POST to server ────────────────────
+async function saveAiQuestions() {
+    const btn = document.getElementById('ai-save-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const examId = <?= $selectedExam['id'] ?? 0 ?>;
+    const csrfToken = document.querySelector('input[name="_csrf_token"]')?.value || '';
+    let saved = 0;
+
+    for (const q of aiGeneratedQuestions) {
+        const fd = new FormData();
+        fd.append('action', 'add_question');
+        fd.append('exam_id', examId);
+        fd.append('_csrf_token', csrfToken);
+        fd.append('question_text', q.question_text);
+        fd.append('question_desc', q.description || '');
+        fd.append('question_type', q.question_type);
+        fd.append('points', q.points);
+        fd.append('is_required', '1');
+
+        const CHOICE_TYPES = ['multiple_choice','checkboxes','dropdown'];
+        if (CHOICE_TYPES.includes(q.question_type) && q.choices.length > 0) {
+            q.choices.forEach(c => fd.append('choices[]', c));
+            if (q.question_type === 'checkboxes') {
+                (q.correct_indices || []).forEach(ci => fd.append('correct_indices[]', ci));
+            } else {
+                fd.append('correct_index', q.correct_index);
+            }
+        } else if (q.question_type === 'short_answer') {
+            fd.append('expected_answer', q.correct_answer || '');
+        }
+
+        try {
+            await fetch(location.href, { method: 'POST', body: fd });
+            saved++;
+            btn.textContent = `Saving… (${saved}/${aiGeneratedQuestions.length})`;
+        } catch (e) { /* continue */ }
+    }
+
+    // Reload page to show new questions
+    window.location.reload();
+}
 </script>
 
 <?php

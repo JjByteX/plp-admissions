@@ -43,14 +43,6 @@ $usersByRole = array_column($userCounts, 'cnt', 'role');
 ob_start();
 ?>
 
-<div class="page-header">
-    <h1 class="page-title">Admin Panel</h1>
-    <p class="page-description">
-        System overview &middot; <?= e($schoolYear) ?> &middot;
-        v<?= e(school_setting('system_version', '1.0.0')) ?>
-    </p>
-</div>
-
 <!-- System metrics -->
 <div class="metrics-row">
     <div class="metric-card">
