@@ -169,6 +169,12 @@ plp-admissions/
 - [ ] Add zoom functionality inside the modal
 - [ ] Enable click-and-drag (panning) when zoomed in
 
+### Bassig — Exam Manager
+- [ ] Remove answer mode in each question as sections already describes it
+- [ ] Allow section deleting with confirmation
+- [ ] Show edit section only on empty sections
+
+
 ---
 
 ## Contributing
