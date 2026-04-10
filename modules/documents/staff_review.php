@@ -502,7 +502,7 @@ ob_start();
     flex-wrap:wrap;
 ">
     <!-- Filter tabs -->
-    <div style="display:flex;gap:var(--space-1);overflow-x:auto;flex-shrink:1;min-width:0">
+    <div style="display:flex;gap:var(--space-1);flex-wrap:wrap;flex-shrink:1;min-width:0">
         <?php
         $tabs = ['' => 'All'] + array_map('ucfirst', array_combine(
             ['pending','documents','exam','interview','released'],
