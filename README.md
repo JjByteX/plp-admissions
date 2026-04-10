@@ -162,12 +162,7 @@ plp-admissions/
 - [ ] Allow interviewers to record evaluation notes or assessments per student within the system
 
 ### Chavez — Applicants
-- [ ] Move the search bar to the top right, aligned with the tabs
 - [ ] Add a filter option beside the search bar for sorting/refining results
-- [ ] Replace "View File" separate tab with an in-page popup modal
-- [ ] Add navigation arrows inside the modal to browse through uploaded requirements
-- [ ] Add zoom functionality inside the modal
-- [ ] Enable click-and-drag (panning) when zoomed in
 
 ### Bassig — Exam Manager
 - [ ] Remove answer mode in each question as sections already describes it
