@@ -1996,6 +1996,7 @@ async function saveAiQuestions(){
         secFd.append('action','create_section');
         secFd.append('exam_id',examId);
         secFd.append('section_title',sec.section_title);
+        secFd.append('section_desc', sec.section_description || '');
         secFd.append('section_type',sec.section_type);
         secFd.append(csrfName,csrf);
         let sectionId=null;

@@ -45,9 +45,25 @@ $stmt = $db->prepare('SELECT * FROM questions WHERE exam_id=? ORDER BY sort_orde
 $stmt->execute([$examId]);
 $questions = $stmt->fetchAll();
 
+// Fetch sections
+$stmt = $db->prepare('SELECT * FROM exam_sections WHERE exam_id=? ORDER BY sort_order, id');
+$stmt->execute([$examId]);
+$sections = $stmt->fetchAll();
+
+// Group questions by section
+$questionsBySection = [];
+foreach ($sections as $sec) $questionsBySection[$sec['id']] = [];
+$unsectioned = [];
+foreach ($questions as $q) {
+    $sid = (int)$q['section_id'];
+    if (isset($questionsBySection[$sid])) $questionsBySection[$sid][] = $q;
+    else $unsectioned[] = $q;
+}
+
 // Shuffle if configured
 if ($exam['shuffle_questions']) {
-    shuffle($questions);
+    foreach ($questionsBySection as &$secQs) shuffle($secQs);
+    shuffle($unsectioned);
 }
 
 $errors = [];
@@ -173,8 +189,23 @@ ob_start();
     padding: var(--space-6);
     transition: border-color .15s;
 }
-.q-card.answered {
-    border-left: 3px solid var(--success);
+
+/* Section divider in student exam view */
+.exam-section-header {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1.5px solid transparent;
+    margin-bottom: var(--space-1);
+}
+.exam-section-title {
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-sm);
+}
+.exam-section-desc {
+    font-size: var(--text-xs);
+    opacity: .8;
+    margin-top: 2px;
 }
 .q-number {
     font-size: var(--text-xs);
@@ -394,30 +425,34 @@ ob_start();
     // Build shuffle index for choices if needed
     $shuffleChoices = (bool)$exam['shuffle_choices'];
 
-    foreach ($questions as $i => $q):
+    $SECTION_COLORS = [
+        'multiple_choice' => ['bg' => '#dbeafe', 'text' => '#1d4ed8', 'border' => '#93c5fd'],
+        'checkboxes'      => ['bg' => '#d1fae5', 'text' => '#065f46', 'border' => '#6ee7b7'],
+        'dropdown'        => ['bg' => '#ede9fe', 'text' => '#5b21b6', 'border' => '#c4b5fd'],
+        'short_answer'    => ['bg' => '#fef3c7', 'text' => '#92400e', 'border' => '#fcd34d'],
+        'paragraph'       => ['bg' => '#fce7f3', 'text' => '#9d174d', 'border' => '#f9a8d4'],
+        'linear_scale'    => ['bg' => '#f3f4f6', 'text' => '#374151', 'border' => '#d1d5db'],
+    ];
+
+    $globalI = 0;
+
+    // Helper: render a single question card
+    function renderStudentQuestion($q, &$globalI, $shuffleChoices) {
         $qType   = $q['question_type'] ?? 'multiple_choice';
         $choices = $q['choices'] ? json_decode($q['choices'], true) : [];
         $required = (bool)$q['is_required'];
 
         // Shuffle choices while preserving correct index mapping
-        $choiceMap = range(0, count($choices)-1); // original indices
+        $choiceMap = range(0, count($choices)-1);
         if ($shuffleChoices && in_array($qType, ['multiple_choice','checkboxes','dropdown'])) {
             shuffle($choiceMap);
         }
-
-        $typeLabels = [
-            'multiple_choice' => 'Multiple choice',
-            'checkboxes'      => 'Select all that apply',
-            'dropdown'        => 'Choose one',
-            'short_answer'    => 'Short answer',
-            'paragraph'       => 'Paragraph',
-            'linear_scale'    => 'Linear scale',
-        ];
+        $globalI++;
+        $totalQs = $GLOBALS['_exam_total_q'];
     ?>
         <div class="card q-card" id="qcard-<?= $q['id'] ?>" data-qid="<?= $q['id'] ?>" data-type="<?= $qType ?>">
             <div class="q-number">
-                Question <?= $i+1 ?> of <?= count($questions) ?>
-                &middot; <span style="color:var(--accent)"><?= $typeLabels[$qType] ?? '' ?></span>
+                Question <?= $globalI ?> of <?= $totalQs ?>
                 <?php if ($required): ?><span class="q-required">*</span><?php endif; ?>
                 <?php if ($q['points'] > 0): ?>
                     &middot; <?= $q['points'] ?> pt<?= $q['points']!=1?'s':'' ?>
@@ -508,7 +543,27 @@ ob_start();
                 </div>
             <?php endif; ?>
         </div>
-    <?php endforeach; ?>
+    <?php } // end renderStudentQuestion
+
+    $GLOBALS['_exam_total_q'] = count($questions);
+
+    foreach ($sections as $sec):
+        $secQs = $questionsBySection[$sec['id']] ?? [];
+        if (empty($secQs)) continue;
+        $sc = $SECTION_COLORS[$sec['question_type']] ?? $SECTION_COLORS['multiple_choice'];
+    ?>
+        <div class="exam-section-header" style="background:<?= $sc['bg'] ?>;border-color:<?= $sc['border'] ?>">
+            <div class="exam-section-title" style="color:<?= $sc['text'] ?>"><?= e($sec['title']) ?></div>
+            <?php if (!empty($sec['description'])): ?>
+                <div class="exam-section-desc" style="color:<?= $sc['text'] ?>"><?= e($sec['description']) ?></div>
+            <?php endif; ?>
+        </div>
+        <?php foreach ($secQs as $q): renderStudentQuestion($q, $globalI, $shuffleChoices); endforeach; ?>
+    <?php endforeach;
+
+    // Unsectioned questions (fallback)
+    foreach ($unsectioned as $q): renderStudentQuestion($q, $globalI, $shuffleChoices); endforeach;
+    ?>
     </div>
 
     <div style="margin-top:var(--space-8);display:flex;justify-content:space-between;align-items:center">
@@ -570,10 +625,6 @@ function markAnswered(qid) {
     });
     if (hasAnswer) answeredSet.add(qid);
     else answeredSet.delete(qid);
-
-    // Card accent
-    const card = document.getElementById('qcard-' + qid);
-    if (card) card.classList.toggle('answered', hasAnswer);
 
     updateProgress();
 }

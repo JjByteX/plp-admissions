@@ -37,6 +37,10 @@ $isStudent    = ($userRole === 'student');
         (function(){
             const t = localStorage.getItem('plp_theme') || 'light';
             document.documentElement.dataset.theme = t;
+            document.addEventListener('DOMContentLoaded', function() {
+                const pill = document.querySelector('.theme-pill');
+                if (pill) pill.dataset.theme = t;
+            });
         })();
     </script>
 </head>
@@ -145,10 +149,30 @@ $isStudent    = ($userRole === 'student');
                         <?php include __DIR__ . '/../partials/icons/settings.svg.php'; ?>
                         Settings
                     </a>
-                    <a href="#" class="dropdown-item">
-                        <?php include __DIR__ . '/../partials/icons/help.svg.php'; ?>
-                        Help &amp; About
-                    </a>
+                    <div class="dropdown-item theme-toggle-row" onclick="
+                        const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+                        document.documentElement.dataset.theme = t;
+                        localStorage.setItem('plp_theme', t);
+                        document.querySelector('.theme-pill').dataset.theme = t;" style="cursor:pointer;justify-content:space-between;">
+                        <span style="display:flex;align-items:center;gap:var(--space-2)">
+                            <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                            Dark Mode
+                        </span>
+                        <div class="theme-pill" data-theme="light" style="
+                            position:relative;width:32px;height:18px;border-radius:999px;
+                            background:var(--border);transition:background .2s;flex-shrink:0;pointer-events:none;">
+                            <div style="
+                                position:absolute;top:3px;left:3px;width:12px;height:12px;
+                                border-radius:50%;background:#fff;
+                                transition:transform .2s;
+                                transform:translateX(0);">
+                            </div>
+                        </div>
+                    </div>
+                    <style>
+                        .theme-pill[data-theme='dark'] { background: var(--accent) !important; }
+                        .theme-pill[data-theme='dark'] div { transform: translateX(14px) !important; }
+                    </style>
                     <div class="dropdown-separator"></div>
                     <a href="<?= url('/logout') ?>" class="dropdown-item danger">
                         <?php include __DIR__ . '/../partials/icons/logout.svg.php'; ?>
