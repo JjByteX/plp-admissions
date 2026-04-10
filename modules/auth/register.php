@@ -15,24 +15,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
     $old = [
-        'name'           => trim($_POST['name']           ?? ''),
+        'first_name'     => trim($_POST['first_name']     ?? ''),
+        'middle_name'    => trim($_POST['middle_name']    ?? ''),
+        'last_name'      => trim($_POST['last_name']      ?? ''),
+        'suffix'         => trim($_POST['suffix']         ?? ''),
+        'birthdate'      => trim($_POST['birthdate']      ?? ''),
+        'sex'            => trim($_POST['sex']            ?? ''),
+        'street_address' => trim($_POST['street_address'] ?? ''),
+        'barangay'       => trim($_POST['barangay']       ?? ''),
+        'phone'          => trim($_POST['phone']          ?? ''),
         'email'          => trim($_POST['email']          ?? ''),
-        'course_applied' => trim($_POST['course_applied'] ?? ''),
         'applicant_type' => trim($_POST['applicant_type'] ?? ''),
+        'course_applied' => trim($_POST['course_applied'] ?? ''),
         'shs_strand'     => trim($_POST['shs_strand']     ?? ''),
     ];
     $password        = $_POST['password']        ?? '';
     $passwordConfirm = $_POST['password_confirm'] ?? '';
 
     // Validate
-    if (!$old['name'])                         $errors['name']           = 'Full name is required.';
-    if (!filter_var($old['email'], FILTER_VALIDATE_EMAIL)) $errors['email'] = 'Enter a valid email address.';
+    if (!$old['first_name'])
+        $errors['first_name'] = 'First name is required.';
+    if (!$old['last_name'])
+        $errors['last_name']  = 'Last name is required.';
+    if (!$old['birthdate'] || !strtotime($old['birthdate']))
+        $errors['birthdate']  = 'Enter a valid birthdate.';
+    if (!in_array($old['sex'], ['M', 'F'], true))
+        $errors['sex']        = 'Select M or F.';
+    if (!$old['street_address'])
+        $errors['street_address'] = 'Street address is required.';
+
+    // Hardcoded list of valid Pasig City barangays
+    $validBarangays = [
+        'Bagong Ilog', 'Bagong Katipunan', 'Bambang', 'Buting', 'Caniogan',
+        'Dela Paz', 'Kalawaan', 'Kapasigan', 'Kapitolyo', 'Malinao',
+        'Manggahan', 'Maybunga', 'Oranbo', 'Palatiw', 'Pinagbuhatan',
+        'Pineda', 'Rosario', 'Sagad', 'San Antonio', 'San Joaquin',
+        'San Jose', 'San Miguel', 'San Nicolas', 'Santa Cruz',
+        'Santa Lucia', 'Santa Rosa', 'Santo Tomas', 'Santolan',
+        'Sumilang', 'Ugong',
+    ];
+    if (!in_array($old['barangay'], $validBarangays, true))
+        $errors['barangay'] = 'Select a valid barangay in Pasig City.';
+    if (!$old['phone'])
+        $errors['phone']      = 'Phone number is required.';
+    if (!filter_var($old['email'], FILTER_VALIDATE_EMAIL))
+        $errors['email']      = 'Enter a valid email address.';
     if (!in_array($old['applicant_type'], [TYPE_FRESHMAN, TYPE_TRANSFEREE, TYPE_FOREIGN], true))
         $errors['applicant_type'] = 'Select an applicant type.';
     if (!in_array($old['course_applied'], PLP_COURSES, true))
         $errors['course_applied'] = 'Select a valid course.';
-    if (strlen($password) < 8)                 $errors['password']       = 'Password must be at least 8 characters.';
-    if ($password !== $passwordConfirm)        $errors['password_confirm'] = 'Passwords do not match.';
+    if (strlen($password) < 8)
+        $errors['password']   = 'Password must be at least 8 characters.';
+    if ($password !== $passwordConfirm)
+        $errors['password_confirm'] = 'Passwords do not match.';
 
     // Strand validation for freshmen
     if ($old['applicant_type'] === TYPE_FRESHMAN) {
@@ -41,7 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!empty($old['course_applied'])) {
             $allowedStrands = COURSE_STRAND_MAP[$old['course_applied']] ?? null;
             if ($allowedStrands !== null && !in_array($old['shs_strand'], $allowedStrands, true)) {
-                $errors['shs_strand'] = 'Your strand (' . $old['shs_strand'] . ') is not accepted for ' . $old['course_applied'] . '. Accepted: ' . implode(', ', $allowedStrands) . '.';
+                $errors['shs_strand'] = 'Your strand (' . $old['shs_strand'] . ') is not accepted for '
+                    . $old['course_applied'] . '. Accepted: ' . implode(', ', $allowedStrands) . '.';
             }
         }
     }
@@ -54,23 +90,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
+        $parts = array_filter([
+            $old['first_name'],
+            $old['middle_name'] ?: null,
+            $old['last_name'],
+            $old['suffix']      ?: null,
+        ]);
+        $displayName = implode(' ', $parts);
+
+        $fullAddress = $old['street_address'] . ', Brgy. ' . $old['barangay'] . ', Pasig City';
+
         $pdo = db();
         $pdo->beginTransaction();
 
         try {
-            // Create user
             $stmt = $pdo->prepare(
-                'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)'
+                'INSERT INTO users
+                    (name, first_name, middle_name, last_name, suffix,
+                     birthdate, sex, address, phone, email, password_hash, role)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $stmt->execute([
-                $old['name'],
+                $displayName,
+                $old['first_name'],
+                $old['middle_name'],
+                $old['last_name'],
+                $old['suffix'],
+                $old['birthdate'],
+                $old['sex'],
+                $fullAddress,
+                $old['phone'],
                 $old['email'],
                 password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]),
                 ROLE_STUDENT,
             ]);
             $userId = (int) $pdo->lastInsertId();
 
-            // Create applicant record
             $schoolYear = school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
             $stmt = $pdo->prepare(
                 'INSERT INTO applicants (user_id, applicant_type, course_applied, overall_status, school_year)
@@ -85,8 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $applicantId = (int) $pdo->lastInsertId();
 
-            // Seed document rows per applicant type
-            $docs = docs_for_type($old['applicant_type']);
+            $docs    = docs_for_type($old['applicant_type']);
             $docStmt = $pdo->prepare(
                 'INSERT INTO documents (applicant_id, doc_type, status) VALUES (?, ?, ?)'
             );
@@ -96,7 +150,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
 
-            // Auto-login
             $user = $pdo->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
             $user->execute([$userId]);
             Auth::login($user->fetch());
@@ -113,16 +166,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // -- View -------------------------------------------------------
+$schoolLogo = school_setting('school_logo', '');
 ob_start();
 ?>
-<div class="auth-card animate-fade-in" style="max-width:480px">
+<div class="auth-card animate-fade-in" style="max-width:560px">
+
+    <button class="auth-theme-toggle" onclick="Theme.toggle()" aria-label="Toggle theme">
+        <svg data-theme-icon="dark" class="hidden" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <svg data-theme-icon="light" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
 
     <div class="auth-header">
-        <div class="auth-logo">
-            <?php include VIEWS_PATH . '/partials/icons/school.svg.php'; ?>
+        <?php if ($schoolLogo): ?>
+            <img src="<?= url($schoolLogo) ?>" alt="School Logo" class="auth-logo-img">
+        <?php else: ?>
+            <div class="auth-logo">
+                <?php include VIEWS_PATH . '/partials/icons/school.svg.php'; ?>
+            </div>
+        <?php endif; ?>
+        <div class="auth-header-text">
+            <h1 class="auth-title">PLP Admissions</h1>
+            <p class="auth-subtitle">Pamantasan ng Lungsod ng Pasig</p>
         </div>
-        <h1 class="auth-title">Create an account</h1>
-        <p class="auth-subtitle">Apply to <?= e(school_setting('school_name', 'PLP')) ?></p>
     </div>
 
     <?php if (!empty($errors['general'])): ?>
@@ -135,36 +200,13 @@ ob_start();
     <form method="POST" action="<?= url('/register') ?>" data-once novalidate>
         <?= csrf_field() ?>
 
+        <!-- Applicant Type -->
         <div class="form-group">
-            <label class="form-label" for="name">Full name <span>*</span></label>
-            <input type="text" id="name" name="name"
-                class="form-input <?= isset($errors['name']) ? 'error' : '' ?>"
-                value="<?= e($old['name'] ?? '') ?>"
-                placeholder="Juan dela Cruz"
-                autocomplete="name" required>
-            <?php if (!empty($errors['name'])): ?>
-                <span class="form-error"><?= e($errors['name']) ?></span>
-            <?php endif; ?>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label" for="email">Email address <span>*</span></label>
-            <input type="email" id="email" name="email"
-                class="form-input <?= isset($errors['email']) ? 'error' : '' ?>"
-                value="<?= e($old['email'] ?? '') ?>"
-                placeholder="you@example.com"
-                autocomplete="email" required>
-            <?php if (!empty($errors['email'])): ?>
-                <span class="form-error"><?= e($errors['email']) ?></span>
-            <?php endif; ?>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label" for="applicant_type">Applicant type <span>*</span></label>
+            <label class="form-label" for="applicant_type">Applicant Type <span>*</span></label>
             <select id="applicant_type" name="applicant_type"
                 class="form-select <?= isset($errors['applicant_type']) ? 'error' : '' ?>" required
                 onchange="onTypeChange(this.value)">
-                <option value="">Select type…</option>
+                <option value="">Select…</option>
                 <option value="freshman"   <?= ($old['applicant_type'] ?? '') === 'freshman'   ? 'selected' : '' ?>>Freshman (Graduating / Graduate of Senior HS)</option>
                 <option value="transferee" <?= ($old['applicant_type'] ?? '') === 'transferee' ? 'selected' : '' ?>>Transferee (Incoming 2nd–3rd Year)</option>
                 <option value="foreign"    <?= ($old['applicant_type'] ?? '') === 'foreign'    ? 'selected' : '' ?>>Foreign Student</option>
@@ -174,7 +216,6 @@ ob_start();
             <?php endif; ?>
         </div>
 
-        <!-- Qualifications info box — shown per type -->
         <div id="qual-freshman" class="qual-box" style="display:<?= ($old['applicant_type'] ?? '') === 'freshman' ? 'block' : 'none' ?>">
             <div class="qual-box-title">Freshman Qualifications</div>
             <ul class="qual-list">
@@ -195,12 +236,13 @@ ob_start();
             </ul>
         </div>
 
+        <!-- Course -->
         <div class="form-group">
-            <label class="form-label" for="course_applied">Course applied for <span>*</span></label>
+            <label class="form-label" for="course_applied">Course Applying For <span>*</span></label>
             <select id="course_applied" name="course_applied"
                 class="form-select <?= isset($errors['course_applied']) ? 'error' : '' ?>" required
                 onchange="onCourseChange(this.value)">
-                <option value="">Select course…</option>
+                <option value="">Select…</option>
                 <?php foreach (PLP_COURSES as $course): ?>
                     <option value="<?= e($course) ?>"
                         <?= ($old['course_applied'] ?? '') === $course ? 'selected' : '' ?>>
@@ -213,28 +255,160 @@ ob_start();
             <?php endif; ?>
         </div>
 
-        <!-- SHS Strand — shown for freshmen only -->
+        <!-- SHS Strand — only shown for freshmen; options filtered by course via JS -->
         <div id="strand-group" class="form-group" style="display:<?= ($old['applicant_type'] ?? '') === 'freshman' ? 'block' : 'none' ?>">
             <label class="form-label" for="shs_strand">SHS Strand <span>*</span></label>
             <select id="shs_strand" name="shs_strand"
                 class="form-select <?= isset($errors['shs_strand']) ? 'error' : '' ?>">
-                <option value="">Select strand…</option>
-                <?php foreach (SHS_STRANDS as $key => $label): ?>
-                    <option value="<?= e($key) ?>"
-                        <?= ($old['shs_strand'] ?? '') === $key ? 'selected' : '' ?>>
-                        <?= e($label) ?>
-                    </option>
-                <?php endforeach; ?>
+                <option value="">Select…</option>
             </select>
-            <p id="strand-note" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">
-                Only strands accepted for your selected course will pass validation.
-            </p>
             <?php if (!empty($errors['shs_strand'])): ?>
                 <span class="form-error"><?= e($errors['shs_strand']) ?></span>
             <?php endif; ?>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)">
+        <!-- Row: First / Middle / Last / Suffix — all in one row -->
+        <div class="reg-row-names">
+            <div class="form-group">
+                <label class="form-label" for="first_name">First Name <span>*</span></label>
+                <input type="text" id="first_name" name="first_name"
+                    class="form-input <?= isset($errors['first_name']) ? 'error' : '' ?>"
+                    value="<?= e($old['first_name'] ?? '') ?>"
+                    placeholder=""
+                    autocomplete="given-name" required>
+                <?php if (!empty($errors['first_name'])): ?>
+                    <span class="form-error"><?= e($errors['first_name']) ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="middle_name">Middle Name</label>
+                <input type="text" id="middle_name" name="middle_name"
+                    class="form-input"
+                    value="<?= e($old['middle_name'] ?? '') ?>"
+                    placeholder=""
+                    autocomplete="additional-name">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="last_name">Last Name <span>*</span></label>
+                <input type="text" id="last_name" name="last_name"
+                    class="form-input <?= isset($errors['last_name']) ? 'error' : '' ?>"
+                    value="<?= e($old['last_name'] ?? '') ?>"
+                    placeholder=""
+                    autocomplete="family-name" required>
+                <?php if (!empty($errors['last_name'])): ?>
+                    <span class="form-error"><?= e($errors['last_name']) ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="form-group reg-suffix-col">
+                <label class="form-label" for="suffix">Suffix</label>
+                <input type="text" id="suffix" name="suffix"
+                    class="form-input"
+                    value="<?= e($old['suffix'] ?? '') ?>"
+                    placeholder=""
+                    autocomplete="honorific-suffix"
+                    maxlength="8">
+            </div>
+        </div>
+
+        <!-- Row: Birthdate / Sex -->
+        <div class="reg-row reg-row-birthdate">
+            <div class="form-group">
+                <label class="form-label" for="birthdate">Birthdate <span>*</span></label>
+                <input type="date" id="birthdate" name="birthdate"
+                    class="form-input <?= isset($errors['birthdate']) ? 'error' : '' ?>"
+                    value="<?= e($old['birthdate'] ?? '') ?>"
+                    max="<?= date('Y-m-d', strtotime('-15 years')) ?>"
+                    required>
+                <?php if (!empty($errors['birthdate'])): ?>
+                    <span class="form-error"><?= e($errors['birthdate']) ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Sex <span>*</span></label>
+                <div class="sex-toggle <?= isset($errors['sex']) ? 'error' : '' ?>">
+                    <input type="hidden" name="sex" id="sex_value" value="<?= e($old['sex'] ?? '') ?>">
+                    <button type="button" class="sex-btn <?= ($old['sex'] ?? '') === 'M' ? 'active' : '' ?>"
+                        onclick="setSex('M')">M</button>
+                    <button type="button" class="sex-btn <?= ($old['sex'] ?? '') === 'F' ? 'active' : '' ?>"
+                        onclick="setSex('F')">F</button>
+                </div>
+                <?php if (!empty($errors['sex'])): ?>
+                    <span class="form-error"><?= e($errors['sex']) ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Row: Address / Barangay -->
+        <div class="reg-row reg-row-address">
+            <div class="form-group">
+                <label class="form-label" for="street_address">Address <span>*</span></label>
+                <input type="text" id="street_address" name="street_address"
+                    class="form-input <?= isset($errors['street_address']) ? 'error' : '' ?>"
+                    value="<?= e($old['street_address'] ?? '') ?>"
+                    placeholder="House No., Building, Street"
+                    autocomplete="street-address" required>
+                <?php if (!empty($errors['street_address'])): ?>
+                    <span class="form-error"><?= e($errors['street_address']) ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="barangay">Barangay <span>*</span></label>
+                <select id="barangay" name="barangay"
+                    class="form-select <?= isset($errors['barangay']) ? 'error' : '' ?>" required>
+                    <option value="">Select…</option>
+                    <?php
+                    $pasigBarangays = [
+                        'Bagong Ilog', 'Bagong Katipunan', 'Bambang', 'Buting', 'Caniogan',
+                        'Dela Paz', 'Kalawaan', 'Kapasigan', 'Kapitolyo', 'Malinao',
+                        'Manggahan', 'Maybunga', 'Oranbo', 'Palatiw', 'Pinagbuhatan',
+                        'Pineda', 'Rosario', 'Sagad', 'San Antonio', 'San Joaquin',
+                        'San Jose', 'San Miguel', 'San Nicolas', 'Santa Cruz',
+                        'Santa Lucia', 'Santa Rosa', 'Santo Tomas', 'Santolan',
+                        'Sumilang', 'Ugong',
+                    ];
+                    foreach ($pasigBarangays as $brgy): ?>
+                        <option value="<?= e($brgy) ?>"
+                            <?= ($old['barangay'] ?? '') === $brgy ? 'selected' : '' ?>>
+                            <?= e($brgy) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if (!empty($errors['barangay'])): ?>
+                    <span class="form-error"><?= e($errors['barangay']) ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Row: Email / Phone -->
+        <div class="reg-row">
+            <div class="form-group">
+                <label class="form-label" for="email">Email Address <span>*</span></label>
+                <input type="email" id="email" name="email"
+                    class="form-input <?= isset($errors['email']) ? 'error' : '' ?>"
+                    value="<?= e($old['email'] ?? '') ?>"
+                    placeholder=""
+                    autocomplete="email" required>
+                <?php if (!empty($errors['email'])): ?>
+                    <span class="form-error"><?= e($errors['email']) ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="phone">Phone Number <span>*</span></label>
+                <input type="tel" id="phone" name="phone"
+                    class="form-input <?= isset($errors['phone']) ? 'error' : '' ?>"
+                    value="<?= e($old['phone'] ?? '') ?>"
+                    placeholder=""
+                    autocomplete="tel"
+                    maxlength="10"
+                    oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"
+                    required>
+                <?php if (!empty($errors['phone'])): ?>
+                    <span class="form-error"><?= e($errors['phone']) ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="reg-row">
             <div class="form-group" style="margin-bottom:0">
                 <label class="form-label" for="password">Password <span>*</span></label>
                 <div class="input-wrapper has-suffix">
@@ -242,7 +416,8 @@ ob_start();
                         class="form-input <?= isset($errors['password']) ? 'error' : '' ?>"
                         placeholder="Min. 8 characters"
                         autocomplete="new-password" required>
-                    <button type="button" class="input-suffix-icon btn-pw-toggle" onclick="togglePw('password',this)" tabindex="-1" aria-label="Show password">
+                    <button type="button" class="input-suffix-icon btn-pw-toggle"
+                        onclick="togglePw('password',this)" tabindex="-1" aria-label="Show password">
                         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
                     </button>
                 </div>
@@ -251,13 +426,14 @@ ob_start();
                 <?php endif; ?>
             </div>
             <div class="form-group" style="margin-bottom:0">
-                <label class="form-label" for="password_confirm">Confirm <span>*</span></label>
+                <label class="form-label" for="password_confirm">Confirm Password <span>*</span></label>
                 <div class="input-wrapper has-suffix">
                     <input type="password" id="password_confirm" name="password_confirm"
                         class="form-input <?= isset($errors['password_confirm']) ? 'error' : '' ?>"
-                        placeholder="Repeat password"
+                        placeholder=""
                         autocomplete="new-password" required>
-                    <button type="button" class="input-suffix-icon btn-pw-toggle" onclick="togglePw('password_confirm',this)" tabindex="-1" aria-label="Show password">
+                    <button type="button" class="input-suffix-icon btn-pw-toggle"
+                        onclick="togglePw('password_confirm',this)" tabindex="-1" aria-label="Show password">
                         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
                     </button>
                 </div>
@@ -278,37 +454,62 @@ ob_start();
     </div>
 
 </div>
+
 <script>
-const strandMap = <?= json_encode(COURSE_STRAND_MAP) ?>;
+const strandMap  = <?= json_encode(COURSE_STRAND_MAP) ?>;
+const allStrands = <?= json_encode(SHS_STRANDS) ?>;
+
+function setSex(val) {
+    document.getElementById('sex_value').value = val;
+    document.querySelectorAll('.sex-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.textContent.trim() === val);
+    });
+}
 
 function onTypeChange(type) {
-    document.getElementById('qual-freshman').style.display  = type === 'freshman'   ? 'block' : 'none';
+    document.getElementById('qual-freshman').style.display   = type === 'freshman'   ? 'block' : 'none';
     document.getElementById('qual-transferee').style.display = type === 'transferee' ? 'block' : 'none';
-    document.getElementById('strand-group').style.display   = type === 'freshman'   ? 'block' : 'none';
-    if (type !== 'freshman') {
-        document.getElementById('shs_strand').value = '';
-    }
-    updateStrandNote();
+    document.getElementById('strand-group').style.display    = type === 'freshman'   ? 'block' : 'none';
+    if (type !== 'freshman') document.getElementById('shs_strand').value = '';
+    rebuildStrandOptions(document.getElementById('course_applied').value);
 }
 
 function onCourseChange(course) {
-    updateStrandNote(course);
+    rebuildStrandOptions(course);
 }
 
-function updateStrandNote(course) {
-    course = course || document.getElementById('course_applied').value;
-    const note = document.getElementById('strand-note');
-    if (!note) return;
-    const strands = strandMap[course];
-    if (strands && strands.length) {
-        note.textContent = 'Accepted strands for this course: ' + strands.join(', ') + '.';
-        note.style.color = 'var(--accent)';
-    } else if (course) {
-        note.textContent = 'Open to all SHS strands.';
-        note.style.color = 'var(--text-tertiary)';
+function rebuildStrandOptions(course) {
+    const sel = document.getElementById('shs_strand');
+    const prevVal = sel.value;
+    sel.innerHTML = '';
+
+    const allowedKeys = strandMap[course] || null;
+    // If no course selected yet, or type isn't freshman, show placeholder only
+    if (!course || document.getElementById('strand-group').style.display === 'none') {
+        sel.innerHTML = '<option value="">Select…</option>';
+        return;
+    }
+
+    if (allowedKeys && allowedKeys.length) {
+        sel.innerHTML = '<option value="">Select…</option>';
+        allowedKeys.forEach(function(key) {
+            const label = allStrands[key] || key;
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = label;
+            if (key === prevVal) opt.selected = true;
+            sel.appendChild(opt);
+        });
     } else {
-        note.textContent = 'Select a course first to see accepted strands.';
-        note.style.color = 'var(--text-tertiary)';
+        // Open to all strands
+        sel.innerHTML = '<option value="">Select…</option>';
+        Object.keys(allStrands).forEach(function(key) {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = allStrands[key];
+            if (key === prevVal) opt.selected = true;
+            sel.appendChild(opt);
+        });
     }
 }
 
@@ -319,15 +520,95 @@ function togglePw(id, btn) {
     btn.querySelector('svg').style.opacity = isText ? '1' : '0.5';
 }
 
-// Init on page load (for validation repopulation)
 (function() {
     const t = document.getElementById('applicant_type').value;
-    if (t) onTypeChange(t);
     const c = document.getElementById('course_applied').value;
-    if (c) updateStrandNote(c);
+    const savedStrand = <?= json_encode($old['shs_strand'] ?? '') ?>;
+
+    if (t) onTypeChange(t);
+    if (c) rebuildStrandOptions(c);
+
+    // Restore previously selected strand after rebuilding
+    if (savedStrand) {
+        const sel = document.getElementById('shs_strand');
+        for (let i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === savedStrand) {
+                sel.options[i].selected = true;
+                break;
+            }
+        }
+    }
 })();
 </script>
+
 <style>
+/* Name row: first / middle / last / suffix */
+.reg-row-names {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 80px;
+    gap: var(--space-3);
+    margin-bottom: 0;
+}
+.reg-suffix-col .form-input {
+    max-width: 100%;
+}
+
+/* Standard 2-col row */
+.reg-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+}
+
+/* Birthdate/Sex: equal columns */
+.reg-row-birthdate {
+    grid-template-columns: 1fr 1fr;
+}
+
+/* Address: equal columns like all other rows */
+.reg-row-address {
+    grid-template-columns: 1fr 1fr;
+}
+
+/* Section labels */
+.reg-section-label {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border);
+    margin-top: var(--space-5);
+}
+.reg-section-label:first-of-type {
+    margin-top: 0;
+}
+
+.sex-toggle {
+    display: flex;
+    gap: var(--space-2);
+    height: 40px;
+}
+.sex-btn {
+    width: 48px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.sex-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+.sex-toggle.error .sex-btn { border-color: var(--color-error, #e53e3e); }
+
 .qual-box {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
@@ -344,18 +625,20 @@ function togglePw(id, btn) {
     font-size: var(--text-sm);
 }
 .qual-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
+    list-style: none; padding: 0; margin: 0;
+    display: flex; flex-direction: column;
     gap: var(--space-1);
     color: var(--text-secondary);
 }
-.qual-list li::before {
-    content: '· ';
-    color: var(--accent);
-    font-weight: bold;
+.qual-list li::before { content: '· '; color: var(--accent); font-weight: bold; }
+
+@media (max-width: 560px) {
+    .reg-row-names { grid-template-columns: 1fr 1fr; }
+    .reg-suffix-col { grid-column: span 1; }
+    .reg-row, .reg-row-address, .reg-row-birthdate { grid-template-columns: 1fr; }
+}
+@media (max-width: 380px) {
+    .reg-row-names { grid-template-columns: 1fr; }
 }
 </style>
 <?php

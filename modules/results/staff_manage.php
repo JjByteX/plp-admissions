@@ -110,7 +110,7 @@ ob_start();
                     </td>
                     <td>
                         <button class="btn btn-secondary btn-sm"
-                                onclick="openReleaseModal(<?= $row['id'] ?>, <?= json_encode($row['student_name']) ?>, <?= json_encode($row['admission_result']) ?>, <?= json_encode($row['admission_remarks'] ?? '') ?>)">
+                                onclick="openReleaseModal(<?= $row['id'] ?>, <?= htmlspecialchars(json_encode($row['student_name']), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($row['admission_result']), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($row['admission_remarks'] ?? ''), ENT_QUOTES) ?>)">
                             <?= $row['admission_result'] ? 'Edit' : 'Release' ?>
                         </button>
                     </td>

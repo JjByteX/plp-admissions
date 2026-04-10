@@ -48,15 +48,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 ob_start();
+$schoolLogo = school_setting('school_logo', '');
 ?>
 <div class="auth-card animate-fade-in">
 
+    <button class="auth-theme-toggle" onclick="Theme.toggle()" aria-label="Toggle theme">
+        <svg data-theme-icon="dark" class="hidden" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <svg data-theme-icon="light" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+
     <div class="auth-header">
-        <div class="auth-logo">
-            <?php include VIEWS_PATH . '/partials/icons/help.svg.php'; ?>
+        <?php if ($schoolLogo): ?>
+            <img src="<?= url($schoolLogo) ?>" alt="School Logo" class="auth-logo-img">
+        <?php else: ?>
+            <div class="auth-logo">
+                <?php include VIEWS_PATH . '/partials/icons/school.svg.php'; ?>
+            </div>
+        <?php endif; ?>
+        <div class="auth-header-text">
+            <h1 class="auth-title">PLP Admissions</h1>
+            <p class="auth-subtitle">Pamantasan ng Lungsod ng Pasig</p>
         </div>
-        <h1 class="auth-title">Reset password</h1>
-        <p class="auth-subtitle">Enter your email to get a reset token</p>
     </div>
 
     <?php if ($success): ?>

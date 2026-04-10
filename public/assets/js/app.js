@@ -14,7 +14,7 @@ const Theme = (() => {
     function apply(theme) {
         document.documentElement.dataset.theme = theme;
         localStorage.setItem(KEY, theme);
-        // Sync toggle icons
+        // Sync toggle icons — show the icon for the mode you'll SWITCH TO
         document.querySelectorAll('[data-theme-icon]').forEach(el => {
             el.dataset.themeIcon === theme
                 ? el.classList.remove('hidden')

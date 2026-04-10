@@ -56,7 +56,7 @@ define('TYPE_FOREIGN',    'foreign');
 define('DOCS_CORE', [
     'applicant_id'       => 'Government-issued ID / School ID (Applicant)',
     'psa_birth_cert'     => 'PSA Birth Certificate',
-    'passport_photos'    => 'Passport-size Photos — 2 pcs., white background with nameplate',
+    'passport_photos'    => 'Passport-size Photos, white background with nameplate',
     'parent_id'          => 'Government-issued ID of Parent/Guardian',
     'proof_of_income'    => 'Proof of Income of Parents (ITR, DSWD Case Study, or DSWD Beneficiary ID)',
     'guardianship_affidavit' => 'Notarized Affidavit of Guardianship (for applicants under a guardian)',
