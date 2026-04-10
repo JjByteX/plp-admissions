@@ -26,7 +26,7 @@ A web-based admissions management system for **Pamantasan ng Lungsod ng Pasig (P
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/plp-admissions.git
+git clone https://github.com/JjByteX/plp-admissions.git
 ```
 
 Then copy the `plp-admissions` folder into your XAMPP web root:
