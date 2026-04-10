@@ -162,7 +162,7 @@ plp-admissions/
 - [ ] Allow interviewers to record evaluation notes or assessments per student within the system
 
 ### Chavez — Applicants
-- [ ] Add a filter option beside the search bar for sorting/refining results
+- [ ] Enhance filter option beside the search bar for sorting/refining results
 
 ### Bassig — Exam Manager
 - [ ] Remove answer mode in each question as sections already describes it
