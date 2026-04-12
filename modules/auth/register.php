@@ -128,13 +128,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $schoolYear = school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
             $stmt = $pdo->prepare(
-                'INSERT INTO applicants (user_id, applicant_type, course_applied, overall_status, school_year)
-                 VALUES (?, ?, ?, ?, ?)'
+                'INSERT INTO applicants (user_id, applicant_type, course_applied, shs_strand, overall_status, school_year)
+                 VALUES (?, ?, ?, ?, ?, ?)'
             );
             $stmt->execute([
                 $userId,
                 $old['applicant_type'],
                 $old['course_applied'],
+                $old['applicant_type'] === TYPE_FRESHMAN ? ($old['shs_strand'] ?: null) : null,
                 'pending',
                 $schoolYear,
             ]);

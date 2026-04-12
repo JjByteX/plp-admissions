@@ -1,7 +1,6 @@
 <?php
 // ============================================================
 // modules/auth/admin/dashboard.php
-// Admin overview — system-wide stats + quick links
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -10,108 +9,667 @@ Auth::requireRole(ROLE_ADMIN);
 $pdo        = db();
 $schoolYear = school_setting('current_school_year');
 
-// Totals
-$stats = $pdo->prepare(
-    "SELECT
-        COUNT(*)                                          AS total,
-        SUM(overall_status = 'released')                 AS released,
-        SUM(a2.result = 'accepted')                      AS accepted,
-        SUM(a2.result = 'waitlisted')                    AS waitlisted,
-        SUM(a2.result = 'rejected')                      AS rejected_result
-     FROM applicants a
-     LEFT JOIN admission_results a2 ON a2.applicant_id = a.id
-     WHERE a.school_year = ?"
-);
-$stats->execute([$schoolYear]);
-$totals = $stats->fetch();
+// ── Date range ────────────────────────────────────────────────────
+$validRanges = ['today','yesterday','this-week','last-week','this-month','last-month','this-year','last-year','custom'];
+$range    = in_array($_GET['range'] ?? '', $validRanges) ? $_GET['range'] : 'this-year';
+$fromDate = isset($_GET['from']) ? preg_replace('/[^0-9\-]/', '', $_GET['from']) : null;
+$toDate   = isset($_GET['to'])   ? preg_replace('/[^0-9\-]/', '', $_GET['to'])   : null;
 
-// Pipeline stage counts
-$pipeline = $pdo->prepare(
-    "SELECT overall_status, COUNT(*) as cnt
-     FROM applicants WHERE school_year = ?
-     GROUP BY overall_status"
-);
-$pipeline->execute([$schoolYear]);
-$pipelineCounts = array_column($pipeline->fetchAll(), 'cnt', 'overall_status');
+$dateFilter = '';
+$dateExtra  = [];
+switch ($range) {
+    case 'today':
+        $dateFilter = 'AND DATE(a.created_at) = CURDATE()'; break;
+    case 'yesterday':
+        $dateFilter = 'AND DATE(a.created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)'; break;
+    case 'this-week':
+        $dateFilter = 'AND YEARWEEK(a.created_at, 1) = YEARWEEK(CURDATE(), 1)'; break;
+    case 'last-week':
+        $dateFilter = 'AND YEARWEEK(a.created_at, 1) = YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK), 1)'; break;
+    case 'this-month':
+        $dateFilter = 'AND YEAR(a.created_at) = YEAR(CURDATE()) AND MONTH(a.created_at) = MONTH(CURDATE())'; break;
+    case 'last-month':
+        $dateFilter = 'AND YEAR(a.created_at) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(a.created_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))'; break;
+    case 'last-year':
+        $dateFilter = 'AND YEAR(a.created_at) = YEAR(CURDATE()) - 1'; break;
+    case 'custom':
+        if ($fromDate && $toDate) {
+            $dateFilter = 'AND DATE(a.created_at) BETWEEN ? AND ?';
+            $dateExtra  = [$fromDate, $toDate];
+        }
+        break;
+    default:
+        $dateFilter = 'AND YEAR(a.created_at) = YEAR(CURDATE())';
+}
 
-// User counts by role
-$userCounts = $pdo->query(
-    "SELECT role, COUNT(*) as cnt FROM users WHERE is_active = 1 GROUP BY role"
-)->fetchAll();
-$usersByRole = array_column($userCounts, 'cnt', 'role');
+// ── CSV export (early exit) ────────────────────────────────────────
+if (isset($_GET['export']) && $_GET['export'] === 'csv') {
+    $csvStmt = $pdo->prepare("
+        SELECT
+            u.name,
+            u.email,
+            u.sex,
+            TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE())                                      AS age,
+            TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(u.address, 'Brgy. ', -1), ',', 1))         AS barangay,
+            a.applicant_type,
+            a.course_applied,
+            a.overall_status,
+            a.school_year,
+            COALESCE(ar.result, 'pending')                                                   AS result,
+            ar.released_at,
+            a.created_at
+        FROM applicants a
+        JOIN  users u              ON u.id = a.user_id
+        LEFT JOIN admission_results ar ON ar.applicant_id = a.id
+        WHERE a.school_year = ? $dateFilter
+        ORDER BY a.created_at DESC
+    ");
+    $csvStmt->execute(array_merge([$schoolYear], $dateExtra));
+    $rows = $csvStmt->fetchAll(PDO::FETCH_ASSOC);
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="plp-admissions-' . $schoolYear . '.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['Name','Email','Sex','Age','Barangay','Type','Course','Stage','School Year','Result','Released At','Applied At']);
+    foreach ($rows as $r) fputcsv($out, array_values($r));
+    fclose($out);
+    exit;
+}
+
+// ── Stats ──────────────────────────────────────────────────────────
+$statsStmt = $pdo->prepare("
+    SELECT
+        COUNT(*)                              AS total,
+        SUM(ar.result = 'accepted')           AS accepted,
+        SUM(ar.result = 'rejected')           AS rejected,
+        SUM(ar.result = 'waitlisted')         AS waitlisted,
+        SUM(a.overall_status = 'released')    AS released
+    FROM applicants a
+    LEFT JOIN admission_results ar ON ar.applicant_id = a.id
+    WHERE a.school_year = ? $dateFilter
+");
+$statsStmt->execute(array_merge([$schoolYear], $dateExtra));
+$t = $statsStmt->fetch(PDO::FETCH_ASSOC);
+
+$total         = (int)$t['total'];
+$accepted      = (int)$t['accepted'];
+$rejected      = (int)$t['rejected'];
+$waitlisted    = (int)$t['waitlisted'];
+$released      = (int)$t['released'];
+$acceptedPct   = $released > 0 ? round($accepted   / $released * 100, 1) : 0;
+$rejectedPct   = $released > 0 ? round($rejected   / $released * 100, 1) : 0;
+$waitlistedPct = $released > 0 ? round($waitlisted / $released * 100, 1) : 0;
+$completionPct = $total > 0    ? round($released   / $total    * 100)    : 0;
+
+// ── Pipeline ───────────────────────────────────────────────────────
+$pipelineStmt = $pdo->prepare("
+    SELECT overall_status, COUNT(*) AS cnt
+    FROM applicants a
+    WHERE a.school_year = ? $dateFilter
+    GROUP BY overall_status
+");
+$pipelineStmt->execute(array_merge([$schoolYear], $dateExtra));
+$pipelineMap    = array_column($pipelineStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'overall_status');
+$pipelineOrder  = ['pending','documents','exam','interview','released'];
+$pipelineLabels = ['Pending','Documents','Exam','Interview','Released'];
+$pipelineData   = array_map(fn($s) => (int)($pipelineMap[$s] ?? 0), $pipelineOrder);
+
+// ── Course — all PLP courses, 0 if no data ─────────────────────────
+$courseCountsStmt = $pdo->prepare("
+    SELECT a.course_applied AS label, COUNT(*) AS cnt
+    FROM applicants a
+    WHERE a.school_year = ? $dateFilter
+    GROUP BY a.course_applied
+");
+$courseCountsStmt->execute(array_merge([$schoolYear], $dateExtra));
+$courseCountsMap = array_column($courseCountsStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'label');
+
+$courseLabels = PLP_COURSES;
+$courseData   = array_map(fn($c) => (int)($courseCountsMap[$c] ?? 0), $courseLabels);
+
+// ── SHS Strand — all strands from config, 0 if no data ────────────
+$strandCountsStmt = $pdo->prepare("
+    SELECT a.shs_strand AS label, COUNT(*) AS cnt
+    FROM applicants a
+    WHERE a.school_year = ? $dateFilter
+      AND a.shs_strand IS NOT NULL AND a.shs_strand != ''
+    GROUP BY a.shs_strand
+");
+$strandCountsStmt->execute(array_merge([$schoolYear], $dateExtra));
+$strandCountsMap = array_column($strandCountsStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'label');
+
+// Use full labels from config; keys are the DB values
+$strandLabels = [];
+$strandData   = [];
+foreach (SHS_STRANDS as $key => $label) {
+    $strandLabels[] = $label;
+    $strandData[]   = (int)($strandCountsMap[$key] ?? 0);
+}
+
+// ── Sex ────────────────────────────────────────────────────────────
+$sexStmt = $pdo->prepare("
+    SELECT u.sex, COUNT(*) AS cnt
+    FROM applicants a JOIN users u ON u.id = a.user_id
+    WHERE a.school_year = ? $dateFilter AND u.sex IN ('M','F')
+    GROUP BY u.sex
+");
+$sexStmt->execute(array_merge([$schoolYear], $dateExtra));
+$sexMap    = array_column($sexStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'sex');
+$sexMale   = (int)($sexMap['M'] ?? 0);
+$sexFemale = (int)($sexMap['F'] ?? 0);
+
+// ── Age ────────────────────────────────────────────────────────────
+$ageStmt = $pdo->prepare("
+    SELECT
+        CASE
+            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) <= 16 THEN '16 & below'
+            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) = 17  THEN '17'
+            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) = 18  THEN '18'
+            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) = 19  THEN '19'
+            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) = 20  THEN '20'
+            ELSE '21+'
+        END AS age_group,
+        COUNT(*) AS cnt
+    FROM applicants a JOIN users u ON u.id = a.user_id
+    WHERE a.school_year = ? $dateFilter AND u.birthdate IS NOT NULL
+    GROUP BY age_group
+");
+$ageStmt->execute(array_merge([$schoolYear], $dateExtra));
+$ageRaw    = array_column($ageStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'age_group');
+$ageLabels = ['16 & below','17','18','19','20','21+'];
+$ageData   = array_map(fn($g) => (int)($ageRaw[$g] ?? 0), $ageLabels);
+
+// ── Barangay — all Pasig City barangays, 0 if no data ────────────
+$brgyCountsStmt = $pdo->prepare("
+    SELECT
+        TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(u.address, 'Brgy. ', -1), ',', 1)) AS brgy,
+        COUNT(*) AS cnt
+    FROM applicants a JOIN users u ON u.id = a.user_id
+    WHERE a.school_year = ? $dateFilter AND u.address LIKE '%Brgy. %'
+    GROUP BY brgy
+");
+$brgyCountsStmt->execute(array_merge([$schoolYear], $dateExtra));
+$brgyCountsMap = array_column($brgyCountsStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'brgy');
+
+$allPasigBarangays = [
+    'Bagong Ilog', 'Bagong Katipunan', 'Bambang', 'Buting', 'Caniogan',
+    'Dela Paz', 'Kalawaan', 'Kapasigan', 'Kapitolyo', 'Malinao',
+    'Manggahan', 'Maybunga', 'Oranbo', 'Palatiw', 'Pinagbuhatan',
+    'Pineda', 'Rosario', 'Sagad', 'San Antonio', 'San Joaquin',
+    'San Jose', 'San Miguel', 'San Nicolas', 'Santa Cruz',
+    'Santa Lucia', 'Santa Rosa', 'Santo Tomas', 'Santolan',
+    'Sumilang', 'Ugong',
+];
+
+// Build rows with all barangays; sort by count desc, then name asc
+$brgyRows = [];
+foreach ($allPasigBarangays as $b) {
+    $brgyRows[] = ['brgy' => $b, 'cnt' => (int)($brgyCountsMap[$b] ?? 0)];
+}
+usort($brgyRows, fn($a, $b) => $b['cnt'] <=> $a['cnt'] ?: strcmp($a['brgy'], $b['brgy']));
+
+$brgyMax   = !empty($brgyRows) ? max(array_column($brgyRows, 'cnt')) : 1;
+$brgyMax   = $brgyMax ?: 1; // avoid division by zero when all are 0
+$brgyCount = count($brgyRows);
+
+// ── Labels & URLs ──────────────────────────────────────────────────
+$rangeLabels = [
+    'today'      => 'Today',      'yesterday'  => 'Yesterday',
+    'this-week'  => 'This week',  'last-week'  => 'Last week',
+    'this-month' => 'This month', 'last-month' => 'Last month',
+    'this-year'  => 'This year',  'last-year'  => 'Last year',
+    'custom'     => ($fromDate && $toDate) ? e($fromDate).' – '.e($toDate) : 'Custom range',
+];
+$rangeLabel  = $rangeLabels[$range] ?? 'This year';
+$exportUrl   = url('/admin/dashboard').'?'.http_build_query(array_filter([
+    'range' => $range, 'from' => $fromDate, 'to' => $toDate, 'export' => 'csv'
+]));
+
+// Donut ring math  r=24, cx=cy=29, viewBox 58×58
+$circ    = round(2 * M_PI * 24, 2); // ≈ 150.80
+$dashOff = round($circ * (1 - $completionPct / 100), 2);
+
+$courseCount = count($courseLabels);
 
 ob_start();
 ?>
 
-<!-- System metrics -->
-<div class="metrics-row">
-    <div class="metric-card">
-        <div class="metric-label">Applicants</div>
-        <div class="metric-value"><?= (int)$totals['total'] ?></div>
-        <div class="metric-sub"><?= e($schoolYear) ?></div>
+<style>
+/* ── All UI colors from app CSS variables ─────────────────── */
+
+.db-header {
+    display:flex; align-items:flex-start; justify-content:space-between;
+    flex-wrap:wrap; gap:var(--space-3); margin-bottom:var(--space-6);
+}
+.db-heading {
+    font-size:var(--text-xl); font-weight:var(--weight-semibold);
+    color:var(--text-primary); margin:0 0 var(--space-1); letter-spacing:-0.2px;
+}
+.db-sub      { font-size:var(--text-xs); color:var(--text-tertiary); margin:0; }
+.db-controls { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; }
+
+/* ── 3-column grid: 30% | 40% | 30%
+   Col1 and Col2 are plain flex stacks — no row-spanning.
+   ───────────────────────────────────── */
+.db-grid {
+    display:grid;
+    grid-template-columns: 3fr 4fr 3fr;
+    gap:var(--space-4);
+    align-items:start;
+}
+.db-col1, .db-col2 { display:flex; flex-direction:column; gap:var(--space-4); }
+.db-c-brgy { display:flex; flex-direction:column; min-height:0; }
+
+/* KPI card — single column stack */
+.db-kpi-grid { display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-3); }
+.db-kpi-item { background:var(--bg-subtle); border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); display:flex; align-items:baseline; justify-content:space-between; gap:var(--space-3); }
+.db-kpi-val  { font-size:var(--text-xl); font-weight:var(--weight-semibold); letter-spacing:-0.03em; line-height:1; color:var(--text-primary); flex-shrink:0; }
+.db-kpi-val--success { color:var(--success); }
+.db-kpi-val--error   { color:var(--error);   }
+.db-kpi-val--warning { color:var(--warning); }
+.db-kpi-lbl  { font-size:var(--text-xs); color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.04em; }
+.db-kpi-sub  { display:none; }
+
+/* Pipeline donut (SVG) */
+.db-donut-wrap { position:relative; width:110px; height:110px; flex-shrink:0; }
+.db-donut      { width:110px; height:110px; }
+.db-donut-bg   { stroke:var(--bg-subtle); }
+.db-donut-fill { stroke:var(--accent); stroke-linecap:round; transition:stroke-dashoffset .5s ease; }
+.db-donut-lbl  { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1; gap:2px; }
+.db-donut-pct  { font-size:18px; font-weight:var(--weight-semibold); color:var(--text-primary); }
+.db-donut-sub  { font-size:10px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.05em; }
+
+/* Card chart header */
+.db-ch     { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:var(--space-4); }
+.db-ch-sub { font-size:var(--text-xs); color:var(--text-tertiary); }
+
+/* Legend */
+.db-legend      { display:flex; flex-wrap:wrap; gap:var(--space-3); margin-top:var(--space-3); justify-content:center; }
+.db-legend-item { display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-xs); color:var(--text-secondary); }
+.db-legend-dot  { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+
+/* Barangay list */
+.db-brgy-list { display:flex; flex-direction:column; gap:var(--space-2); flex:1; overflow-y:auto; }
+.db-brgy-row  { display:flex; align-items:center; gap:var(--space-2); min-width:0; }
+.db-brgy-name { flex:1; font-size:var(--text-xs); color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.db-brgy-bar  { height:4px; background:var(--bg-subtle); border-radius:var(--radius-full); overflow:hidden; flex:1; min-width:0; }
+.db-brgy-fill { height:100%; background:var(--accent); border-radius:var(--radius-full); min-width:2px; }
+.db-brgy-cnt  { font-size:var(--text-xs); color:var(--text-tertiary); width:16px; text-align:right; flex-shrink:0; }
+
+/* Date picker */
+.dp-wrap { position:relative; }
+.dp-menu {
+    display:none; position:absolute; right:0; top:calc(100% + var(--space-1));
+    min-width:176px; background:var(--bg-elevated); border:1px solid var(--border);
+    border-radius:var(--radius-md); box-shadow:var(--shadow-md);
+    padding:var(--space-1) 0; z-index:200;
+}
+.dp-menu.open { display:block; }
+.dp-item {
+    display:block; width:100%; text-align:left; padding:var(--space-2) var(--space-4);
+    font-size:var(--text-sm); font-family:var(--font-sans); color:var(--text-secondary);
+    background:none; border:none; cursor:pointer;
+}
+.dp-item:hover  { background:var(--bg-subtle); color:var(--text-primary); }
+.dp-item.active { color:var(--accent); font-weight:var(--weight-medium); }
+.dp-divider     { height:1px; background:var(--border); margin:var(--space-1) 0; }
+.dp-custom-row  { display:none; padding:var(--space-2) var(--space-3); gap:var(--space-2); align-items:center; }
+.dp-custom-row.show { display:flex; }
+.dp-date-in {
+    flex:1; padding:var(--space-1) var(--space-2); font-size:var(--text-xs);
+    font-family:var(--font-sans); border:1px solid var(--border);
+    border-radius:var(--radius-sm); background:var(--bg-subtle); color:var(--text-primary); min-width:0;
+}
+
+@media (max-width:960px) {
+    .db-grid { grid-template-columns:1fr 1fr; }
+    .db-col2, .db-c-brgy { grid-column:1/3; }
+}
+@media (max-width:560px) {
+    .db-grid { grid-template-columns:1fr; }
+    .db-col1,.db-col2,.db-c-brgy { grid-column:1; }
+}
+</style>
+
+<div>
+
+    <!-- ── Header ───────────────────────────────────────────────── -->
+    <div class="db-header">
+        <div>
+            <h1 class="db-heading">Admissions dashboard</h1>
+            <p class="db-sub">Pamantasan ng Lungsod ng Pasig &middot; SY <?= e($schoolYear) ?></p>
+        </div>
+        <div class="db-controls">
+
+            <div class="dp-wrap" id="dpWrap">
+                <button class="btn btn-secondary btn-sm" onclick="dpToggle(event)" type="button">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                        <rect x="1" y="2.5" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.3"/>
+                        <path d="M5 1v3M11 1v3M1 7h14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                    </svg>
+                    <span id="dpLabel"><?= e($rangeLabel) ?></span>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                        <path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <div class="dp-menu" id="dpMenu">
+                    <button class="dp-item <?= $range==='today'      ?'active':''?>" onclick="dpSet('today')">Today</button>
+                    <button class="dp-item <?= $range==='yesterday'  ?'active':''?>" onclick="dpSet('yesterday')">Yesterday</button>
+                    <div class="dp-divider"></div>
+                    <button class="dp-item <?= $range==='this-week'  ?'active':''?>" onclick="dpSet('this-week')">This week</button>
+                    <button class="dp-item <?= $range==='last-week'  ?'active':''?>" onclick="dpSet('last-week')">Last week</button>
+                    <div class="dp-divider"></div>
+                    <button class="dp-item <?= $range==='this-month' ?'active':''?>" onclick="dpSet('this-month')">This month</button>
+                    <button class="dp-item <?= $range==='last-month' ?'active':''?>" onclick="dpSet('last-month')">Last month</button>
+                    <div class="dp-divider"></div>
+                    <button class="dp-item <?= $range==='this-year'  ?'active':''?>" onclick="dpSet('this-year')">This year</button>
+                    <button class="dp-item <?= $range==='last-year'  ?'active':''?>" onclick="dpSet('last-year')">Last year</button>
+                    <div class="dp-divider"></div>
+                    <button class="dp-item <?= $range==='custom'     ?'active':''?>" onclick="dpCustom()">Custom range&hellip;</button>
+                    <div class="dp-custom-row <?= $range==='custom'?'show':''?>" id="dpCustomRow">
+                        <input type="date" class="dp-date-in" id="dpFrom" value="<?= e($fromDate ?? '') ?>">
+                        <input type="date" class="dp-date-in" id="dpTo"   value="<?= e($toDate   ?? '') ?>">
+                        <button class="btn btn-primary" style="padding:var(--space-1) var(--space-3);font-size:var(--text-xs)" onclick="dpApply()">Go</button>
+                    </div>
+                </div>
+            </div>
+
+            <a class="btn btn-secondary btn-sm" href="<?= $exportUrl ?>">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                    <path d="M3 12.5h10M8 1.5v8M5 6.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Export CSV
+            </a>
+
+        </div>
     </div>
-    <div class="metric-card metric-card--success">
-        <div class="metric-label">Accepted</div>
-        <div class="metric-value"><?= (int)$totals['accepted'] ?></div>
-        <div class="metric-sub">of <?= (int)$totals['released'] ?> released</div>
-    </div>
-    <div class="metric-card metric-card--warning">
-        <div class="metric-label">Waitlisted</div>
-        <div class="metric-value"><?= (int)$totals['waitlisted'] ?></div>
-        <div class="metric-sub">&nbsp;</div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-label">Staff accounts</div>
-        <div class="metric-value"><?= (int)($usersByRole['staff'] ?? 0) ?></div>
-        <div class="metric-sub"><?= (int)($usersByRole['admin'] ?? 0) ?> admin(s)</div>
-    </div>
+
+    <!-- ── Main grid ─────────────────────────────────────────────── -->
+    <div class="db-grid">
+
+        <!-- Col 1 stack -->
+        <div class="db-col1">
+
+        <!-- Col 1 · 1 — Key Metrics -->
+        <div class="card db-c-kpi" style="padding:var(--space-5);">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;">
+                <span class="card-title">Key metrics</span>
+                <span style="font-size:var(--text-xs);color:var(--text-tertiary);"><?= e($rangeLabel) ?></span>
+            </div>
+            <div class="db-kpi-grid">
+                <div class="db-kpi-item">
+                    <div class="db-kpi-val"><?= number_format($total) ?></div>
+                    <div class="db-kpi-lbl">Total</div>
+                    <div class="db-kpi-sub">SY <?= e($schoolYear) ?></div>
+                </div>
+                <div class="db-kpi-item">
+                    <div class="db-kpi-val db-kpi-val--success"><?= number_format($accepted) ?></div>
+                    <div class="db-kpi-lbl">Accepted</div>
+                    <div class="db-kpi-sub"><?= $acceptedPct ?>% of released</div>
+                </div>
+                <div class="db-kpi-item">
+                    <div class="db-kpi-val db-kpi-val--error"><?= number_format($rejected) ?></div>
+                    <div class="db-kpi-lbl">Rejected</div>
+                    <div class="db-kpi-sub"><?= $rejectedPct ?>% of released</div>
+                </div>
+                <div class="db-kpi-item">
+                    <div class="db-kpi-val db-kpi-val--warning"><?= number_format($waitlisted) ?></div>
+                    <div class="db-kpi-lbl">Waitlisted</div>
+                    <div class="db-kpi-sub"><?= $waitlistedPct ?>% of released</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Col 1 · 2 — Pipeline -->
+        <div class="card db-c-pipeline" style="padding:var(--space-5);">
+            <div class="db-ch">
+                <span class="card-title">Pipeline</span>
+                <span class="db-ch-sub"><?= number_format($total) ?> total</span>
+            </div>
+            <div style="display:flex;gap:0;align-items:center;">
+                <!-- Chart -->
+                <div style="flex:1;min-width:0;padding-right:var(--space-4);">
+                    <div style="position:relative;width:100%;height:<?= count($pipelineOrder) * 30 + 56 ?>px;">
+                        <canvas id="chartPipeline"></canvas>
+                    </div>
+                </div>
+                <!-- Divider -->
+                <div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch;"></div>
+                <!-- Donut — flex:1 mirrors the Sex side below -->
+                <div style="flex:1;min-width:0;padding-left:var(--space-4);display:flex;align-items:center;justify-content:center;">
+                    <div class="db-donut-wrap" title="<?= $completionPct ?>% released">
+                        <svg class="db-donut" viewBox="0 0 58 58">
+                            <circle class="db-donut-bg"   cx="29" cy="29" r="24" fill="none" stroke-width="7"/>
+                            <circle class="db-donut-fill" cx="29" cy="29" r="24" fill="none" stroke-width="7"
+                                    stroke-dasharray="<?= $circ ?>"
+                                    stroke-dashoffset="<?= $dashOff ?>"
+                                    transform="rotate(-90 29 29)"/>
+                        </svg>
+                        <div class="db-donut-lbl">
+                            <span class="db-donut-pct"><?= $completionPct ?>%</span>
+                            <span class="db-donut-sub">done</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Col 1 · 3 — Age distribution + Sex (combined) -->
+        <div class="card db-c-age-sex" style="padding:var(--space-5);">
+            <div style="display:flex;gap:0;align-items:stretch;">
+
+                <!-- Age — left -->
+                <div style="flex:1;min-width:0;padding-right:var(--space-4);">
+                    <div class="db-ch">
+                        <span class="card-title">Age distribution</span>
+                    </div>
+                    <div style="position:relative;width:100%;height:<?= count($ageLabels) * 30 + 20 ?>px;">
+                        <canvas id="chartAge"></canvas>
+                    </div>
+                </div>
+
+                <!-- Divider -->
+                <div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch;"></div>
+
+                <!-- Sex — right -->
+                <div style="flex:1;min-width:0;padding-left:var(--space-4);">
+                    <div class="db-ch">
+                        <span class="card-title">Sex</span>
+                        <span class="db-ch-sub"><?= number_format($sexMale + $sexFemale) ?> with data</span>
+                    </div>
+                    <div style="position:relative;width:100%;height:130px;">
+                        <canvas id="chartSex"></canvas>
+                    </div>
+                    <div class="db-legend">
+                        <span class="db-legend-item"><span class="db-legend-dot" id="dotFemale"></span>Female <?= number_format($sexFemale) ?></span>
+                        <span class="db-legend-item"><span class="db-legend-dot" id="dotMale"></span>Male <?= number_format($sexMale) ?></span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        </div><!-- /db-col1 -->
+
+        <!-- Col 2 stack -->
+        <div class="db-col2">
+
+        <!-- Col 2 · 1 — Course -->
+        <div class="card db-c-course" style="padding:var(--space-5);">
+            <div class="db-ch">
+                <span class="card-title">Course</span>
+                <span class="db-ch-sub"><?= $courseCount ?> courses</span>
+            </div>
+            <div style="position:relative;width:100%;height:<?= max(120, $courseCount * 28 + 20) ?>px;">
+                <canvas id="chartCourse"></canvas>
+            </div>
+        </div>
+
+        <!-- Col 2 · 2 — SHS Strand -->
+        <div class="card db-c-strand" style="padding:var(--space-5);">
+            <div class="db-ch">
+                <span class="card-title">SHS Strand</span>
+                <span class="db-ch-sub">by strand</span>
+            </div>
+            <div style="position:relative;width:100%;height:<?= max(240, count($strandLabels) * 26 + 20) ?>px;">
+                <canvas id="chartStrand"></canvas>
+            </div>
+            <div class="db-legend" id="strandLegend"></div>
+        </div>
+
+        </div><!-- /db-col2 -->
+
+        <!-- Barangay — col 3 -->
+        <div class="card db-c-brgy" style="padding:var(--space-5);">
+            <div class="db-ch" style="margin-bottom:var(--space-3);">
+                <span class="card-title">Barangay</span>
+                <span class="db-ch-sub"><?= $brgyCount ?> barangays</span>
+            </div>
+            <div class="db-brgy-list">
+                <?php foreach ($brgyRows as $br): ?>
+                <?php $pct = round((int)$br['cnt'] / $brgyMax * 100); ?>
+                <div class="db-brgy-row">
+                    <span class="db-brgy-name" title="<?= e($br['brgy']) ?>"><?= e($br['brgy']) ?></span>
+                    <span class="db-brgy-bar">
+                        <span class="db-brgy-fill" style="width:<?= $pct ?>%"></span>
+                    </span>
+                    <span class="db-brgy-cnt"><?= (int)$br['cnt'] ?></span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+    </div><!-- /db-grid -->
+
 </div>
 
-<!-- Pipeline overview -->
-<?php
-$stages = [
-    'pending'   => 'Pending',
-    'documents' => 'Documents',
-    'exam'      => 'Exam',
-    'interview' => 'Interview',
-    'released'  => 'Released',
-];
-?>
-<div class="pipeline-row">
-    <?php foreach ($stages as $key => $label): ?>
-    <div class="pipeline-stage">
-        <div class="pipeline-stage-count"><?= (int)($pipelineCounts[$key] ?? 0) ?></div>
-        <div class="pipeline-stage-label"><?= $label ?></div>
-    </div>
-    <?php endforeach; ?>
-</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function () {
 
-<!-- Quick actions -->
-<div class="quick-actions">
-    <div class="card quick-action-card quick-action-card--users">
-        <div class="card-title" style="margin-bottom:var(--space-2)">User Management</div>
-        <p class="card-description" style="margin-bottom:var(--space-4)">Create, deactivate, or reset staff and admin accounts.</p>
-        <a href="<?= url('/admin/users') ?>" class="btn btn-primary btn-sm">Manage users</a>
-    </div>
-    <div class="card quick-action-card quick-action-card--year">
-        <div class="card-title" style="margin-bottom:var(--space-2)">School Year</div>
-        <p class="card-description" style="margin-bottom:var(--space-4)">Archive applicant data and open a new admission cycle.</p>
-        <a href="<?= url('/admin/school-year') ?>" class="btn btn-secondary btn-sm">Manage school year</a>
-    </div>
-    <div class="card quick-action-card quick-action-card--export">
-        <div class="card-title" style="margin-bottom:var(--space-2)">Export Results</div>
-        <p class="card-description" style="margin-bottom:var(--space-4)">Download the full admission results list as CSV.</p>
-        <a href="<?= url('/admin/results') ?>" class="btn btn-secondary btn-sm">Export CSV</a>
-    </div>
-    <div class="card quick-action-card quick-action-card--settings">
-        <div class="card-title" style="margin-bottom:var(--space-2)">System Settings</div>
-        <p class="card-description" style="margin-bottom:var(--space-4)">Update school name, logo, and accent color.</p>
-        <a href="<?= url('/admin/settings') ?>" class="btn btn-secondary btn-sm">Open settings</a>
-    </div>
-</div>
+    var DATA = {
+        pipeline: { labels: <?= json_encode($pipelineLabels) ?>, data: <?= json_encode($pipelineData) ?> },
+        course:   { labels: <?= json_encode($courseLabels)   ?>, data: <?= json_encode($courseData)   ?> },
+        strand:   { labels: <?= json_encode($strandLabels)   ?>, data: <?= json_encode($strandData)   ?> },
+        sex:      { male: <?= $sexMale ?>, female: <?= $sexFemale ?> },
+        age:      { labels: <?= json_encode($ageLabels) ?>, data: <?= json_encode($ageData) ?> }
+    };
+
+    function v(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+    var charts = {};
+
+    function buildCharts() {
+        Object.values(charts).forEach(function(c) { if (c) c.destroy(); });
+        charts = {};
+
+        var accent  = v('--accent');
+        var success = v('--success');
+        var warning = v('--warning');
+        var error   = v('--error');
+        var info    = v('--info');
+        var muted   = v('--text-tertiary');
+        var border  = v('--border');
+        var elev    = v('--bg-elevated');
+        var strandColors = [accent, info, '#7c3aed', warning, error, success, '#f97316', '#06b6d4', '#84cc16', '#ec4899'];
+
+        Chart.defaults.font  = { family: v('--font-sans') || 'DM Sans,sans-serif', size: 11 };
+        Chart.defaults.color = muted;
+
+        var xGrid = { grid:{color:border}, border:{display:false}, ticks:{color:muted, precision:0} };
+        var yFlat = { grid:{display:false}, border:{display:false}, ticks:{color:muted} };
+        var tip   = { callbacks:{ label:function(c){ return ' '+c.raw+' applicants'; } } };
+
+        // Pipeline — horizontal bar
+        charts.pipeline = new Chart(document.getElementById('chartPipeline'), {
+            type: 'bar',
+            data: {
+                labels: DATA.pipeline.labels,
+                datasets: [{ data: DATA.pipeline.data, borderRadius:5, borderSkipped:false,
+                    backgroundColor: [v('--border-strong'), info, warning, '#7c3aed', success] }]
+            },
+            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{display:false}, tooltip:tip },
+                scales:{ x:xGrid, y:yFlat } }
+        });
+
+        // Course — horizontal bar
+        charts.course = new Chart(document.getElementById('chartCourse'), {
+            type: 'bar',
+            data: { labels:DATA.course.labels,
+                datasets:[{ data:DATA.course.data, backgroundColor:accent, borderRadius:5, borderSkipped:false }] },
+            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{display:false}, tooltip:tip },
+                scales:{ x:xGrid, y:yFlat } }
+        });
+
+        // SHS Strand — horizontal bar (all strands, including 0)
+        var strandBg = DATA.strand.labels.map(function(_,i){ return strandColors[i%strandColors.length]; });
+        charts.strand = new Chart(document.getElementById('chartStrand'), {
+            type: 'bar',
+            data: { labels:DATA.strand.labels,
+                datasets:[{ data:DATA.strand.data, backgroundColor:strandBg, borderRadius:5, borderSkipped:false }] },
+            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:function(c){
+                    return ' '+c.raw+' applicants';
+                }}}},
+                scales:{ x:xGrid, y:yFlat } }
+        });
+        var sl=document.getElementById('strandLegend');
+        if(sl) sl.innerHTML='';
+
+        // Sex — donut
+        var fc=success, mc=info;
+        var df=document.getElementById('dotFemale'), dm=document.getElementById('dotMale');
+        if(df) df.style.background=fc;
+        if(dm) dm.style.background=mc;
+        charts.sex = new Chart(document.getElementById('chartSex'), {
+            type: 'doughnut',
+            data: { labels:['Female','Male'],
+                datasets:[{ data:[DATA.sex.female,DATA.sex.male], backgroundColor:[fc,mc], borderWidth:3, borderColor:elev, hoverOffset:4 }] },
+            options: { responsive:true, maintainAspectRatio:false, cutout:'68%',
+                plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:function(c){
+                    var tot=DATA.sex.female+DATA.sex.male;
+                    return ' '+c.label+': '+c.raw+' ('+(tot>0?Math.round(c.raw/tot*100):0)+'%)';
+                }}}}}
+        });
+
+        // Age — horizontal bar (matches pipeline / course style)
+        charts.age = new Chart(document.getElementById('chartAge'), {
+            type: 'bar',
+            data: { labels:DATA.age.labels,
+                datasets:[{ data:DATA.age.data, backgroundColor:accent, borderRadius:5, borderSkipped:false }] },
+            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{display:false}, tooltip:tip },
+                scales:{ x:xGrid, y:yFlat } }
+        });
+    }
+
+    buildCharts();
+
+    new MutationObserver(function(ms){
+        ms.forEach(function(m){ if(m.attributeName==='data-theme') buildCharts(); });
+    }).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+    // Date picker
+    var BASE='<?= url('/admin/dashboard') ?>';
+    window.dpToggle=function(e){ e.stopPropagation(); document.getElementById('dpMenu').classList.toggle('open'); };
+    window.dpSet   =function(r){ window.location.href=BASE+'?range='+r; };
+    window.dpCustom=function() { document.getElementById('dpCustomRow').classList.add('show'); };
+    window.dpApply =function() {
+        var f=document.getElementById('dpFrom').value, t=document.getElementById('dpTo').value;
+        if(f&&t) window.location.href=BASE+'?range=custom&from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t);
+    };
+    document.addEventListener('click',function(e){
+        var w=document.getElementById('dpWrap');
+        if(w&&!w.contains(e.target)) document.getElementById('dpMenu').classList.remove('open');
+    });
+
+})();
+</script>
 
 <?php
 $content   = ob_get_clean();
-$pageTitle = 'Admin Panel';
+$pageTitle = 'Dashboard';
 $activeNav = 'dashboard';
+$pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

@@ -105,15 +105,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'create_section':
             $examId    = (int)($_POST['exam_id'] ?? 0);
             $secTitle  = trim($_POST['section_title'] ?? '');
-            $secDesc   = trim($_POST['section_desc'] ?? '');
             $secType   = $_POST['section_type'] ?? 'multiple_choice';
             if (!$secTitle) { $errors[] = 'Section title is required.'; break; }
             if (!array_key_exists($secType, $QUESTION_TYPES)) $secType = 'multiple_choice';
             $maxOrd = $db->prepare('SELECT COALESCE(MAX(sort_order),0) FROM exam_sections WHERE exam_id=?');
             $maxOrd->execute([$examId]);
             $db->prepare(
-                'INSERT INTO exam_sections (exam_id, title, description, question_type, sort_order) VALUES (?,?,?,?,?)'
-            )->execute([$examId, $secTitle, $secDesc ?: null, $secType, (int)$maxOrd->fetchColumn() + 1]);
+                'INSERT INTO exam_sections (exam_id, title, question_type, sort_order) VALUES (?,?,?,?)'
+            )->execute([$examId, $secTitle, $secType, (int)$maxOrd->fetchColumn() + 1]);
             $newSecId = (int)$db->lastInsertId();
             if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
                 header('Content-Type: application/json');
@@ -126,12 +125,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'edit_section':
             $secId    = (int)($_POST['section_id'] ?? 0);
             $secTitle = trim($_POST['section_title'] ?? '');
-            $secDesc  = trim($_POST['section_desc'] ?? '');
             $secType  = $_POST['section_type'] ?? 'multiple_choice';
             if (!$secTitle) { $errors[] = 'Section title is required.'; break; }
             if (!array_key_exists($secType, $QUESTION_TYPES)) $secType = 'multiple_choice';
-            $db->prepare('UPDATE exam_sections SET title=?, description=?, question_type=? WHERE id=?')
-               ->execute([$secTitle, $secDesc ?: null, $secType, $secId]);
+            $db->prepare('UPDATE exam_sections SET title=?, question_type=? WHERE id=?')
+               ->execute([$secTitle, $secType, $secId]);
             // Handle inline AJAX
             if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
                 header('Content-Type: application/json');
@@ -143,7 +141,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         case 'delete_section':
             $secId = (int)($_POST['section_id'] ?? 0);
-            $db->prepare('DELETE FROM questions WHERE section_id=?')->execute([$secId]);
+            $qCount = $db->prepare('SELECT COUNT(*) FROM questions WHERE section_id=?');
+            $qCount->execute([$secId]);
+            if ((int)$qCount->fetchColumn() > 0) {
+                $errors[] = 'This section still has questions. Delete all questions in it first.';
+                break;
+            }
             $db->prepare('DELETE FROM exam_sections WHERE id=?')->execute([$secId]);
             $success[] = 'Section deleted.';
             break;
@@ -217,6 +220,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $scaleMin, $scaleMax, $scaleMinLabel, $scaleMaxLabel,
                     $sectionId, (int)$maxOrder->fetchColumn() + 1
                 ]);
+                if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['ok' => true, 'id' => (int)$db->lastInsertId()]);
+                    exit;
+                }
                 $success[] = 'Question added.';
             }
             break;
@@ -651,6 +659,10 @@ ob_start();
                         <div style="flex:1;min-width:0">
                             <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)">
                                 <span style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= $globalQNum ?>.</span>
+                                <span class="type-pill">
+                                    <?= typeIcon($q['question_type']) ?>
+                                    <?= $typeMeta['label'] ?>
+                                </span>
                                 <span class="pts-badge"><?= $q['points'] ?> pt<?= $q['points']!=1?'s':'' ?></span>
                                 <?php if (!$q['is_required']): ?>
                                     <span class="type-pill">Optional</span>
@@ -734,43 +746,35 @@ ob_start();
 
                     <!-- Section header -->
                     <div class="section-header" style="background:<?= $sc['bg'] ?>;border-color:<?= $sc['border'] ?>;border-radius:var(--radius-md) var(--radius-md) 0 0;margin-bottom:0">
-                        <div style="flex:1;min-width:0">
-                            <div id="sec-title-view-<?= $sec['id'] ?>" style="display:flex;align-items:center;gap:var(--space-2)">
-                                <?= typeIcon($sec['question_type']) ?>
-                                <span id="sec-title-text-<?= $sec['id'] ?>"
-                                      style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:<?= $sc['text'] ?>;cursor:pointer"
-                                      class="inline-editable"
-                                      onclick="startInlineSecEdit(<?= $sec['id'] ?>)"
-                                      title="Click to rename"><?= e($sec['title']) ?></span>
-                                <span style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.65" id="sec-count-<?= $sec['id'] ?>"><?= count($secQs) ?> question<?= count($secQs)!==1?'s':'' ?></span>
-                            </div>
-                            <?php if (!empty($sec['description'])): ?>
-                                <div style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.8;margin-top:3px;padding-left:18px"><?= e($sec['description']) ?></div>
-                            <?php endif; ?>
-                            <div id="sec-title-edit-<?= $sec['id'] ?>" style="display:none">
-                                <input type="text" id="sec-title-input-<?= $sec['id'] ?>"
-                                       class="inline-edit-input"
-                                       value="<?= e($sec['title']) ?>"
-                                       style="font-size:var(--text-sm);font-weight:var(--weight-semibold)">
-                                <div class="inline-edit-actions">
-                                    <button class="inline-save-btn" onclick="saveInlineSecTitle(<?= $sec['id'] ?>, '<?= e($sec['question_type']) ?>')">Save</button>
-                                    <button class="inline-cancel-btn" onclick="cancelInlineSecEdit(<?= $sec['id'] ?>)">Cancel</button>
-                                    <button class="inline-cancel-btn" onclick="openEditSectionModal(<?= $secJson ?>)" style="margin-left:auto">Full edit…</button>
-                                </div>
+                        <div id="sec-title-view-<?= $sec['id'] ?>" style="display:flex;align-items:center;gap:var(--space-2);flex:1;min-width:0">
+                            <?= typeIcon($sec['question_type']) ?>
+                            <span id="sec-title-text-<?= $sec['id'] ?>"
+                                  style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:<?= $sc['text'] ?>;cursor:pointer"
+                                  class="inline-editable"
+                                  onclick="startInlineSecEdit(<?= $sec['id'] ?>)"
+                                  title="Click to rename"><?= e($sec['title']) ?></span>
+                            <span style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.65" id="sec-count-<?= $sec['id'] ?>"><?= count($secQs) ?> question<?= count($secQs)!==1?'s':'' ?></span>
+                        </div>
+                        <div id="sec-title-edit-<?= $sec['id'] ?>" style="display:none;flex:1">
+                            <input type="text" id="sec-title-input-<?= $sec['id'] ?>"
+                                   class="inline-edit-input"
+                                   value="<?= e($sec['title']) ?>"
+                                   style="font-size:var(--text-sm);font-weight:var(--weight-semibold)">
+                            <div class="inline-edit-actions">
+                                <button class="inline-save-btn" onclick="saveInlineSecTitle(<?= $sec['id'] ?>, '<?= e($sec['question_type']) ?>')">Save</button>
+                                <button class="inline-cancel-btn" onclick="cancelInlineSecEdit(<?= $sec['id'] ?>)">Cancel</button>
+                                <button class="inline-cancel-btn" onclick="openEditSectionModal(<?= $secJson ?>)" style="margin-left:auto">Full edit…</button>
                             </div>
                         </div>
                         <div class="section-actions">
-                            <?php if (empty($secQs)): ?>
                             <button class="btn-icon" title="Edit section" onclick="openEditSectionModal(<?= $secJson ?>)">
                                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             </button>
-                            <?php endif; ?>
-                            <form method="POST" id="del-sec-form-<?= $sec['id'] ?>" style="display:inline">
+                            <form method="POST" onsubmit="return confirm('Delete this section? It must be empty first.')" style="display:inline">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete_section">
                                 <input type="hidden" name="section_id" value="<?= $sec['id'] ?>">
-                                <button type="button" class="btn-icon" style="color:var(--error)" title="Delete section"
-                                        onclick="confirmDeleteSection(<?= $sec['id'] ?>, <?= count($secQs) ?>)">
+                                <button class="btn-icon" style="color:var(--error)" title="Delete section">
                                     <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 6h18m-2 0V20a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
                                 </button>
                             </form>
@@ -1006,12 +1010,6 @@ ob_start();
                            placeholder="e.g. Part 1: Multiple Choice" required>
                 </div>
                 <div>
-                    <label class="form-label">Instructions / Description <span style="font-size:var(--text-xs);font-weight:400;color:var(--text-tertiary)">(optional)</span></label>
-                    <textarea name="section_desc" id="sec-desc-field" class="form-control" rows="2"
-                              placeholder="e.g. Read each item carefully and choose the best answer."></textarea>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Shown to students above the questions in this section.</p>
-                </div>
-                <div>
                     <label class="form-label">Answer Mode</label>
                     <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-2)">
                         All questions added to this section will automatically use this type.
@@ -1141,7 +1139,6 @@ function openAddSectionModal() {
     document.getElementById('sec-action').value            = 'create_section';
     document.getElementById('sec-id').value                = '';
     document.getElementById('sec-title-field').value       = '';
-    document.getElementById('sec-desc-field').value        = '';
     document.getElementById('sec-submit-btn').textContent  = 'Create Section';
     selectSectionType('multiple_choice');
     openModal('section-modal');
@@ -1151,20 +1148,9 @@ function openEditSectionModal(sec) {
     document.getElementById('sec-action').value            = 'edit_section';
     document.getElementById('sec-id').value               = sec.id;
     document.getElementById('sec-title-field').value      = sec.title;
-    document.getElementById('sec-desc-field').value       = sec.description || '';
     document.getElementById('sec-submit-btn').textContent  = 'Save Section';
     selectSectionType(sec.question_type);
     openModal('section-modal');
-}
-
-// ── Section delete confirm ────────────────────────────────────
-function confirmDeleteSection(secId, qCount) {
-    const msg = qCount > 0
-        ? `This section has ${qCount} question${qCount > 1 ? 's' : ''} that will also be deleted. Delete anyway?`
-        : 'Delete this section?';
-    if (confirm(msg)) {
-        document.getElementById('del-sec-form-' + secId).submit();
-    }
 }
 
 // ── Full inline question edit ─────────────────────────────────
@@ -1663,11 +1649,11 @@ async function saveInlineQuestion(secId, secType) {
 .ai-file-tag .rm { cursor:pointer;opacity:.7;background:none;border:none;color:#fff;padding:0;font-size:14px;display:flex;align-items:center;line-height:1; }
 .ai-file-tag .rm:hover { opacity:1; }
 .ai-processing-ring { width:44px;height:44px;margin:0 auto;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:ai-spin .75s linear infinite; }
-.ai-q-card { border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden; }
-.ai-q-card-head { display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--neutral-50);border-bottom:1px solid var(--border);font-size:var(--text-xs);color:var(--text-tertiary); }
-.ai-q-card-body { padding:12px 14px; }
-.ai-q-text { font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-primary);margin-bottom:8px;line-height:1.45; }
-.ai-choice-row { display:flex;align-items:center;gap:7px;padding:3px 0;font-size:var(--text-sm);color:var(--text-secondary); }
+.ai-q-card { border:1px solid #e5e7eb;border-radius:var(--radius-md);overflow:hidden;background:#fff; }
+.ai-q-card-head { display:flex;align-items:center;gap:8px;padding:9px 14px;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:var(--text-xs);color:#6b7280; }
+.ai-q-card-body { padding:12px 14px;background:#fff; }
+.ai-q-text { font-size:var(--text-sm);font-weight:var(--weight-medium);color:#111827;margin-bottom:8px;line-height:1.45; }
+.ai-choice-row { display:flex;align-items:center;gap:7px;padding:3px 0;font-size:var(--text-sm);color:#374151; }
 .ai-choice-row.correct { color:#16a34a;font-weight:var(--weight-medium); }
 .ai-choice-ind { width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1.5px solid var(--border); }
 .ai-choice-row.correct .ai-choice-ind { background:#16a34a;border-color:#16a34a;display:flex;align-items:center;justify-content:center; }
@@ -1877,7 +1863,7 @@ function extractPuterText(response) {
 }
 
 // ── AI prompt — extracts sections + questions ─────────────────
-const AI_PROMPT = `You are an exam question extractor. Extract ALL sections and their questions from the exam content.
+const AI_PROMPT = `You are an expert exam question extractor for Philippine school exams. Extract ALL sections and ALL questions from the exam content.
 
 Return ONLY a valid JSON array of sections — no markdown, no explanation, no extra text.
 
@@ -1886,7 +1872,7 @@ Structure:
   {
     "section_title": "I. Multiple Choice",
     "section_type": "multiple_choice",
-    "section_description": "Read each item carefully and choose the best answer.",
+    "section_description": "Choose the best answer.",
     "questions": [
       {
         "question_text": "What is the capital of France?",
@@ -1901,32 +1887,66 @@ Structure:
   }
 ]
 
-Section type rules (pick the best match):
+SECTION TYPE RULES:
 - "multiple_choice" → Multiple Choice, True/False, Matching Type
 - "checkboxes"      → Select all that apply, Multiple correct answers
 - "short_answer"    → Identification, Fill in the blank, Enumeration, Completion
 - "paragraph"       → Essay, Explain, Discuss, Long answer
 
-Additional rules:
-- section_description: Copy any instructions or directions shown for that section (e.g. "Write the letter of the correct answer", "Identify the following", "Choose the best answer"). Leave as empty string if none found.
-- For True/False sections: use section_type "multiple_choice" and choices ["True","False"]
-- Strip letter/number prefixes from choices (e.g. "a. Paris" → "Paris", "A) Paris" → "Paris")
-- correct_index is the 0-based index of the correct choice (for multiple_choice/dropdown)
-- If the correct answer is not shown, set correct_index to 0
+IDENTIFYING CORRECT ANSWERS (critical — read carefully):
+- In Philippine printed exams, the correct answer is shown in BOLD, UNDERLINED, or ALL-CAPS in the answer choices
+- Look very carefully at each choice — whichever one appears visually emphasized (bold/underlined/caps) is the correct answer
+- correct_index = 0-based position of the correct choice (0=a, 1=b, 2=c, 3=d)
+- If no answer is marked, set correct_index to 0 and set description to "No answer key provided"
+- For short_answer/identification: set correct_answer to the expected answer if shown (e.g. "QL", "QUALITATIVE", etc.)
+
+CHOICE FORMATTING:
+- Strip letter/number prefixes from choices (e.g. "a. Paris" → "Paris", "A) Paris" → "Paris", "1. Paris" → "Paris")
+- Keep the choice text only, no labels
+
+TRUE/FALSE SECTIONS — IMPORTANT:
+- Each numbered statement is a SEPARATE question
+- question_text = the statement itself (e.g. "The sky is blue")
+- choices = ["True", "False"] for every question
+- Do NOT extract the instructions ("Write TRUE if...") as a question — that is a direction, not a question
+- correct_index = 0 if True is correct, 1 if False is correct (or 0 if unknown)
+
+IDENTIFICATION/SHORT ANSWER SECTIONS:
+- Each numbered item is a separate question
+- Extract any hint text after the question (like "QL" or "QT") as correct_answer
+- Example: "11. Identify patterns, features, themes QL" → question_text="Identify patterns, features, themes", correct_answer="QUALITATIVE"
+- Expand abbreviations: QL/Q.L. → "QUALITATIVE", QT/Q.T. → "QUANTITATIVE"
+
+GENERAL RULES:
+- Extract EVERY numbered question — do not skip any
+- section_description = copy any directions/instructions shown at the top of that section
+- Do NOT treat section headings or instructions as questions
 - Output ONLY the JSON array, nothing else`;
 
 async function callPuterWithText(text, pts) {
     const trunc=text.length>10000?text.slice(0,10000)+'…[truncated]':text;
     await ensurePuterAuth();
-    const response=await puter.ai.chat(AI_PROMPT+'\n\nCONTENT:\n\n'+trunc, {model:'claude-haiku-4-5'});
+    const response=await puter.ai.chat(AI_PROMPT+'\n\nCONTENT:\n\n'+trunc, {model:'claude-sonnet-4-6'});
     return parseAiResp(extractPuterText(response), pts);
 }
 async function callPuterWithImage(file, pts) {
     await ensurePuterAuth();
     const tmpName='exam_import_'+Date.now()+'.'+file.name.split('.').pop();
     let puterFile; try { puterFile=await puter.fs.write(tmpName,file); } catch(e) { throw new Error('Could not upload image to Puter: '+e.message); }
-    let response; try { response=await puter.ai.chat([{role:'user',content:[{type:'file',puter_path:puterFile.path},{type:'text',text:AI_PROMPT}]}],{model:'claude-haiku-4-5'}); } finally { try{await puter.fs.delete(puterFile.path);}catch(_){} }
+    let response; try { response=await puter.ai.chat([{role:'user',content:[{type:'file',puter_path:puterFile.path},{type:'text',text:AI_PROMPT}]}],{model:'claude-sonnet-4-6'}); } finally { try{await puter.fs.delete(puterFile.path);}catch(_){} }
     return parseAiResp(extractPuterText(response), pts);
+}
+
+// Expand common Philippine exam abbreviations in answers
+function expandAnswer(ans) {
+    if (!ans) return ans;
+    const map = {
+        'QL': 'QUALITATIVE', 'Q.L.': 'QUALITATIVE', 'Ql': 'QUALITATIVE', 'ql': 'QUALITATIVE',
+        'QT': 'QUANTITATIVE', 'Q.T.': 'QUANTITATIVE', 'Qt': 'QUANTITATIVE', 'qt': 'QUANTITATIVE',
+        'T': 'TRUE', 'F': 'FALSE',
+    };
+    const trimmed = ans.trim();
+    return map[trimmed] || ans;
 }
 
 function parseAiResp(raw, dp) {
@@ -1948,7 +1968,7 @@ function parseAiResp(raw, dp) {
             description:    q.description||'',
             choices:        Array.isArray(q.choices)?q.choices:[],
             correct_index:  typeof q.correct_index==='number'?q.correct_index:0,
-            correct_answer: q.correct_answer||null,
+            correct_answer: expandAnswer(q.correct_answer)||null,
             correct_indices:Array.isArray(q.correct_indices)?q.correct_indices:[],
             points:         typeof q.points==='number'&&q.points>=0?q.points:dp,
             is_required:    1,
@@ -1972,26 +1992,30 @@ function renderAiPreview(sections) {
         const sc=AI_SECTION_COLORS[sec.section_type]||AI_SECTION_COLORS['multiple_choice'];
         // Section header
         const secHead=document.createElement('div');
-        secHead.style.cssText=`background:${sc.bg};border:1.5px solid ${sc.border};border-radius:var(--radius-md);padding:8px 12px;display:flex;align-items:center;gap:8px;margin-top:var(--space-2)`;
-        secHead.innerHTML=`<span style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:${sc.text}">${escHtml(sec.section_title)}</span><span style="font-size:var(--text-xs);color:${sc.text};opacity:.7;margin-left:auto">${sec.section_type.replace(/_/g,' ')} · ${sec.questions.length} question${sec.questions.length!==1?'s':''}</span>`;
+        secHead.style.cssText=`background:${sc.bg};border:1.5px solid ${sc.border};border-radius:8px;padding:8px 12px;margin-top:8px`;
+        let secDesc = sec.section_description ? `<div style="font-size:11px;color:${sc.text};opacity:.75;margin-top:2px">${escHtml(sec.section_description)}</div>` : '';
+        secHead.innerHTML=`<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:600;color:${sc.text}">${escHtml(sec.section_title)}</span><span style="font-size:11px;color:${sc.text};opacity:.7;margin-left:auto">${sec.section_type.replace(/_/g,' ')} · ${sec.questions.length} question${sec.questions.length!==1?'s':''}</span></div>${secDesc}`;
         wrap.appendChild(secHead);
 
         // Questions
         sec.questions.forEach(q=>{
             globalQ++;
-            const card=document.createElement('div'); card.className='ai-q-card'; card.style.marginLeft='var(--space-3)';
+            const card=document.createElement('div'); card.className='ai-q-card'; card.style.marginLeft='12px';
             let choices='';
-            if(CT.includes(q.question_type)&&q.choices.length){
-                choices=q.choices.map((c,ci)=>{
-                    const ok=q.question_type==='checkboxes'?(q.correct_indices||[]).includes(ci):ci===q.correct_index;
-                    return`<div class="ai-choice-row${ok?' correct':''}"><div class="ai-choice-ind">${ok?'<svg width="9" height="9" viewBox="0 0 24 24" fill="none"><path stroke="#fff" stroke-width="3.5" stroke-linecap="round" d="M5 13l4 4L19 7"/></svg>':''}</div>${escHtml(c)}</div>`;
-                }).join('');
+            if(CT.includes(q.question_type)&&q.choices&&q.choices.length){
+                choices='<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px">'+q.choices.map((c,ci)=>{
+                    const ok=q.question_type==='checkboxes'?(q.correct_indices||[]).includes(ci):ci===parseInt(q.correct_index);
+                    const dot=ok
+                        ? `<span style="width:14px;height:14px;border-radius:50%;background:#15803d;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"><svg width="8" height="8" viewBox="0 0 24 24" fill="none"><path stroke="#fff" stroke-width="3.5" stroke-linecap="round" d="M5 13l4 4L19 7"/></svg></span>`
+                        : `<span style="width:14px;height:14px;border-radius:50%;border:1.5px solid #d1d5db;flex-shrink:0;display:inline-block"></span>`;
+                    return`<div style="display:flex;align-items:center;gap:7px;padding:2px 0;font-size:13px;color:${ok?'#15803d':'#374151'};${ok?'font-weight:500':''}">${dot}${escHtml(c)}</div>`;
+                }).join('')+'</div>';
             } else if(q.question_type==='short_answer'){
-                choices=`<div style="font-size:var(--text-xs);color:var(--text-tertiary);font-style:italic">${q.correct_answer?'Expected: '+escHtml(q.correct_answer):'Short answer — manually graded'}</div>`;
+                choices=`<div style="margin-top:6px;font-size:12px;color:#6b7280;font-style:italic">${q.correct_answer?'Expected: <strong style=\'color:#111827\'">'+escHtml(q.correct_answer)+'</strong>':'Short answer — reviewed manually'}</div>`;
             } else {
-                choices=`<div style="font-size:var(--text-xs);color:var(--text-tertiary);font-style:italic">Paragraph — manually graded</div>`;
+                choices=`<div style="margin-top:6px;font-size:12px;color:#6b7280;font-style:italic">Paragraph — reviewed manually</div>`;
             }
-            card.innerHTML=`<div class="ai-q-card-head"><span style="background:var(--accent);color:#fff;border-radius:4px;padding:1px 7px;font-weight:var(--weight-semibold)">Q${globalQ}</span><span>${q.question_type.replace(/_/g,' ')}</span><span style="margin-left:auto">${q.points} pt${q.points!==1?'s':''}</span></div><div class="ai-q-card-body"><div class="ai-q-text">${escHtml(q.question_text)}</div>${choices}</div>`;
+            card.innerHTML=`<div class="ai-q-card-head"><span style="background:#2d6a4f;color:#fff;border-radius:4px;padding:1px 7px;font-weight:600;font-size:11px">Q${globalQ}</span><span style="font-size:11px;color:#6b7280">${q.question_type.replace(/_/g,' ')}</span><span style="margin-left:auto;font-size:11px;color:#6b7280">${q.points} pt${q.points!==1?'s':''}</span></div><div class="ai-q-card-body"><div class="ai-q-text">${escHtml(q.question_text)}</div>${choices}</div>`;
             wrap.appendChild(card);
         });
     });
@@ -2041,7 +2065,12 @@ async function saveAiQuestions(){
                 if(q.question_type==='checkboxes')(q.correct_indices||[]).forEach(ci=>fd.append('correct_indices[]',ci));
                 else fd.append('correct_index',q.correct_index);
             } else if(q.question_type==='short_answer') fd.append('expected_answer',q.correct_answer||'');
-            try{const resp=await fetch(location.href,{method:'POST',body:fd});if(resp.ok)saved++;}catch(e){}
+            try{
+                const resp=await fetch(location.href,{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}});
+                const d=await resp.json();
+                if(d.ok) saved++;
+                else console.warn('Failed to save question:', q.question_text);
+            }catch(e){ console.error('Save error:', e); }
             btn.textContent=`Saving… (${saved}/${totalQ})`;
         }
     }
