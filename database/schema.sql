@@ -78,20 +78,48 @@ CREATE TABLE `exams` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
--- questions
--- Multiple-choice questions linked to an exam
--- choices stored as JSON array of strings
 -- ------------------------------------------------------------
-CREATE TABLE `questions` (
+-- exam_sections
+-- Groups questions within an exam by answer type / part
+-- ------------------------------------------------------------
+CREATE TABLE `exam_sections` (
     `id`            INT UNSIGNED  NOT NULL AUTO_INCREMENT,
     `exam_id`       INT UNSIGNED  NOT NULL,
-    `question_text` TEXT          NOT NULL,
-    `choices`       JSON          NOT NULL COMMENT 'Array of choice strings',
-    `correct_index` TINYINT       NOT NULL COMMENT '0-based index into choices',
+    `title`         VARCHAR(200)  NOT NULL,
+    `description`   TEXT          DEFAULT NULL COMMENT 'Instructions shown to students above this section',
+    `question_type` VARCHAR(40)   NOT NULL DEFAULT 'multiple_choice',
     `sort_order`    SMALLINT      NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     KEY `idx_exam_id` (`exam_id`),
-    CONSTRAINT `fk_questions_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_sections_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- questions
+-- Questions linked to an exam and a section
+-- ------------------------------------------------------------
+CREATE TABLE `questions` (
+    `id`              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    `exam_id`         INT UNSIGNED  NOT NULL,
+    `section_id`      INT UNSIGNED  DEFAULT NULL,
+    `question_text`   TEXT          NOT NULL,
+    `question_type`   VARCHAR(40)   NOT NULL DEFAULT 'multiple_choice',
+    `description`     TEXT          DEFAULT NULL COMMENT 'Optional hint shown below question text',
+    `choices`         JSON          DEFAULT NULL COMMENT 'Array of choice strings',
+    `correct_index`   TINYINT       DEFAULT NULL COMMENT '0-based index for single-correct questions',
+    `correct_answer`  TEXT          DEFAULT NULL COMMENT 'Expected text answer or JSON array of indices',
+    `scale_min`       TINYINT       NOT NULL DEFAULT 1,
+    `scale_max`       TINYINT       NOT NULL DEFAULT 5,
+    `scale_min_label` VARCHAR(100)  DEFAULT NULL,
+    `scale_max_label` VARCHAR(100)  DEFAULT NULL,
+    `points`          SMALLINT      NOT NULL DEFAULT 1,
+    `is_required`     TINYINT(1)    NOT NULL DEFAULT 1,
+    `sort_order`      SMALLINT      NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_exam_id`    (`exam_id`),
+    KEY `idx_section_id` (`section_id`),
+    CONSTRAINT `fk_questions_exam`    FOREIGN KEY (`exam_id`)    REFERENCES `exams`         (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_questions_section` FOREIGN KEY (`section_id`) REFERENCES `exam_sections` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------

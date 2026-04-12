@@ -105,14 +105,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'create_section':
             $examId    = (int)($_POST['exam_id'] ?? 0);
             $secTitle  = trim($_POST['section_title'] ?? '');
+            $secDesc   = trim($_POST['section_desc'] ?? '');
             $secType   = $_POST['section_type'] ?? 'multiple_choice';
             if (!$secTitle) { $errors[] = 'Section title is required.'; break; }
             if (!array_key_exists($secType, $QUESTION_TYPES)) $secType = 'multiple_choice';
             $maxOrd = $db->prepare('SELECT COALESCE(MAX(sort_order),0) FROM exam_sections WHERE exam_id=?');
             $maxOrd->execute([$examId]);
             $db->prepare(
-                'INSERT INTO exam_sections (exam_id, title, question_type, sort_order) VALUES (?,?,?,?)'
-            )->execute([$examId, $secTitle, $secType, (int)$maxOrd->fetchColumn() + 1]);
+                'INSERT INTO exam_sections (exam_id, title, description, question_type, sort_order) VALUES (?,?,?,?,?)'
+            )->execute([$examId, $secTitle, $secDesc ?: null, $secType, (int)$maxOrd->fetchColumn() + 1]);
             $newSecId = (int)$db->lastInsertId();
             if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
                 header('Content-Type: application/json');
@@ -125,11 +126,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'edit_section':
             $secId    = (int)($_POST['section_id'] ?? 0);
             $secTitle = trim($_POST['section_title'] ?? '');
+            $secDesc  = trim($_POST['section_desc'] ?? '');
             $secType  = $_POST['section_type'] ?? 'multiple_choice';
             if (!$secTitle) { $errors[] = 'Section title is required.'; break; }
             if (!array_key_exists($secType, $QUESTION_TYPES)) $secType = 'multiple_choice';
-            $db->prepare('UPDATE exam_sections SET title=?, question_type=? WHERE id=?')
-               ->execute([$secTitle, $secType, $secId]);
+            $db->prepare('UPDATE exam_sections SET title=?, description=?, question_type=? WHERE id=?')
+               ->execute([$secTitle, $secDesc ?: null, $secType, $secId]);
             // Handle inline AJAX
             if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
                 header('Content-Type: application/json');
@@ -141,12 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         case 'delete_section':
             $secId = (int)($_POST['section_id'] ?? 0);
-            $qCount = $db->prepare('SELECT COUNT(*) FROM questions WHERE section_id=?');
-            $qCount->execute([$secId]);
-            if ((int)$qCount->fetchColumn() > 0) {
-                $errors[] = 'This section still has questions. Delete all questions in it first.';
-                break;
-            }
+            $db->prepare('DELETE FROM questions WHERE section_id=?')->execute([$secId]);
             $db->prepare('DELETE FROM exam_sections WHERE id=?')->execute([$secId]);
             $success[] = 'Section deleted.';
             break;
@@ -654,10 +651,6 @@ ob_start();
                         <div style="flex:1;min-width:0">
                             <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)">
                                 <span style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= $globalQNum ?>.</span>
-                                <span class="type-pill">
-                                    <?= typeIcon($q['question_type']) ?>
-                                    <?= $typeMeta['label'] ?>
-                                </span>
                                 <span class="pts-badge"><?= $q['points'] ?> pt<?= $q['points']!=1?'s':'' ?></span>
                                 <?php if (!$q['is_required']): ?>
                                     <span class="type-pill">Optional</span>
@@ -741,35 +734,43 @@ ob_start();
 
                     <!-- Section header -->
                     <div class="section-header" style="background:<?= $sc['bg'] ?>;border-color:<?= $sc['border'] ?>;border-radius:var(--radius-md) var(--radius-md) 0 0;margin-bottom:0">
-                        <div id="sec-title-view-<?= $sec['id'] ?>" style="display:flex;align-items:center;gap:var(--space-2);flex:1;min-width:0">
-                            <?= typeIcon($sec['question_type']) ?>
-                            <span id="sec-title-text-<?= $sec['id'] ?>"
-                                  style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:<?= $sc['text'] ?>;cursor:pointer"
-                                  class="inline-editable"
-                                  onclick="startInlineSecEdit(<?= $sec['id'] ?>)"
-                                  title="Click to rename"><?= e($sec['title']) ?></span>
-                            <span style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.65" id="sec-count-<?= $sec['id'] ?>"><?= count($secQs) ?> question<?= count($secQs)!==1?'s':'' ?></span>
-                        </div>
-                        <div id="sec-title-edit-<?= $sec['id'] ?>" style="display:none;flex:1">
-                            <input type="text" id="sec-title-input-<?= $sec['id'] ?>"
-                                   class="inline-edit-input"
-                                   value="<?= e($sec['title']) ?>"
-                                   style="font-size:var(--text-sm);font-weight:var(--weight-semibold)">
-                            <div class="inline-edit-actions">
-                                <button class="inline-save-btn" onclick="saveInlineSecTitle(<?= $sec['id'] ?>, '<?= e($sec['question_type']) ?>')">Save</button>
-                                <button class="inline-cancel-btn" onclick="cancelInlineSecEdit(<?= $sec['id'] ?>)">Cancel</button>
-                                <button class="inline-cancel-btn" onclick="openEditSectionModal(<?= $secJson ?>)" style="margin-left:auto">Full edit…</button>
+                        <div style="flex:1;min-width:0">
+                            <div id="sec-title-view-<?= $sec['id'] ?>" style="display:flex;align-items:center;gap:var(--space-2)">
+                                <?= typeIcon($sec['question_type']) ?>
+                                <span id="sec-title-text-<?= $sec['id'] ?>"
+                                      style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:<?= $sc['text'] ?>;cursor:pointer"
+                                      class="inline-editable"
+                                      onclick="startInlineSecEdit(<?= $sec['id'] ?>)"
+                                      title="Click to rename"><?= e($sec['title']) ?></span>
+                                <span style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.65" id="sec-count-<?= $sec['id'] ?>"><?= count($secQs) ?> question<?= count($secQs)!==1?'s':'' ?></span>
+                            </div>
+                            <?php if (!empty($sec['description'])): ?>
+                                <div style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.8;margin-top:3px;padding-left:18px"><?= e($sec['description']) ?></div>
+                            <?php endif; ?>
+                            <div id="sec-title-edit-<?= $sec['id'] ?>" style="display:none">
+                                <input type="text" id="sec-title-input-<?= $sec['id'] ?>"
+                                       class="inline-edit-input"
+                                       value="<?= e($sec['title']) ?>"
+                                       style="font-size:var(--text-sm);font-weight:var(--weight-semibold)">
+                                <div class="inline-edit-actions">
+                                    <button class="inline-save-btn" onclick="saveInlineSecTitle(<?= $sec['id'] ?>, '<?= e($sec['question_type']) ?>')">Save</button>
+                                    <button class="inline-cancel-btn" onclick="cancelInlineSecEdit(<?= $sec['id'] ?>)">Cancel</button>
+                                    <button class="inline-cancel-btn" onclick="openEditSectionModal(<?= $secJson ?>)" style="margin-left:auto">Full edit…</button>
+                                </div>
                             </div>
                         </div>
                         <div class="section-actions">
+                            <?php if (empty($secQs)): ?>
                             <button class="btn-icon" title="Edit section" onclick="openEditSectionModal(<?= $secJson ?>)">
                                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             </button>
-                            <form method="POST" onsubmit="return confirm('Delete this section? It must be empty first.')" style="display:inline">
+                            <?php endif; ?>
+                            <form method="POST" id="del-sec-form-<?= $sec['id'] ?>" style="display:inline">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete_section">
                                 <input type="hidden" name="section_id" value="<?= $sec['id'] ?>">
-                                <button class="btn-icon" style="color:var(--error)" title="Delete section">
+                                <button type="button" class="btn-icon" style="color:var(--error)" title="Delete section"
+                                        onclick="confirmDeleteSection(<?= $sec['id'] ?>, <?= count($secQs) ?>)">
                                     <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 6h18m-2 0V20a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
                                 </button>
                             </form>
@@ -1005,6 +1006,12 @@ ob_start();
                            placeholder="e.g. Part 1: Multiple Choice" required>
                 </div>
                 <div>
+                    <label class="form-label">Instructions / Description <span style="font-size:var(--text-xs);font-weight:400;color:var(--text-tertiary)">(optional)</span></label>
+                    <textarea name="section_desc" id="sec-desc-field" class="form-control" rows="2"
+                              placeholder="e.g. Read each item carefully and choose the best answer."></textarea>
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Shown to students above the questions in this section.</p>
+                </div>
+                <div>
                     <label class="form-label">Answer Mode</label>
                     <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-2)">
                         All questions added to this section will automatically use this type.
@@ -1134,6 +1141,7 @@ function openAddSectionModal() {
     document.getElementById('sec-action').value            = 'create_section';
     document.getElementById('sec-id').value                = '';
     document.getElementById('sec-title-field').value       = '';
+    document.getElementById('sec-desc-field').value        = '';
     document.getElementById('sec-submit-btn').textContent  = 'Create Section';
     selectSectionType('multiple_choice');
     openModal('section-modal');
@@ -1143,9 +1151,20 @@ function openEditSectionModal(sec) {
     document.getElementById('sec-action').value            = 'edit_section';
     document.getElementById('sec-id').value               = sec.id;
     document.getElementById('sec-title-field').value      = sec.title;
+    document.getElementById('sec-desc-field').value       = sec.description || '';
     document.getElementById('sec-submit-btn').textContent  = 'Save Section';
     selectSectionType(sec.question_type);
     openModal('section-modal');
+}
+
+// ── Section delete confirm ────────────────────────────────────
+function confirmDeleteSection(secId, qCount) {
+    const msg = qCount > 0
+        ? `This section has ${qCount} question${qCount > 1 ? 's' : ''} that will also be deleted. Delete anyway?`
+        : 'Delete this section?';
+    if (confirm(msg)) {
+        document.getElementById('del-sec-form-' + secId).submit();
+    }
 }
 
 // ── Full inline question edit ─────────────────────────────────
@@ -1867,6 +1886,7 @@ Structure:
   {
     "section_title": "I. Multiple Choice",
     "section_type": "multiple_choice",
+    "section_description": "Read each item carefully and choose the best answer.",
     "questions": [
       {
         "question_text": "What is the capital of France?",
@@ -1888,10 +1908,11 @@ Section type rules (pick the best match):
 - "paragraph"       → Essay, Explain, Discuss, Long answer
 
 Additional rules:
+- section_description: Copy any instructions or directions shown for that section (e.g. "Write the letter of the correct answer", "Identify the following", "Choose the best answer"). Leave as empty string if none found.
 - For True/False sections: use section_type "multiple_choice" and choices ["True","False"]
 - Strip letter/number prefixes from choices (e.g. "a. Paris" → "Paris", "A) Paris" → "Paris")
-- correct_index is the 0-based index of the correct choice (for multiple_choice/checkboxes)
-- If the correct answer is not shown, set correct_index to 0 and note it in description
+- correct_index is the 0-based index of the correct choice (for multiple_choice/dropdown)
+- If the correct answer is not shown, set correct_index to 0
 - Output ONLY the JSON array, nothing else`;
 
 async function callPuterWithText(text, pts) {
@@ -1919,6 +1940,7 @@ function parseAiResp(raw, dp) {
     return arr.map(sec=>({
         section_title: sec.section_title||sec.title||'Untitled Section',
         section_type: VALID_TYPES.includes(sec.section_type)?sec.section_type:'multiple_choice',
+        section_description: sec.section_description||sec.description||'',
         questions: (Array.isArray(sec.questions)?sec.questions:[]).map(q=>({
             question_text:  q.question_text||'Untitled question',
             question_type:  VALID_TYPES.includes(q.question_type)?q.question_type:
