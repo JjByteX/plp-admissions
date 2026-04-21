@@ -35,8 +35,8 @@ function db(): PDO
 
     try {
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        $pdo->exec("SET sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
     } catch (PDOException $e) {
-        // Never expose credentials in production
         error_log('DB connection failed: ' . $e->getMessage());
         http_response_code(500);
         exit('Database connection error. Please contact the system administrator.');
