@@ -406,8 +406,6 @@ ob_start();
                     <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:2px">
                         Approved by admissions staff
                     </div>
-                <?php else: ?>
-                    <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:2px">No file uploaded yet</div>
                 <?php endif; ?>
             </div>
 
@@ -474,6 +472,12 @@ ob_start();
         </form>
     </div>
 </div>
+
+<!-- Hidden form for submit / withdraw — ensures CSRF token is always sent correctly -->
+<form id="action-form" style="display:none">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" id="action-name" value="">
+</form>
 
 <!-- Result popup (success / error) -->
 <div id="result-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
@@ -578,41 +582,46 @@ async function submitUpload() {
     }
 }
 
+async function postAction(action) {
+    document.getElementById('action-name').value = action;
+    const fd = new FormData(document.getElementById('action-form'));
+    const res = await fetch(UPLOAD_URL, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: fd,
+    });
+    const text = await res.text();
+    try { return JSON.parse(text); } catch (e) {
+        console.error('Non-JSON response:', text);
+        throw new Error('Invalid server response');
+    }
+}
+
 async function submitApplication() {
     if (!confirm('Submit your application for staff review?\n\nYou can withdraw the submission if you need to make changes.')) return;
-
     try {
-        const fd = new FormData();
-        fd.append('action', 'submit_application');
-        fd.append('_token', CSRF_TOKEN);
-        const res  = await fetch(UPLOAD_URL, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd });
-        const data = await res.json();
+        const data = await postAction('submit_application');
         if (data.ok) {
             showResultModal(true, 'Application submitted!', 'Your documents are now under staff review.');
         } else {
             showResultModal(false, 'Could not submit', data.message);
         }
     } catch (err) {
-        showResultModal(false, 'Network error', 'Something went wrong. Please try again.');
+        showResultModal(false, 'Error', err.message);
     }
 }
 
 async function withdrawSubmission() {
     if (!confirm('Withdraw your submission?\n\nYou can make changes and re-submit whenever you\'re ready.')) return;
-
     try {
-        const fd = new FormData();
-        fd.append('action', 'withdraw_submission');
-        fd.append('_token', CSRF_TOKEN);
-        const res  = await fetch(UPLOAD_URL, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd });
-        const data = await res.json();
+        const data = await postAction('withdraw_submission');
         if (data.ok) {
-            showResultModal(true, 'Submission withdrawn', 'Your application is no longer submitted. Make your changes and re-submit when ready.');
+            showResultModal(true, 'Submission withdrawn', 'You can make changes and re-submit when ready.');
         } else {
             showResultModal(false, 'Could not withdraw', data.message);
         }
     } catch (err) {
-        showResultModal(false, 'Network error', 'Something went wrong. Please try again.');
+        showResultModal(false, 'Error', err.message);
     }
 }
 
