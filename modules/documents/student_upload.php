@@ -402,9 +402,9 @@ ob_start();
                     <div style="font-size:var(--text-sm);color:var(--error);margin-top:2px">
                         Staff note: <?= e($doc['staff_remarks']) ?>
                     </div>
-                <?php elseif ($doc && $doc['file_path']): ?>
+                <?php elseif ($status === 'approved'): ?>
                     <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:2px">
-                        <?= $status === 'approved' ? 'Approved by admissions staff' : 'File uploaded — awaiting review' ?>
+                        Approved by admissions staff
                     </div>
                 <?php else: ?>
                     <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:2px">No file uploaded yet</div>
