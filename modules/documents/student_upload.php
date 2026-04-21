@@ -103,30 +103,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success[] = $requiredDocs[$docSlug] . ' uploaded successfully.';
         }
     }
-        } else {
-            $filePath = 'uploads/' . $applicantId . '/' . $filename;
-
-            if (isset($docRows[$docSlug])) {
-                $stmt = $db->prepare(
-                    'UPDATE documents SET file_path=?, status="uploaded", staff_remarks=NULL, reviewed_by=NULL
-                     WHERE applicant_id=? AND doc_type=?'
-                );
-                $stmt->execute([$filePath, $applicantId, $docSlug]);
-            } else {
-                $stmt = $db->prepare(
-                    'INSERT INTO documents (applicant_id, doc_type, file_path, status) VALUES (?,?,?,"uploaded")'
-                );
-                $stmt->execute([$applicantId, $docSlug, $filePath]);
-            }
-
-            // Re-fetch updated doc rows
-            $stmt = $db->prepare('SELECT * FROM documents WHERE applicant_id = ?');
-            $stmt->execute([$applicantId]);
-            $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
-
-            $success[] = $requiredDocs[$docSlug] . ' uploaded successfully.';
-        }
-    }
 
     // Return JSON for AJAX requests
     if ($isAjax) {
