@@ -149,7 +149,8 @@ function uploadcare_upload(string $tmpPath, string $filename, string $mimeType):
     $data = json_decode($response, true);
     if (empty($data['file'])) return null;
 
-    return 'https://ucarecdn.com/' . $data['file'] . '/';
+    $cdnBase = getenv('UPLOADCARE_CDN_BASE') ?: 'ucarecdn.com';
+    return 'https://' . $cdnBase . '/' . $data['file'] . '/';
 }
 
 // -- hCaptcha verification --------------------------------------
