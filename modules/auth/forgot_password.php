@@ -53,8 +53,8 @@ $schoolLogo = school_setting('school_logo', '');
 <div class="auth-card animate-fade-in">
 
     <button class="auth-theme-toggle" onclick="Theme.toggle()" aria-label="Toggle theme">
-        <svg data-theme-icon="dark" class="hidden" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        <svg data-theme-icon="light" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <?= icon('ic_fluent_weather_sunny_24_regular', 16, '', 'data-theme-icon="dark" class="hidden"') ?>
+        <?= icon('ic_fluent_weather_moon_24_regular', 16, '', 'data-theme-icon="light"') ?>
     </button>
 
     <div class="auth-header">
@@ -62,7 +62,7 @@ $schoolLogo = school_setting('school_logo', '');
             <img src="<?= e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url($schoolLogo)) ?>" alt="School Logo" class="auth-logo-img">
         <?php else: ?>
             <div class="auth-logo">
-                <?php include VIEWS_PATH . '/partials/icons/school.svg.php'; ?>
+                <?php include VIEWS_PATH . '/partials/icons/ic_fluent_building_bank_24_regular.svg'; ?>
             </div>
         <?php endif; ?>
         <div class="auth-header-text">
@@ -73,7 +73,7 @@ $schoolLogo = school_setting('school_logo', '');
 
     <?php if ($success): ?>
         <div class="alert alert-success" style="margin-bottom:var(--space-5)">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
             <?php if ($token): ?>
                 Your reset token has been generated. Bring this to the admissions office or use it below.
             <?php else: ?>

@@ -313,14 +313,14 @@ ob_start();
 
 <?php foreach ($errors as $err): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-4)">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <?= icon('ic_fluent_warning_24_regular', 16) ?>
         <?= e($err) ?>
     </div>
 <?php endforeach; ?>
 
 <?php foreach ($success as $msg): ?>
     <div class="alert alert-success" style="margin-bottom:var(--space-4)">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
         <?= e($msg) ?>
     </div>
 <?php endforeach; ?>
@@ -352,9 +352,9 @@ ob_start();
             <!-- Icon -->
             <div style="width:40px;height:40px;border-radius:var(--radius-md);background:var(--neutral-100);display:flex;align-items:center;justify-content:center;flex-shrink:0;<?= $isApproved ? 'background:var(--success-bg)' : '' ?>">
                 <?php if ($isApproved): ?>
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" style="color:var(--success)"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <?= icon('ic_fluent_checkmark_circle_24_regular', 18, 'color:var(--success)') ?>
                 <?php else: ?>
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" style="color:var(--text-tertiary)"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/></svg>
+                    <?= icon('ic_fluent_document_24_regular', 18, 'color:var(--text-tertiary)') ?>
                 <?php endif; ?>
             </div>
 
@@ -406,7 +406,7 @@ ob_start();
         <div class="modal-header">
             <div class="modal-title" id="modal-doc-name">Upload Document</div>
             <button class="btn-icon" onclick="closeUploadModal()" aria-label="Close">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
             </button>
         </div>
         <form id="upload-form" enctype="multipart/form-data">
@@ -610,7 +610,7 @@ function updateDropLabel(name) {
                 color:var(--text-secondary);cursor:pointer;flex-shrink:0;
                 transition:background var(--transition-fast),color var(--transition-fast);
             " title="Previous (←)">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M15 18l-6-6 6-6"/></svg>
+                <?= icon('ic_fluent_chevron_left_24_regular', 15) ?>
             </button>
             <div style="flex:1;min-width:0">
                 <div id="fv-label" style="font-weight:var(--weight-semibold);font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
@@ -623,22 +623,22 @@ function updateDropLabel(name) {
                 color:var(--text-secondary);cursor:pointer;flex-shrink:0;
                 transition:background var(--transition-fast),color var(--transition-fast);
             " title="Next (→)">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M9 18l6-6-6-6"/></svg>
+                <?= icon('ic_fluent_chevron_right_24_regular', 15) ?>
             </button>
             <div style="width:1px;height:24px;background:var(--border);flex-shrink:0"></div>
             <button onclick="fvZoom(-0.25)" type="button" class="fv-ctrl-btn" title="Zoom out (−)">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14"/></svg>
+                <?= icon('ic_fluent_subtract_24_regular', 14) ?>
             </button>
             <span id="fv-zoom-label" style="font-size:var(--text-xs);color:var(--text-secondary);min-width:38px;text-align:center;font-variant-numeric:tabular-nums">100%</span>
             <button onclick="fvZoom(0.25)" type="button" class="fv-ctrl-btn" title="Zoom in (+)">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                <?= icon('ic_fluent_add_24_regular', 14) ?>
             </button>
             <button onclick="fvResetZoom()" type="button" class="fv-ctrl-btn" title="Reset zoom (0)">
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 21l-4.35-4.35m0 0A7 7 0 105.65 5.65a7 7 0 0011 11.35z"/></svg>
             </button>
             <div style="width:1px;height:24px;background:var(--border);flex-shrink:0"></div>
             <button onclick="closeFileViewer()" type="button" class="fv-ctrl-btn" title="Close (Esc)" aria-label="Close">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+                <?= icon('ic_fluent_dismiss_24_regular', 15) ?>
             </button>
         </div>
         <!-- Viewport -->

@@ -198,7 +198,7 @@ ob_start();
         <div class="modal-header">
             <div class="modal-title">Release Result</div>
             <button class="btn-icon" onclick="document.getElementById('release-modal').style.display='none'">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
             </button>
         </div>
         <form method="POST" id="release-form" action="">

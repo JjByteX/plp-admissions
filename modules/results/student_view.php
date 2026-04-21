@@ -52,7 +52,7 @@ ob_start();
 ?>
     <div class="card" style="padding:var(--space-8);text-align:center;max-width:480px;margin:0 auto">
         <div style="width:72px;height:72px;border-radius:50%;background:var(--<?= $cfg['class'] ?>-bg);display:flex;align-items:center;justify-content:center;margin:0 auto var(--space-6)">
-            <svg width="32" height="32" fill="none" viewBox="0 0 24 24" style="color:var(--<?= $cfg['class'] ?>)">
+            <?= icon('ic_fluent_checkmark_circle_24_regular', 32, 'color:var(--' . $cfg['class'] . ')') ?><!--
                 <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="<?= $cfg['icon'] ?>"/>
             </svg>
         </div>

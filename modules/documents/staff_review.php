@@ -44,7 +44,7 @@ if ($applicantId) {
     ob_start();
 ?>
 <div style="margin-bottom:var(--space-6)"><a href="<?= url('/staff/applicants') ?>" class="btn btn-ghost btn-sm">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M19 12H5m7-7-7 7 7 7"/></svg>
+        <?= icon('ic_fluent_arrow_left_24_regular', 16) ?>
         Back
     </a>
 </div>
@@ -92,7 +92,7 @@ if ($applicantId) {
                     onclick="openFileViewer(<?= $fileIndex ?>, <?= htmlspecialchars(json_encode($viewableFiles), ENT_QUOTES) ?>)"
                     type="button"
                 >
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" style="margin-right:4px"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                    <?= icon('ic_fluent_eye_show_24_regular', 14, 'margin-right:4px') ?>
                     View File
                 </button>
             <?php else: ?>
@@ -137,7 +137,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
         <div class="modal-header">
             <div class="modal-title">Reject Document</div>
             <button class="btn-icon" onclick="closeRejectModal()">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
             </button>
         </div>
         <form method="POST" id="reject-form" action="">
@@ -192,7 +192,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                 color:var(--text-secondary);cursor:pointer;flex-shrink:0;
                 transition:background var(--transition-fast),color var(--transition-fast);
             " title="Previous (←)">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M15 18l-6-6 6-6"/></svg>
+                <?= icon('ic_fluent_chevron_left_24_regular', 15) ?>
             </button>
 
             <!-- Label + counter -->
@@ -209,19 +209,19 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                 color:var(--text-secondary);cursor:pointer;flex-shrink:0;
                 transition:background var(--transition-fast),color var(--transition-fast);
             " title="Next (→)">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M9 18l6-6-6-6"/></svg>
+                <?= icon('ic_fluent_chevron_right_24_regular', 15) ?>
             </button>
 
             <div style="width:1px;height:24px;background:var(--border);flex-shrink:0"></div>
 
             <!-- Zoom out -->
             <button onclick="fvZoom(-0.25)" type="button" class="fv-ctrl-btn" title="Zoom out (−)">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14"/></svg>
+                <?= icon('ic_fluent_subtract_24_regular', 14) ?>
             </button>
             <span id="fv-zoom-label" style="font-size:var(--text-xs);color:var(--text-secondary);min-width:38px;text-align:center;font-variant-numeric:tabular-nums">100%</span>
             <!-- Zoom in -->
             <button onclick="fvZoom(0.25)" type="button" class="fv-ctrl-btn" title="Zoom in (+)">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                <?= icon('ic_fluent_add_24_regular', 14) ?>
             </button>
             <!-- Reset zoom -->
             <button onclick="fvResetZoom()" type="button" class="fv-ctrl-btn" title="Reset zoom (0)">
@@ -232,7 +232,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 
             <!-- Close -->
             <button onclick="closeFileViewer()" type="button" class="fv-ctrl-btn" title="Close (Esc)" aria-label="Close">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+                <?= icon('ic_fluent_dismiss_24_regular', 15) ?>
             </button>
         </div>
 

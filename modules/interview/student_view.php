@@ -268,10 +268,7 @@ ob_start();
         </div>
 
         <div class="alert alert-warning">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-                <path stroke="currentColor" stroke-width="2"
-                      d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            </svg>
+            <?= icon('ic_fluent_warning_24_regular', 16) ?>
             Please stay nearby and have your valid ID and application documents ready.
         </div>
 
@@ -282,7 +279,7 @@ ob_start();
             <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5)">
                 <div style="width:48px;height:48px;border-radius:var(--radius-lg);
                              background:var(--success-bg);display:flex;align-items:center;justify-content:center">
-                    <svg width="22" height="22" fill="none" viewBox="0 0 24 24" style="color:var(--success)">
+                    <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?><!--
                         <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
                               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
@@ -315,7 +312,7 @@ ob_start();
             <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5)">
                 <div style="width:48px;height:48px;border-radius:var(--radius-lg);
                              background:var(--success-bg);display:flex;align-items:center;justify-content:center">
-                    <svg width="22" height="22" fill="none" viewBox="0 0 24 24" style="color:var(--success)">
+                    <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?><!--
                         <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
                               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                     </svg>
@@ -378,7 +375,7 @@ ob_start();
             <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5)">
                 <div style="width:48px;height:48px;border-radius:var(--radius-lg);
                              background:var(--success-bg);display:flex;align-items:center;justify-content:center">
-                    <svg width="22" height="22" fill="none" viewBox="0 0 24 24" style="color:var(--success)">
+                    <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?><!--
                         <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
                               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
@@ -412,10 +409,7 @@ ob_start();
             <?php endif; ?>
 
             <div class="alert alert-info">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                    <path stroke="currentColor" stroke-width="2"
-                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
+                <?= icon('ic_fluent_info_24_regular', 15) ?>
                 <span>
                     On the day of your interview, return to this page and tap <strong>"I'm Here"</strong>
                     to join the queue and receive your number.

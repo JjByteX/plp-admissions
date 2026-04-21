@@ -213,6 +213,33 @@ function audit_log(
     }
 }
 
+
+// -- SVG icon helper -------------------------------------------
+// Loads a Fluent icon from views/partials/icons/ and sets size.
+// $extra = any additional SVG attributes e.g. 'id="foo" class="bar"'
+function icon(string $name, int $size = 16, string $style = '', string $extra = ''): string
+{
+    static $cache = [];
+    if (!isset($cache[$name])) {
+        $path = VIEWS_PATH . '/partials/icons/' . $name . '.svg';
+        $cache[$name] = file_exists($path) ? file_get_contents($path) : '';
+    }
+    if (!$cache[$name]) return '';
+    $svg = $cache[$name];
+    $svg = preg_replace_callback('/<svg\b([^>]*)>/', function ($m) use ($size, $style, $extra) {
+        $attrs = $m[1];
+        $attrs = preg_replace('/\s*width="[^"]*"/',  '', $attrs);
+        $attrs = preg_replace('/\s*height="[^"]*"/', '', $attrs);
+        $out  = '<svg';
+        $out .= ' width="' . $size . '" height="' . $size . '"';
+        if ($style) $out .= ' style="' . $style . '"';
+        if ($extra) $out .= ' ' . $extra;
+        $out .= $attrs . '>';
+        return $out;
+    }, $svg, 1);
+    return $svg;
+}
+
 // -- Pagination -------------------------------------------------
 function paginate(PDO $pdo, string $countSql, string $dataSql, array $params, int $page, int $perPage = 20): array
 {

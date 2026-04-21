@@ -178,8 +178,8 @@ ob_start();
 <div class="auth-card animate-fade-in" style="max-width:560px">
 
     <button class="auth-theme-toggle" onclick="Theme.toggle()" aria-label="Toggle theme">
-        <svg data-theme-icon="dark" class="hidden" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        <svg data-theme-icon="light" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <?= icon('ic_fluent_weather_sunny_24_regular', 16, '', 'data-theme-icon="dark" class="hidden"') ?>
+        <?= icon('ic_fluent_weather_moon_24_regular', 16, '', 'data-theme-icon="light"') ?>
     </button>
 
     <div class="auth-header">
@@ -187,7 +187,7 @@ ob_start();
             <img src="<?= e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url($schoolLogo)) ?>" alt="School Logo" class="auth-logo-img">
         <?php else: ?>
             <div class="auth-logo">
-                <?php include VIEWS_PATH . '/partials/icons/school.svg.php'; ?>
+                <?php include VIEWS_PATH . '/partials/icons/ic_fluent_building_bank_24_regular.svg'; ?>
             </div>
         <?php endif; ?>
         <div class="auth-header-text">
@@ -198,7 +198,7 @@ ob_start();
 
     <?php if (!empty($errors['general'])): ?>
         <div class="alert alert-error" style="margin-bottom:var(--space-5)">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/></svg>
+            <?= icon('ic_fluent_info_24_regular', 16) ?>
             <?= e($errors['general']) ?>
         </div>
     <?php endif; ?>
@@ -424,7 +424,7 @@ ob_start();
                         autocomplete="new-password" required>
                     <button type="button" class="input-suffix-icon btn-pw-toggle"
                         onclick="togglePw('password',this)" tabindex="-1" aria-label="Show password">
-                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                        <?= icon('ic_fluent_eye_show_24_regular', 16) ?>
                     </button>
                 </div>
                 <?php if (!empty($errors['password'])): ?>
@@ -440,7 +440,7 @@ ob_start();
                         autocomplete="new-password" required>
                     <button type="button" class="input-suffix-icon btn-pw-toggle"
                         onclick="togglePw('password_confirm',this)" tabindex="-1" aria-label="Show password">
-                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                        <?= icon('ic_fluent_eye_show_24_regular', 16) ?>
                     </button>
                 </div>
                 <?php if (!empty($errors['password_confirm'])): ?>
@@ -451,7 +451,7 @@ ob_start();
 
         <?php if (!empty($errors['captcha'])): ?>
             <div class="alert alert-error" style="margin-bottom:var(--space-4)">
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/></svg>
+                <?= icon('ic_fluent_info_24_regular', 16) ?>
                 <?= e($errors['captcha']) ?>
             </div>
         <?php endif; ?>

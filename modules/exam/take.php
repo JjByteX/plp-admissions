@@ -402,7 +402,7 @@ ob_start();
 </div>
 
 <div class="alert alert-warning" style="margin-bottom:var(--space-6)">
-    <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+    <?= icon('ic_fluent_warning_24_regular', 16) ?>
     <span>You can only submit <strong>once</strong>. Do not close this page until you click <strong>Submit Exam</strong>.</span>
     <?php if ($exam['duration_minutes'] > 0): ?>
         &nbsp;&nbsp;Time remaining: <span id="timer" class="timer-chip"><?= str_pad($exam['duration_minutes'],2,'0',STR_PAD_LEFT) ?>:00</span>

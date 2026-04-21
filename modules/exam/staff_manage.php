@@ -542,7 +542,7 @@ ob_start();
                             <button onclick="startInlineExamEdit()" title="Edit title"
                                     style="opacity:.4;background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;transition:opacity .15s"
                                     onmouseover="this.style.opacity='.9'" onmouseout="this.style.opacity='.4'">
-                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                <?= icon('ic_fluent_edit_24_regular', 13) ?>
                             </button>
                         </div>
                     </div>
@@ -689,7 +689,7 @@ ob_start();
                                 ?>
                                     <div style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm)">
                                         <?php if ($isCorrect): ?>
-                                            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" style="color:var(--success);flex-shrink:0"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M5 13l4 4L19 7"/></svg>
+                                            <?= icon('ic_fluent_checkmark_24_regular', 13, 'color:var(--success);flex-shrink:0') ?>
                                         <?php elseif ($q['question_type'] === 'checkboxes'): ?>
                                             <span style="width:13px;height:13px;border:1.5px solid var(--border);border-radius:3px;display:inline-block;flex-shrink:0"></span>
                                         <?php else: ?>
@@ -716,14 +716,14 @@ ob_start();
                         <!-- Actions -->
                         <div style="display:flex;gap:var(--space-1)">
                             <button class="btn-icon" title="Edit question" onclick="startInlineQFullEdit(<?= $q['id'] ?>)">
-                                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                <?= icon('ic_fluent_edit_24_regular', 15) ?>
                             </button>
                             <form method="POST" onsubmit="return confirm('Delete this question?')" style="display:inline">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete_question">
                                 <input type="hidden" name="question_id" value="<?= $q['id'] ?>">
                                 <button class="btn-icon" style="color:var(--error)" title="Delete">
-                                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 6h18m-2 0V20a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                                    <?= icon('ic_fluent_delete_24_regular', 15) ?>
                                 </button>
                             </form>
                         </div>
@@ -771,14 +771,14 @@ ob_start();
                         </div>
                         <div class="section-actions">
                             <button class="btn-icon" title="Edit section" onclick="openEditSectionModal(<?= $secJson ?>)">
-                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                <?= icon('ic_fluent_edit_24_regular', 13) ?>
                             </button>
                             <form method="POST" onsubmit="return confirm('Delete this section? It must be empty first.')" style="display:inline">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete_section">
                                 <input type="hidden" name="section_id" value="<?= $sec['id'] ?>">
                                 <button class="btn-icon" style="color:var(--error)" title="Delete section">
-                                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 6h18m-2 0V20a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                                    <?= icon('ic_fluent_delete_24_regular', 13) ?>
                                 </button>
                             </form>
                         </div>
@@ -803,7 +803,7 @@ ob_start();
                         <button class="btn btn-ghost btn-sm" id="sec-add-btn-<?= $sec['id'] ?>"
                                 onclick="showInlineCreator(<?= $sec['id'] ?>, '<?= $sec['question_type'] ?>')"
                                 style="display:flex;align-items:center;gap:5px;color:var(--accent)">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                            <?= icon('ic_fluent_add_24_regular', 13) ?>
                             Add question
                         </button>
                     </div>
@@ -830,7 +830,7 @@ ob_start();
         <div class="modal-header">
             <div class="modal-title">New Exam</div>
             <button class="btn-icon" onclick="closeModal('create-exam-modal')">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
             </button>
         </div>
         <form method="POST">
@@ -915,7 +915,7 @@ ob_start();
         <div class="modal-header">
             <div class="modal-title">Edit Exam</div>
             <button class="btn-icon" onclick="closeModal('edit-exam-modal')">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
             </button>
         </div>
         <form method="POST">
@@ -998,7 +998,7 @@ ob_start();
         <div class="modal-header">
             <div class="modal-title" id="sec-modal-title">Add Section</div>
             <button class="btn-icon" onclick="closeModal('section-modal')">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
             </button>
         </div>
         <form method="POST">
@@ -1206,7 +1206,7 @@ function buildQEditHTML(q) {
                 <label class="form-label">Answer Choices</label>
                 <div id="qe-choices-${qid}" style="display:flex;flex-direction:column;gap:var(--space-2)">${rows}</div>
                 <button type="button" class="iq-add-choice" onclick="addEditChoice(${qid},'${q.question_type}')">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                    <?= icon('ic_fluent_add_24_regular', 11) ?>
                     Add choice
                 </button>
                 <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">${isCheckbox?'Check all correct answers.':'Select the one correct answer.'}</p>
@@ -1267,7 +1267,7 @@ function buildEditChoiceRow(choice, idx, qid, qType) {
     const name = isCheckbox ? `qe_cb_${qid}_${idx}` : `qe_rb_${qid}`;
     const delBtn = idx >= 2
         ? `<button type="button" class="btn-icon" style="color:var(--error);flex-shrink:0" onclick="removeEditChoice(${qid},${idx},'${qType}')">
-               <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+               <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
            </button>`
         : '<div style="width:22px"></div>';
     return `<div class="iq-choice-row" data-choice-idx="${idx}">
@@ -1402,7 +1402,7 @@ function renderInlineCreator(container, secId, secType) {
                 ${choices.map((c, i) => renderChoiceRow(c, i, secId, secType)).join('')}
             </div>
             <button type="button" class="iq-add-choice" onclick="addInlineChoice(${secId}, '${secType}')">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                <?= icon('ic_fluent_add_24_regular', 11) ?>
                 Add choice
             </button>
             <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">${isCheckbox ? 'Check all correct answers.' : 'Select the one correct answer.'}</p>
@@ -1469,7 +1469,7 @@ function renderChoiceRow(choice, idx, secId, secType) {
     const delBtn = idx >= 2
         ? `<button type="button" class="btn-icon" style="color:var(--error);flex-shrink:0"
                onclick="removeInlineChoice(${secId}, ${idx}, '${secType}')">
-               <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+               <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
            </button>`
         : '<div style="width:22px"></div>';
     return `<div class="iq-choice-row" data-choice-idx="${idx}">
@@ -1677,7 +1677,7 @@ async function saveInlineQuestion(secId, secType) {
                 </div>
             </div>
             <button class="btn-icon" onclick="closeAiImportModal()">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
             </button>
         </div>
         <div class="modal-body" style="overflow-y:auto;display:flex;flex-direction:column;gap:var(--space-4)">

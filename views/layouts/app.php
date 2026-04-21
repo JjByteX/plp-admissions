@@ -61,7 +61,7 @@ $isStudent    = ($userRole === 'student');
                 <img src="<?= str_starts_with($schoolLogo, 'http') ? e($schoolLogo) : e(url('/' . $schoolLogo)) ?>" alt="Logo" class="sidebar-logo">
             <?php else: ?>
                 <div class="sidebar-logo-placeholder">
-                    <?php include __DIR__ . '/../partials/icons/school.svg.php'; ?>
+                    <?php include __DIR__ . '/../partials/icons/ic_fluent_building_bank_24_regular.svg'; ?>
                 </div>
             <?php endif; ?>
             <span class="sidebar-school-name"><?= e($schoolName) ?></span>
@@ -86,12 +86,12 @@ $isStudent    = ($userRole === 'student');
                 </div>
                 <div class="dropdown-separator"></div>
                 <a href="<?= url('/student/settings') ?>" class="dropdown-item">
-                    <?php include __DIR__ . '/../partials/icons/settings.svg.php'; ?>
+                    <?php include __DIR__ . '/../partials/icons/ic_fluent_settings_24_regular.svg'; ?>
                     Settings
                 </a>
                 <div class="dropdown-separator"></div>
                 <a href="<?= url('/logout') ?>" class="dropdown-item danger">
-                    <?php include __DIR__ . '/../partials/icons/logout.svg.php'; ?>
+                    <?php include __DIR__ . '/../partials/icons/ic_fluent_sign_out_24_regular.svg'; ?>
                     Log out
                 </a>
             </div>
@@ -112,7 +112,7 @@ $isStudent    = ($userRole === 'student');
                 <img src="<?= str_starts_with($schoolLogo, 'http') ? e($schoolLogo) : e(url('/' . $schoolLogo)) ?>" alt="Logo" class="sidebar-logo">
             <?php else: ?>
                 <div class="sidebar-logo-placeholder">
-                    <?php include __DIR__ . '/../partials/icons/school.svg.php'; ?>
+                    <?php include __DIR__ . '/../partials/icons/ic_fluent_building_bank_24_regular.svg'; ?>
                 </div>
             <?php endif; ?>
             <span class="sidebar-school-name"><?= e($schoolName) ?></span>
@@ -136,13 +136,11 @@ $isStudent    = ($userRole === 'student');
                         <div class="user-name truncate"><?= e($authUser['name'] ?? '') ?></div>
                         <div class="user-role"><?= e($userRole) ?></div>
                     </div>
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" style="flex-shrink:0;color:var(--text-tertiary)">
-                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 9l6 6 6-6"/>
-                    </svg>
+                    <?= icon('ic_fluent_arrow_down_24_regular', 14, 'flex-shrink:0;color:var(--text-tertiary)') ?>
                 </div>
                 <div class="dropdown-menu">
                     <a href="<?= url($userRole === 'staff' ? '/staff/settings' : '/admin/settings') ?>" class="dropdown-item">
-                        <?php include __DIR__ . '/../partials/icons/settings.svg.php'; ?>
+                        <?php include __DIR__ . '/../partials/icons/ic_fluent_settings_24_regular.svg'; ?>
                         Settings
                     </a>
                     <div class="dropdown-item theme-toggle-row" onclick="
@@ -151,7 +149,7 @@ $isStudent    = ($userRole === 'student');
                         localStorage.setItem('plp_theme', t);
                         document.querySelector('.theme-pill').dataset.theme = t;" style="cursor:pointer;justify-content:space-between;">
                         <span style="display:flex;align-items:center;gap:var(--space-2)">
-                            <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                            <?= icon('ic_fluent_weather_moon_24_regular', 15) ?>
                             Dark Mode
                         </span>
                         <div class="theme-pill" data-theme="light" style="
@@ -171,7 +169,7 @@ $isStudent    = ($userRole === 'student');
                     </style>
                     <div class="dropdown-separator"></div>
                     <a href="<?= url('/logout') ?>" class="dropdown-item danger">
-                        <?php include __DIR__ . '/../partials/icons/logout.svg.php'; ?>
+                        <?php include __DIR__ . '/../partials/icons/ic_fluent_sign_out_24_regular.svg'; ?>
                         Log out
                     </a>
                 </div>
@@ -192,19 +190,19 @@ $isStudent    = ($userRole === 'student');
             <div style="padding: var(--space-4) var(--space-8) 0;">
                 <?php if ($msg = Session::getFlash('success')): ?>
                     <div class="alert alert-success animate-fade-in" data-auto-dismiss="5000">
-                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
                         <?= e($msg) ?>
                     </div>
                 <?php endif; ?>
                 <?php if ($msg = Session::getFlash('error')): ?>
                     <div class="alert alert-error animate-fade-in" data-auto-dismiss="6000">
-                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/></svg>
+                        <?= icon('ic_fluent_info_24_regular', 16) ?>
                         <?= e($msg) ?>
                     </div>
                 <?php endif; ?>
                 <?php if ($msg = Session::getFlash('info')): ?>
                     <div class="alert alert-info animate-fade-in" data-auto-dismiss="5000">
-                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 16v-4M12 8h.01"/></svg>
+                        <?= icon('ic_fluent_info_24_regular', 16) ?>
                         <?= e($msg) ?>
                     </div>
                 <?php endif; ?>

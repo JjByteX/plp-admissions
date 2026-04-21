@@ -58,7 +58,7 @@ ob_start();
 
     <div class="auth-header">
         <div class="auth-logo">
-            <?php include VIEWS_PATH . '/partials/icons/shield.svg.php'; ?>
+            <?php include VIEWS_PATH . '/partials/icons/ic_fluent_shield_24_regular.svg'; ?>
         </div>
         <h1 class="auth-title">New password</h1>
         <p class="auth-subtitle">Choose a strong password for your account</p>
@@ -66,14 +66,14 @@ ob_start();
 
     <?php if ($success): ?>
         <div class="alert alert-success" style="margin-bottom:var(--space-5)">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
             Password updated successfully.
         </div>
         <a href="<?= url('/login') ?>" class="btn btn-primary btn-block">Sign in</a>
 
     <?php elseif (!$token || !$resetRow): ?>
         <div class="alert alert-error" style="margin-bottom:var(--space-5)">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/></svg>
+            <?= icon('ic_fluent_info_24_regular', 16) ?>
             This reset link is invalid or has expired.
         </div>
         <a href="<?= url('/forgot-password') ?>" class="btn btn-secondary btn-block">Request new token</a>

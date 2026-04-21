@@ -339,10 +339,7 @@ ob_start();
                                 <input type="hidden" name="action" value="delete_slot">
                                 <button class="btn-icon" style="color:var(--text-tertiary);padding:var(--space-1)"
                                         title="Delete session">
-                                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                              d="M3 6h18m-2 0V20a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
-                                    </svg>
+<?= icon('ic_fluent_delete_24_regular', 14) ?>
                                 </button>
                             </form>
                         <?php endif; ?>
@@ -363,9 +360,7 @@ ob_start();
             <div class="modal-title">New Session</div>
             <button class="btn-icon"
                     onclick="document.getElementById('add-session-modal').style.display='none'">
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-                    <path stroke="currentColor" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
+<?= icon('ic_fluent_dismiss_24_regular', 16) ?>
             </button>
         </div>
         <form method="POST">
