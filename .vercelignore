@@ -1,0 +1,9 @@
+# Exclude uploaded user files from deployment
+public/uploads/*/
+!public/uploads/branding/
+!public/uploads/.htaccess
+
+# Exclude local dev files
+.git/
+database/
+README.md

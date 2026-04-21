@@ -5,7 +5,7 @@
 // ============================================================
 
 // -- Environment -------------------------------------------------
-define('APP_ENV', 'development');   // 'development' | 'production'
+define('APP_ENV', getenv('APP_ENV') ?: 'development');   // 'development' | 'production'
 define('APP_DEBUG', APP_ENV === 'development');
 
 // -- Paths -------------------------------------------------------
@@ -19,7 +19,7 @@ define('UPLOAD_PATH', PUBLIC_PATH . '/uploads');
 
 // -- URL ---------------------------------------------------------
 if (APP_ENV === 'production') {
-    define('BASE_URL', 'https://plp-admissions.rf.gd');
+    define('BASE_URL', rtrim(getenv('APP_URL') ?: 'https://plp-admissions.vercel.app', '/'));
 } else {
     $__scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $__host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
@@ -149,6 +149,11 @@ define('RESULT_LABELS', [
     'waitlisted' => 'Waitlisted',
     'rejected'   => 'Rejected',
 ]);
+
+// -- hCaptcha ----------------------------------------------------
+define('HCAPTCHA_SITE_KEY',   getenv('HCAPTCHA_SITE_KEY')   ?: '');
+define('HCAPTCHA_SECRET_KEY', getenv('HCAPTCHA_SECRET_KEY') ?: '');
+define('HCAPTCHA_ENABLED',    !empty(HCAPTCHA_SITE_KEY) && !empty(HCAPTCHA_SECRET_KEY));
 
 // -- Progress steps (student tracker) ---------------------------
 define('PROGRESS_STEPS', [

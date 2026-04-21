@@ -4,10 +4,10 @@
 // Database connection — update credentials for InfinityFree
 // ============================================================
 
-define('DB_HOST', 'localhost');        // InfinityFree: sql###.infinityfree.com
-define('DB_NAME', 'plp_admissions');   // InfinityFree: your database name
-define('DB_USER', 'root');             // InfinityFree: your DB username
-define('DB_PASS', '');                 // InfinityFree: your DB password
+define('DB_HOST',    getenv('DB_HOST')    ?: 'localhost');
+define('DB_NAME',    getenv('DB_NAME')    ?: 'plp_admissions');
+define('DB_USER',    getenv('DB_USER')    ?: 'root');
+define('DB_PASS',    getenv('DB_PASS')    ?: '');
 define('DB_CHARSET', 'utf8mb4');
 
 function db(): PDO

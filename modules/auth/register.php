@@ -14,6 +14,11 @@ $old    = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
+    // hCaptcha verification
+    if (!hcaptcha_verify()) {
+        $errors['captcha'] = 'Please complete the CAPTCHA.';
+    }
+
     $old = [
         'first_name'     => trim($_POST['first_name']     ?? ''),
         'middle_name'    => trim($_POST['middle_name']    ?? ''),
@@ -443,6 +448,17 @@ ob_start();
                 <?php endif; ?>
             </div>
         </div>
+
+        <?php if (!empty($errors['captcha'])): ?>
+            <div class="alert alert-error" style="margin-bottom:var(--space-4)">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/></svg>
+                <?= e($errors['captcha']) ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if (HCAPTCHA_ENABLED): ?>
+            <div class="h-captcha" data-sitekey="<?= e(HCAPTCHA_SITE_KEY) ?>" style="margin-bottom:var(--space-4)"></div>
+        <?php endif; ?>
 
         <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top:var(--space-6)">
             Create account

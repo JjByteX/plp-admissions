@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "functions": {
+    "public/index.php": {
+      "runtime": "vercel-php@0.7.1"
+    }
+  },
+  "routes": [
+    {
+      "src": "^/assets/(.*)",
+      "dest": "/public/assets/$1"
+    },
+    {
+      "src": "^/uploads/(.*)",
+      "dest": "/public/uploads/$1"
+    },
+    {
+      "src": "^/(.*)",
+      "dest": "/public/index.php"
+    }
+  ]
+}

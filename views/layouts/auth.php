@@ -37,6 +37,9 @@ $pageTitle   = $pageTitle ?? 'Welcome';
 
 <script src="<?= asset('js/app.js') ?>"></script>
 <script>setAccentColor('<?= e($accentColor) ?>');</script>
+<?php if (HCAPTCHA_ENABLED): ?>
+<script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+<?php endif; ?>
 
 </body>
 </html>

@@ -25,6 +25,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$password) $errors['password'] = 'Password is required.';
 
     if (empty($errors)) {
+        // hCaptcha verification
+        if (!hcaptcha_verify()) {
+            $errors['captcha'] = 'Please complete the CAPTCHA.';
+        }
+    }
+
+    if (empty($errors)) {
         $stmt = db()->prepare('SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch();
@@ -115,6 +122,17 @@ ob_start();
                 <span class="form-error"><?= e($errors['password']) ?></span>
             <?php endif; ?>
         </div>
+
+        <?php if (!empty($errors['captcha'])): ?>
+            <div class="alert alert-error" style="margin-bottom:var(--space-4)">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/></svg>
+                <?= e($errors['captcha']) ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if (HCAPTCHA_ENABLED): ?>
+            <div class="h-captcha" data-sitekey="<?= e(HCAPTCHA_SITE_KEY) ?>" style="margin-bottom:var(--space-4)"></div>
+        <?php endif; ?>
 
         <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top:var(--space-2)">
             Sign in

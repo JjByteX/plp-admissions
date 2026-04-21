@@ -118,6 +118,37 @@ function current_step(array $applicant, ?array $examResult, ?array $interviewSlo
     return 'documents';
 }
 
+// -- hCaptcha verification --------------------------------------
+function hcaptcha_verify(): bool
+{
+    if (!HCAPTCHA_ENABLED) {
+        return true; // Skip if keys are not configured
+    }
+
+    $token = $_POST['h-captcha-response'] ?? '';
+    if (!$token) {
+        return false;
+    }
+
+    $response = @file_get_contents('https://api.hcaptcha.com/siteverify', false, stream_context_create([
+        'http' => [
+            'method'  => 'POST',
+            'header'  => 'Content-Type: application/x-www-form-urlencoded',
+            'content' => http_build_query([
+                'secret'   => HCAPTCHA_SECRET_KEY,
+                'response' => $token,
+            ]),
+        ],
+    ]));
+
+    if (!$response) {
+        return false;
+    }
+
+    $data = json_decode($response, true);
+    return !empty($data['success']);
+}
+
 // -- Pagination -------------------------------------------------
 function paginate(PDO $pdo, string $countSql, string $dataSql, array $params, int $page, int $perPage = 20): array
 {
