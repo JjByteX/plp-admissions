@@ -411,16 +411,13 @@ ob_start();
                 <?php endif; ?>
             </div>
 
-            <!-- Status badge -->
-            <span class="badge <?= $badge['class'] ?>"><?= $badge['label'] ?></span>
+            <!-- Status badge — hide when Replace is shown (redundant) -->
+            <?php if (!($canUpload && $status !== 'pending')): ?>
+                <span class="badge <?= $badge['class'] ?>"><?= $badge['label'] ?></span>
+            <?php endif; ?>
 
-            <!-- Upload / Replace button -->
-            <?php if ($canUpload): ?>
-                <button class="btn btn-secondary btn-sm"
-                        onclick="openUploadModal('<?= $slug ?>', <?= htmlspecialchars(json_encode($label), ENT_QUOTES) ?>)">
-                    <?= $uploadLabel ?>
-                </button>
-            <?php elseif ($doc && $doc['file_path']): ?>
+            <!-- View — always show when a file exists -->
+            <?php if ($doc && $doc['file_path']): ?>
                 <?php
                 $fileIndex = -1;
                 foreach ($viewableFiles as $fi => $vf) {
@@ -430,6 +427,14 @@ ob_start();
                 <button class="btn btn-ghost btn-sm"
                         onclick="openFileViewer(<?= $fileIndex ?>, <?= htmlspecialchars(json_encode($viewableFiles), ENT_QUOTES) ?>)"
                         type="button">View</button>
+            <?php endif; ?>
+
+            <!-- Upload / Replace button -->
+            <?php if ($canUpload): ?>
+                <button class="btn btn-secondary btn-sm"
+                        onclick="openUploadModal('<?= $slug ?>', <?= htmlspecialchars(json_encode($label), ENT_QUOTES) ?>)">
+                    <?= $uploadLabel ?>
+                </button>
             <?php endif; ?>
 
         </div>
