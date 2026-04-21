@@ -96,7 +96,7 @@ ob_start();
                 <?php if ($schoolLogo): ?>
                     <div>
                         <label class="form-label">Current Logo</label>
-                        <img src="<?= url('/'.$schoolLogo) ?>" alt="Logo"
+                        <img src="<?= str_starts_with($schoolLogo, 'http') ? e($schoolLogo) : e(url('/'. $schoolLogo)) ?>" alt="Logo"
                              style="height:48px;border-radius:var(--radius-sm);display:block">
                     </div>
                 <?php endif; ?>
