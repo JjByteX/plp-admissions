@@ -906,7 +906,7 @@ function updateDropLabel(name) {
         <div style="font-weight:var(--weight-medium);color:var(--text-primary)">Ready to submit</div>
         <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:2px">All documents uploaded. Submit your application for staff review.</div>
     </div>
-    <button class="btn btn-primary" onclick="submitApplication()">Submit Application</button>
+    <button class="btn btn-primary" type="button" onclick="submitApplication()">Submit Application</button>
 </div>
 <?php elseif ($canWithdraw): ?>
 <div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4)">
@@ -915,7 +915,7 @@ function updateDropLabel(name) {
         <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:2px">Your documents are awaiting staff review.</div>
     </div>
     <div style="text-align:right;flex-shrink:0">
-        <button class="btn btn-ghost btn-sm" onclick="withdrawSubmission()">Withdraw Submission</button>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="withdrawSubmission()">Withdraw Submission</button>
         <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">You can re-submit after making changes.</div>
     </div>
 </div>
