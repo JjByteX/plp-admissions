@@ -42,23 +42,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ---- Submit application ----
     if ($action === 'submit_application') {
-        $uploadedCount = 0;
-        foreach ($requiredDocs as $slug => $_) {
-            $s = $docRows[$slug]['status'] ?? 'pending';
-            if (in_array($s, ['uploaded', 'approved'], true)) $uploadedCount++;
-        }
-        $readyToSubmit = $uploadedCount === count($requiredDocs);
+        try {
+            $uploadedCount = 0;
+            foreach ($requiredDocs as $slug => $_) {
+                $s = $docRows[$slug]['status'] ?? 'pending';
+                if (in_array($s, ['uploaded', 'approved'], true)) $uploadedCount++;
+            }
+            $readyToSubmit = $uploadedCount === count($requiredDocs);
 
-        if ($readyToSubmit && !$isSubmitted) {
-            $db->prepare('UPDATE applicants SET overall_status = "submitted" WHERE id = ?')
-               ->execute([$applicantId]);
-            $isSubmitted = true;
-            $applicant['overall_status'] = 'submitted';
-            Session::flash('success', 'Your application has been submitted successfully!');
-        } elseif ($isSubmitted) {
-            $errors[] = 'Application is already submitted.';
-        } else {
-            $errors[] = 'All documents must be uploaded before submitting.';
+            if ($readyToSubmit && !$isSubmitted) {
+                $db->prepare('UPDATE applicants SET overall_status = "submitted" WHERE id = ?')
+                   ->execute([$applicantId]);
+                $isSubmitted = true;
+            } elseif ($isSubmitted) {
+                $errors[] = 'Application is already submitted.';
+            } else {
+                $errors[] = 'All documents must be uploaded before submitting.';
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Server error: ' . $e->getMessage();
         }
 
         if ($isAjax) {
@@ -71,17 +73,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ---- Withdraw submission ----
     if ($action === 'withdraw_submission') {
-        if ($isSubmitted) {
-            $db->prepare('UPDATE applicants SET overall_status = "documents" WHERE id = ?')
-               ->execute([$applicantId]);
-            $isSubmitted = false;
-            $applicant['overall_status'] = 'documents';
-            Session::flash('success', 'Submission withdrawn. You can make changes and re-submit.');
+        try {
+            if ($isSubmitted) {
+                $db->prepare('UPDATE applicants SET overall_status = "documents" WHERE id = ?')
+                   ->execute([$applicantId]);
+                $isSubmitted = false;
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Server error: ' . $e->getMessage();
         }
 
         if ($isAjax) {
             header('Content-Type: application/json');
-            echo json_encode(['ok' => true, 'message' => 'Submission withdrawn.']);
+            echo json_encode(['ok' => empty($errors), 'message' => empty($errors) ? 'Submission withdrawn.' : implode(' ', $errors)]);
             exit;
         }
         redirect('/student/documents');
