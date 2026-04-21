@@ -42,6 +42,7 @@ switch ($action) {
         }
 
         Session::flash('success', 'Document approved.');
+        audit_log('document_approved', "Approved document ID {$id} for applicant {$applicantId}", 'document', $id);
         redirect('/staff/applicants/' . $applicantId);
         break;
 
@@ -62,6 +63,7 @@ switch ($action) {
         $stmt = $db->prepare('SELECT applicant_id FROM documents WHERE id=?');
         $stmt->execute([$id]);
         $row = $stmt->fetch();
+        audit_log('document_rejected', "Rejected document ID {$id} — {$remarks}", 'document', $id);
         redirect('/staff/applicants/' . ($row['applicant_id'] ?? 0));
         break;
 
@@ -71,6 +73,7 @@ switch ($action) {
             'UPDATE applicants SET overall_status="exam" WHERE id=? AND overall_status IN ("pending","documents")'
         );
         $stmt->execute([$id]);
+        audit_log('applicant_advanced_exam', "Manually advanced applicant {$id} to exam stage", 'applicant', $id);
         Session::flash('success', 'Applicant advanced to entrance exam stage.');
         redirect('/staff/applicants/' . $id);
         break;

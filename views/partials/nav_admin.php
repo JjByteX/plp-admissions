@@ -13,6 +13,7 @@ $staff = [
 $admin = [
     ['href' => '/admin/users',       'key' => 'users',       'label' => 'User Accounts', 'icon' => 'shield'],
     ['href' => '/admin/school-year', 'key' => 'school-year', 'label' => 'School Year',   'icon' => 'refresh'],
+    ['href' => '/admin/audit-log',   'key' => 'audit-log',   'label' => 'Audit Log',     'icon' => 'eye'],
     ['href' => '/admin/settings',    'key' => 'settings',    'label' => 'Settings',      'icon' => 'settings'],
 ];
 ?>

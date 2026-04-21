@@ -42,6 +42,7 @@ switch ($action) {
                  WHERE id=? AND overall_status="interview"'
             )->execute([$row['applicant_id']]);
         }
+        audit_log('interview_completed', "Marked interview queue ID {$id} as completed", 'interview_queue', $id);
         Session::flash('success', 'Interview marked as completed.');
         redirect('/staff/interviews/queue');
         break;
@@ -56,6 +57,7 @@ switch ($action) {
              SET    q.status = "no_show"
              WHERE  q.id = ? AND s.created_by = ?'
         )->execute([$id, $staffId]);
+        audit_log('interview_no_show', "Marked interview queue ID {$id} as no-show", 'interview_queue', $id);
         Session::flash('success', 'Marked as no-show.');
         redirect('/staff/interviews/queue');
         break;
@@ -70,6 +72,7 @@ switch ($action) {
              SET    q.status = "in_progress"
              WHERE  q.id = ? AND q.status = "checked_in" AND s.created_by = ?'
         )->execute([$id, $staffId]);
+        audit_log('interview_started', "Started interview for queue ID {$id}", 'interview_queue', $id);
         Session::flash('success', 'Interview started.');
         redirect('/staff/interviews/queue');
         break;
@@ -85,6 +88,7 @@ switch ($action) {
              SET    q.interview_notes = ?
              WHERE  q.id = ? AND s.created_by = ?'
         )->execute([$notes ?: null, $id, $staffId]);
+        audit_log('interview_notes_saved', "Saved notes for interview queue ID {$id}", 'interview_queue', $id);
         Session::flash('success', 'Notes saved.');
         redirect('/staff/interviews/queue');
         break;
@@ -104,6 +108,7 @@ switch ($action) {
         $db->prepare(
             'DELETE FROM interview_slots WHERE id = ? AND created_by = ?'
         )->execute([$id, $staffId]);
+        audit_log('interview_slot_deleted', "Deleted interview slot ID {$id}", 'interview_slot', $id);
         Session::flash('success', 'Session deleted.');
         redirect('/staff/interviews');
         break;
@@ -115,6 +120,7 @@ switch ($action) {
         $db->prepare(
             'UPDATE interview_slots SET status="closed" WHERE id=? AND created_by=?'
         )->execute([$id, $staffId]);
+        audit_log('interview_slot_closed', "Closed interview slot ID {$id}", 'interview_slot', $id);
         Session::flash('success', 'Session closed. Students can no longer book it.');
         redirect('/staff/interviews');
         break;
@@ -126,6 +132,7 @@ switch ($action) {
         $db->prepare(
             'UPDATE interview_slots SET status="open" WHERE id=? AND created_by=?'
         )->execute([$id, $staffId]);
+        audit_log('interview_slot_reopened', "Reopened interview slot ID {$id}", 'interview_slot', $id);
         Session::flash('success', 'Session reopened.');
         redirect('/staff/interviews');
         break;

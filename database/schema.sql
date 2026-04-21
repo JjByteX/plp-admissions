@@ -251,3 +251,22 @@ INSERT INTO `users` (`name`, `first_name`, `last_name`, `email`, `password_hash`
     ('System Administrator', 'System', 'Administrator', 'admin@plp.edu.ph',
      '$2y$12$placeholder.hash.change.on.first.run.xxxxxxxxxxxxxxxxxx',
      'admin');
+-- ------------------------------------------------------------
+-- audit_logs
+-- ------------------------------------------------------------
+CREATE TABLE `audit_logs` (
+    `id`          BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id`     INT(10) UNSIGNED    DEFAULT NULL,
+    `user_name`   VARCHAR(150)        NOT NULL DEFAULT '',
+    `user_role`   VARCHAR(20)         NOT NULL DEFAULT '',
+    `action`      VARCHAR(80)         NOT NULL,
+    `description` TEXT                DEFAULT NULL,
+    `entity_type` VARCHAR(60)         DEFAULT NULL,
+    `entity_id`   INT(10) UNSIGNED    DEFAULT NULL,
+    `ip_address`  VARCHAR(45)         DEFAULT NULL,
+    `created_at`  DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_user_id`    (`user_id`),
+    KEY `idx_action`     (`action`),
+    KEY `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

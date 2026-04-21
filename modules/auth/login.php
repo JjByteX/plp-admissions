@@ -38,8 +38,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($user && password_verify($password, $user['password_hash'])) {
             Auth::login($user);
+            audit_log('login', "Successful login: {$user['email']}", 'user', $user['id']);
             header("Location: " . Auth::homeUrl()); exit;
         } else {
+            audit_log('login_failed', "Failed login attempt for: {$email}");
             $errors['general'] = 'Incorrect email or password.';
         }
     }

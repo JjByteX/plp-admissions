@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'INSERT INTO school_settings (setting_key, setting_value) VALUES ("current_school_year",?)
                      ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)'
                 )->execute([$year]);
+                audit_log('school_year_changed', "School year set to {$year}");
                 $success[] = "Current school year set to $year.";
             }
         }
@@ -52,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Deactivate current exam
             $db->exec('UPDATE exams SET is_active=0');
 
+            audit_log('new_cycle_started', "Started new admission cycle: {$newYear}");
             $success[] = "New cycle $newYear started. All previous applicant data is preserved. Exam deactivated — create a new one for the new cycle.";
         }
     }

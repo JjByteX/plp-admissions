@@ -58,6 +58,9 @@ $router->get( '/admin/settings',   'settings/admin');
 $router->post('/admin/settings',   'settings/admin');
 $router->get( '/admin/results',    'results/admin_export');
 
+$router->get( '/admin/audit-log',  'audit/log');
+$router->get( '/staff/audit-log',  'audit/log');
+
 // -- Root redirect -----------------------------------------------
 $router->get('/', 'auth/login');
 

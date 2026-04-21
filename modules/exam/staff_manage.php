@@ -65,6 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )->execute([$title, $desc ?: null, $duration, $passing, $shuffleQ, $shuffleC,
                         $schedStart, $schedEnd, $accessPassword]);
             $success[] = 'Exam created and set as active.';
+            audit_log('exam_created', "Created exam: {$title}", 'exam', (int)$db->lastInsertId());
             break;
 
         case 'edit_exam':
@@ -92,6 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             $success[] = 'Exam updated.';
+            audit_log('exam_updated', "Updated exam ID {$examId}: {$title}", 'exam', $examId);
             break;
 
         case 'activate_exam':
@@ -99,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare('UPDATE exams SET is_active=0')->execute();
             $db->prepare('UPDATE exams SET is_active=1 WHERE id=?')->execute([$examId]);
             $success[] = 'Exam activated.';
+            audit_log('exam_activated', "Activated exam ID {$examId}", 'exam', $examId);
             break;
 
         // ── Section CRUD ─────────────────────────────────────────

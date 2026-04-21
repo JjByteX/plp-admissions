@@ -48,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ups('school_name', $schoolName);
             $ups('accent_color', $accentColor);
             if ($logoPath) $ups('school_logo', $logoPath);
+            audit_log('settings_branding_updated', "Updated branding: school_name={$schoolName}");
             $success[] = 'Branding updated.';
         }
     }
@@ -65,6 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         else {
             $db->prepare('UPDATE users SET password_hash=? WHERE id=?')
                ->execute([password_hash($new, PASSWORD_BCRYPT, ['cost'=>12]), $userId]);
+            audit_log('admin_password_changed', 'Admin changed their own password', 'user', $userId);
             $success[] = 'Password changed.';
         }
     }

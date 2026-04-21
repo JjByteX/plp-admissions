@@ -184,6 +184,35 @@ function hcaptcha_verify(): bool
     return !empty($data['success']);
 }
 
+// -- Audit log --------------------------------------------------
+function audit_log(
+    string  $action,
+    string  $description = '',
+    ?string $entityType  = null,
+    ?int    $entityId    = null
+): void {
+    try {
+        $userId   = Auth::check() ? Auth::id()   : null;
+        $userName = Auth::check() ? (Auth::user()['name'] ?? '') : 'System';
+        $userRole = Auth::check() ? (Auth::user()['role'] ?? '') : '';
+        $ip       = $_SERVER['HTTP_X_FORWARDED_FOR']
+                    ?? $_SERVER['REMOTE_ADDR']
+                    ?? null;
+        // Take only the first IP if comma-separated
+        if ($ip && str_contains($ip, ',')) {
+            $ip = trim(explode(',', $ip)[0]);
+        }
+        db()->prepare(
+            'INSERT INTO audit_logs
+             (user_id, user_name, user_role, action, description, entity_type, entity_id, ip_address)
+             VALUES (?,?,?,?,?,?,?,?)'
+        )->execute([$userId, $userName, $userRole, $action, $description ?: null,
+                    $entityType, $entityId, $ip]);
+    } catch (Throwable) {
+        // Never let audit failures break the main request
+    }
+}
+
 // -- Pagination -------------------------------------------------
 function paginate(PDO $pdo, string $countSql, string $dataSql, array $params, int $page, int $perPage = 20): array
 {

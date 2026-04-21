@@ -33,5 +33,6 @@ $stmt->execute([$applicantId, $decision, $remarks ?: null, $staffId]);
 $db->prepare('UPDATE applicants SET overall_status="released" WHERE id=?')
    ->execute([$applicantId]);
 
+audit_log('admission_result', "Set applicant {$applicantId} result to: {$decision}", 'applicant', $applicantId);
 Session::flash('success', 'Admission result saved.');
 redirect('/staff/results');

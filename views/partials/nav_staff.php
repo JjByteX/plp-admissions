@@ -8,6 +8,7 @@ $items = [
     ['href' => '/staff/exam',        'key' => 'exam',        'label' => 'Exam Manager',   'icon' => 'edit'],
     ['href' => '/staff/interviews',  'key' => 'interviews',  'label' => 'Interviews',     'icon' => 'calendar'],
     ['href' => '/staff/results',     'key' => 'results',     'label' => 'Release Results','icon' => 'award'],
+    ['href' => '/staff/audit-log',   'key' => 'audit-log',   'label' => 'Audit Log',      'icon' => 'eye'],
     ['href' => '/staff/settings',    'key' => 'settings',    'label' => 'Settings',       'icon' => 'settings'],
 ];
 ?>
