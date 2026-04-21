@@ -73,16 +73,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $ext      = pathinfo($file['name'], PATHINFO_EXTENSION);
         $filename = $applicantId . '_' . $docSlug . '_' . time() . '.' . strtolower($ext);
-        $destDir  = UPLOAD_PATH . '/' . $applicantId . '/';
 
-        if (!is_dir($destDir)) {
-            mkdir($destDir, 0755, true);
-        }
+        // Upload to Uploadcare
+        $fileUrl = uploadcare_upload($tmpPath, $filename, $mimeType);
 
-        $destPath = $destDir . $filename;
-
-        if (!move_uploaded_file($tmpPath, $destPath)) {
+        if (!$fileUrl) {
             $errors[] = 'File upload failed. Please try again.';
+        } else {
+            $filePath = $fileUrl; // Store full CDN URL
+
+            if (isset($docRows[$docSlug])) {
+                $stmt = $db->prepare(
+                    'UPDATE documents SET file_path=?, status="uploaded", staff_remarks=NULL, reviewed_by=NULL
+                     WHERE applicant_id=? AND doc_type=?'
+                );
+                $stmt->execute([$filePath, $applicantId, $docSlug]);
+            } else {
+                $stmt = $db->prepare(
+                    'INSERT INTO documents (applicant_id, doc_type, file_path, status) VALUES (?,?,?,"uploaded")'
+                );
+                $stmt->execute([$applicantId, $docSlug, $filePath]);
+            }
+
+            // Re-fetch updated doc rows
+            $stmt = $db->prepare('SELECT * FROM documents WHERE applicant_id = ?');
+            $stmt->execute([$applicantId]);
+            $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
+
+            $success[] = $requiredDocs[$docSlug] . ' uploaded successfully.';
+        }
+    }
         } else {
             $filePath = 'uploads/' . $applicantId . '/' . $filename;
 
@@ -387,7 +407,7 @@ $pct      = $total > 0 ? round(($uploaded / $total) * 100) : 0;
                     <?= $status === 'rejected' ? 'Re-upload' : 'Upload' ?>
                 </button>
             <?php elseif ($doc && $doc['file_path']): ?>
-                <a href="<?= url('/' . $doc['file_path']) ?>" target="_blank"
+                <a href="<?= e(str_starts_with($doc['file_path'], 'http') ? $doc['file_path'] : url('/' . $doc['file_path'])) ?>" target="_blank"
                    class="btn btn-ghost btn-sm">View</a>
             <?php endif; ?>
 

@@ -36,7 +36,7 @@ if ($applicantId) {
             $viewableFiles[] = [
                 'label'     => $label,
                 'file_path' => $doc['file_path'],
-                'url'       => url('/' . $doc['file_path']),
+                'url'       => str_starts_with($doc['file_path'], 'http') ? $doc['file_path'] : url('/' . $doc['file_path']),
             ];
         }
     }

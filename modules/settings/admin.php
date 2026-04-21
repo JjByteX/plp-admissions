@@ -33,10 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             else {
                 $ext     = pathinfo($file['name'], PATHINFO_EXTENSION);
                 $fname   = 'school_logo_'.time().'.'.strtolower($ext);
-                $dir     = UPLOAD_PATH.'/branding/';
-                if (!is_dir($dir)) mkdir($dir, 0755, true);
-                if (move_uploaded_file($file['tmp_name'], $dir.$fname)) {
-                    $logoPath = 'uploads/branding/'.$fname;
+                $fileUrl = uploadcare_upload($file['tmp_name'], $fname, $mime);
+                if ($fileUrl) {
+                    $logoPath = $fileUrl;
                 } else { $errors[] = 'Logo upload failed.'; }
             }
         }

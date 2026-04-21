@@ -58,7 +58,7 @@ $isStudent    = ($userRole === 'student');
         <!-- Brand -->
         <div class="student-header-brand">
             <?php if ($schoolLogo): ?>
-                <img src="<?= e(url('/' . $schoolLogo)) ?>" alt="Logo" class="sidebar-logo">
+                <img src="<?= e(e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url('/'. $schoolLogo))) ?>" alt="Logo" class="sidebar-logo">
             <?php else: ?>
                 <div class="sidebar-logo-placeholder">
                     <?php include __DIR__ . '/../partials/icons/school.svg.php'; ?>
@@ -113,7 +113,7 @@ $isStudent    = ($userRole === 'student');
         <!-- Brand -->
         <div class="sidebar-brand">
             <?php if ($schoolLogo): ?>
-                <img src="<?= e(url('/' . $schoolLogo)) ?>" alt="Logo" class="sidebar-logo">
+                <img src="<?= e(e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url('/'. $schoolLogo))) ?>" alt="Logo" class="sidebar-logo">
             <?php else: ?>
                 <div class="sidebar-logo-placeholder">
                     <?php include __DIR__ . '/../partials/icons/school.svg.php'; ?>

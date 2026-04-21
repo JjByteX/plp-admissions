@@ -58,7 +58,7 @@ ob_start();
 
     <div class="auth-header">
         <?php if ($schoolLogo): ?>
-            <img src="<?= url($schoolLogo) ?>" alt="School Logo" class="auth-logo-img">
+            <img src="<?= e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url($schoolLogo)) ?>" alt="School Logo" class="auth-logo-img">
         <?php else: ?>
             <div class="auth-logo">
                 <?php include VIEWS_PATH . '/partials/icons/school.svg.php'; ?>

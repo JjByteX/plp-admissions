@@ -118,6 +118,40 @@ function current_step(array $applicant, ?array $examResult, ?array $interviewSlo
     return 'documents';
 }
 
+// -- Uploadcare file upload -------------------------------------
+function uploadcare_upload(string $tmpPath, string $filename, string $mimeType): ?string
+{
+    if (!UPLOADCARE_ENABLED) {
+        return null;
+    }
+
+    $boundary = '----UploadcareBoundary' . uniqid();
+    $body  = "--{$boundary}\r\n";
+    $body .= "Content-Disposition: form-data; name=\"UPLOADCARE_PUB_KEY\"\r\n\r\n" . UPLOADCARE_PUB_KEY . "\r\n";
+    $body .= "--{$boundary}\r\n";
+    $body .= "Content-Disposition: form-data; name=\"UPLOADCARE_STORE\"\r\n\r\n1\r\n";
+    $body .= "--{$boundary}\r\n";
+    $body .= "Content-Disposition: form-data; name=\"file\"; filename=\"{$filename}\"\r\n";
+    $body .= "Content-Type: {$mimeType}\r\n\r\n";
+    $body .= file_get_contents($tmpPath) . "\r\n";
+    $body .= "--{$boundary}--\r\n";
+
+    $response = @file_get_contents('https://upload.uploadcare.com/base/', false, stream_context_create([
+        'http' => [
+            'method'  => 'POST',
+            'header'  => "Content-Type: multipart/form-data; boundary={$boundary}\r\nContent-Length: " . strlen($body),
+            'content' => $body,
+            'timeout' => 30,
+        ],
+    ]));
+
+    if (!$response) return null;
+    $data = json_decode($response, true);
+    if (empty($data['file'])) return null;
+
+    return 'https://ucarecdn.com/' . $data['file'] . '/';
+}
+
 // -- hCaptcha verification --------------------------------------
 function hcaptcha_verify(): bool
 {
