@@ -15,7 +15,8 @@ $stmt = $db->prepare('SELECT * FROM applicants WHERE user_id = ? ORDER BY id DES
 $stmt->execute([$userId]);
 $applicant = $stmt->fetch();
 if (!$applicant) { redirect('/student/documents'); }
-$applicantId = $applicant['id'];
+$applicantId  = $applicant['id'];
+$isSubmitted  = ($applicant['overall_status'] ?? '') === 'submitted';
 
 // Fetch existing document rows
 $stmt = $db->prepare('SELECT * FROM documents WHERE applicant_id = ?');
@@ -32,21 +33,72 @@ $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
     && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
 // ----------------------------------------------------------------
-// POST — handle file upload
+// POST — handle file upload, submit, or withdraw
 // ----------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
+    $action = $_POST['action'] ?? 'upload';
+
+    // ---- Submit application ----
+    if ($action === 'submit_application') {
+        $uploadedCount = 0;
+        foreach ($requiredDocs as $slug => $_) {
+            $s = $docRows[$slug]['status'] ?? 'pending';
+            if (in_array($s, ['uploaded', 'approved'], true)) $uploadedCount++;
+        }
+        $readyToSubmit = $uploadedCount === count($requiredDocs);
+
+        if ($readyToSubmit && !$isSubmitted) {
+            $db->prepare('UPDATE applicants SET overall_status = "submitted" WHERE id = ?')
+               ->execute([$applicantId]);
+            $isSubmitted = true;
+            $applicant['overall_status'] = 'submitted';
+            Session::flash('success', 'Your application has been submitted successfully!');
+        } elseif ($isSubmitted) {
+            $errors[] = 'Application is already submitted.';
+        } else {
+            $errors[] = 'All documents must be uploaded before submitting.';
+        }
+
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => empty($errors), 'message' => empty($errors) ? 'Application submitted!' : implode(' ', $errors)]);
+            exit;
+        }
+        redirect('/student/documents');
+    }
+
+    // ---- Withdraw submission ----
+    if ($action === 'withdraw_submission') {
+        if ($isSubmitted) {
+            $db->prepare('UPDATE applicants SET overall_status = "documents" WHERE id = ?')
+               ->execute([$applicantId]);
+            $isSubmitted = false;
+            $applicant['overall_status'] = 'documents';
+            Session::flash('success', 'Submission withdrawn. You can make changes and re-submit.');
+        }
+
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => true, 'message' => 'Submission withdrawn.']);
+            exit;
+        }
+        redirect('/student/documents');
+    }
+
+    // ---- File upload ----
     $docSlug = trim($_POST['doc_slug'] ?? '');
 
     if (!array_key_exists($docSlug, $requiredDocs)) {
         $errors[] = 'Invalid document type.';
     }
 
-    // Only allow re-upload if pending or rejected
-    $currentStatus = $docRows[$docSlug]['status'] ?? 'pending';
-    if (!in_array($currentStatus, ['pending', 'rejected'], true)) {
-        $errors[] = 'This document has already been submitted and cannot be replaced.';
+    // Only allow replace based on submission state
+    $currentStatus  = $docRows[$docSlug]['status'] ?? 'pending';
+    $allowedStatuses = $isSubmitted ? ['rejected'] : ['pending', 'rejected', 'uploaded'];
+    if (!in_array($currentStatus, $allowedStatuses, true)) {
+        $errors[] = 'This document cannot be replaced at this time.';
     }
 
     if (empty($_FILES['doc_file']['name'])) {
@@ -120,6 +172,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $statusCounts = array_count_values(array_column($docRows, 'status'));
 $allApproved  = count($docRows) === count($requiredDocs)
     && ($statusCounts['approved'] ?? 0) === count($requiredDocs);
+
+// Submission state helpers
+$uploadedOrApproved = ($statusCounts['uploaded'] ?? 0) + ($statusCounts['approved'] ?? 0);
+$allUploaded  = count($docRows) === count($requiredDocs) && $uploadedOrApproved === count($requiredDocs);
+$canSubmit    = $allUploaded && !$isSubmitted;
+$canWithdraw  = $isSubmitted && !$allApproved;
 
 // Stepper current step
 $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
@@ -319,7 +377,10 @@ ob_start();
         'rejected'     => ['label' => 'Rejected',     'class' => 'badge-error'],
     ];
     $badge      = $statusMap[$status] ?? $statusMap['pending'];
-    $canUpload  = in_array($status, ['pending', 'rejected'], true);
+    $canUpload  = $isSubmitted
+        ? $status === 'rejected'
+        : in_array($status, ['pending', 'rejected', 'uploaded'], true);
+    $uploadLabel = $status === 'pending' ? 'Upload' : 'Replace';
     $isApproved = $status === 'approved';
 ?>
     <div class="card" style="padding:var(--space-4) var(--space-5)">
@@ -353,11 +414,11 @@ ob_start();
             <!-- Status badge -->
             <span class="badge <?= $badge['class'] ?>"><?= $badge['label'] ?></span>
 
-            <!-- Upload button -->
+            <!-- Upload / Replace button -->
             <?php if ($canUpload): ?>
                 <button class="btn btn-secondary btn-sm"
                         onclick="openUploadModal('<?= $slug ?>', <?= htmlspecialchars(json_encode($label), ENT_QUOTES) ?>)">
-                    <?= $status === 'rejected' ? 'Re-upload' : 'Upload' ?>
+                    <?= $uploadLabel ?>
                 </button>
             <?php elseif ($doc && $doc['file_path']): ?>
                 <?php
@@ -509,6 +570,44 @@ async function submitUpload() {
     } finally {
         btn.disabled = false;
         btn.textContent = 'Upload';
+    }
+}
+
+async function submitApplication() {
+    if (!confirm('Submit your application for staff review?\n\nYou can withdraw the submission if you need to make changes.')) return;
+
+    try {
+        const fd = new FormData();
+        fd.append('action', 'submit_application');
+        fd.append('_token', CSRF_TOKEN);
+        const res  = await fetch(UPLOAD_URL, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            showResultModal(true, 'Application submitted!', 'Your documents are now under staff review.');
+        } else {
+            showResultModal(false, 'Could not submit', data.message);
+        }
+    } catch (err) {
+        showResultModal(false, 'Network error', 'Something went wrong. Please try again.');
+    }
+}
+
+async function withdrawSubmission() {
+    if (!confirm('Withdraw your submission?\n\nYou can make changes and re-submit whenever you\'re ready.')) return;
+
+    try {
+        const fd = new FormData();
+        fd.append('action', 'withdraw_submission');
+        fd.append('_token', CSRF_TOKEN);
+        const res  = await fetch(UPLOAD_URL, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            showResultModal(true, 'Submission withdrawn', 'Your application is no longer submitted. Make your changes and re-submit when ready.');
+        } else {
+            showResultModal(false, 'Could not withdraw', data.message);
+        }
+    } catch (err) {
+        showResultModal(false, 'Network error', 'Something went wrong. Please try again.');
     }
 }
 
@@ -785,6 +884,36 @@ function updateDropLabel(name) {
     });
 })();
 </script>
+
+<!-- Submit / Withdraw panel -->
+<?php if ($canSubmit): ?>
+<div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4)">
+    <div style="flex:1">
+        <div style="font-weight:var(--weight-medium);color:var(--text-primary)">Ready to submit</div>
+        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:2px">All documents uploaded. Submit your application for staff review.</div>
+    </div>
+    <button class="btn btn-primary" onclick="submitApplication()">Submit Application</button>
+</div>
+<?php elseif ($canWithdraw): ?>
+<div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4)">
+    <div style="flex:1">
+        <div style="font-weight:var(--weight-medium);color:var(--text-primary)">Application submitted</div>
+        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:2px">Your documents are awaiting staff review.</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+        <button class="btn btn-ghost btn-sm" onclick="withdrawSubmission()">Withdraw Submission</button>
+        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">You can re-submit after making changes.</div>
+    </div>
+</div>
+<?php elseif (!$allUploaded && !$isSubmitted): ?>
+<div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4);opacity:.6">
+    <div style="flex:1">
+        <div style="font-weight:var(--weight-medium);color:var(--text-primary)">Submit Application</div>
+        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:2px">Upload all required documents to enable submission.</div>
+    </div>
+    <button class="btn btn-primary" disabled style="cursor:not-allowed">Submit Application</button>
+</div>
+<?php endif; ?>
 
 <!-- Step navigation -->
 <div class="step-nav">
