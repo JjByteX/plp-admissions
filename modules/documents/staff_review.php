@@ -47,9 +47,6 @@ if ($applicantId) {
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M19 12H5m7-7-7 7 7 7"/></svg>
         Back
     </a>
-    <span class="badge badge-<?= $applicant['overall_status'] ?>" style="margin-left:auto">
-        <?= e(ucfirst(str_replace('_',' ',$applicant['overall_status']))) ?>
-    </span>
 </div>
 
 <?php if ($msg = Session::getFlash('success')): ?>
@@ -172,8 +169,8 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 
     <div style="
         position:relative;
-        width:min(92vw,1000px);
-        max-height:92vh;
+        width:min(94vw,1100px);
+        height:min(90vh,860px);
         background:var(--bg-elevated);
         border-radius:var(--radius-lg);
         box-shadow:var(--shadow-lg);
@@ -253,7 +250,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                 transform-origin:center center;
             ">
                 <img id="fv-img" src="" alt="Document preview" style="
-                    max-width:100%;max-height:72vh;
+                    max-width:100%;max-height:78vh;
                     border-radius:var(--radius-sm);
                     box-shadow:var(--shadow-md);
                     display:block;pointer-events:none;

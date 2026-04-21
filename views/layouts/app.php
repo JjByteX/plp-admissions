@@ -89,10 +89,6 @@ $isStudent    = ($userRole === 'student');
                     <?php include __DIR__ . '/../partials/icons/settings.svg.php'; ?>
                     Settings
                 </a>
-                <a href="#" class="dropdown-item">
-                    <?php include __DIR__ . '/../partials/icons/help.svg.php'; ?>
-                    Help &amp; About
-                </a>
                 <div class="dropdown-separator"></div>
                 <a href="<?= url('/logout') ?>" class="dropdown-item danger">
                     <?php include __DIR__ . '/../partials/icons/logout.svg.php'; ?>

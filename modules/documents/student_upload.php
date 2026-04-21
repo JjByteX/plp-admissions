@@ -292,6 +292,19 @@ if ($_examResult) {
     }
 }
 
+// Build viewable files for modal
+$viewableFiles = [];
+foreach ($requiredDocs as $slug => $label) {
+    $doc = $docRows[$slug] ?? null;
+    if ($doc && $doc['file_path']) {
+        $viewableFiles[] = [
+            'label'     => $label,
+            'file_path' => $doc['file_path'],
+            'url'       => str_starts_with($doc['file_path'], 'http') ? $doc['file_path'] : url('/' . $doc['file_path']),
+        ];
+    }
+}
+
 // ----------------------------------------------------------------
 // View
 // ----------------------------------------------------------------
@@ -312,41 +325,10 @@ ob_start();
     </div>
 <?php endforeach; ?>
 
-<?php if ($allApproved && !$_examResult): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-6);display:flex;align-items:center;justify-content:space-between;gap:var(--space-4)">
-        <div style="display:flex;align-items:center;gap:var(--space-2)">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <span><strong>All documents approved!</strong> You may now proceed to the entrance exam.</span>
-        </div>
-        <a href="<?= url('/student/exam') ?>" class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0">
-            Take Entrance Exam →
-        </a>
-    </div>
-<?php elseif ($allApproved && $_examResult): ?>
-
-    <!-- Proceed to interview banner -->
-    <div class="alert alert-success" style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-6)">
-        <span><strong>All documents approved</strong> and entrance exam completed. Proceed to your interview scheduling.</span>
-        <a href="<?= url('/student/interview') ?>" class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0">Interview →</a>
-    </div>
-<?php endif; ?>
 
 
-<!-- Progress bar -->
-<?php
-$uploaded = count(array_filter($docRows, fn($d) => $d['status'] !== 'pending'));
-$total    = count($requiredDocs);
-$pct      = $total > 0 ? round(($uploaded / $total) * 100) : 0;
-?>
-<div style="margin-bottom:var(--space-6)">
-    <div style="display:flex;justify-content:space-between;margin-bottom:var(--space-2)">
-        <span style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-primary)"><?= $uploaded ?> of <?= $total ?> documents submitted</span>
-        <span style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= $pct ?>%</span>
-    </div>
-    <div style="height:6px;background:var(--neutral-200);border-radius:var(--radius-full);overflow:hidden">
-        <div style="height:100%;width:<?= $pct ?>%;background:var(--accent);border-radius:var(--radius-full);transition:width .4s ease"></div>
-    </div>
-</div>
+
+
 
 <!-- Document list -->
 <div style="display:flex;flex-direction:column;gap:var(--space-3)">
@@ -402,8 +384,15 @@ $pct      = $total > 0 ? round(($uploaded / $total) * 100) : 0;
                     <?= $status === 'rejected' ? 'Re-upload' : 'Upload' ?>
                 </button>
             <?php elseif ($doc && $doc['file_path']): ?>
-                <a href="<?= e(str_starts_with($doc['file_path'], 'http') ? $doc['file_path'] : url('/' . $doc['file_path'])) ?>" target="_blank"
-                   class="btn btn-ghost btn-sm">View</a>
+                <?php
+                $fileIndex = -1;
+                foreach ($viewableFiles as $fi => $vf) {
+                    if ($vf['file_path'] === $doc['file_path']) { $fileIndex = $fi; break; }
+                }
+                ?>
+                <button class="btn btn-ghost btn-sm"
+                        onclick="openFileViewer(<?= $fileIndex ?>, <?= htmlspecialchars(json_encode($viewableFiles), ENT_QUOTES) ?>)"
+                        type="button">View</button>
             <?php endif; ?>
 
         </div>
@@ -586,6 +575,239 @@ function updateDropLabel(name) {
         '<p style="font-weight:var(--weight-medium);color:var(--accent)">' + name + '</p>' +
         '<p style="font-size:var(--text-sm);color:var(--text-tertiary)">Ready to upload</p>';
 }
+</script>
+
+<!-- FILE VIEWER MODAL -->
+<div id="file-viewer-modal" style="
+    display:none;
+    position:fixed;inset:0;z-index:9999;
+    background:rgba(0,0,0,0.82);
+    backdrop-filter:blur(4px);
+    align-items:center;justify-content:center;
+" aria-modal="true" role="dialog" aria-label="Document Viewer">
+
+    <div style="
+        position:relative;
+        width:min(94vw,1100px);
+        height:min(90vh,860px);
+        background:var(--bg-elevated);
+        border-radius:var(--radius-lg);
+        box-shadow:var(--shadow-lg);
+        display:flex;flex-direction:column;
+        overflow:hidden;
+    ">
+        <!-- Header -->
+        <div style="
+            display:flex;align-items:center;gap:var(--space-3);
+            padding:var(--space-3) var(--space-5);
+            border-bottom:1px solid var(--border);
+            flex-shrink:0;
+        ">
+            <button id="fv-prev" onclick="fvNavigate(-1)" type="button" style="
+                display:flex;align-items:center;justify-content:center;
+                width:32px;height:32px;border-radius:var(--radius-sm);
+                border:1px solid var(--border);background:var(--bg);
+                color:var(--text-secondary);cursor:pointer;flex-shrink:0;
+                transition:background var(--transition-fast),color var(--transition-fast);
+            " title="Previous (←)">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <div style="flex:1;min-width:0">
+                <div id="fv-label" style="font-weight:var(--weight-semibold);font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+                <div id="fv-counter" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:1px"></div>
+            </div>
+            <button id="fv-next" onclick="fvNavigate(1)" type="button" style="
+                display:flex;align-items:center;justify-content:center;
+                width:32px;height:32px;border-radius:var(--radius-sm);
+                border:1px solid var(--border);background:var(--bg);
+                color:var(--text-secondary);cursor:pointer;flex-shrink:0;
+                transition:background var(--transition-fast),color var(--transition-fast);
+            " title="Next (→)">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <div style="width:1px;height:24px;background:var(--border);flex-shrink:0"></div>
+            <button onclick="fvZoom(-0.25)" type="button" class="fv-ctrl-btn" title="Zoom out (−)">
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14"/></svg>
+            </button>
+            <span id="fv-zoom-label" style="font-size:var(--text-xs);color:var(--text-secondary);min-width:38px;text-align:center;font-variant-numeric:tabular-nums">100%</span>
+            <button onclick="fvZoom(0.25)" type="button" class="fv-ctrl-btn" title="Zoom in (+)">
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button onclick="fvResetZoom()" type="button" class="fv-ctrl-btn" title="Reset zoom (0)">
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 21l-4.35-4.35m0 0A7 7 0 105.65 5.65a7 7 0 0011 11.35z"/></svg>
+            </button>
+            <div style="width:1px;height:24px;background:var(--border);flex-shrink:0"></div>
+            <button onclick="closeFileViewer()" type="button" class="fv-ctrl-btn" title="Close (Esc)" aria-label="Close">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <!-- Viewport -->
+        <div id="fv-viewport" style="
+            flex:1;overflow:hidden;position:relative;
+            background:var(--bg-subtle);min-height:300px;
+            cursor:default;user-select:none;
+        ">
+            <div id="fv-transform-wrap" style="
+                position:absolute;top:0;left:0;
+                width:100%;height:100%;
+                display:flex;align-items:center;justify-content:center;
+                will-change:transform;
+                transform-origin:center center;
+            ">
+                <img id="fv-img" src="" alt="Document preview" style="
+                    max-width:100%;max-height:78vh;
+                    border-radius:var(--radius-sm);
+                    box-shadow:var(--shadow-md);
+                    display:block;pointer-events:none;
+                    user-select:none;-webkit-user-drag:none;
+                ">
+            </div>
+            <div id="fv-hint" style="
+                position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+                background:rgba(0,0,0,0.55);color:#fff;
+                font-size:var(--text-xs);padding:5px 14px;border-radius:var(--radius-full);
+                pointer-events:none;opacity:0;transition:opacity .4s ease;white-space:nowrap;
+            ">Scroll to zoom · Drag to pan when zoomed in</div>
+        </div>
+        <div id="fv-dots" style="
+            display:flex;align-items:center;justify-content:center;gap:6px;
+            padding:var(--space-3);border-top:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
+        "></div>
+    </div>
+</div>
+
+<style>
+.fv-ctrl-btn {
+    display:flex;align-items:center;justify-content:center;
+    width:30px;height:30px;border-radius:var(--radius-sm);
+    border:1px solid var(--border);background:var(--bg);
+    color:var(--text-secondary);cursor:pointer;
+    transition:background var(--transition-fast),color var(--transition-fast);
+}
+.fv-ctrl-btn:hover { background:var(--bg-overlay); color:var(--text-primary); }
+#fv-prev:hover, #fv-next:hover { background:var(--bg-overlay); color:var(--text-primary); }
+#fv-viewport[data-zoomed="true"]   { cursor:grab; }
+#fv-viewport[data-dragging="true"] { cursor:grabbing !important; }
+</style>
+
+<script>
+(function(){
+    var _files=[], _idx=0, _scale=1, _tx=0, _ty=0;
+    var _drag=false, _ds={x:0,y:0}, _touch=null;
+
+    window.openFileViewer = function(idx, files) {
+        _files=files; _idx=idx; _scale=1; _tx=0; _ty=0;
+        _render();
+        document.getElementById('file-viewer-modal').style.display='flex';
+        document.body.style.overflow='hidden';
+        var h=document.getElementById('fv-hint');
+        if(h){ h.style.opacity='1'; setTimeout(function(){ h.style.opacity='0'; },2800); }
+    };
+
+    window.closeFileViewer = function() {
+        document.getElementById('file-viewer-modal').style.display='none';
+        document.body.style.overflow='';
+        document.getElementById('fv-img').src='';
+    };
+
+    window.fvNavigate = function(d) {
+        var n=_idx+d;
+        if(n<0||n>=_files.length) return;
+        _idx=n; _scale=1; _tx=0; _ty=0; _render();
+    };
+
+    window.fvZoom = function(delta) {
+        _scale=Math.min(5,Math.max(0.5,_scale+delta));
+        if(_scale<=1){ _tx=0; _ty=0; }
+        _apply();
+    };
+
+    window.fvResetZoom = function() { _scale=1; _tx=0; _ty=0; _apply(); };
+
+    function _render() {
+        var f=_files[_idx];
+        if(!f) return;
+        document.getElementById('fv-img').src=f.url;
+        document.getElementById('fv-label').textContent=f.label;
+        document.getElementById('fv-counter').textContent=(_idx+1)+' of '+_files.length;
+        var p=document.getElementById('fv-prev');
+        var n=document.getElementById('fv-next');
+        p.disabled=(_idx===0); p.style.opacity=(_idx===0)?'0.35':'1';
+        n.disabled=(_idx===_files.length-1); n.style.opacity=(_idx===_files.length-1)?'0.35':'1';
+        _apply();
+        _dots();
+        var h=document.getElementById('fv-hint');
+        if(h){ h.style.opacity='1'; setTimeout(function(){ h.style.opacity='0'; },2800); }
+    }
+
+    function _apply() {
+        var w=document.getElementById('fv-transform-wrap');
+        w.style.transform='translate('+_tx+'px,'+_ty+'px) scale('+_scale+')';
+        document.getElementById('fv-zoom-label').textContent=Math.round(_scale*100)+'%';
+        var vp=document.getElementById('fv-viewport');
+        vp.dataset.zoomed=(_scale>1)?'true':'false';
+    }
+
+    function _dots() {
+        var c=document.getElementById('fv-dots');
+        c.innerHTML='';
+        _files.forEach(function(f,i){
+            var b=document.createElement('button');
+            b.type='button';
+            b.style.cssText='width:8px;height:8px;border-radius:50%;border:none;padding:0;cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s;';
+            b.style.background=(i===_idx)?'var(--accent)':'var(--border-strong)';
+            b.style.transform=(i===_idx)?'scale(1.35)':'scale(1)';
+            b.title=f.label;
+            b.onclick=function(){ _idx=i; _scale=1; _tx=0; _ty=0; _render(); };
+            c.appendChild(b);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded',function(){
+        var vp=document.getElementById('fv-viewport');
+        vp.addEventListener('mousedown',function(e){
+            if(_scale<=1) return;
+            _drag=true; _ds={x:e.clientX-_tx,y:e.clientY-_ty};
+            vp.dataset.dragging='true'; e.preventDefault();
+        });
+        window.addEventListener('mousemove',function(e){
+            if(!_drag) return;
+            _tx=e.clientX-_ds.x; _ty=e.clientY-_ds.y; _apply();
+        });
+        window.addEventListener('mouseup',function(){
+            if(_drag){ _drag=false; document.getElementById('fv-viewport').dataset.dragging='false'; }
+        });
+        vp.addEventListener('touchstart',function(e){
+            if(_scale<=1) return;
+            var t=e.touches[0]; _touch={x:t.clientX-_tx,y:t.clientY-_ty}; e.preventDefault();
+        },{passive:false});
+        vp.addEventListener('touchmove',function(e){
+            if(!_touch) return;
+            var t=e.touches[0]; _tx=t.clientX-_touch.x; _ty=t.clientY-_touch.y; _apply(); e.preventDefault();
+        },{passive:false});
+        vp.addEventListener('touchend',function(){ _touch=null; });
+        vp.addEventListener('wheel',function(e){
+            e.preventDefault();
+            var d=e.deltaY>0?-0.15:0.15;
+            _scale=Math.min(5,Math.max(0.5,_scale+d));
+            if(_scale<=1){ _tx=0; _ty=0; }
+            _apply();
+        },{passive:false});
+        document.getElementById('file-viewer-modal').addEventListener('click',function(e){
+            if(e.target===this) closeFileViewer();
+        });
+    });
+
+    document.addEventListener('keydown',function(e){
+        if(document.getElementById('file-viewer-modal').style.display!=='flex') return;
+        if(e.key==='Escape') closeFileViewer();
+        if(e.key==='ArrowLeft') fvNavigate(-1);
+        if(e.key==='ArrowRight') fvNavigate(1);
+        if(e.key==='+'||e.key==='=') fvZoom(0.25);
+        if(e.key==='-') fvZoom(-0.25);
+        if(e.key==='0') fvResetZoom();
+    });
+})();
 </script>
 
 <!-- Step navigation -->

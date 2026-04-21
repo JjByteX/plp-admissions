@@ -87,18 +87,13 @@ ob_start();
             <?php endif; ?>
         </div>
 
-        <?php if ($result['result'] === 'accepted'): ?>
-            <div class="alert alert-success" style="text-align:left">
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                Proceed to the Registrar's Office for enrollment. Bring all original documents and this result.
-            </div>
-        <?php endif; ?>
+
     </div>
 <?php endif; ?>
 
 <!-- Step navigation -->
 <div class="step-nav">
-    <a href="<?= url('/student/documents') ?>" class="btn btn-ghost">← Back</a>
+    <a href="<?= url('/student/interview') ?>" class="btn btn-ghost">← Back</a>
     <span></span>
 </div>
 
