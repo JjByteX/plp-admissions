@@ -25,7 +25,7 @@ $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $_examResult = $stmt->fetch() ?: null;
 
-$stmt = $db->prepare('SELECT * FROM interview_slots WHERE assigned_applicant_id=? LIMIT 1');
+$stmt = $db->prepare('SELECT q.* FROM interview_queue q WHERE q.applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $_interviewSlot = $stmt->fetch() ?: null;
 
@@ -98,7 +98,7 @@ ob_start();
 
 <!-- Step navigation -->
 <div class="step-nav">
-    <a href="<?= url('/student/interview') ?>" class="btn btn-ghost">← Interview</a>
+    <a href="<?= url('/student/documents') ?>" class="btn btn-ghost">← Back</a>
     <span></span>
 </div>
 

@@ -34,10 +34,14 @@ $result = paginate(
      LEFT JOIN admission_results ar ON ar.applicant_id=a.id
      WHERE $whereStr",
     "SELECT a.*, u.name AS student_name, u.email,
-            ar.result AS admission_result, ar.remarks AS admission_remarks, ar.released_at
+            ar.result AS admission_result, ar.remarks AS admission_remarks, ar.released_at,
+            er.score  AS exam_score, er.total_items AS exam_total,
+            iq.status AS interview_status, iq.interview_notes
      FROM applicants a
      JOIN users u ON u.id=a.user_id
      LEFT JOIN admission_results ar ON ar.applicant_id=a.id
+     LEFT JOIN exam_results       er ON er.applicant_id=a.id
+     LEFT JOIN interview_queue    iq ON iq.applicant_id=a.id
      WHERE $whereStr
      ORDER BY a.updated_at DESC",
     $params, $page, 25
@@ -80,7 +84,8 @@ ob_start();
             <tr>
                 <th>Applicant</th>
                 <th>Course</th>
-                <th>Stage</th>
+                <th>Exam Score</th>
+                <th>Interview</th>
                 <th>Result</th>
                 <th>Released</th>
                 <th style="width:100px"></th>
@@ -88,23 +93,79 @@ ob_start();
         </thead>
         <tbody>
         <?php if (empty($result['data'])): ?>
-            <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No applicants found.</td></tr>
+            <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No applicants found.</td></tr>
         <?php else: ?>
             <?php foreach ($result['data'] as $row): ?>
                 <tr>
                     <td>
                         <div style="font-weight:var(--weight-medium)"><?= e($row['student_name']) ?></div>
                         <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
+                        <div style="margin-top:2px">
+                            <span class="badge badge-<?= $row['overall_status'] ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span>
+                        </div>
                     </td>
                     <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>
-                    <td><span class="badge badge-<?= $row['overall_status'] ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span></td>
+
+                    <!-- Exam score -->
+                    <td>
+                        <?php if ($row['exam_score'] !== null): ?>
+                            <span style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">
+                                <?= (int)$row['exam_score'] ?>
+                            </span>
+                            <?php if ($row['exam_total']): ?>
+                                <span style="color:var(--text-tertiary);font-size:var(--text-xs)">
+                                    / <?= (int)$row['exam_total'] ?>
+                                </span>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">—</span>
+                        <?php endif; ?>
+                    </td>
+
+                    <!-- Interview status -->
+                    <td>
+                        <?php if ($row['interview_status']): ?>
+                            <?php
+                                $iMap = [
+                                    'scheduled'   => ['badge-info',    'Scheduled'],
+                                    'checked_in'  => ['badge-info',    'Checked In'],
+                                    'in_progress' => ['badge-review',  'In Progress'],
+                                    'completed'   => ['badge-approved','Completed'],
+                                    'no_show'     => ['badge-rejected','No-show'],
+                                ];
+                                [$ibadge, $ilabel] = $iMap[$row['interview_status']] ?? ['badge-neutral', ucfirst($row['interview_status'])];
+                            ?>
+                            <span class="badge <?= $ibadge ?>"><?= $ilabel ?></span>
+                            <?php if ($row['interview_notes']): ?>
+                                <div style="font-size:var(--text-xs);color:var(--text-tertiary);
+                                             margin-top:var(--space-1);max-width:180px;
+                                             white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                                     title="<?= e($row['interview_notes']) ?>">
+                                    <?= e($row['interview_notes']) ?>
+                                </div>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">—</span>
+                        <?php endif; ?>
+                    </td>
+
+                    <!-- Admission result -->
                     <td>
                         <?php if ($row['admission_result']): ?>
                             <span class="badge badge-<?= $row['admission_result'] ?>"><?= e(RESULT_LABELS[$row['admission_result']]) ?></span>
+                            <?php if ($row['admission_remarks']): ?>
+                                <div style="font-size:var(--text-xs);color:var(--text-tertiary);
+                                             margin-top:var(--space-1);max-width:160px;
+                                             white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                                     title="<?= e($row['admission_remarks']) ?>">
+                                    <?= e($row['admission_remarks']) ?>
+                                </div>
+                            <?php endif; ?>
                         <?php else: ?>
                             <span style="color:var(--text-tertiary);font-size:var(--text-sm)">Pending</span>
                         <?php endif; ?>
                     </td>
+
                     <td style="font-size:var(--text-sm);color:var(--text-tertiary)">
                         <?= $row['released_at'] ? format_date($row['released_at'], 'M j, Y') : '—' ?>
                     </td>

@@ -135,7 +135,7 @@ $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $_examResult = $stmt->fetch() ?: null;
 
-$stmt = $db->prepare('SELECT * FROM interview_slots WHERE assigned_applicant_id=? LIMIT 1');
+$stmt = $db->prepare('SELECT q.* FROM interview_queue q WHERE q.applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $_interviewSlot = $stmt->fetch() ?: null;
 
@@ -144,6 +144,138 @@ $stmt->execute([$applicantId]);
 $_admissionResult = $stmt->fetch() ?: null;
 
 $stepperCurrent = current_step($applicant, $_examResult, $_interviewSlot, $_admissionResult);
+
+// ----------------------------------------------------------------
+// Interview data (needed when step = interview)
+// ----------------------------------------------------------------
+$interviewErrors = [];
+$myEntry         = null;
+$openSessions    = [];
+$queuePosition   = null;
+
+if ($_examResult) {
+    // Load the student's booking with full slot details
+    $stmt = $db->prepare(
+        'SELECT q.*,
+                s.slot_date, s.slot_time, s.end_time, s.capacity,
+                u.name AS staff_name, u.desk_label, u.desk_notes
+         FROM   interview_queue q
+         JOIN   interview_slots s ON s.id = q.slot_id
+         JOIN   users u           ON u.id = s.created_by
+         WHERE  q.applicant_id = ?
+         LIMIT 1'
+    );
+    $stmt->execute([$applicantId]);
+    $myEntry = $stmt->fetch() ?: null;
+
+    // POST actions — book or check in
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['interview_action'])) {
+        csrf_check();
+        $iAction = $_POST['interview_action'];
+
+        if ($iAction === 'book') {
+            $slotId = (int)($_POST['slot_id'] ?? 0);
+            $db->beginTransaction();
+            try {
+                $stmt = $db->prepare(
+                    'SELECT s.id, s.capacity, COUNT(q.id) AS booked
+                     FROM   interview_slots s
+                     LEFT JOIN interview_queue q ON q.slot_id = s.id
+                     WHERE  s.id = ? AND s.status = "open"
+                     GROUP BY s.id FOR UPDATE'
+                );
+                $stmt->execute([$slotId]);
+                $slot = $stmt->fetch();
+
+                if (!$slot || (int)$slot['booked'] >= (int)$slot['capacity']) {
+                    $db->rollBack();
+                    $interviewErrors[] = 'That session is no longer available or is full.';
+                } else {
+                    $db->prepare(
+                        'INSERT INTO interview_queue (slot_id, applicant_id, status) VALUES (?, ?, "scheduled")'
+                    )->execute([$slotId, $applicantId]);
+                    $db->prepare(
+                        'UPDATE applicants SET overall_status="interview" WHERE id=?'
+                    )->execute([$applicantId]);
+                    $db->commit();
+                    Session::flash('success', 'Your interview session has been booked!');
+                    redirect('/student/documents');
+                }
+            } catch (Throwable $e) {
+                $db->rollBack();
+                $interviewErrors[] = 'Booking failed. Please try again.';
+            }
+        }
+
+        if ($iAction === 'checkin' && $myEntry && $myEntry['slot_date'] === date('Y-m-d') && $myEntry['status'] === 'scheduled') {
+            $db->beginTransaction();
+            try {
+                $stmt = $db->prepare(
+                    'SELECT COALESCE(MAX(q.queue_number), 0) + 1
+                     FROM   interview_queue q
+                     JOIN   interview_slots s ON s.id = q.slot_id
+                     WHERE  s.slot_date = ? AND s.created_by = (
+                         SELECT created_by FROM interview_slots WHERE id = ?
+                     ) AND q.queue_number IS NOT NULL'
+                );
+                $stmt->execute([date('Y-m-d'), $myEntry['slot_id']]);
+                $nextNum = (int)$stmt->fetchColumn();
+
+                $db->prepare(
+                    'UPDATE interview_queue
+                     SET    status = "checked_in", queue_number = ?, checked_in_at = NOW()
+                     WHERE  id = ? AND status = "scheduled"'
+                )->execute([$nextNum, $myEntry['id']]);
+                $db->commit();
+                Session::flash('success', 'You are now in the queue!');
+            } catch (Throwable $e) {
+                $db->rollBack();
+                $interviewErrors[] = 'Check-in failed. Please try again.';
+            }
+            // Reload
+            $stmt = $db->prepare(
+                'SELECT q.*, s.slot_date, s.slot_time, s.end_time, s.capacity,
+                        u.name AS staff_name, u.desk_label, u.desk_notes
+                 FROM   interview_queue q
+                 JOIN   interview_slots s ON s.id = q.slot_id
+                 JOIN   users u           ON u.id = s.created_by
+                 WHERE  q.applicant_id = ? LIMIT 1'
+            );
+            $stmt->execute([$applicantId]);
+            $myEntry = $stmt->fetch() ?: null;
+        }
+    }
+
+    // Load open sessions if not booked yet
+    if (!$myEntry) {
+        $nowTime = date('H:i:s');
+        $stmt = $db->prepare(
+            'SELECT s.*, u.name AS staff_name, u.desk_label, u.desk_notes, COUNT(q.id) AS booked
+             FROM   interview_slots s
+             JOIN   users u ON u.id = s.created_by
+             LEFT JOIN interview_queue q ON q.slot_id = s.id
+             WHERE  s.slot_date >= ? AND s.status = "open"
+               AND  NOT (s.slot_date = ? AND s.end_time IS NOT NULL AND s.end_time <= ?)
+             GROUP BY s.id HAVING booked < s.capacity
+             ORDER BY s.slot_date ASC, s.slot_time ASC'
+        );
+        $stmt->execute([date('Y-m-d'), date('Y-m-d'), $nowTime]);
+        $openSessions = $stmt->fetchAll();
+    }
+
+    // Queue position
+    if ($myEntry && $myEntry['status'] === 'checked_in') {
+        $stmt = $db->prepare(
+            'SELECT COUNT(*) FROM interview_queue q
+             JOIN   interview_slots s ON s.id = q.slot_id
+             WHERE  s.slot_date = ? AND s.created_by = (
+                 SELECT created_by FROM interview_slots WHERE id = ?
+             ) AND q.status = "checked_in" AND q.queue_number < ?'
+        );
+        $stmt->execute([date('Y-m-d'), $myEntry['slot_id'], $myEntry['queue_number']]);
+        $queuePosition = (int)$stmt->fetchColumn() + 1;
+    }
+}
 
 // ----------------------------------------------------------------
 // View
@@ -176,11 +308,14 @@ ob_start();
         </a>
     </div>
 <?php elseif ($allApproved && $_examResult): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-6)">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+
+    <!-- Proceed to interview banner -->
+    <div class="alert alert-success" style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-6)">
         <span><strong>All documents approved</strong> and entrance exam completed. Proceed to your interview scheduling.</span>
+        <a href="<?= url('/student/interview') ?>" class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0">Interview →</a>
     </div>
 <?php endif; ?>
+
 
 <!-- Progress bar -->
 <?php
@@ -441,9 +576,9 @@ function updateDropLabel(name) {
 <!-- Step navigation -->
 <div class="step-nav">
     <span></span>
-    <?php if ($_examResult): ?>
+    <?php if ($allApproved && $_examResult): ?>
         <a href="<?= url('/student/interview') ?>" class="btn btn-primary">Interview →</a>
-    <?php elseif ($allApproved): ?>
+    <?php elseif ($allApproved && !$_examResult): ?>
         <a href="<?= url('/student/exam') ?>" class="btn btn-primary">Entrance Exam →</a>
     <?php else: ?>
         <span class="btn btn-primary" style="opacity:.4;cursor:not-allowed" title="All documents must be approved first">Entrance Exam →</span>

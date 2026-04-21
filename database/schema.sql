@@ -25,6 +25,8 @@ CREATE TABLE `users` (
     `password_hash` VARCHAR(255)     NOT NULL,
     `role`          ENUM('student','staff','admin') NOT NULL DEFAULT 'student',
     `is_active`     TINYINT(1)       NOT NULL DEFAULT 1,
+    `desk_label`    VARCHAR(120)     NOT NULL DEFAULT '',
+    `desk_notes`    TEXT             DEFAULT NULL,
     `created_at`    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
@@ -148,23 +150,41 @@ CREATE TABLE `exam_results` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
--- interview_slots
+-- interview_slots  (one session per desk per day)
 -- ------------------------------------------------------------
 CREATE TABLE `interview_slots` (
-    `id`                    INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-    `slot_date`             DATE             NOT NULL,
-    `slot_time`             TIME             NOT NULL,
-    `capacity`              TINYINT(4)       NOT NULL DEFAULT 1,
-    `assigned_applicant_id` INT(10) UNSIGNED DEFAULT NULL,
-    `status`                ENUM('open','scheduled','completed','no_show') NOT NULL DEFAULT 'open',
-    `created_by`            INT(10) UNSIGNED NOT NULL,
-    `created_at`            DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `id`          INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `slot_date`   DATE             NOT NULL,
+    `slot_time`   TIME             DEFAULT NULL,
+    `end_time`    TIME             DEFAULT NULL,
+    `capacity`    SMALLINT(5)      NOT NULL DEFAULT 30,
+    `status`      ENUM('open','closed') NOT NULL DEFAULT 'open',
+    `created_by`  INT(10) UNSIGNED NOT NULL,
+    `created_at`  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    KEY `idx_assigned`   (`assigned_applicant_id`),
     KEY `idx_slot_date`  (`slot_date`),
     KEY `idx_created_by` (`created_by`),
-    CONSTRAINT `fk_slots_applicant` FOREIGN KEY (`assigned_applicant_id`) REFERENCES `applicants` (`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_slots_creator`   FOREIGN KEY (`created_by`)            REFERENCES `users`      (`id`)
+    CONSTRAINT `fk_slots_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- interview_queue  (one row per student per session)
+-- ------------------------------------------------------------
+CREATE TABLE `interview_queue` (
+    `id`              INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `slot_id`         INT(10) UNSIGNED NOT NULL,
+    `applicant_id`    INT(10) UNSIGNED NOT NULL,
+    `queue_number`    INT UNSIGNED     DEFAULT NULL,
+    `status`          ENUM('scheduled','checked_in','in_progress','completed','no_show') NOT NULL DEFAULT 'scheduled',
+    `checked_in_at`   DATETIME         DEFAULT NULL,
+    `interview_notes` TEXT             DEFAULT NULL,
+    `created_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_applicant_active` (`applicant_id`),
+    KEY `idx_iq_applicant` (`applicant_id`),
+    KEY `idx_iq_slot`      (`slot_id`),
+    CONSTRAINT `fk_iq_slot`      FOREIGN KEY (`slot_id`)      REFERENCES `interview_slots` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_iq_applicant` FOREIGN KEY (`applicant_id`) REFERENCES `applicants`       (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
