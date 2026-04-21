@@ -38,10 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $ext      = pathinfo($file['name'], PATHINFO_EXTENSION);
                 $filename = 'school_logo_' . time() . '.' . strtolower($ext);
-                $destDir  = UPLOAD_PATH . '/branding/';
-                if (!is_dir($destDir)) mkdir($destDir, 0755, true);
-                if (move_uploaded_file($file['tmp_name'], $destDir . $filename)) {
-                    $logoPath = 'uploads/branding/' . $filename;
+                $fileUrl  = uploadcare_upload($file['tmp_name'], $filename, $mime);
+                if ($fileUrl) {
+                    $logoPath = $fileUrl;
                 } else {
                     $errors[] = 'Logo upload failed.';
                 }
@@ -131,7 +130,7 @@ ob_start();
                 <?php if ($schoolLogo): ?>
                     <div>
                         <label class="form-label">Current Logo</label>
-                        <img src="<?= url('/' . $schoolLogo) ?>" alt="Logo"
+                        <img src="<?= str_starts_with($schoolLogo, 'http') ? e($schoolLogo) : e(url('/' . $schoolLogo)) ?>" alt="Logo"
                              style="height:48px;display:block;border-radius:var(--radius-sm)">
                     </div>
                 <?php endif; ?>

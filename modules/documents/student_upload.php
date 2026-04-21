@@ -107,11 +107,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $filePath = 'uploads/' . $applicantId . '/' . $filename;
 
             if (isset($docRows[$docSlug])) {
-                // Delete old physical file if exists
-                $oldFile = PUBLIC_PATH . '/' . $docRows[$docSlug]['file_path'];
-                if ($docRows[$docSlug]['file_path'] && file_exists($oldFile)) {
-                    @unlink($oldFile);
-                }
                 $stmt = $db->prepare(
                     'UPDATE documents SET file_path=?, status="uploaded", staff_remarks=NULL, reviewed_by=NULL
                      WHERE applicant_id=? AND doc_type=?'
