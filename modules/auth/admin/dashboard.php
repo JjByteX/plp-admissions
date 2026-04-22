@@ -157,59 +157,7 @@ $sexMap    = array_column($sexStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'sex');
 $sexMale   = (int)($sexMap['M'] ?? 0);
 $sexFemale = (int)($sexMap['F'] ?? 0);
 
-// ── Age ────────────────────────────────────────────────────────────
-$ageStmt = $pdo->prepare("
-    SELECT
-        CASE
-            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) <= 16 THEN '16 & below'
-            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) = 17  THEN '17'
-            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) = 18  THEN '18'
-            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) = 19  THEN '19'
-            WHEN TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE()) = 20  THEN '20'
-            ELSE '21+'
-        END AS age_group,
-        COUNT(*) AS cnt
-    FROM applicants a JOIN users u ON u.id = a.user_id
-    WHERE a.school_year = ? $dateFilter AND u.birthdate IS NOT NULL
-    GROUP BY age_group
-");
-$ageStmt->execute(array_merge([$schoolYear], $dateExtra));
-$ageRaw    = array_column($ageStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'age_group');
-$ageLabels = ['16 & below','17','18','19','20','21+'];
-$ageData   = array_map(fn($g) => (int)($ageRaw[$g] ?? 0), $ageLabels);
 
-// ── Barangay — all Pasig City barangays, 0 if no data ────────────
-$brgyCountsStmt = $pdo->prepare("
-    SELECT
-        TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(u.address, 'Brgy. ', -1), ',', 1)) AS brgy,
-        COUNT(*) AS cnt
-    FROM applicants a JOIN users u ON u.id = a.user_id
-    WHERE a.school_year = ? $dateFilter AND u.address LIKE '%Brgy. %'
-    GROUP BY brgy
-");
-$brgyCountsStmt->execute(array_merge([$schoolYear], $dateExtra));
-$brgyCountsMap = array_column($brgyCountsStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'brgy');
-
-$allPasigBarangays = [
-    'Bagong Ilog', 'Bagong Katipunan', 'Bambang', 'Buting', 'Caniogan',
-    'Dela Paz', 'Kalawaan', 'Kapasigan', 'Kapitolyo', 'Malinao',
-    'Manggahan', 'Maybunga', 'Oranbo', 'Palatiw', 'Pinagbuhatan',
-    'Pineda', 'Rosario', 'Sagad', 'San Antonio', 'San Joaquin',
-    'San Jose', 'San Miguel', 'San Nicolas', 'Santa Cruz',
-    'Santa Lucia', 'Santa Rosa', 'Santo Tomas', 'Santolan',
-    'Sumilang', 'Ugong',
-];
-
-// Build rows with all barangays; sort by count desc, then name asc
-$brgyRows = [];
-foreach ($allPasigBarangays as $b) {
-    $brgyRows[] = ['brgy' => $b, 'cnt' => (int)($brgyCountsMap[$b] ?? 0)];
-}
-usort($brgyRows, fn($a, $b) => $b['cnt'] <=> $a['cnt'] ?: strcmp($a['brgy'], $b['brgy']));
-
-$brgyMax   = !empty($brgyRows) ? max(array_column($brgyRows, 'cnt')) : 1;
-$brgyMax   = $brgyMax ?: 1; // avoid division by zero when all are 0
-$brgyCount = count($brgyRows);
 
 // ── Labels & URLs ──────────────────────────────────────────────────
 $rangeLabels = [
@@ -257,7 +205,6 @@ ob_start();
     align-items:start;
 }
 .db-col1, .db-col2 { display:flex; flex-direction:column; gap:var(--space-4); }
-.db-c-brgy { display:flex; flex-direction:column; min-height:0; }
 
 /* KPI card — single column stack */
 .db-kpi-grid { display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-3); }
@@ -287,13 +234,6 @@ ob_start();
 .db-legend-item { display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-xs); color:var(--text-secondary); }
 .db-legend-dot  { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
 
-/* Barangay list */
-.db-brgy-list { display:flex; flex-direction:column; gap:var(--space-2); flex:1; overflow-y:auto; }
-.db-brgy-row  { display:flex; align-items:center; gap:var(--space-2); min-width:0; }
-.db-brgy-name { flex:1; font-size:var(--text-xs); color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.db-brgy-bar  { height:4px; background:var(--bg-subtle); border-radius:var(--radius-full); overflow:hidden; flex:1; min-width:0; }
-.db-brgy-fill { height:100%; background:var(--accent); border-radius:var(--radius-full); min-width:2px; }
-.db-brgy-cnt  { font-size:var(--text-xs); color:var(--text-tertiary); width:16px; text-align:right; flex-shrink:0; }
 
 /* Date picker */
 .dp-wrap { position:relative; }
@@ -322,11 +262,11 @@ ob_start();
 
 @media (max-width:960px) {
     .db-grid { grid-template-columns:1fr 1fr; }
-    .db-col2, .db-c-brgy { grid-column:1/3; }
+    .db-col2 { grid-column:1/3; }
 }
 @media (max-width:560px) {
     .db-grid { grid-template-columns:1fr; }
-    .db-col1,.db-col2,.db-c-brgy { grid-column:1; }
+    .db-col1,.db-col2 { grid-column:1; }
 }
 </style>
 
@@ -454,39 +394,6 @@ ob_start();
         </div>
 
         <!-- Col 1 · 3 — Age distribution + Sex (combined) -->
-        <div class="card db-c-age-sex" style="padding:var(--space-5);">
-            <div style="display:flex;gap:0;align-items:stretch;">
-
-                <!-- Age — left -->
-                <div style="flex:1;min-width:0;padding-right:var(--space-4);">
-                    <div class="db-ch">
-                        <span class="card-title">Age distribution</span>
-                    </div>
-                    <div style="position:relative;width:100%;height:<?= count($ageLabels) * 30 + 20 ?>px;">
-                        <canvas id="chartAge"></canvas>
-                    </div>
-                </div>
-
-                <!-- Divider -->
-                <div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch;"></div>
-
-                <!-- Sex — right -->
-                <div style="flex:1;min-width:0;padding-left:var(--space-4);">
-                    <div class="db-ch">
-                        <span class="card-title">Sex</span>
-                        <span class="db-ch-sub"><?= number_format($sexMale + $sexFemale) ?> with data</span>
-                    </div>
-                    <div style="position:relative;width:100%;height:130px;">
-                        <canvas id="chartSex"></canvas>
-                    </div>
-                    <div class="db-legend">
-                        <span class="db-legend-item"><span class="db-legend-dot" id="dotFemale"></span>Female <?= number_format($sexFemale) ?></span>
-                        <span class="db-legend-item"><span class="db-legend-dot" id="dotMale"></span>Male <?= number_format($sexMale) ?></span>
-                    </div>
-                </div>
-
-            </div>
-        </div>
 
         </div><!-- /db-col1 -->
 
@@ -518,25 +425,6 @@ ob_start();
 
         </div><!-- /db-col2 -->
 
-        <!-- Barangay — col 3 -->
-        <div class="card db-c-brgy" style="padding:var(--space-5);">
-            <div class="db-ch" style="margin-bottom:var(--space-3);">
-                <span class="card-title">Barangay</span>
-                <span class="db-ch-sub"><?= $brgyCount ?> barangays</span>
-            </div>
-            <div class="db-brgy-list">
-                <?php foreach ($brgyRows as $br): ?>
-                <?php $pct = round((int)$br['cnt'] / $brgyMax * 100); ?>
-                <div class="db-brgy-row">
-                    <span class="db-brgy-name" title="<?= e($br['brgy']) ?>"><?= e($br['brgy']) ?></span>
-                    <span class="db-brgy-bar">
-                        <span class="db-brgy-fill" style="width:<?= $pct ?>%"></span>
-                    </span>
-                    <span class="db-brgy-cnt"><?= (int)$br['cnt'] ?></span>
-                </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
 
     </div><!-- /db-grid -->
 
@@ -549,9 +437,7 @@ ob_start();
     var DATA = {
         pipeline: { labels: <?= json_encode($pipelineLabels) ?>, data: <?= json_encode($pipelineData) ?> },
         course:   { labels: <?= json_encode($courseLabels)   ?>, data: <?= json_encode($courseData)   ?> },
-        strand:   { labels: <?= json_encode($strandLabels)   ?>, data: <?= json_encode($strandData)   ?> },
-        sex:      { male: <?= $sexMale ?>, female: <?= $sexFemale ?> },
-        age:      { labels: <?= json_encode($ageLabels) ?>, data: <?= json_encode($ageData) ?> }
+        strand:   { labels: <?= json_encode($strandLabels)   ?>, data: <?= json_encode($strandData)   ?> }
     };
 
     function v(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
@@ -622,26 +508,6 @@ ob_start();
         var df=document.getElementById('dotFemale'), dm=document.getElementById('dotMale');
         if(df) df.style.background=fc;
         if(dm) dm.style.background=mc;
-        charts.sex = new Chart(document.getElementById('chartSex'), {
-            type: 'doughnut',
-            data: { labels:['Female','Male'],
-                datasets:[{ data:[DATA.sex.female,DATA.sex.male], backgroundColor:[fc,mc], borderWidth:3, borderColor:elev, hoverOffset:4 }] },
-            options: { responsive:true, maintainAspectRatio:false, cutout:'68%',
-                plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:function(c){
-                    var tot=DATA.sex.female+DATA.sex.male;
-                    return ' '+c.label+': '+c.raw+' ('+(tot>0?Math.round(c.raw/tot*100):0)+'%)';
-                }}}}}
-        });
-
-        // Age — horizontal bar (matches pipeline / course style)
-        charts.age = new Chart(document.getElementById('chartAge'), {
-            type: 'bar',
-            data: { labels:DATA.age.labels,
-                datasets:[{ data:DATA.age.data, backgroundColor:accent, borderRadius:5, borderSkipped:false }] },
-            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
-                plugins:{ legend:{display:false}, tooltip:tip },
-                scales:{ x:xGrid, y:yFlat } }
-        });
     }
 
     buildCharts();
