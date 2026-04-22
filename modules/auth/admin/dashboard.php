@@ -182,6 +182,9 @@ ob_start();
 ?>
 
 <style>
+/* Wider sidebar for admin dashboard */
+.sidebar { width: 272px; }
+
 /* ── All UI colors from app CSS variables ─────────────────── */
 
 .db-header {
@@ -200,11 +203,11 @@ ob_start();
    ───────────────────────────────────── */
 .db-grid {
     display:grid;
-    grid-template-columns: 3fr 4fr 3fr;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
     gap:var(--space-4);
     align-items:start;
 }
-.db-col1, .db-col2 { display:flex; flex-direction:column; gap:var(--space-4); }
 
 /* KPI card — single column stack */
 .db-kpi-grid { display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-3); }
@@ -261,12 +264,10 @@ ob_start();
 }
 
 @media (max-width:960px) {
-    .db-grid { grid-template-columns:1fr 1fr; }
-    .db-col2 { grid-column:1/3; }
+    .db-grid { grid-template-columns:1fr; }
 }
 @media (max-width:560px) {
     .db-grid { grid-template-columns:1fr; }
-    .db-col1,.db-col2 { grid-column:1; }
 }
 </style>
 
@@ -326,10 +327,7 @@ ob_start();
     <!-- ── Main grid ─────────────────────────────────────────────── -->
     <div class="db-grid">
 
-        <!-- Col 1 stack -->
-        <div class="db-col1">
-
-        <!-- Col 1 · 1 — Key Metrics -->
+        <!-- Cell 1 — Key Metrics -->
         <div class="card db-c-kpi" style="padding:var(--space-5);">
             <div style="display:flex;align-items:baseline;justify-content:space-between;">
                 <span class="card-title">Key metrics</span>
@@ -359,7 +357,7 @@ ob_start();
             </div>
         </div>
 
-        <!-- Col 1 · 2 — Pipeline -->
+        <!-- Cell 2 — Pipeline -->
         <div class="card db-c-pipeline" style="padding:var(--space-5);">
             <div class="db-ch">
                 <span class="card-title">Pipeline</span>
@@ -393,14 +391,7 @@ ob_start();
             </div>
         </div>
 
-        <!-- Col 1 · 3 — Age distribution + Sex (combined) -->
-
-        </div><!-- /db-col1 -->
-
-        <!-- Col 2 stack -->
-        <div class="db-col2">
-
-        <!-- Col 2 · 1 — Course -->
+        <!-- Cell 3 — Course -->
         <div class="card db-c-course" style="padding:var(--space-5);">
             <div class="db-ch">
                 <span class="card-title">Course</span>
@@ -411,7 +402,7 @@ ob_start();
             </div>
         </div>
 
-        <!-- Col 2 · 2 — SHS Strand -->
+        <!-- Cell 4 — SHS Strand -->
         <div class="card db-c-strand" style="padding:var(--space-5);">
             <div class="db-ch">
                 <span class="card-title">SHS Strand</span>
@@ -423,7 +414,7 @@ ob_start();
             <div class="db-legend" id="strandLegend"></div>
         </div>
 
-        </div><!-- /db-col2 -->
+
 
 
     </div><!-- /db-grid -->
