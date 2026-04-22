@@ -53,7 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $shuffleQ       = isset($_POST['shuffle_questions']) ? 1 : 0;
             $shuffleC       = isset($_POST['shuffle_choices'])   ? 1 : 0;
             $schedStart     = trim($_POST['scheduled_start'] ?? '') ?: null;
-            $schedEnd       = trim($_POST['scheduled_end']   ?? '') ?: null;
+            $schedEndTime   = trim($_POST['scheduled_end_time'] ?? '') ?: null;
+            $schedEnd       = ($schedStart && $schedEndTime)
+                ? date('Y-m-d', strtotime($schedStart)) . ' ' . $schedEndTime . ':00'
+                : null;
             $accessPassword = trim($_POST['access_password'] ?? '') ?: null;
             if (!$title) { $errors[] = 'Exam title is required.'; break; }
             $db->prepare('UPDATE exams SET is_active=0')->execute();
@@ -77,7 +80,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $shuffleQ       = isset($_POST['shuffle_questions']) ? 1 : 0;
             $shuffleC       = isset($_POST['shuffle_choices'])   ? 1 : 0;
             $schedStart     = trim($_POST['scheduled_start'] ?? '') ?: null;
-            $schedEnd       = trim($_POST['scheduled_end']   ?? '') ?: null;
+            $schedEndTime   = trim($_POST['scheduled_end_time'] ?? '') ?: null;
+            $schedEnd       = ($schedStart && $schedEndTime)
+                ? date('Y-m-d', strtotime($schedStart)) . ' ' . $schedEndTime . ':00'
+                : null;
             $accessPassword = trim($_POST['access_password'] ?? '') ?: null;
             if (!$title) { $errors[] = 'Exam title is required.'; break; }
             $db->prepare(
@@ -154,12 +160,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         case 'delete_section':
             $secId = (int)($_POST['section_id'] ?? 0);
-            $qCount = $db->prepare('SELECT COUNT(*) FROM questions WHERE section_id=?');
-            $qCount->execute([$secId]);
-            if ((int)$qCount->fetchColumn() > 0) {
-                $errors[] = 'This section still has questions. Delete all questions in it first.';
-                break;
-            }
+            // Delete all questions in section first, then the section itself
+            $db->prepare('DELETE FROM questions WHERE section_id=?')->execute([$secId]);
             $db->prepare('DELETE FROM exam_sections WHERE id=?')->execute([$secId]);
             $success[] = 'Section deleted.';
             break;
@@ -759,8 +761,9 @@ ob_start();
             <!-- Sections -->
             <?php foreach ($sections as $sec):
                 $sc = $SECTION_COLORS[$sec['question_type']] ?? $SECTION_COLORS['multiple_choice'];
-                $secQs = $questionsBySection[$sec['id']] ?? [];
-                $secJson = htmlspecialchars(json_encode($sec));
+                $secQs    = $questionsBySection[$sec['id']] ?? [];
+                $secQCount = count($secQs);
+                $secJson   = htmlspecialchars(json_encode($sec));
             ?>
                 <div class="card section-block" style="margin-bottom:var(--space-5);padding:0;overflow:visible" data-section-id="<?= $sec['id'] ?>">
 
@@ -790,11 +793,12 @@ ob_start();
                             <button class="btn-icon" title="Edit section" onclick="openEditSectionModal(<?= $secJson ?>)">
                                 <?= icon('ic_fluent_edit_24_regular', 13) ?>
                             </button>
-                            <form method="POST" onsubmit="return confirm('Delete this section? It must be empty first.')" style="display:inline">
+                            <form method="POST" style="display:inline"
+                                  onsubmit="return confirmDeleteSection(this, <?= $secQCount ?>, <?= json_encode($sec['title']) ?>)">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete_section">
                                 <input type="hidden" name="section_id" value="<?= $sec['id'] ?>">
-                                <button class="btn-icon" style="color:var(--error)" title="Delete section">
+                                <button class="btn-icon" style="color:var(--error)" title="Delete section" type="submit">
                                     <?= icon('ic_fluent_delete_24_regular', 13) ?>
                                 </button>
                             </form>
@@ -885,11 +889,11 @@ ob_start();
                             <input type="datetime-local" name="scheduled_start" class="form-control">
                         </div>
                         <div>
-                            <label class="form-label">Closes</label>
-                            <input type="datetime-local" name="scheduled_end" class="form-control">
+                            <label class="form-label">Closes (time)</label>
+                            <input type="time" name="scheduled_end_time" class="form-control">
                         </div>
                     </div>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:6px">Leave blank to allow access at any time.</p>
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:6px">Close time is on the same day as the open date. Leave blank to allow access at any time.</p>
                 </div>
 
                 <!-- Password -->
@@ -971,8 +975,8 @@ ob_start();
                             <input type="datetime-local" name="scheduled_start" id="edit-exam-start" class="form-control">
                         </div>
                         <div>
-                            <label class="form-label">Closes</label>
-                            <input type="datetime-local" name="scheduled_end" id="edit-exam-end" class="form-control">
+                            <label class="form-label">Closes (time)</label>
+                            <input type="time" name="scheduled_end_time" id="edit-exam-end" class="form-control">
                         </div>
                     </div>
                     <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:6px">Leave blank to allow access at any time.</p>
@@ -1080,8 +1084,10 @@ function openEditExamModal(exam) {
     document.getElementById('edit-exam-shuffleQ').checked = exam.shuffle_questions == 1;
     document.getElementById('edit-exam-shuffleC').checked = exam.shuffle_choices == 1;
     const toLocal = v => v ? v.replace(' ', 'T').substring(0,16) : '';
-    document.getElementById('edit-exam-start').value    = toLocal(exam.scheduled_start);
-    document.getElementById('edit-exam-end').value      = toLocal(exam.scheduled_end);
+    document.getElementById('edit-exam-start').value = toLocal(exam.scheduled_start);
+    // Populate close time only (HH:MM) from stored scheduled_end datetime
+    document.getElementById('edit-exam-end').value =
+        exam.scheduled_end ? exam.scheduled_end.substring(11, 16) : '';
     document.getElementById('edit-exam-password').value = exam.access_password || '';
     openModal('edit-exam-modal');
 }
@@ -1163,6 +1169,11 @@ function openAddSectionModal() {
     selectSectionType('multiple_choice');
     openModal('section-modal');
 }
+function confirmDeleteSection(form, qCount, title) {
+    if (qCount === 0) return confirm(`Delete section "${title}"?`);
+    return confirm(`Delete "${title}" and all ${qCount} question${qCount !== 1 ? 's' : ''} inside it? This cannot be undone.`);
+}
+
 function openEditSectionModal(sec) {
     document.getElementById('sec-modal-title').textContent = 'Edit Section';
     document.getElementById('sec-action').value            = 'edit_section';

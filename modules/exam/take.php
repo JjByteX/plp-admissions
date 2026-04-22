@@ -459,7 +459,7 @@ ob_start();
                 <?php endif; ?>
             </div>
             <div class="q-text"><?= e($q['question_text']) ?></div>
-            <?php if ($q['description']): ?>
+            <?php if ($q['description'] && $q['description'] !== 'No answer key provided'): ?>
                 <div class="q-desc"><?= e($q['description']) ?></div>
             <?php endif; ?>
 
