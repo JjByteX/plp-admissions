@@ -55,6 +55,31 @@ function csrf_check(): void
     }
 }
 
+// -- Admissions window helpers ----------------------------------
+function admissions_open_date(): ?DateTime
+{
+    $v = school_setting('admissions_open');
+    return $v ? new DateTime($v) : null;
+}
+
+function admissions_close_date(): ?DateTime
+{
+    $v = school_setting('admissions_close');
+    return $v ? new DateTime($v) : null;
+}
+
+function admissions_is_open(): bool
+{
+    // Admin override bypasses the date window (for testing/development)
+    if (school_setting('admissions_override') === '1') return true;
+
+    $open  = admissions_open_date();
+    $close = admissions_close_date();
+    if (!$open || !$close) return false;
+    $now = new DateTime();
+    return $now >= $open && $now <= $close;
+}
+
 // -- Flash messages ----------------------------------------------
 function flash(string $key, mixed $value): void
 {
@@ -76,6 +101,12 @@ function school_setting(string $key, string $default = ''): string
             $cache = array_column($rows, 'setting_value', 'setting_key');
         } catch (Throwable) {
             $cache = [];
+        }
+
+        // Derive current_school_year automatically from admissions_open date
+        if (!empty($cache['admissions_open'])) {
+            $openYear = (int) date('Y', strtotime($cache['admissions_open']));
+            $cache['current_school_year'] = $openYear . '-' . ($openYear + 1);
         }
     }
     return $cache[$key] ?? $default;

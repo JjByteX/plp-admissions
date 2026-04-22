@@ -42,7 +42,7 @@ CREATE TABLE `applicants` (
     `applicant_type`  ENUM('freshman','transferee','foreign') NOT NULL,
     `course_applied`  VARCHAR(120)     NOT NULL,
     `shs_strand`      VARCHAR(60)      DEFAULT NULL COMMENT 'SHS strand key (freshmen only)',
-    `overall_status`  ENUM('pending','documents','exam','interview','released') NOT NULL DEFAULT 'pending',
+    `overall_status`  ENUM('pending','documents','submitted','exam','interview','released') NOT NULL DEFAULT 'pending',
     `school_year`     VARCHAR(9)       NOT NULL COMMENT 'e.g. 2024-2025',
     `created_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -240,7 +240,10 @@ INSERT INTO `school_settings` (`setting_key`, `setting_value`) VALUES
     ('school_name',         'Pamantasan ng Lungsod ng Pasig'),
     ('school_logo',         ''),
     ('accent_color',        '#2d6a4f'),
-    ('current_school_year', '2024-2025'),
+    ('current_school_year', '2026-2027'),
+    ('admissions_open',     '2026-01-06'),
+    ('admissions_close',    '2026-03-31'),
+    ('admissions_override', '0'),
     ('system_version',      '1.0.0');
 
 -- ============================================================

@@ -8,6 +8,40 @@ require_once CORE_PATH . '/bootstrap.php';
 
 if (Auth::check()) { header("Location: " . Auth::homeUrl()); exit; }
 
+// Block registration outside the admissions window
+if (!admissions_is_open()) {
+    $open  = admissions_open_date();
+    $close = admissions_close_date();
+    $msg   = 'Admissions are currently closed.';
+    if ($open && $close) {
+        $msg .= ' The application window is ' . $open->format('F j, Y') . ' to ' . $close->format('F j, Y') . '.';
+    }
+    $schoolLogo = school_setting('school_logo', '');
+    $closedMsg  = $msg;
+    ob_start();
+    ?>
+    <div class="auth-card animate-fade-in" style="text-align:center">
+        <div class="auth-header" style="margin-bottom:var(--space-6)">
+            <?php if ($schoolLogo): ?>
+                <img src="<?= e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url($schoolLogo)) ?>" alt="School Logo" class="auth-logo-img">
+            <?php else: ?>
+                <div class="auth-logo"><?php include VIEWS_PATH . '/partials/icons/ic_fluent_building_bank_24_regular.svg'; ?></div>
+            <?php endif; ?>
+            <div class="auth-header-text">
+                <h1 class="auth-title">PLP Admissions</h1>
+                <p class="auth-subtitle">Pamantasan ng Lungsod ng Pasig</p>
+            </div>
+        </div>
+        <div class="alert alert-error" style="margin-bottom:var(--space-5)"><?= e($closedMsg) ?></div>
+        <a href="<?= url('/login') ?>" class="btn btn-ghost btn-block">Back to Login</a>
+    </div>
+    <?php
+    $content   = ob_get_clean();
+    $pageTitle = 'Admissions Closed';
+    include VIEWS_PATH . '/layouts/auth.php';
+    exit;
+}
+
 $errors = [];
 $old    = [];
 

@@ -1,7 +1,8 @@
 <?php
 // ============================================================
 // modules/settings/admin_school_year.php
-// M8 — Admin: school year reset and archive management
+// Admin: manage admissions window (open/close dates)
+// School year is derived automatically from the open date.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -15,49 +16,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'set_school_year') {
-        $year = trim($_POST['school_year'] ?? '');
-        // Validate format YYYY-YYYY
-        if (!preg_match('/^\d{4}-\d{4}$/', $year)) {
-            $errors[] = 'Use the format YYYY-YYYY (e.g. 2025-2026).';
+    if ($action === 'toggle_override') {
+        $current = school_setting('admissions_override', '0');
+        $newVal  = $current === '1' ? '0' : '1';
+        $db->prepare(
+            'INSERT INTO school_settings (setting_key, setting_value) VALUES ("admissions_override",?)
+             ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)'
+        )->execute([$newVal]);
+        audit_log('admissions_override', $newVal === '1' ? 'Admissions override enabled' : 'Admissions override disabled');
+        $success[] = $newVal === '1' ? 'Override enabled — admissions is now forced open.' : 'Override disabled — admissions window is back in effect.';
+    }
+
+    if ($action === 'set_admissions_window') {
+        $open  = trim($_POST['admissions_open']  ?? '');
+        $close = trim($_POST['admissions_close'] ?? '');
+
+        if (!$open || !$close) {
+            $errors[] = 'Both open and close dates are required.';
+        } elseif ($close <= $open) {
+            $errors[] = 'Close date must be after the open date.';
         } else {
-            [$y1, $y2] = explode('-', $year);
-            if ((int)$y2 !== (int)$y1 + 1) {
-                $errors[] = 'The second year must be one more than the first (e.g. 2025-2026).';
-            } else {
-                $db->prepare(
-                    'INSERT INTO school_settings (setting_key, setting_value) VALUES ("current_school_year",?)
-                     ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)'
-                )->execute([$year]);
-                audit_log('school_year_changed', "School year set to {$year}");
-                $success[] = "Current school year set to $year.";
-            }
+            $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
+                       ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)';
+            $db->prepare($upsert)->execute(['admissions_open',  $open]);
+            $db->prepare($upsert)->execute(['admissions_close', $close]);
+
+            // Derive and persist school year for reference
+            $openYear  = (int) date('Y', strtotime($open));
+            $schoolYear = $openYear . '-' . ($openYear + 1);
+            $db->prepare($upsert)->execute(['current_school_year', $schoolYear]);
+
+            audit_log('admissions_window_set',
+                "Admissions window set: {$open} to {$close} (AY {$schoolYear})");
+            $success[] = "Admissions window saved. School year automatically set to AY {$schoolYear}.";
         }
     }
 
     if ($action === 'new_cycle') {
-        $newYear = trim($_POST['new_year'] ?? '');
         $confirm = trim($_POST['confirm_text'] ?? '');
-
         if ($confirm !== 'START NEW CYCLE') {
             $errors[] = 'Type START NEW CYCLE exactly to confirm.';
-        } elseif (!preg_match('/^\d{4}-\d{4}$/', $newYear)) {
-            $errors[] = 'Invalid school year format.';
         } else {
-            // Archive: deactivate exam, do NOT delete applicant data (keep history)
-            $db->prepare(
-                'INSERT INTO school_settings (setting_key, setting_value) VALUES ("current_school_year",?)
-                 ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)'
-            )->execute([$newYear]);
-
-            // Deactivate current exam
             $db->exec('UPDATE exams SET is_active=0');
-
-            audit_log('new_cycle_started', "Started new admission cycle: {$newYear}");
-            $success[] = "New cycle $newYear started. All previous applicant data is preserved. Exam deactivated — create a new one for the new cycle.";
+            audit_log('new_cycle_started', 'Started new admission cycle — exam deactivated.');
+            $success[] = 'New cycle started. All previous applicant data is preserved. Create a new exam for the new cycle.';
         }
     }
 }
+
+// Reload settings after possible save
+$admissionsOpen  = school_setting('admissions_open',  '');
+$admissionsClose = school_setting('admissions_close', '');
+$currentYear     = school_setting('current_school_year', '—');
+$isOverride      = school_setting('admissions_override', '0') === '1';
+$isOpen          = admissions_is_open();
 
 // Stats by school year
 $stmt = $db->query(
@@ -71,8 +83,6 @@ foreach ($rawStats as $row) {
     $statsByYear[$row['school_year']][$row['overall_status']] = (int)$row['cnt'];
 }
 
-$currentYear = school_setting('current_school_year', '');
-
 ob_start();
 ?>
 
@@ -85,20 +95,48 @@ ob_start();
 
 <div class="admin-form-stack">
 
-    <!-- Current school year -->
+    <!-- Admissions window -->
     <div class="card">
-        <div class="card-title" style="margin-bottom:var(--space-5)">Current School Year</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
+            <div class="card-title" style="margin:0">Admissions Window</div>
+            <div style="display:flex;align-items:center;gap:var(--space-3)">
+                <?php if ($isOpen): ?>
+                    <span class="badge badge-approved"><?= $isOverride ? 'Open (Override)' : 'Open' ?></span>
+                <?php else: ?>
+                    <span class="badge badge-pending">Closed</span>
+                <?php endif; ?>
+                <form method="POST" style="margin:0">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="toggle_override">
+                    <button type="submit" class="btn btn-sm <?= $isOverride ? 'btn-danger' : 'btn-ghost' ?>">
+                        <?= $isOverride ? 'Disable Override' : 'Force Open' ?>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <?php if ($currentYear !== '—'): ?>
+            <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-5)">
+                School year <strong><?= e($currentYear) ?></strong> — derived automatically from the open date.
+            </div>
+        <?php endif; ?>
+
         <form method="POST">
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="set_school_year">
-            <div style="display:flex;gap:var(--space-3);align-items:flex-end">
-                <div style="flex:1">
-                    <label class="form-label">School Year</label>
-                    <input type="text" name="school_year" class="form-input"
-                           value="<?= e($currentYear) ?>" placeholder="e.g. 2025-2026">
+            <input type="hidden" name="action" value="set_admissions_window">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-5)">
+                <div>
+                    <label class="form-label">Admissions Opens</label>
+                    <input type="date" name="admissions_open" class="form-input"
+                           value="<?= e($admissionsOpen) ?>">
                 </div>
-                <button type="submit" class="btn btn-primary">Update</button>
+                <div>
+                    <label class="form-label">Admissions Closes</label>
+                    <input type="date" name="admissions_close" class="form-input"
+                           value="<?= e($admissionsClose) ?>">
+                </div>
             </div>
+            <button type="submit" class="btn btn-primary">Save Window</button>
         </form>
     </div>
 
@@ -122,7 +160,7 @@ ob_start();
                 </div>
                 <div style="display:flex;gap:var(--space-4);flex-wrap:wrap">
                     <?php
-                    $stages = ['pending','documents','exam','interview','released'];
+                    $stages = ['pending','documents','submitted','exam','interview','released'];
                     foreach ($stages as $stage):
                         $cnt = $statuses[$stage] ?? 0;
                         if (!$cnt) continue;
@@ -143,26 +181,16 @@ ob_start();
     <div class="card card-danger">
         <div class="card-title" style="color:var(--error);margin-bottom:var(--space-1)">Start New Admission Cycle</div>
         <p class="card-description" style="margin-bottom:var(--space-5)">
-            This will switch the active school year and deactivate the current entrance exam.
-            All existing applicant data is preserved. A new exam must be created for the new cycle.
+            Deactivates the current entrance exam so you can create a fresh one for the new cycle.
+            All existing applicant data is preserved. Set the new admissions window above first.
         </p>
-        <form method="POST" onsubmit="return document.getElementById('confirm-cycle-input').value === 'START NEW CYCLE'
-                || (alert('Type START NEW CYCLE exactly to confirm.'), false)">
+        <form method="POST">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="new_cycle">
-            <div style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div>
-                    <label class="form-label">New School Year</label>
-                    <input type="text" name="new_year" class="form-input"
-                           placeholder="e.g. 2026-2027" style="max-width:200px">
-                </div>
-                <div>
-                    <label class="form-label">
-                        Type <strong>START NEW CYCLE</strong> to confirm
-                    </label>
-                    <input type="text" name="confirm_text" id="confirm-cycle-input" class="form-input"
-                           placeholder="START NEW CYCLE" autocomplete="off">
-                </div>
+            <div>
+                <label class="form-label">Type <strong>START NEW CYCLE</strong> to confirm</label>
+                <input type="text" name="confirm_text" class="form-input"
+                       placeholder="START NEW CYCLE" autocomplete="off" style="max-width:280px">
             </div>
             <div style="margin-top:var(--space-5)">
                 <button type="submit" class="btn btn-danger">Start New Cycle</button>
@@ -174,6 +202,6 @@ ob_start();
 
 <?php
 $content   = ob_get_clean();
-$pageTitle = 'School Year';
+$pageTitle = 'Admissions Window';
 $activeNav = 'school-year';
 include VIEWS_PATH . '/layouts/app.php';
