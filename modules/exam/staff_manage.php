@@ -104,6 +104,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             audit_log('exam_activated', "Activated exam ID {$examId}", 'exam', $examId);
             break;
 
+        case 'delete_exam':
+            $examId = (int)($_POST['exam_id'] ?? 0);
+            if (!$examId) { $errors[] = 'Invalid exam.'; break; }
+            $db->prepare('DELETE FROM question_choices WHERE question_id IN (SELECT id FROM questions WHERE exam_id=?)')->execute([$examId]);
+            $db->prepare('DELETE FROM questions WHERE exam_id=?')->execute([$examId]);
+            $db->prepare('DELETE FROM exam_sections WHERE exam_id=?')->execute([$examId]);
+            $db->prepare('DELETE FROM exam_results WHERE exam_id=?')->execute([$examId]);
+            $db->prepare('DELETE FROM exams WHERE id=?')->execute([$examId]);
+            audit_log('exam_deleted', "Deleted exam ID {$examId}", 'exam', $examId);
+            header('Location: ' . url('/staff/exam'));
+            exit;
+
         // ── Section CRUD ─────────────────────────────────────────
         case 'create_section':
             $examId    = (int)($_POST['exam_id'] ?? 0);
@@ -348,9 +360,8 @@ ob_start();
     position: relative;
 }
 .section-header .section-actions {
-    display: none; gap: var(--space-1); margin-left: auto;
+    display: flex; gap: var(--space-1); margin-left: auto;
 }
-.section-header:hover .section-actions { display: flex; }
 
 /* ── Inline editing ──────────────────────────────── */
 .inline-edit-wrap { position: relative; display: inline-block; }
@@ -595,7 +606,7 @@ ob_start();
                         </div>
                     <?php endif; ?>
                 </div>
-                <div style="display:flex;gap:var(--space-2);flex-shrink:0">
+                <div style="display:flex;gap:var(--space-2);flex-shrink:0;align-items:center">
                     <button class="btn btn-ghost btn-sm"
                             onclick="openEditExamModal(<?= htmlspecialchars(json_encode($selectedExam)) ?>)">Edit</button>
                     <?php if (!$selectedExam['is_active']): ?>
@@ -608,6 +619,14 @@ ob_start();
                     <?php else: ?>
                         <span class="badge badge-success">Active</span>
                     <?php endif; ?>
+                    <form method="POST" style="display:inline"
+                          onsubmit="return confirm('Delete this exam and all its questions? This cannot be undone.')">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="delete_exam">
+                        <input type="hidden" name="exam_id" value="<?= $selectedExam['id'] ?>">
+                        <button class="btn btn-sm" style="color:var(--error);border-color:var(--error);background:transparent"
+                                type="submit">Delete Exam</button>
+                    </form>
                 </div>
             </div>
 
