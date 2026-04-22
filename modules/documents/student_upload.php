@@ -180,8 +180,9 @@ $allApproved  = count($docRows) === count($requiredDocs)
 // Submission state helpers
 $uploadedOrApproved = ($statusCounts['uploaded'] ?? 0) + ($statusCounts['approved'] ?? 0);
 $allUploaded  = count($docRows) === count($requiredDocs) && $uploadedOrApproved === count($requiredDocs);
-$canSubmit    = $allUploaded && !$isSubmitted;
-$canWithdraw  = $isSubmitted && !$allApproved;
+$pastDocuments = in_array($applicant['overall_status'] ?? '', ['exam', 'interview', 'released'], true);
+$canSubmit     = $allUploaded && !$isSubmitted && !$pastDocuments;
+$canWithdraw   = $isSubmitted && !$allApproved && !$pastDocuments;
 
 // Stepper current step
 $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
