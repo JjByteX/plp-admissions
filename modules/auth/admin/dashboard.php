@@ -199,23 +199,51 @@ ob_start();
    Col1 and Col2 are plain flex stacks — no row-spanning.
    ───────────────────────────────────── */
 .db-grid {
-    display:grid;
+    display: grid;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap:var(--space-4);
-    align-items:stretch;
+    grid-template-rows: auto 1fr;
+    gap: var(--space-4);
+    align-items: stretch;
+    min-height: calc(100vh - 140px);
 }
-.db-grid > .card { display:flex; flex-direction:column; }
+.db-grid > .card { display: flex; flex-direction: column; }
 
-/* KPI card — single column stack */
-.db-kpi-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:var(--space-3); margin-top:var(--space-4); flex:1; }
-.db-kpi-item { background:var(--bg-subtle); border-radius:var(--radius-md); padding:var(--space-4); display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between; gap:var(--space-2); }
-.db-kpi-val  { font-size:var(--text-2xl); font-weight:var(--weight-semibold); letter-spacing:-0.03em; line-height:1; color:var(--text-primary); }
-.db-kpi-val--success { color:var(--success); }
-.db-kpi-val--error   { color:var(--error);   }
-.db-kpi-val--warning { color:var(--warning); }
-.db-kpi-lbl  { font-size:var(--text-xs); color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.05em; margin-top:auto; }
-.db-kpi-sub  { display:none; }
+/* KPI cards — 4 equal squares, single accent color */
+.db-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+    flex: 1;
+}
+.db-kpi-item {
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--accent);
+    padding: var(--space-5) var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.db-kpi-val {
+    font-size: 2rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--text-primary);
+}
+.db-kpi-val--success,
+.db-kpi-val--error,
+.db-kpi-val--warning { color: var(--text-primary); }
+.db-kpi-lbl {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    font-weight: var(--weight-medium);
+    letter-spacing: 0;
+    text-transform: none;
+    margin-top: var(--space-1);
+}
+.db-kpi-sub { display: none; }
 
 /* Pipeline donut (SVG) */
 .db-donut-wrap { position:relative; width:110px; height:110px; flex-shrink:0; }
@@ -228,13 +256,16 @@ ob_start();
 
 /* Card chart header */
 .db-ch     { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:var(--space-4); }
-.db-ch-sub { font-size:var(--text-xs); color:var(--text-tertiary); }
+.db-ch-sub { font-size:var(--text-xs); color:var(--text-secondary); font-weight:var(--weight-medium); }
 
 /* Legend */
 .db-legend      { display:flex; flex-wrap:wrap; gap:var(--space-3); margin-top:var(--space-3); justify-content:center; }
 .db-legend-item { display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-xs); color:var(--text-secondary); }
 .db-legend-dot  { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
 
+
+/* Dashboard card titles */
+.db-grid .card-title { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--text-primary); }
 
 /* Date picker */
 .dp-wrap { position:relative; }
@@ -437,30 +468,28 @@ ob_start();
         Object.values(charts).forEach(function(c) { if (c) c.destroy(); });
         charts = {};
 
-        var accent  = v('--accent');
-        var success = v('--success');
-        var warning = v('--warning');
-        var error   = v('--error');
-        var info    = v('--info');
-        var muted   = v('--text-tertiary');
-        var border  = v('--border');
-        var elev    = v('--bg-elevated');
-        var strandColors = [accent, info, '#7c3aed', warning, error, success, '#f97316', '#06b6d4', '#84cc16', '#ec4899'];
+        var accent      = v('--accent');
+        var accentLight = v('--accent-light');
+        var textPrimary = v('--text-primary');
+        var textSecond  = v('--text-secondary');
+        var border      = v('--border');
+        // Single accent color family for all charts — no rainbow
+        var barColor    = accentLight || accent;
 
-        Chart.defaults.font  = { family: v('--font-sans') || 'DM Sans,sans-serif', size: 11 };
-        Chart.defaults.color = muted;
+        Chart.defaults.font  = { family: v('--font-sans') || 'DM Sans,sans-serif', size: 12 };
+        Chart.defaults.color = textSecond;
 
-        var xGrid = { grid:{color:border}, border:{display:false}, ticks:{color:muted, precision:0} };
-        var yFlat = { grid:{display:false}, border:{display:false}, ticks:{color:muted} };
+        var xGrid = { grid:{color:border}, border:{display:false}, ticks:{color:textSecond, precision:0} };
+        var yFlat = { grid:{display:false}, border:{display:false}, ticks:{color:textPrimary, font:{size:12}} };
         var tip   = { callbacks:{ label:function(c){ return ' '+c.raw+' applicants'; } } };
 
-        // Pipeline — horizontal bar
+        // Pipeline — horizontal bar (same accent, different opacity per stage)
         charts.pipeline = new Chart(document.getElementById('chartPipeline'), {
             type: 'bar',
             data: {
                 labels: DATA.pipeline.labels,
                 datasets: [{ data: DATA.pipeline.data, borderRadius:5, borderSkipped:false,
-                    backgroundColor: [v('--border-strong'), info, warning, '#7c3aed', success] }]
+                    backgroundColor: DATA.pipeline.data.map(function(){ return barColor; }) }]
             },
             options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
                 plugins:{ legend:{display:false}, tooltip:tip },
@@ -471,18 +500,17 @@ ob_start();
         charts.course = new Chart(document.getElementById('chartCourse'), {
             type: 'bar',
             data: { labels:DATA.course.labels,
-                datasets:[{ data:DATA.course.data, backgroundColor:accent, borderRadius:5, borderSkipped:false }] },
+                datasets:[{ data:DATA.course.data, backgroundColor:barColor, borderRadius:5, borderSkipped:false }] },
             options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
                 plugins:{ legend:{display:false}, tooltip:tip },
                 scales:{ x:xGrid, y:yFlat } }
         });
 
-        // SHS Strand — horizontal bar (all strands, including 0)
-        var strandBg = DATA.strand.labels.map(function(_,i){ return strandColors[i%strandColors.length]; });
+        // SHS Strand — same single color
         charts.strand = new Chart(document.getElementById('chartStrand'), {
             type: 'bar',
             data: { labels:DATA.strand.labels,
-                datasets:[{ data:DATA.strand.data, backgroundColor:strandBg, borderRadius:5, borderSkipped:false }] },
+                datasets:[{ data:DATA.strand.data, backgroundColor:barColor, borderRadius:5, borderSkipped:false }] },
             options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
                 plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:function(c){
                     return ' '+c.raw+' applicants';
