@@ -201,19 +201,20 @@ ob_start();
 .db-grid {
     display:grid;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto;
+    grid-template-rows: 1fr 1fr;
     gap:var(--space-4);
-    align-items:start;
+    align-items:stretch;
 }
+.db-grid > .card { display:flex; flex-direction:column; }
 
 /* KPI card — single column stack */
-.db-kpi-grid { display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-3); }
-.db-kpi-item { background:var(--bg-subtle); border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); display:flex; align-items:baseline; justify-content:space-between; gap:var(--space-3); }
-.db-kpi-val  { font-size:var(--text-xl); font-weight:var(--weight-semibold); letter-spacing:-0.03em; line-height:1; color:var(--text-primary); flex-shrink:0; }
+.db-kpi-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:var(--space-3); margin-top:var(--space-4); flex:1; }
+.db-kpi-item { background:var(--bg-subtle); border-radius:var(--radius-md); padding:var(--space-4); display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between; gap:var(--space-2); }
+.db-kpi-val  { font-size:var(--text-2xl); font-weight:var(--weight-semibold); letter-spacing:-0.03em; line-height:1; color:var(--text-primary); }
 .db-kpi-val--success { color:var(--success); }
 .db-kpi-val--error   { color:var(--error);   }
 .db-kpi-val--warning { color:var(--warning); }
-.db-kpi-lbl  { font-size:var(--text-xs); color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.04em; }
+.db-kpi-lbl  { font-size:var(--text-xs); color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.05em; margin-top:auto; }
 .db-kpi-sub  { display:none; }
 
 /* Pipeline donut (SVG) */
@@ -360,7 +361,7 @@ ob_start();
                 <span class="card-title">Pipeline</span>
                 <span class="db-ch-sub"><?= number_format($total) ?> total</span>
             </div>
-            <div style="display:flex;gap:0;align-items:center;">
+            <div style="display:flex;gap:0;align-items:center;flex:1;">
                 <!-- Chart -->
                 <div style="flex:1;min-width:0;padding-right:var(--space-4);">
                     <div style="position:relative;width:100%;height:<?= count($pipelineOrder) * 30 + 56 ?>px;">
@@ -394,7 +395,7 @@ ob_start();
                 <span class="card-title">Course</span>
                 <span class="db-ch-sub"><?= $courseCount ?> courses</span>
             </div>
-            <div style="position:relative;width:100%;height:<?= max(120, $courseCount * 28 + 20) ?>px;">
+            <div style="position:relative;width:100%;flex:1;min-height:200px;">
                 <canvas id="chartCourse"></canvas>
             </div>
         </div>
@@ -405,7 +406,7 @@ ob_start();
                 <span class="card-title">SHS Strand</span>
                 <span class="db-ch-sub">by strand</span>
             </div>
-            <div style="position:relative;width:100%;height:<?= max(240, count($strandLabels) * 26 + 20) ?>px;">
+            <div style="position:relative;width:100%;flex:1;min-height:200px;">
                 <canvas id="chartStrand"></canvas>
             </div>
             <div class="db-legend" id="strandLegend"></div>
