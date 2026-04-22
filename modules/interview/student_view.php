@@ -312,10 +312,7 @@ ob_start();
             <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5)">
                 <div style="width:48px;height:48px;border-radius:var(--radius-lg);
                              background:var(--success-bg);display:flex;align-items:center;justify-content:center">
-                    <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?><!--
-                        <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                    </svg>
+                    <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?>
                 </div>
                 <div>
                     <div style="font-weight:var(--weight-semibold)">Today is your Interview Day</div>
