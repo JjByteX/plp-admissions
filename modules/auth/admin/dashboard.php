@@ -182,9 +182,6 @@ ob_start();
 ?>
 
 <style>
-/* Wider sidebar for admin dashboard */
-.sidebar { width: 272px; }
-
 /* ── All UI colors from app CSS variables ─────────────────── */
 
 .db-header {
