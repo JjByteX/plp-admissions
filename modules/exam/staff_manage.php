@@ -1651,7 +1651,10 @@ async function saveInlineQuestion(secId, secType) {
 .ai-file-tag { display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border-radius:var(--radius-sm);padding:4px 10px;font-size:var(--text-xs);font-weight:var(--weight-medium);margin-top:var(--space-2); }
 .ai-file-tag .rm { cursor:pointer;opacity:.7;background:none;border:none;color:#fff;padding:0;font-size:14px;display:flex;align-items:center;line-height:1; }
 .ai-file-tag .rm:hover { opacity:1; }
-.ai-processing-ring { width:44px;height:44px;margin:0 auto;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:ai-spin .75s linear infinite; }
+.ai-progress-wrap { padding: var(--space-2) 0; }
+.ai-progress-track { height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:var(--space-3); }
+.ai-progress-fill { height:100%;background:var(--accent);border-radius:99px;width:0%;transition:width .4s cubic-bezier(.4,0,.2,1); }
+.ai-progress-step { font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px; }
 .ai-q-card { border:1px solid #e5e7eb;border-radius:var(--radius-md);overflow:hidden;background:#fff; }
 .ai-q-card-head { display:flex;align-items:center;gap:8px;padding:9px 14px;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:var(--text-xs);color:#6b7280; }
 .ai-q-card-body { padding:12px 14px;background:#fff; }
@@ -1707,10 +1710,18 @@ async function saveInlineQuestion(secId, secType) {
                     <input type="number" id="ai-default-points" class="form-control" value="1" min="0" max="100" style="width:64px;padding:var(--space-1) var(--space-2);text-align:center">
                 </div>
             </div>
-            <div id="ai-step-processing" style="display:none;padding:var(--space-8) 0;text-align:center">
-                <div class="ai-processing-ring"></div>
-                <div style="margin-top:var(--space-4);font-weight:var(--weight-medium);font-size:var(--text-sm)" id="ai-processing-label">Reading file…</div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">A Puter sign-in popup may appear</div>
+            <div id="ai-step-processing" style="display:none;padding:var(--space-6) 0">
+                <div style="font-weight:var(--weight-medium);font-size:var(--text-sm);margin-bottom:var(--space-4)" id="ai-processing-label">Reading file…</div>
+                <div class="ai-progress-wrap">
+                    <div class="ai-progress-track">
+                        <div class="ai-progress-fill" id="ai-progress-fill"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div class="ai-progress-step" id="ai-progress-step">Preparing…</div>
+                        <div class="ai-progress-step" id="ai-progress-pct">0%</div>
+                    </div>
+                </div>
+                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-4)">A Puter sign-in popup may appear during this step</div>
             </div>
             <div id="ai-step-preview" style="display:none;flex-direction:column;gap:var(--space-3)">
                 <div style="display:flex;align-items:center;justify-content:space-between">
@@ -1809,6 +1820,7 @@ function clearAiFile() {
 function resetAiImport(clearFile) {
     if(clearFile) { aiSelectedFile=null; document.getElementById('ai-file-input').value=''; document.getElementById('ai-drop-zone').classList.remove('has-file','dragover'); document.getElementById('ai-dropzone-label').style.display=''; document.getElementById('ai-file-tag-wrap').style.display='none'; }
     aiGeneratedSections=[];
+    resetProgress();
     document.getElementById('ai-process-btn').disabled=!aiSelectedFile;
     ['upload','processing','preview','error'].forEach(s=>{ const el=document.getElementById('ai-step-'+s); if(el) el.style.display=s==='upload'?'':'none'; if(s==='preview'&&el) el.style.flexDirection='column'; });
     document.getElementById('ai-modal-footer').style.display=''; document.getElementById('ai-save-footer').style.display='none';
@@ -1816,38 +1828,109 @@ function resetAiImport(clearFile) {
 function showAiStep(step) {
     ['upload','processing','preview','error'].forEach(s=>{ const el=document.getElementById('ai-step-'+s); if(!el) return; el.style.display=s===step?(s==='processing'||s==='preview'?'flex':''):'none'; if(s==='preview') el.style.flexDirection='column'; });
 }
-function setProcessingLabel(t) { document.getElementById('ai-processing-label').textContent=t; }
+// ── Progress bar helpers ──────────────────────────────────────
+let _progressTarget = 0, _progressCurrent = 0, _progressTimer = null;
+
+function setProgress(pct, label, step) {
+    _progressTarget = pct;
+    if (label) document.getElementById('ai-processing-label').textContent = label;
+    if (step)  document.getElementById('ai-progress-step').textContent = step;
+    _tickProgress();
+}
+
+function _tickProgress() {
+    if (_progressTimer) clearInterval(_progressTimer);
+    _progressTimer = setInterval(() => {
+        const gap = _progressTarget - _progressCurrent;
+        if (gap <= 0) { clearInterval(_progressTimer); return; }
+        // Ease towards target — slows as it approaches
+        _progressCurrent += Math.max(0.3, gap * 0.06);
+        if (_progressCurrent >= _progressTarget) {
+            _progressCurrent = _progressTarget;
+            clearInterval(_progressTimer);
+        }
+        const fill = document.getElementById('ai-progress-fill');
+        const pct  = document.getElementById('ai-progress-pct');
+        if (fill) fill.style.width = _progressCurrent.toFixed(1) + '%';
+        if (pct)  pct.textContent  = Math.round(_progressCurrent) + '%';
+    }, 30);
+}
+
+function resetProgress() {
+    if (_progressTimer) clearInterval(_progressTimer);
+    _progressTarget = 0; _progressCurrent = 0;
+    const fill = document.getElementById('ai-progress-fill');
+    const pct  = document.getElementById('ai-progress-pct');
+    if (fill) fill.style.width = '0%';
+    if (pct)  pct.textContent  = '0%';
+    document.getElementById('ai-progress-step').textContent = 'Preparing…';
+    document.getElementById('ai-processing-label').textContent = 'Reading file…';
+}
 
 async function startAiProcessing() {
-    if(!aiSelectedFile) return;
-    showAiStep('processing'); document.getElementById('ai-modal-footer').style.display='none';
+    if (!aiSelectedFile) return;
+    resetProgress();
+    showAiStep('processing');
+    document.getElementById('ai-modal-footer').style.display = 'none';
+
     try {
         await loadPuter();
-        const ext=aiSelectedFile.name.split('.').pop().toLowerCase();
-        let content=null, isImage=false;
-        setProcessingLabel('Reading file…');
-        if(['jpg','jpeg','png'].includes(ext)) { content=aiSelectedFile; isImage=true; }
-        else if(ext==='pdf') { setProcessingLabel('Extracting text from PDF…'); await loadPdfJs(); content=await extractPdfText(aiSelectedFile); }
-        else if(['docx','doc'].includes(ext)) { setProcessingLabel('Extracting text from document…'); await loadMammoth(); content=await extractDocxText(aiSelectedFile); }
-        else { content=await readFileAsText(aiSelectedFile); }
-        if(!content||(typeof content==='string'&&content.trim().length<5)) throw new Error('Could not extract readable content from this file.');
-        setProcessingLabel('Sending to AI…');
-        const pts=parseInt(document.getElementById('ai-default-points').value)||1;
-        const sections=isImage?await callPuterWithImage(content,pts):await callPuterWithText(content,pts);
-        if(!sections||sections.length===0) throw new Error('No sections or questions were detected.');
-        const totalQ=sections.reduce((sum,s)=>sum+s.questions.length,0);
-        if(totalQ===0) throw new Error('No questions were detected.');
-        aiGeneratedSections=sections;
+        const ext = aiSelectedFile.name.split('.').pop().toLowerCase();
+        let content = null, isImage = false;
+
+        // Step 1 — Read file (0 → 15%)
+        setProgress(15, 'Reading file…', 'Loading file from disk');
+        if (['jpg','jpeg','png'].includes(ext)) {
+            content = aiSelectedFile; isImage = true;
+        } else if (ext === 'pdf') {
+            // Step 2 — Extract PDF (15 → 30%)
+            setProgress(30, 'Extracting text…', 'Parsing PDF pages');
+            await loadPdfJs();
+            content = await extractPdfText(aiSelectedFile);
+        } else if (['docx','doc'].includes(ext)) {
+            // Step 2 — Extract DOCX (15 → 30%)
+            setProgress(30, 'Extracting text…', 'Parsing document');
+            await loadMammoth();
+            content = await extractDocxText(aiSelectedFile);
+        } else {
+            content = await readFileAsText(aiSelectedFile);
+        }
+
+        if (!content || (typeof content === 'string' && content.trim().length < 5))
+            throw new Error('Could not extract readable content from this file.');
+
+        // Step 3 — Send to AI (→ 40%)
+        setProgress(40, 'Sending to AI…', 'Uploading content to Puter AI');
+
+        // Step 4 — AI processing (40 → 88%, slow crawl while we wait)
+        const pts = parseInt(document.getElementById('ai-default-points').value) || 1;
+        // Kick off slow crawl to 88% — will snap to 100 when done
+        setProgress(88, 'AI is processing…', 'Generating questions from your file');
+
+        const sections = isImage
+            ? await callPuterWithImage(content, pts)
+            : await callPuterWithText(content, pts);
+
+        // Step 5 — Finalizing (88 → 100%)
+        setProgress(100, 'Finalizing…', 'Parsing AI response');
+        await new Promise(r => setTimeout(r, 350)); // let bar finish
+
+        if (!sections || sections.length === 0) throw new Error('No sections or questions were detected.');
+        const totalQ = sections.reduce((sum, s) => sum + s.questions.length, 0);
+        if (totalQ === 0) throw new Error('No questions were detected.');
+
+        aiGeneratedSections = sections;
         renderAiPreview(sections);
         showAiStep('preview');
-        document.getElementById('ai-preview-count').textContent=
-            `${sections.length} section${sections.length!==1?'s':''}, ${totalQ} question${totalQ!==1?'s':''} detected`;
-        document.getElementById('ai-save-footer').style.display='';
-    } catch(err) {
-        showAiStep('error'); document.getElementById('ai-modal-footer').style.display='';
-        let msg=typeof err==='string'?err:err?.message||err?.error||'Unknown error';
-        document.getElementById('ai-error-msg').textContent=msg;
-        document.getElementById('ai-process-btn').disabled=!aiSelectedFile;
+        document.getElementById('ai-preview-count').textContent =
+            `${sections.length} section${sections.length !== 1 ? 's' : ''}, ${totalQ} question${totalQ !== 1 ? 's' : ''} detected`;
+        document.getElementById('ai-save-footer').style.display = '';
+    } catch (err) {
+        showAiStep('error');
+        document.getElementById('ai-modal-footer').style.display = '';
+        let msg = typeof err === 'string' ? err : err?.message || err?.error || 'Unknown error';
+        document.getElementById('ai-error-msg').textContent = msg;
+        document.getElementById('ai-process-btn').disabled = !aiSelectedFile;
     }
 }
 
