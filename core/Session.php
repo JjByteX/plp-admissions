@@ -27,16 +27,33 @@ class Session
         self::regenerateIfNeeded();
     }
 
-    // -- Inactivity timeout ------------------------------------------
+    // -- Inactivity timeout — role-aware ----------------------------
     private static function enforceTimeout(): void
     {
         if (isset($_SESSION['_last_activity'])) {
-            if (time() - $_SESSION['_last_activity'] > SESSION_LIFETIME) {
+            $role    = $_SESSION['user_role'] ?? 'student';
+            $limit   = in_array($role, ['staff', 'admin'], true)
+                ? SESSION_LIFETIME_STAFF
+                : SESSION_LIFETIME_STUDENT;
+            $elapsed = time() - $_SESSION['_last_activity'];
+            if ($elapsed > $limit) {
+                self::flash('timeout', '1');
                 self::destroy();
                 return;
             }
         }
         $_SESSION['_last_activity'] = time();
+    }
+
+    // -- Remaining session seconds (for JS warning timer) -----------
+    public static function secondsRemaining(): int
+    {
+        if (!isset($_SESSION['_last_activity'])) return 0;
+        $role  = $_SESSION['user_role'] ?? 'student';
+        $limit = in_array($role, ['staff', 'admin'], true)
+            ? SESSION_LIFETIME_STAFF
+            : SESSION_LIFETIME_STUDENT;
+        return max(0, $limit - (time() - $_SESSION['_last_activity']));
     }
 
     // -- Regenerate ID periodically to limit fixation attacks --------

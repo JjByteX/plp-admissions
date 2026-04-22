@@ -232,5 +232,114 @@ $isStudent    = ($userRole === 'student');
     <?php endif; ?>
 </script>
 
+<?php if (Auth::check()): ?>
+<!-- ── Session timeout warning ──────────────────────────────── -->
+<div id="session-timeout-modal" style="
+    display:none;position:fixed;inset:0;z-index:9999;
+    background:rgba(0,0,0,.55);backdrop-filter:blur(4px);
+    align-items:center;justify-content:center;">
+    <div style="
+        background:var(--bg-elevated);border:1px solid var(--border);
+        border-radius:var(--radius-xl);padding:var(--space-8);
+        max-width:360px;width:90%;text-align:center;
+        box-shadow:0 24px 48px rgba(0,0,0,.3)">
+        <div style="width:48px;height:48px;border-radius:50%;
+                    background:var(--warning-bg,#fef3c7);
+                    display:flex;align-items:center;justify-content:center;
+                    margin:0 auto var(--space-4)">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
+                <path stroke="#d97706" stroke-width="2" stroke-linecap="round"
+                      d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+        </div>
+        <div style="font-weight:var(--weight-semibold);font-size:var(--text-lg);margin-bottom:var(--space-2)">
+            Session Expiring Soon
+        </div>
+        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-6)">
+            You'll be logged out in <strong id="session-countdown"></strong> due to inactivity.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-3)">
+            <button onclick="keepAlive()" class="btn btn-primary" style="width:100%">
+                Stay Logged In
+            </button>
+            <button onclick="logOutNow()" class="btn btn-ghost" style="width:100%;color:var(--text-tertiary)">
+                Log Out Now
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const WARN_BEFORE   = <?= SESSION_WARN_BEFORE ?>;         // seconds before expiry to warn
+    let secsRemaining   = <?= Session::secondsRemaining() ?>; // seconds left right now
+    let countdownTimer  = null;
+    let warnTimer       = null;
+    const modal         = document.getElementById('session-timeout-modal');
+    const countdownEl   = document.getElementById('session-countdown');
+
+    function fmtTime(s) {
+        const m = Math.floor(s / 60), r = s % 60;
+        return m > 0 ? `${m}m ${r}s` : `${r}s`;
+    }
+
+    function showWarning() {
+        let secs = WARN_BEFORE;
+        countdownEl.textContent = fmtTime(secs);
+        modal.style.display = 'flex';
+        countdownTimer = setInterval(() => {
+            secs--;
+            if (secs <= 0) {
+                clearInterval(countdownTimer);
+                window.location.href = '<?= url('/login') ?>';
+            } else {
+                countdownEl.textContent = fmtTime(secs);
+            }
+        }, 1000);
+    }
+
+    function scheduleWarning() {
+        if (warnTimer) clearTimeout(warnTimer);
+        const fireIn = Math.max(0, (secsRemaining - WARN_BEFORE) * 1000);
+        warnTimer = setTimeout(showWarning, fireIn);
+    }
+
+    async function keepAlive() {
+        modal.style.display = 'none';
+        clearInterval(countdownTimer);
+        try {
+            const res  = await fetch('<?= url('/auth/keepalive') ?>', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest',
+                           'Content-Type': 'application/x-www-form-urlencoded' },
+                body: '_csrf=<?= csrf_token() ?>'
+            });
+            const data = await res.json();
+            secsRemaining = data.seconds_remaining ?? secsRemaining;
+        } catch (e) { /* ignore */ }
+        scheduleWarning();
+    }
+
+    function logOutNow() {
+        window.location.href = '<?= url('/logout') ?>';
+    }
+
+    // Expose so login page can trigger the "session expired" modal
+    window.showTimeoutModal = function () {
+        countdownEl.textContent = '0s';
+        modal.style.display = 'flex';
+        // Replace buttons with just a "Log In Again" button
+        modal.querySelector('div[style*="flex-direction:column"]').innerHTML =
+            `<a href="<?= url('/login') ?>" class="btn btn-primary" style="width:100%">Log In Again</a>`;
+        modal.querySelector('#session-countdown').closest('div').textContent =
+            'Your session expired due to inactivity. Please log in again.';
+        modal.querySelector('div[style*="font-weight"]').textContent = 'Session Expired';
+    };
+
+    scheduleWarning();
+})();
+</script>
+<?php endif; ?>
+
 </body>
 </html>

@@ -11,7 +11,9 @@ if (Auth::check()) {
     header("Location: " . Auth::homeUrl()); exit;
 }
 
-$errors = [];
+$errors     = [];
+$didTimeout = Session::getFlash('timeout');
+
 $email  = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -155,6 +157,15 @@ function togglePw(id, btn) {
     btn.querySelector('svg').style.opacity = isText ? '1' : '0.5';
 }
 </script>
+
+<?php if ($didTimeout): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    showTimeoutModal();
+});
+</script>
+<?php endif; ?>
+
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Sign In';

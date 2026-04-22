@@ -15,6 +15,7 @@ $router->post('/login',           'auth/login');
 $router->get( '/register',        'auth/register');
 $router->post('/register',        'auth/register');
 $router->get( '/logout',          'auth/logout');
+$router->post('/auth/keepalive',  'auth/keepalive');
 $router->get( '/forgot-password', 'auth/forgot_password');
 $router->post('/forgot-password', 'auth/forgot_password');
 $router->get( '/reset-password',  'auth/reset_password');

@@ -31,7 +31,9 @@ if (APP_ENV === 'production') {
 
 // -- Session -----------------------------------------------------
 define('SESSION_NAME',    'plp_session');
-define('SESSION_LIFETIME', 7200);
+define('SESSION_LIFETIME_STUDENT', 1800);   // 30 min
+define('SESSION_LIFETIME_STAFF',   7200);   // 2 hours
+define('SESSION_WARN_BEFORE',       300);   // warn 5 min before expiry
 
 // -- File uploads ------------------------------------------------
 define('MAX_UPLOAD_BYTES', 5 * 1024 * 1024);
