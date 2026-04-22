@@ -107,10 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'delete_exam':
             $examId = (int)($_POST['exam_id'] ?? 0);
             if (!$examId) { $errors[] = 'Invalid exam.'; break; }
-            $db->prepare('DELETE FROM question_choices WHERE question_id IN (SELECT id FROM questions WHERE exam_id=?)')->execute([$examId]);
-            $db->prepare('DELETE FROM questions WHERE exam_id=?')->execute([$examId]);
-            $db->prepare('DELETE FROM exam_sections WHERE exam_id=?')->execute([$examId]);
-            $db->prepare('DELETE FROM exam_results WHERE exam_id=?')->execute([$examId]);
+            // CASCADE constraints on exam_sections, questions, and exam_results
+            // handle child rows automatically — just delete the parent.
             $db->prepare('DELETE FROM exams WHERE id=?')->execute([$examId]);
             audit_log('exam_deleted', "Deleted exam ID {$examId}", 'exam', $examId);
             header('Location: ' . url('/staff/exam'));
