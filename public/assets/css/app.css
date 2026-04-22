@@ -275,14 +275,14 @@ button { cursor: pointer; }
     color: var(--text-tertiary);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    padding: var(--space-4) var(--space-5) var(--space-2);
+    padding: var(--space-5) var(--space-5) var(--space-2);
 }
 
 .nav-item {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-2) var(--space-5);
+    padding: 10px var(--space-5);
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
     color: var(--text-secondary);
@@ -290,6 +290,7 @@ button { cursor: pointer; }
     transition: color var(--transition-fast), background-color var(--transition-fast);
     text-decoration: none;
     position: relative;
+    line-height: 1.4;
 }
 
 .nav-item:hover {
@@ -307,16 +308,16 @@ button { cursor: pointer; }
     content: '';
     position: absolute;
     left: 0;
-    top: 4px;
-    bottom: 4px;
+    top: 6px;
+    bottom: 6px;
     width: 3px;
     background: var(--accent);
     border-radius: 0 var(--radius-full) var(--radius-full) 0;
 }
 
 .nav-item svg {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
 }
 
