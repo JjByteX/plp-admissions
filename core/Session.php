@@ -22,9 +22,69 @@ class Session
             'samesite' => 'Lax',
         ]);
 
+        self::registerDbHandler();
         session_start();
         self::enforceTimeout();
         self::regenerateIfNeeded();
+    }
+
+    // -- DB-backed session handler (required for Vercel serverless) -
+    // Vercel containers do not share /tmp, so file-based sessions are
+    // lost between requests. Storing sessions in MySQL fixes this.
+    private static function registerDbHandler(): void
+    {
+        session_set_save_handler(
+            // open
+            fn($path, $name) => true,
+            // close
+            fn() => true,
+            // read
+            function (string $id): string {
+                try {
+                    $stmt = db()->prepare('SELECT payload FROM sessions WHERE id = ?');
+                    $stmt->execute([$id]);
+                    return (string)($stmt->fetchColumn() ?: '');
+                } catch (\Throwable) {
+                    return '';
+                }
+            },
+            // write
+            function (string $id, string $data): bool {
+                try {
+                    db()->prepare('
+                        INSERT INTO sessions (id, payload, last_activity)
+                        VALUES (?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            payload       = VALUES(payload),
+                            last_activity = VALUES(last_activity)
+                    ')->execute([$id, $data, time()]);
+                    return true;
+                } catch (\Throwable) {
+                    return false;
+                }
+            },
+            // destroy
+            function (string $id): bool {
+                try {
+                    db()->prepare('DELETE FROM sessions WHERE id = ?')->execute([$id]);
+                    return true;
+                } catch (\Throwable) {
+                    return false;
+                }
+            },
+            // gc
+            function (int $maxLifetime): int|false {
+                try {
+                    $stmt = db()->prepare('DELETE FROM sessions WHERE last_activity < ?');
+                    $stmt->execute([time() - $maxLifetime]);
+                    return $stmt->rowCount();
+                } catch (\Throwable) {
+                    return false;
+                }
+            }
+        );
+
+        ini_set('session.gc_maxlifetime', (string) max(SESSION_LIFETIME_STAFF, SESSION_LIFETIME_STUDENT));
     }
 
     // -- Inactivity timeout — role-aware ----------------------------
