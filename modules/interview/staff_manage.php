@@ -33,10 +33,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'create_slot') {
-        $date    = trim($_POST['slot_date']     ?? '');
-        $time    = trim($_POST['slot_time']     ?? '') ?: null;
-        $endTime = trim($_POST['slot_end_time'] ?? '') ?: null;
+        $date     = trim($_POST['slot_date']     ?? '');
+        $time     = trim($_POST['slot_time']     ?? '') ?: null;
+        $endTime  = trim($_POST['slot_end_time'] ?? '') ?: null;
         $capacity = max(1, (int)($_POST['capacity'] ?? 30));
+
+        // Department defaults to the staff's own department.  Admins (or
+        // cross-department staff) may override via a dropdown.
+        $slotDept = trim($_POST['department'] ?? '');
+        if ($slotDept === '') {
+            $slotDept = user_department($staffId);
+        } elseif (!in_array($slotDept, departments_list(), true)) {
+            $errors[] = 'Invalid department selected.';
+        }
 
         if (!$date) {
             $errors[] = 'Please select a date.';
@@ -44,18 +53,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Date cannot be in the past.';
         } elseif ($time && $endTime && $endTime <= $time) {
             $errors[] = 'End time must be after the start time.';
-        } else {
+        } elseif (empty($errors)) {
             try {
                 $db->prepare(
-                    'INSERT INTO interview_slots (slot_date, slot_time, end_time, capacity, created_by)
-                     VALUES (?, ?, ?, ?, ?)'
-                )->execute([$date, $time, $endTime, $capacity, $staffId]);
-                $success[] = 'Session added for ' . format_date($date) . '.';
+                    'INSERT INTO interview_slots
+                        (slot_date, slot_time, end_time, capacity, department, created_by)
+                     VALUES (?, ?, ?, ?, ?, ?)'
+                )->execute([$date, $time, $endTime, $capacity, $slotDept, $staffId]);
+                $newSlotId = (int)$db->lastInsertId();
+                audit_log(
+                    'interview_slot_created',
+                    "Created slot #{$newSlotId} on {$date} for "
+                        . ($slotDept !== '' ? $slotDept : 'any department'),
+                    'interview_slot',
+                    $newSlotId
+                );
+
+                // Auto-assign pending applicants to the new (and any
+                // other open) department slot(s).  Students never book
+                // their own slot — this is how assignment happens.
+                $assigned = 0;
+                try {
+                    $assigned = bulk_assign_pending_applicants(
+                        $slotDept !== '' ? $slotDept : null,
+                        $staffId
+                    );
+                } catch (Throwable $e) {
+                    error_log('bulk_assign after create_slot failed: ' . $e->getMessage());
+                }
+
+                $success[] = 'Session added for ' . format_date($date) . '.'
+                    . ($assigned > 0
+                        ? " {$assigned} pending applicant(s) were automatically assigned."
+                        : '');
             } catch (PDOException) {
                 $errors[] = 'Could not create session. Please try again.';
             }
         }
     }
+
 }
 
 // ----------------------------------------------------------------
@@ -163,9 +199,14 @@ ob_start();
         </a>
         <a href="?past=1"
            style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
-                  text-decoration:none;
+                  text-decoration:none;border-right:1px solid var(--border);
                   <?= $showPast ? 'background:var(--bg-subtle);color:var(--text-primary);font-weight:var(--weight-medium)' : 'color:var(--text-secondary)' ?>">
             Past
+        </a>
+        <a href="<?= url('/staff/interviews/absent') ?>"
+           style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
+                  text-decoration:none;color:var(--text-secondary)">
+            Absent
         </a>
     </div>
 
@@ -321,6 +362,11 @@ ob_start();
                     <!-- Actions -->
                     <div style="display:flex;align-items:center;gap:var(--space-1)">
 
+                        <a href="<?= url('/staff/interviews/' . $slot['id'] . '/roster') ?>"
+                           class="btn btn-ghost btn-sm">
+                            Roster (<?= $booked ?>)
+                        </a>
+
                         <?php if (!$isExpired): ?>
                         <form method="POST" action="<?= url('/staff/interviews/' . $slot['id']) ?>">
                             <?= csrf_field() ?>
@@ -399,7 +445,29 @@ ob_start();
                 <div>
                     <label class="form-label">Capacity <span style="color:var(--error)">*</span></label>
                     <input type="number" name="capacity" class="form-control"
-                           value="30" min="1" max="500" required>
+                           value="<?= INTERVIEW_DAILY_CAP ?>" min="1" max="500" required>
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
+                        Recommended: 40–50 per day. Admin-configured max: <?= (int) school_setting('interview_daily_cap', INTERVIEW_DAILY_CAP) ?>.
+                    </p>
+                </div>
+
+                <div>
+                    <label class="form-label">
+                        Department / College
+                        <span style="color:var(--text-tertiary);font-weight:400"> — auto-assignment target</span>
+                    </label>
+                    <?php $myDept = user_department($staffId); ?>
+                    <select name="department" class="form-control">
+                        <option value="">Use my department (<?= e($myDept ?: 'any') ?>)</option>
+                        <?php foreach (departments_list() as $deptName): ?>
+                            <option value="<?= e($deptName) ?>" <?= $deptName === $myDept ? 'selected' : '' ?>>
+                                <?= e($deptName) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
+                        The auto-scheduler will only assign applicants from this college to the slot.
+                    </p>
                 </div>
 
             </div>

@@ -25,6 +25,19 @@ $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $_examResult = $stmt->fetch() ?: null;
 
+// Course suggestion from staff
+$suggestion = null;
+try {
+    $stmt = $db->prepare(
+        'SELECT cs.*, u.name AS staff_name
+         FROM course_suggestions cs
+         LEFT JOIN users u ON u.id = cs.suggested_by
+         WHERE cs.applicant_id = ? LIMIT 1'
+    );
+    $stmt->execute([$applicantId]);
+    $suggestion = $stmt->fetch() ?: null;
+} catch (\Throwable $e) {}
+
 $stmt = $db->prepare('SELECT q.* FROM interview_queue q WHERE q.applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $_interviewSlot = $stmt->fetch() ?: null;
@@ -86,6 +99,77 @@ ob_start();
                 </div>
             <?php endif; ?>
         </div>
+
+        <!-- Exam score breakdown (always shown if available) -->
+        <?php if ($_examResult): ?>
+        <?php
+            $eRank   = $_examResult['rank_score'] > 0 ? (int)$_examResult['rank_score']
+                       : score_to_rank((int)$_examResult['score'], (int)($_examResult['total_items'] ?: 1));
+            $eTier   = rank_tier_info($eRank);
+            $ePassed = $_examResult['passed'] !== null ? (bool)$_examResult['passed']
+                       : exam_passed((int)$_examResult['score'], (int)($_examResult['total_items'] ?: 1), $applicant['course_applied']);
+            $ePct    = $_examResult['total_items'] > 0 ? round(($_examResult['score'] / $_examResult['total_items']) * 100) : 0;
+        ?>
+        <div style="background:var(--neutral-50);border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
+            <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-3)">Entrance Exam Result</div>
+            <div style="display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap">
+                <!-- Rank circle -->
+                <div style="width:56px;height:56px;border-radius:50%;
+                            background:<?= $eTier['bg'] ?>;border:2px solid <?= $eTier['color'] ?>;
+                            display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">
+                    <span style="font-size:1.3rem;font-weight:var(--weight-bold);color:<?= $eTier['color'] ?>;line-height:1"><?= $eRank ?></span>
+                    <span style="font-size:9px;color:<?= $eTier['color'] ?>">/10</span>
+                </div>
+                <div style="flex:1">
+                    <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:4px;flex-wrap:wrap">
+                        <span style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">
+                            <?= (int)$_examResult['score'] ?> / <?= (int)$_examResult['total_items'] ?> &nbsp;(<?= $ePct ?>%)
+                        </span>
+                        <span style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:<?= $eTier['color'] ?>">
+                            <?= $eTier['label'] ?> Tier
+                        </span>
+                        <?php if ($ePassed): ?>
+                            <span style="font-size:var(--text-xs);color:#22c55e;font-weight:var(--weight-semibold)">✓ Passed</span>
+                        <?php else: ?>
+                            <span style="font-size:var(--text-xs);color:#ef4444;font-weight:var(--weight-semibold)">✗ Did not pass</span>
+                        <?php endif; ?>
+                    </div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                        Course: <?= e($applicant['course_applied']) ?> &nbsp;·&nbsp;
+                        Passing rank: ≥ <?= get_pass_threshold($applicant['course_applied']) ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Course suggestion from staff -->
+        <?php if ($suggestion && $suggestion['status'] === 'pending'): ?>
+        <div style="border:1.5px solid #f59e0b;background:#fffbeb;border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
+            <div style="display:flex;align-items:flex-start;gap:var(--space-3)">
+                <div style="width:36px;height:36px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path stroke="#f59e0b" stroke-width="2" stroke-linecap="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3M6.343 6.343l-.707-.707M12 21a9 9 0 100-18 9 9 0 000 18z"/></svg>
+                </div>
+                <div style="flex:1">
+                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:4px">Course Suggestion from Admissions</div>
+                    <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">
+                        The admissions office has suggested an alternative course based on your exam results:
+                    </p>
+                    <div style="background:white;border:1px solid #fde68a;border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-3)">
+                        <?= e($suggestion['suggested_course']) ?>
+                    </div>
+                    <?php if ($suggestion['note']): ?>
+                    <p style="font-size:var(--text-xs);color:var(--text-secondary);font-style:italic;margin-bottom:var(--space-3)">
+                        "<?= e($suggestion['note']) ?>"
+                    </p>
+                    <?php endif; ?>
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                        Please visit the admissions office to discuss this recommendation and update your application if you wish to proceed.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 
 
     </div>

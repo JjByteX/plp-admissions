@@ -1,10 +1,14 @@
 <?php
 // ============================================================
 // config/db.php
-// Database connection — update credentials for InfinityFree
+// Works for both:
+//   Local XAMPP  → uses localhost / root / no password
+//   Vercel       → reads DB_HOST, DB_NAME, DB_USER, DB_PASS,
+//                  DB_PORT env vars set in Vercel dashboard
 // ============================================================
 
 define('DB_HOST',    getenv('DB_HOST')    ?: 'localhost');
+define('DB_PORT',    getenv('DB_PORT')    ?: '3306');
 define('DB_NAME',    getenv('DB_NAME')    ?: 'plp_admissions');
 define('DB_USER',    getenv('DB_USER')    ?: 'root');
 define('DB_PASS',    getenv('DB_PASS')    ?: '');
@@ -21,7 +25,7 @@ function db(): PDO
     $dsn = sprintf(
         'mysql:host=%s;port=%s;dbname=%s;charset=%s',
         DB_HOST,
-        getenv('DB_PORT') ?: '3306',
+        DB_PORT,
         DB_NAME,
         DB_CHARSET
     );
@@ -32,6 +36,12 @@ function db(): PDO
         PDO::ATTR_EMULATE_PREPARES   => false,
         PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
     ];
+
+    // Aiven (and other cloud DBs) require SSL — enable when not on localhost
+    if (DB_HOST !== 'localhost' && DB_HOST !== '127.0.0.1') {
+        $options[PDO::MYSQL_ATTR_SSL_CA]     = true;
+        $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = false;
+    }
 
     try {
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);

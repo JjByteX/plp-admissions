@@ -1,154 +1,191 @@
 <?php
 // ============================================================
 // modules/auth/staff/dashboard.php
-// Staff management overview
+// Staff dashboard — pipeline bars with visible left-side labels
 // ============================================================
+require_once ROOT_PATH . '/core/Auth.php';
+Auth::requireRole(ROLE_STAFF);
 
-require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
-
-$pdo         = db();
-$schoolYear  = school_setting('current_school_year');
-
-// Aggregate counts
-$counts = $pdo->prepare(
+// ── Fetch summary counts ─────────────────────────────────────
+$stats = db()->query(
     "SELECT
-        COUNT(*)                                          AS total,
-        SUM(overall_status = 'pending')                  AS pending,
-        SUM(overall_status = 'documents')                AS documents,
-        SUM(overall_status = 'exam')                     AS exam,
-        SUM(overall_status = 'interview')                AS interview,
-        SUM(overall_status = 'released')                 AS released
-     FROM applicants WHERE school_year = ?"
-);
-$counts->execute([$schoolYear]);
-$stats = $counts->fetch();
+       COUNT(*)                                          AS total,
 
-// Documents awaiting review
-$pendingDocs = $pdo->prepare(
-    "SELECT COUNT(*) FROM documents d
-     JOIN applicants a ON a.id = d.applicant_id
-     WHERE d.status = 'uploaded' AND a.school_year = ?"
-);
-$pendingDocs->execute([$schoolYear]);
-$docsToReview = (int) $pendingDocs->fetchColumn();
+       /* pipeline steps */
+       SUM(doc_status IN ('uploaded','under_review','approved'))  AS docs_submitted,
+       SUM(doc_status = 'approved')                              AS docs_approved,
+       SUM(exam_score IS NOT NULL)                               AS exam_taken,
+       SUM(interview_status IN ('scheduled','completed'))        AS interviewed,
+       SUM(result IN ('accepted','waitlisted','rejected'))       AS results_released,
 
-// Upcoming interviews today
-$todaySlots = (int) $pdo->query(
-    "SELECT COUNT(*) FROM interview_slots WHERE slot_date = CURDATE() AND status = 'scheduled'"
-)->fetchColumn();
+       /* applicant types */
+       SUM(applicant_type = 'freshman')                          AS cnt_freshman,
+       SUM(applicant_type = 'transferee')                        AS cnt_transferee,
+       SUM(applicant_type = 'foreign')                           AS cnt_foreign,
 
-// Recent applicants
-$recent = $pdo->prepare(
-    "SELECT u.name, a.course_applied, a.applicant_type, a.overall_status, a.created_at
-     FROM applicants a JOIN users u ON u.id = a.user_id
-     WHERE a.school_year = ?
-     ORDER BY a.created_at DESC LIMIT 8"
-);
-$recent->execute([$schoolYear]);
-$recentApplicants = $recent->fetchAll();
+       /* result breakdown */
+       SUM(result = 'accepted')                                  AS cnt_accepted,
+       SUM(result = 'waitlisted')                                AS cnt_waitlisted,
+       SUM(result = 'rejected')                                  AS cnt_rejected
+     FROM applicants"
+)->fetch(PDO::FETCH_ASSOC);
 
-ob_start();
+// Document-status breakdown (separate query for clarity)
+$docStats = db()->query(
+    "SELECT doc_status, COUNT(*) AS cnt
+     FROM   applicants
+     WHERE  doc_status IS NOT NULL
+     GROUP  BY doc_status"
+)->fetchAll(PDO::FETCH_KEY_PAIR);
+
+// Convenience helper: percentage relative to total registrants
+function pct(int $part, int $total): int {
+    return $total > 0 ? (int) round($part / $total * 100) : 0;
+}
+
+$total = (int) $stats['total'];
+
+// Build pipeline rows (label, count, colour)
+$pipeline = [
+    ['label' => 'Registered',        'count' => $total,                          'color' => '#378ADD'],
+    ['label' => 'Docs submitted',     'count' => (int) $stats['docs_submitted'],  'color' => '#1D9E75'],
+    ['label' => 'Docs approved',      'count' => (int) $stats['docs_approved'],   'color' => '#1D9E75'],
+    ['label' => 'Exam taken',         'count' => (int) $stats['exam_taken'],      'color' => '#BA7517'],
+    ['label' => 'Interviewed',        'count' => (int) $stats['interviewed'],     'color' => '#7F77DD'],
+    ['label' => 'Results released',   'count' => (int) $stats['results_released'],'color' => '#E24B4A'],
+];
+
+$docPipeline = [
+    ['label' => 'Approved',      'count' => (int) ($docStats['approved']     ?? 0), 'color' => '#639922'],
+    ['label' => 'Under review',  'count' => (int) ($docStats['under_review'] ?? 0), 'color' => '#BA7517'],
+    ['label' => 'Rejected',      'count' => (int) ($docStats['rejected']     ?? 0), 'color' => '#E24B4A'],
+];
+
+$typePipeline = [
+    ['label' => 'Freshman',   'count' => (int) $stats['cnt_freshman'],   'color' => '#378ADD'],
+    ['label' => 'Transferee', 'count' => (int) $stats['cnt_transferee'], 'color' => '#7F77DD'],
+    ['label' => 'Foreign',    'count' => (int) $stats['cnt_foreign'],    'color' => '#D4537E'],
+];
+
+$activeNav = 'dashboard';
+$pageTitle = 'Dashboard';
+include VIEWS_PATH . '/layouts/app.php';
 ?>
 
-<!-- Metrics -->
-<div class="metrics-row">
-    <div class="metric-card">
-        <div class="metric-label">Total applicants</div>
-        <div class="metric-value"><?= (int)$stats['total'] ?></div>
-        <div class="metric-sub"><?= e($schoolYear) ?></div>
+<div class="page-header">
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-subtitle">
+        Academic Year <?= date('Y') ?>–<?= date('Y') + 1 ?> &middot; Admission overview
+    </p>
+</div>
+
+<!-- ── Stat cards ───────────────────────────────────────── -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total applicants</div>
+        <div class="stat-value"><?= number_format($total) ?></div>
     </div>
-    <div class="metric-card">
-        <div class="metric-label">Docs to review</div>
-        <div class="metric-value" style="color:var(--warning)"><?= $docsToReview ?></div>
-        <div class="metric-sub">Uploaded, awaiting review</div>
+    <div class="stat-card">
+        <div class="stat-label">Exam takers</div>
+        <div class="stat-value"><?= number_format((int) $stats['exam_taken']) ?></div>
+        <div class="stat-badge badge-blue"><?= pct((int) $stats['exam_taken'], $total) ?>%</div>
     </div>
-    <div class="metric-card">
-        <div class="metric-label">Interviews today</div>
-        <div class="metric-value"><?= $todaySlots ?></div>
-        <div class="metric-sub"><?= date('M j, Y') ?></div>
+    <div class="stat-card">
+        <div class="stat-label">Accepted</div>
+        <div class="stat-value"><?= number_format((int) $stats['cnt_accepted']) ?></div>
+        <div class="stat-badge badge-green"><?= pct((int) $stats['cnt_accepted'], $total) ?>%</div>
     </div>
-    <div class="metric-card">
-        <div class="metric-label">Results released</div>
-        <div class="metric-value"><?= (int)$stats['released'] ?></div>
-        <div class="metric-sub">of <?= (int)$stats['total'] ?> applicants</div>
+    <div class="stat-card">
+        <div class="stat-label">Waitlisted</div>
+        <div class="stat-value"><?= number_format((int) $stats['cnt_waitlisted']) ?></div>
+        <div class="stat-badge badge-amber"><?= pct((int) $stats['cnt_waitlisted'], $total) ?>%</div>
     </div>
 </div>
 
-<!-- Pipeline -->
-<div class="card" style="margin-bottom:var(--space-6)">
-    <div class="card-header">
-        <div class="card-title">Applicant pipeline</div>
-        <a href="<?= url('/staff/applicants') ?>" class="btn btn-secondary btn-sm">View all</a>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:var(--space-4)">
-        <?php
-        $stages = [
-            ['label' => 'Pending',     'key' => 'pending',    'badge' => 'badge-pending'],
-            ['label' => 'Documents',   'key' => 'documents',  'badge' => 'badge-uploaded'],
-            ['label' => 'Exam',        'key' => 'exam',       'badge' => 'badge-review'],
-            ['label' => 'Interview',   'key' => 'interview',  'badge' => 'badge-review'],
-            ['label' => 'Released',    'key' => 'released',   'badge' => 'badge-approved'],
-        ];
-        foreach ($stages as $s): ?>
-            <div style="text-align:center;padding:var(--space-4);background:var(--bg-subtle);border-radius:var(--radius-md)">
-                <div style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);letter-spacing:-0.03em">
-                    <?= (int)$stats[$s['key']] ?>
+<!-- ── Pipeline charts ────────────────────────────────── -->
+<div class="dashboard-grid">
+
+    <!-- Admission pipeline -->
+    <div class="chart-card">
+        <h2 class="chart-title">Admission pipeline</h2>
+        <div class="bar-list">
+            <?php foreach ($pipeline as $row):
+                $pctVal = pct($row['count'], $total);
+            ?>
+            <div class="bar-row">
+                <span class="bar-label"><?= e($row['label']) ?></span>
+                <div class="bar-track">
+                    <div class="bar-fill"
+                         style="width:<?= $pctVal ?>%; background:<?= $row['color'] ?>"></div>
                 </div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)"><?= $s['label'] ?></div>
+                <span class="bar-count"><?= number_format($row['count']) ?></span>
+                <span class="bar-pct"><?= $pctVal ?>%</span>
             </div>
-        <?php endforeach; ?>
-    </div>
-</div>
-
-<!-- Recent applicants table -->
-<div class="card">
-    <div class="card-header">
-        <div class="card-title">Recent applications</div>
-        <?php if ($docsToReview > 0): ?>
-            <a href="<?= url('/staff/applicants') ?>" class="btn btn-primary btn-sm">
-                Review <?= $docsToReview ?> document<?= $docsToReview !== 1 ? 's' : '' ?>
-            </a>
-        <?php endif; ?>
-    </div>
-    <?php if (empty($recentApplicants)): ?>
-        <p style="font-size:var(--text-sm);color:var(--text-tertiary);padding:var(--space-4) 0">
-            No applicants yet for this school year.
-        </p>
-    <?php else: ?>
-        <div class="table-wrap" style="border:none;border-radius:0;margin:-1px">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Course</th>
-                        <th>Type</th>
-                        <th>Status</th>
-                        <th>Applied</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($recentApplicants as $row): ?>
-                        <tr>
-                            <td style="font-weight:var(--weight-medium)"><?= e($row['name']) ?></td>
-                            <td style="color:var(--text-secondary);font-size:var(--text-xs)"><?= e($row['course_applied']) ?></td>
-                            <td style="text-transform:capitalize"><?= e($row['applicant_type']) ?></td>
-                            <td>
-                                <span class="badge badge-<?= $row['overall_status'] === 'released' ? 'approved' : ($row['overall_status'] === 'pending' ? 'pending' : 'uploaded') ?>">
-                                    <?= ucfirst($row['overall_status']) ?>
-                                </span>
-                            </td>
-                            <td style="color:var(--text-tertiary);font-size:var(--text-xs)"><?= format_date($row['created_at'], 'M j') ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+            <?php endforeach; ?>
         </div>
-    <?php endif; ?>
+    </div>
+
+    <!-- Document status + applicant type -->
+    <div class="chart-card">
+        <h2 class="chart-title">Document status</h2>
+        <div class="bar-list">
+            <?php
+            $docTotal = array_sum(array_column($docPipeline, 'count'));
+            foreach ($docPipeline as $row):
+                $pctVal = pct($row['count'], $docTotal ?: 1);
+            ?>
+            <div class="bar-row">
+                <span class="bar-label"><?= e($row['label']) ?></span>
+                <div class="bar-track">
+                    <div class="bar-fill"
+                         style="width:<?= $pctVal ?>%; background:<?= $row['color'] ?>"></div>
+                </div>
+                <span class="bar-count"><?= number_format($row['count']) ?></span>
+                <span class="bar-pct"><?= $pctVal ?>%</span>
+            </div>
+            <?php endforeach; ?>
+        </div>
+
+        <h2 class="chart-title" style="margin-top:1.25rem">Applicant type</h2>
+        <div class="bar-list">
+            <?php foreach ($typePipeline as $row):
+                $pctVal = pct($row['count'], $total);
+            ?>
+            <div class="bar-row">
+                <span class="bar-label"><?= e($row['label']) ?></span>
+                <div class="bar-track">
+                    <div class="bar-fill"
+                         style="width:<?= $pctVal ?>%; background:<?= $row['color'] ?>"></div>
+                </div>
+                <span class="bar-count"><?= number_format($row['count']) ?></span>
+                <span class="bar-pct"><?= $pctVal ?>%</span>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
 </div>
 
-<?php
-$content   = ob_get_clean();
-$pageTitle = 'Dashboard';
-$activeNav = 'dashboard';
-include VIEWS_PATH . '/layouts/app.php';
+<!-- ── Step summary strip ────────────────────────────────── -->
+<div class="step-strip">
+    <?php
+    $steps = [
+        ['label' => 'Registered', 'count' => $total,                          'color' => '#378ADD'],
+        ['label' => 'Documents',  'count' => (int) $stats['docs_submitted'],  'color' => '#1D9E75'],
+        ['label' => 'Exam',       'count' => (int) $stats['exam_taken'],      'color' => '#BA7517'],
+        ['label' => 'Interview',  'count' => (int) $stats['interviewed'],     'color' => '#7F77DD'],
+        ['label' => 'Results',    'count' => (int) $stats['results_released'],'color' => '#639922'],
+    ];
+    foreach ($steps as $step):
+        $pctVal = pct($step['count'], $total);
+    ?>
+    <div class="step-card">
+        <div class="step-count"><?= number_format($step['count']) ?></div>
+        <div class="step-label"><?= e($step['label']) ?></div>
+        <div class="step-bar">
+            <div class="step-bar-fill"
+                 style="width:<?= $pctVal ?>%; background:<?= $step['color'] ?>"></div>
+        </div>
+    </div>
+    <?php endforeach; ?>
+</div>

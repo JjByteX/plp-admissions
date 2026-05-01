@@ -104,6 +104,42 @@ define('PLP_COURSES', [
     'BS Nursing (BSN)',
 ]);
 
+// -- Departments / Colleges -------------------------------------
+// Keep the canonical name in sync with `departments.name` (DB).
+define('DEPT_CCS', 'College of Computer Studies');
+define('DEPT_CON', 'College of Nursing');
+define('DEPT_CBA', 'College of Business and Accountancy');
+define('DEPT_COE', 'College of Education');
+define('DEPT_CAS', 'College of Arts and Sciences');
+define('DEPT_CEN', 'College of Engineering');
+
+define('PLP_DEPARTMENTS', [
+    DEPT_CCS,
+    DEPT_CON,
+    DEPT_CBA,
+    DEPT_COE,
+    DEPT_CAS,
+    DEPT_CEN,
+]);
+
+// Course → department mapping.  This is the config-level fallback;
+// the `course_departments` DB table is the source of truth once seeded.
+define('COURSE_DEPARTMENT_MAP', [
+    'BS Information Technology (BSIT)'                                  => DEPT_CCS,
+    'BS Computer Science (BSCS)'                                        => DEPT_CCS,
+    'BS Nursing (BSN)'                                                  => DEPT_CON,
+    'BS Accountancy (BSA)'                                              => DEPT_CBA,
+    'BS Business Administration major in Marketing Management (BSBA)'   => DEPT_CBA,
+    'BS Entrepreneurship (BSENT)'                                       => DEPT_CBA,
+    'BS Hospitality Management (BSHM)'                                  => DEPT_CBA,
+    'Bachelor of Elementary Education (BEED)'                           => DEPT_COE,
+    'Bachelor of Secondary Education Major in English (BSED-ENG)'       => DEPT_COE,
+    'Bachelor of Secondary Education Major in Filipino (BSED-FIL)'      => DEPT_COE,
+    'Bachelor of Secondary Education Major in Mathematics (BSED-MATH)'  => DEPT_COE,
+    'AB Psychology (AB Psych)'                                          => DEPT_CAS,
+    'BS Electronics Engineering (BSECE)'                                => DEPT_CEN,
+]);
+
 // -- Strand requirements per course (freshmen only) --------------
 // Applicants should apply only to courses where their SHS strand is applicable.
 define('COURSE_STRAND_MAP', [
@@ -123,6 +159,11 @@ define('COURSE_STRAND_MAP', [
 ]);
 
 // -- All SHS strands (for the registration dropdown) -------------
+// Only strands accepted by at least one course in COURSE_STRAND_MAP are listed.
+// TVL-IA, Arts Track, and Sports Track are valid DepEd strands but PLP currently
+// has no courses that accept them — they have been removed to prevent applicants
+// from hitting a registration dead-end. Add them back here and to COURSE_STRAND_MAP
+// if PLP adds a qualifying course in a future school year.
 define('SHS_STRANDS', [
     'ABM'        => 'ABM — Accountancy, Business and Management',
     'STEM'       => 'STEM — Science, Technology, Engineering and Mathematics',
@@ -131,9 +172,6 @@ define('SHS_STRANDS', [
     'TVL-HE'     => 'TVL — Home Economics',
     'TVL-ICT'    => 'TVL — Information and Communications Technology',
     'TVL-Sports' => 'TVL — Sports',
-    'TVL-IA'     => 'TVL — Industrial Arts',
-    'Arts'       => 'Arts and Design Track',
-    'Sports'     => 'Sports Track',
 ]);
 
 // -- Document status labels -------------------------------------
@@ -150,6 +188,48 @@ define('RESULT_LABELS', [
     'accepted'   => 'Accepted',
     'waitlisted' => 'Waitlisted',
     'rejected'   => 'Rejected',
+]);
+
+// ----------------------------------------------------------------
+// EXAM & INTERVIEW CAPACITY (from client interview)
+// ----------------------------------------------------------------
+define('EXAM_DEFAULT_DURATION',   90);   // 1 hr 30 min default (customizable)
+define('EXAM_ROOM_CAPACITY',      35);   // max applicants per room
+define('EXAM_DAILY_CAP',        3000);   // max applicants per day (all courses)
+define('INTERVIEW_DAILY_CAP',     45);   // max per day (40-50 range; 45 default)
+
+// ----------------------------------------------------------------
+// PER-COURSE PASSING SCORE TIERS
+// Source: client interview — BSIT confirmed; all others use same
+// tier system pending client confirmation of exact passing marks.
+//
+// Ranking tiers (1–10 scale):
+//   High    10, 9, 8, 7  → Passed
+//   Average  6, 5, 4     → Passed
+//   Low      3, 2, 1     → Rejected
+// ----------------------------------------------------------------
+define('SCORE_TIER_HIGH',    ['min' => 7, 'max' => 10, 'label' => 'High',    'verdict' => 'passed']);
+define('SCORE_TIER_AVERAGE', ['min' => 4, 'max' => 6,  'label' => 'Average', 'verdict' => 'passed']);
+define('SCORE_TIER_LOW',     ['min' => 1, 'max' => 3,  'label' => 'Low',     'verdict' => 'rejected']);
+
+// Per-course passing configuration.
+// 'pass_from' = minimum score to pass (scores >= pass_from → Passed).
+// 'confirmed' = true if the client has confirmed the exact threshold.
+// Default: pass_from=4 (Average tier and above pass) per BSIT-confirmed rule.
+define('COURSE_PASSING_SCORES', [
+    'BS Accountancy (BSA)'                                               => ['pass_from' => 4, 'confirmed' => false],
+    'BS Business Administration major in Marketing Management (BSBA)'   => ['pass_from' => 4, 'confirmed' => false],
+    'BS Entrepreneurship (BSENT)'                                        => ['pass_from' => 4, 'confirmed' => false],
+    'BS Hospitality Management (BSHM)'                                   => ['pass_from' => 4, 'confirmed' => false],
+    'Bachelor of Elementary Education (BEED)'                            => ['pass_from' => 4, 'confirmed' => false],
+    'Bachelor of Secondary Education Major in English (BSED-ENG)'       => ['pass_from' => 4, 'confirmed' => false],
+    'Bachelor of Secondary Education Major in Filipino (BSED-FIL)'      => ['pass_from' => 4, 'confirmed' => false],
+    'Bachelor of Secondary Education Major in Mathematics (BSED-MATH)'  => ['pass_from' => 4, 'confirmed' => false],
+    'AB Psychology (AB Psych)'                                           => ['pass_from' => 4, 'confirmed' => false],
+    'BS Computer Science (BSCS)'                                         => ['pass_from' => 4, 'confirmed' => false],
+    'BS Information Technology (BSIT)'                                   => ['pass_from' => 4, 'confirmed' => true],  // confirmed
+    'BS Electronics Engineering (BSECE)'                                 => ['pass_from' => 4, 'confirmed' => false],
+    'BS Nursing (BSN)'                                                   => ['pass_from' => 4, 'confirmed' => false],
 ]);
 
 // -- Uploadcare (file storage) -----------------------------------

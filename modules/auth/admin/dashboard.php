@@ -480,7 +480,8 @@ ob_start();
         Chart.defaults.color = textSecond;
 
         var xGrid = { grid:{color:border}, border:{display:false}, ticks:{color:textSecond, precision:0} };
-        var yFlat = { grid:{display:false}, border:{display:false}, ticks:{color:textPrimary, font:{size:12}} };
+        var yFlat  = { grid:{display:false}, border:{display:false}, ticks:{color:textPrimary, font:{size:12}} };
+    var yWide  = { grid:{display:false}, border:{display:false}, ticks:{color:textPrimary, font:{size:12}}, afterFit:function(axis){ axis.width = axis.chart.width * 0.58; } };
         var tip   = { callbacks:{ label:function(c){ return ' '+c.raw+' applicants'; } } };
 
         // Pipeline — horizontal bar (same accent, different opacity per stage)
@@ -500,10 +501,10 @@ ob_start();
         charts.course = new Chart(document.getElementById('chartCourse'), {
             type: 'bar',
             data: { labels:DATA.course.labels,
-                datasets:[{ data:DATA.course.data, backgroundColor:barColor, borderRadius:5, borderSkipped:false }] },
+                datasets:[{ data:DATA.course.data, backgroundColor:barColor, borderRadius:4, borderSkipped:false, barThickness:10, maxBarThickness:12 }] },
             options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
                 plugins:{ legend:{display:false}, tooltip:tip },
-                scales:{ x:xGrid, y:yFlat } }
+                scales:{ x:xGrid, y:yWide } }
         });
 
         // SHS Strand — same single color
@@ -515,7 +516,7 @@ ob_start();
                 plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:function(c){
                     return ' '+c.raw+' applicants';
                 }}}},
-                scales:{ x:xGrid, y:yFlat } }
+                scales:{ x:xGrid, y:yWide } }
         });
         var sl=document.getElementById('strandLegend');
         if(sl) sl.innerHTML='';

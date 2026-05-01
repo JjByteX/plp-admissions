@@ -22,7 +22,12 @@ class Session
             'samesite' => 'Lax',
         ]);
 
-        self::registerDbHandler();
+        // DB-backed sessions are required on Vercel (serverless containers don't
+        // share /tmp between requests).  On localhost XAMPP the native file
+        // handler works perfectly and avoids the sessions table dependency.
+        if (APP_ENV === 'production') {
+            self::registerDbHandler();
+        }
         session_start();
         self::enforceTimeout();
         self::regenerateIfNeeded();

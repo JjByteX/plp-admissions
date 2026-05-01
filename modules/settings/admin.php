@@ -53,6 +53,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'update_exam_capacity') {
+        $roomCap   = max(1,  (int)($_POST['exam_room_capacity'] ?? 35));
+        $dailyCap  = max(1,  (int)($_POST['exam_daily_cap']     ?? 3000));
+        $intDailyCap = max(1,(int)($_POST['interview_daily_cap'] ?? 45));
+        $ups = fn($k,$v) => $db->prepare(
+            'INSERT INTO school_settings (setting_key,setting_value) VALUES (?,?)
+             ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)'
+        )->execute([$k,$v]);
+        $ups('exam_room_capacity',  $roomCap);
+        $ups('exam_daily_cap',      $dailyCap);
+        $ups('interview_daily_cap', $intDailyCap);
+        audit_log('settings_capacity_updated', "Room cap={$roomCap}, Exam daily={$dailyCap}, Interview daily={$intDailyCap}");
+        $success[] = 'Capacity settings updated.';
+    }
+
+    if ($action === 'update_course_caps') {
+        $schoolYear = school_setting('current_school_year', date('Y').'-'.(date('Y')+1));
+        $caps = $_POST['caps'] ?? [];
+        foreach ($caps as $courseName => $maxVal) {
+            if (!in_array($courseName, PLP_COURSES, true)) continue;
+            $max = ($maxVal === '' || $maxVal === null) ? null : max(0, (int)$maxVal);
+            $db->prepare(
+                'INSERT INTO course_caps (course_name, school_year, max_slots)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE max_slots=VALUES(max_slots)'
+            )->execute([$courseName, $schoolYear, $max]);
+        }
+        audit_log('course_caps_updated', 'Updated course enrollment caps');
+        $success[] = 'Course enrollment caps saved.';
+    }
+
     if ($action === 'change_password') {
         $cur  = $_POST['current_password'] ?? '';
         $new  = $_POST['new_password'] ?? '';
@@ -75,6 +106,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $schoolName  = school_setting('school_name', 'Pamantasan ng Lungsod ng Pasig');
 $accentColor = school_setting('accent_color', '#2d6a4f');
 $schoolLogo  = school_setting('school_logo', '');
+$examRoomCap  = (int) school_setting('exam_room_capacity',  EXAM_ROOM_CAPACITY);
+$examDailyCap = (int) school_setting('exam_daily_cap',      EXAM_DAILY_CAP);
+$intDailyCap  = (int) school_setting('interview_daily_cap', INTERVIEW_DAILY_CAP);
+
+// Load current course caps
+$schoolYear = school_setting('current_school_year', date('Y').'-'.(date('Y')+1));
+$capRows = [];
+try {
+    $capStmt = $db->prepare('SELECT course_name, max_slots FROM course_caps WHERE school_year=?');
+    $capStmt->execute([$schoolYear]);
+    foreach ($capStmt->fetchAll() as $row) $capRows[$row['course_name']] = $row['max_slots'];
+} catch (\Throwable $e) { /* table may not exist yet */ }
+
+// Count accepted applicants per course this school year
+$acceptedCounts = [];
+try {
+    $acStmt = $db->prepare(
+        "SELECT a.course_applied, COUNT(*) AS cnt
+         FROM applicants a
+         JOIN admission_results r ON r.applicant_id = a.id
+         WHERE a.school_year = ? AND r.result = 'accepted'
+         GROUP BY a.course_applied"
+    );
+    $acStmt->execute([$schoolYear]);
+    foreach ($acStmt->fetchAll() as $row) $acceptedCounts[$row['course_applied']] = (int)$row['cnt'];
+} catch (\Throwable $e) { /* table may not exist yet */ }
 
 ob_start();
 ?>
@@ -126,6 +183,100 @@ ob_start();
             <div style="margin-top:var(--space-5)">
                 <button type="submit" class="btn btn-primary">Save Branding</button>
             </div>
+        </form>
+    </div>
+
+    <!-- Capacity Settings -->
+    <div class="card" style="padding:var(--space-6)">
+        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Capacity Settings</div>
+        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-5)">
+            Controls exam slot auto-assignment and interview scheduling limits.
+        </div>
+        <form method="POST">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="update_exam_capacity">
+            <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
+                    <div>
+                        <label class="form-label">Applicants per Exam Room</label>
+                        <input type="number" name="exam_room_capacity" class="form-control"
+                               value="<?= $examRoomCap ?>" min="1" max="200">
+                        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">
+                            System auto-assigns up to this many per room. Default: 35.
+                        </p>
+                    </div>
+                    <div>
+                        <label class="form-label">Max Exam Applicants per Day</label>
+                        <input type="number" name="exam_daily_cap" class="form-control"
+                               value="<?= $examDailyCap ?>" min="1" max="10000">
+                        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">
+                            Overflow rolls to the next available day. Default: 3,000.
+                        </p>
+                    </div>
+                </div>
+                <div style="max-width:240px">
+                    <label class="form-label">Max Interview Applicants per Day</label>
+                    <input type="number" name="interview_daily_cap" class="form-control"
+                           value="<?= $intDailyCap ?>" min="1" max="500">
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">
+                        Recommended: 40–50. Default: 45.
+                    </p>
+                </div>
+                <?php
+                $roomsNeeded = $examRoomCap > 0 ? ceil($examDailyCap / $examRoomCap) : '—';
+                ?>
+                <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);font-size:var(--text-xs);color:var(--text-secondary)">
+                    💡 With current settings: <?= $examDailyCap ?> applicants ÷ <?= $examRoomCap ?>/room
+                    = <strong>~<?= $roomsNeeded ?> rooms needed per exam day</strong>.
+                </div>
+            </div>
+            <div style="margin-top:var(--space-5)">
+                <button type="submit" class="btn btn-primary">Save Capacity Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Course Enrollment Caps -->
+    <div class="card" style="padding:var(--space-6)">
+        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Course Enrollment Caps</div>
+        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-2)">
+            School year: <strong><?= e($schoolYear) ?></strong>. When a course reaches its cap it is automatically disabled in the registration form.
+            Leave blank for unlimited.
+        </div>
+        <form method="POST">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="update_course_caps">
+            <div style="display:grid;grid-template-columns:1fr auto auto;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;font-size:var(--text-xs);margin-bottom:var(--space-4)">
+                <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)">Course</div>
+                <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border);text-align:center">Accepted</div>
+                <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border);text-align:center">Max Slots</div>
+                <?php foreach (PLP_COURSES as $ci => $course):
+                    $maxSlots = array_key_exists($course, $capRows) ? $capRows[$course] : null;
+                    $accepted = $acceptedCounts[$course] ?? 0;
+                    $isFull   = $maxSlots !== null && $accepted >= $maxSlots;
+                    $isLast   = $ci === count(PLP_COURSES) - 1;
+                ?>
+                <div style="padding:var(--space-2) var(--space-3);display:flex;align-items:center;gap:var(--space-2);<?= !$isLast?'border-bottom:1px solid var(--border)':'' ?>">
+                    <?= e($course) ?>
+                    <?php if ($isFull): ?>
+                        <span class="badge badge-rejected" style="font-size:10px">Full</span>
+                    <?php endif; ?>
+                </div>
+                <div style="padding:var(--space-2) var(--space-3);text-align:center;<?= !$isLast?'border-bottom:1px solid var(--border)':'' ?>">
+                    <strong><?= $accepted ?></strong>
+                </div>
+                <div style="padding:var(--space-2) var(--space-3);<?= !$isLast?'border-bottom:1px solid var(--border)':'' ?>">
+                    <input type="number"
+                           name="caps[<?= htmlspecialchars($course, ENT_QUOTES) ?>]"
+                           class="form-control"
+                           value="<?= $maxSlots !== null ? $maxSlots : '' ?>"
+                           placeholder="∞"
+                           min="0"
+                           style="width:80px;padding:4px 8px;font-size:var(--text-xs);text-align:center">
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Enrollment Caps</button>
         </form>
     </div>
 

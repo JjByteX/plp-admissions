@@ -7,6 +7,10 @@ Options -Indexes
 
 RewriteEngine On
 
+# RewriteBase for XAMPP subdirectory install.
+# Vercel ignores .htaccess entirely (uses vercel.json), so this is safe.
+RewriteBase /plp-admissions/public
+
 # Serve existing files/dirs directly (CSS, JS, images, fonts)
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

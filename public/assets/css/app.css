@@ -1818,4 +1818,557 @@ tbody tr:hover { background: var(--bg-overlay); }
 .btn-icon:hover {
     background: var(--bg-overlay);
     color: var(--text-primary);
+}/* ============================================================
+   public/assets/css/app.css  — additions / overrides
+   Paste this block at the END of your existing app.css
+   (or @import it as a separate patch file)
+   ============================================================ */
+
+/* ── DESIGN TOKENS ────────────────────────────────────────── */
+:root {
+    --color-high:        #639922;
+    --color-high-bg:     #EAF3DE;
+    --color-high-text:   #3B6D11;
+
+    --color-avg:         #BA7517;
+    --color-avg-bg:      #FAEEDA;
+    --color-avg-text:    #854F0B;
+
+    --color-low:         #E24B4A;
+    --color-low-bg:      #FCEBEB;
+    --color-low-text:    #A32D2D;
+
+    --color-accepted-bg:   #EAF3DE;
+    --color-accepted-text: #3B6D11;
+
+    --color-waitlisted-bg:   #FAEEDA;
+    --color-waitlisted-text: #854F0B;
+
+    --color-rejected-bg:   #FCEBEB;
+    --color-rejected-text: #A32D2D;
+
+    --color-pending-bg:   #E6F1FB;
+    --color-pending-text: #185FA5;
 }
+
+/* ── SHARED: page header ────────────────────────────────── */
+.page-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: var(--bs-body-color);
+    margin-bottom: 0.125rem;
+}
+
+.page-subtitle {
+    font-size: 0.8125rem;
+    color: var(--bs-secondary-color);
+    margin: 0;
+}
+
+/* ── DASHBOARD: stat cards ──────────────────────────────── */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 900px) {
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.stat-card {
+    background: var(--bs-body-bg);
+    border: 0.5px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 0.875rem 1rem;
+}
+
+.stat-label {
+    font-size: 0.6875rem;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.25rem;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.stat-badge {
+    display: inline-block;
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 99px;
+    margin-top: 0.25rem;
+}
+
+.badge-green   { background: var(--color-high-bg);    color: var(--color-high-text); }
+.badge-amber   { background: var(--color-avg-bg);     color: var(--color-avg-text);  }
+.badge-blue    { background: #E6F1FB;                  color: #185FA5;                }
+
+/* ── DASHBOARD: pipeline bar chart ─────────────────────── */
+/*
+   FIX #1 — narrower bar so the left-side label is never clipped.
+   Key changes:
+     • .bar-label  has a fixed width (120px) and does NOT shrink
+     • .bar-track  takes the remaining space (flex:1) with min-width:0
+       so it never forces the row wider than its container
+     • .bar-count and .bar-pct have fixed widths on the right
+*/
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+@media (max-width: 768px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+}
+
+.chart-card {
+    background: var(--bs-body-bg);
+    border: 0.5px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem 1.125rem;
+}
+
+.chart-title {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    margin-bottom: 0.75rem;
+}
+
+/* The row that holds label + bar + numbers */
+.bar-list  { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;          /* spacing between all four columns */
+    min-width: 0;         /* let flex children shrink past content size */
+}
+
+/* LEFT LABEL — fixed width, never wraps, never shrinks */
+.bar-label {
+    width: 120px;         /* ← the main fix: was 'flex:1' before */
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* BAR TRACK — takes all remaining horizontal space */
+.bar-track {
+    flex: 1;
+    min-width: 0;         /* prevents overflow in narrow containers */
+    height: 8px;
+    background: var(--bs-tertiary-bg);
+    border-radius: 99px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.35s ease;
+}
+
+/* RIGHT NUMBERS */
+.bar-count {
+    width: 32px;
+    flex-shrink: 0;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-align: right;
+}
+
+.bar-pct {
+    width: 36px;
+    flex-shrink: 0;
+    font-size: 0.6875rem;
+    color: var(--bs-secondary-color);
+    text-align: right;
+}
+
+/* ── DASHBOARD: step strip ──────────────────────────────── */
+.step-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.625rem;
+}
+
+@media (max-width: 640px) {
+    .step-strip { grid-template-columns: repeat(3, 1fr); }
+}
+
+.step-card {
+    background: var(--bs-body-bg);
+    border: 0.5px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.step-count {
+    font-size: 1.125rem;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.step-label {
+    font-size: 0.6875rem;
+    color: var(--bs-secondary-color);
+    margin-top: 0.125rem;
+}
+
+.step-bar {
+    height: 4px;
+    background: var(--bs-tertiary-bg);
+    border-radius: 99px;
+    margin-top: 0.5rem;
+    overflow: hidden;
+}
+
+.step-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+}
+
+/* ── RESULTS: filter bar ────────────────────────────────── */
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    margin-bottom: 0.75rem;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.filter-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--bs-border-color);
+    flex-shrink: 0;
+    margin: 0 0.125rem;
+}
+
+/* Base pill */
+.filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 99px;
+    border: 0.5px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.filter-pill:hover { background: var(--bs-tertiary-bg); color: var(--bs-body-color); }
+
+.pill-count {
+    font-size: 0.625rem;
+    font-weight: 500;
+    padding: 0.0625rem 0.3125rem;
+    border-radius: 99px;
+    background: var(--bs-tertiary-bg);
+    color: var(--bs-secondary-color);
+}
+
+/* Score-tier active states */
+.filter-pill.pill-tier-high.active {
+    background: var(--color-high-bg);
+    border-color: var(--color-high);
+    color: var(--color-high-text);
+    font-weight: 500;
+}
+.filter-pill.pill-tier-high.active .pill-count {
+    background: var(--color-high);
+    color: #fff;
+}
+
+.filter-pill.pill-tier-avg.active {
+    background: var(--color-avg-bg);
+    border-color: var(--color-avg);
+    color: var(--color-avg-text);
+    font-weight: 500;
+}
+.filter-pill.pill-tier-avg.active .pill-count {
+    background: var(--color-avg);
+    color: #fff;
+}
+
+.filter-pill.pill-tier-low.active {
+    background: var(--color-low-bg);
+    border-color: var(--color-low);
+    color: var(--color-low-text);
+    font-weight: 500;
+}
+.filter-pill.pill-tier-low.active .pill-count {
+    background: var(--color-low);
+    color: #fff;
+}
+
+/* Status active states */
+.filter-pill.pill-status-pending.active,
+.filter-pill.active {
+    background: #E6F1FB;
+    border-color: #185FA5;
+    color: #185FA5;
+    font-weight: 500;
+}
+
+.filter-pill.pill-status-accepted.active {
+    background: var(--color-accepted-bg);
+    border-color: var(--color-high);
+    color: var(--color-accepted-text);
+    font-weight: 500;
+}
+
+.filter-pill.pill-status-waitlisted.active {
+    background: var(--color-waitlisted-bg);
+    border-color: var(--color-avg);
+    color: var(--color-waitlisted-text);
+    font-weight: 500;
+}
+
+.filter-pill.pill-status-rejected.active {
+    background: var(--color-rejected-bg);
+    border-color: var(--color-low);
+    color: var(--color-rejected-text);
+    font-weight: 500;
+}
+
+/* Search input in filter bar */
+.filter-search {
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.375rem;
+    border: 0.5px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    font-size: 0.75rem;
+    width: 180px;
+}
+
+.filter-search:focus {
+    outline: none;
+    border-color: #378ADD;
+    box-shadow: 0 0 0 2px rgba(55, 138, 221, 0.15);
+}
+
+.sort-btn {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.625rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.sort-btn svg { width: 14px; height: 14px; }
+
+/* ── RESULTS: score legend ──────────────────────────────── */
+.score-legend {
+    display: flex;
+    gap: 0.875rem;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.75rem;
+}
+
+.legend-item { display: flex; align-items: center; gap: 0.3rem; }
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.dot-high { background: var(--color-high); }
+.dot-avg  { background: var(--color-avg);  }
+.dot-low  { background: var(--color-low);  }
+
+/* ── RESULTS: auto waitlist button ─────────────────────── */
+.btn-outline-warning {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8125rem;
+}
+
+.btn-outline-warning svg { width: 15px; height: 15px; }
+
+/* ── RESULTS: bulk action bar ───────────────────────────── */
+.bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    background: #EBF2FA;
+    border: 0.5px solid #B5D4F4;
+    border-radius: 0.5rem;
+    margin-bottom: 0.625rem;
+    font-size: 0.75rem;
+    color: #185FA5;
+    flex-wrap: wrap;
+}
+
+.bulk-btn-accept {
+    border: 0.5px solid var(--color-high);
+    background: var(--color-high-bg);
+    color: var(--color-high-text);
+    padding: 0.1875rem 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.bulk-btn-waitlist {
+    border: 0.5px solid var(--color-avg);
+    background: var(--color-avg-bg);
+    color: var(--color-avg-text);
+    padding: 0.1875rem 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.bulk-btn-reject {
+    border: 0.5px solid var(--color-low);
+    background: var(--color-low-bg);
+    color: var(--color-low-text);
+    padding: 0.1875rem 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+/* ── RESULTS: table ─────────────────────────────────────── */
+.table-card {
+    background: var(--bs-body-bg);
+    border: 0.5px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.results-table th,
+.results-table td {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.75rem;
+    text-align: left;
+    border-bottom: 0.5px solid var(--bs-border-color);
+    vertical-align: middle;
+}
+
+.results-table thead th {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: var(--bs-secondary-color);
+    background: var(--bs-tertiary-bg);
+}
+
+.results-table tbody tr:last-child td { border-bottom: none; }
+
+.results-table tbody tr:hover td { background: var(--bs-tertiary-bg); }
+
+/* Column widths */
+.col-cb     { width: 32px; }
+.col-app    { width: 100px; }
+.col-name   { width: auto; }
+.col-type   { width: 90px; }
+.col-score  { width: 70px; }
+.col-rank   { width: 48px; }
+.col-status { width: 90px; }
+.col-action { width: 90px; }
+
+.text-muted { color: var(--bs-secondary-color) !important; }
+.mono       { font-family: var(--bs-font-monospace); font-size: 0.6875rem; }
+
+/* Score badges */
+.score-badge {
+    display: inline-block;
+    padding: 0.125rem 0.4375rem;
+    border-radius: 99px;
+    font-size: 0.6875rem;
+    font-weight: 500;
+}
+
+.badge-high { background: var(--color-high-bg); color: var(--color-high-text); }
+.badge-avg  { background: var(--color-avg-bg);  color: var(--color-avg-text);  }
+.badge-low  { background: var(--color-low-bg);  color: var(--color-low-text);  }
+
+/* Result pills */
+.result-pill {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 99px;
+    font-size: 0.6875rem;
+    font-weight: 500;
+}
+
+.pill-accepted   { background: var(--color-accepted-bg);   color: var(--color-accepted-text);   }
+.pill-waitlisted { background: var(--color-waitlisted-bg); color: var(--color-waitlisted-text); }
+.pill-rejected   { background: var(--color-rejected-bg);   color: var(--color-rejected-text);   }
+.pill-pending    { background: var(--color-pending-bg);    color: var(--color-pending-text);    }
+
+/* Per-row status dropdown */
+.status-select {
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    border: 0.5px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    width: 100%;
+    cursor: pointer;
+}
+
+.status-select:focus {
+    outline: none;
+    border-color: #378ADD;
+}
+
+/* Empty state */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2.5rem 1rem;
+    color: var(--bs-secondary-color);
+    font-size: 0.875rem;
+}
+
+.empty-state svg { width: 32px; height: 32px; opacity: 0.4; }

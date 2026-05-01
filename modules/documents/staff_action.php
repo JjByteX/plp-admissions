@@ -68,7 +68,22 @@ switch ($action) {
         break;
 
     case 'advance_to_exam':
-        // $id here is the applicant_id (see route: POST /staff/documents/{id})
+        // Guard: all documents must exist and be approved before advancing
+        $stmt = $db->prepare('SELECT COUNT(*) FROM documents WHERE applicant_id=?');
+        $stmt->execute([$id]);
+        $totalDocs = (int)$stmt->fetchColumn();
+
+        $stmt = $db->prepare(
+            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != "approved"'
+        );
+        $stmt->execute([$id]);
+        $pendingCount = (int)$stmt->fetchColumn();
+
+        if ($totalDocs === 0 || $pendingCount > 0) {
+            Session::flash('error', 'All documents must be approved before advancing to exam.');
+            redirect('/staff/applicants/' . $id);
+        }
+
         $stmt = $db->prepare(
             'UPDATE applicants SET overall_status="exam" WHERE id=? AND overall_status IN ("pending","documents")'
         );

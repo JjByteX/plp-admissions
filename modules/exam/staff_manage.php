@@ -260,6 +260,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['ok' => true]);
             exit;
 
+        case 'update_passing_scores':
+            $scores = $_POST['scores'] ?? [];
+            foreach ($scores as $courseName => $vals) {
+                if (!in_array($courseName, PLP_COURSES, true)) continue;
+                $highFrom = max(1, min(10, (int)($vals['high'] ?? 7)));
+                $avgFrom  = max(1, min($highFrom - 1, (int)($vals['avg']  ?? 4)));
+                $pf       = $avgFrom; // passing = average tier and above
+                $db->prepare(
+                    'INSERT INTO course_passing_scores (course_name, pass_from, high_from, avg_from, confirmed)
+                     VALUES (?, ?, ?, ?, 1)
+                     ON DUPLICATE KEY UPDATE pass_from=VALUES(pass_from), high_from=VALUES(high_from), avg_from=VALUES(avg_from), confirmed=1'
+                )->execute([$courseName, $pf, $highFrom, $avgFrom]);
+            }
+            audit_log('passing_scores_updated', 'Updated per-course passing score tiers');
+            $success[] = 'Passing score tiers saved.';
+            break;
+
         case 'inline_edit_question':
             // Quick inline text edit for a single question
             $qId   = (int)($_POST['question_id'] ?? 0);
@@ -640,9 +657,107 @@ ob_start();
             <?php endif; ?>
         </div>
 
+        <!-- Per-course passing scores panel -->
+        <?php
+        $passingRows = [];
+        try {
+            $passingRows = $db->query("SELECT course_name, pass_from, high_from, avg_from, confirmed FROM course_passing_scores ORDER BY course_name")->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) { /* table may not exist yet */ }
+        $passingMap  = [];
+        foreach ($passingRows as $pr) $passingMap[$pr['course_name']] = $pr;
+        ?>
+        <div class="card" style="margin-bottom:var(--space-5);padding:var(--space-5)">
+            <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4)">
+                <div style="flex:1">
+                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">Per-Course Passing Tiers</div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
+                        Set the minimum passing tier per course.
+                    </div>
+                </div>
+                <button class="btn btn-ghost btn-sm" onclick="togglePassingPanel()" id="passing-toggle-btn" style="display:flex;align-items:center;gap:5px">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" id="passing-toggle-icon"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 9l6 6 6-6"/></svg>
+                    Edit tiers
+                </button>
+            </div>
+
+
+            <!-- Read-only summary -->
+            <div id="passing-summary">
+                <div style="display:grid;grid-template-columns:1fr auto auto auto;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;font-size:var(--text-xs)">
+                    <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)">Course</div>
+                    <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border);text-align:center">High</div>
+                    <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border);text-align:center">Average</div>
+                    <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border);text-align:center">Low</div>
+                    <?php foreach (PLP_COURSES as $ci => $course):
+                        $pr       = $passingMap[$course] ?? null;
+                        $highFrom = $pr && isset($pr['high_from']) ? (int)$pr['high_from'] : 7;
+                        $avgFrom  = $pr && isset($pr['avg_from'])  ? (int)$pr['avg_from']  : 4;
+                        $isLast   = $ci === count(PLP_COURSES) - 1;
+                        $bb = !$isLast ? 'border-bottom:1px solid var(--border)' : '';
+                    ?>
+                    <div style="padding:var(--space-2) var(--space-3);<?= $bb ?>"><?= e($course) ?></div>
+                    <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary);<?= $bb ?>"><?= $highFrom ?>–10</div>
+                    <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary);<?= $bb ?>"><?= $avgFrom ?>–<?= $highFrom - 1 ?></div>
+                    <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary);<?= $bb ?>">1–<?= $avgFrom - 1 ?></div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <!-- Editable form (hidden) -->
+            <div id="passing-edit-panel" style="display:none;margin-top:var(--space-4)">
+                <form method="POST">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="update_passing_scores">
+                    <!-- Column headers -->
+                    <div style="display:grid;grid-template-columns:1fr 100px 100px 90px;gap:var(--space-2);align-items:center;padding:var(--space-2) 0;border-bottom:2px solid var(--border);margin-bottom:var(--space-1)">
+                        <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary)">Course</div>
+                        <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);text-align:center">High from</div>
+                        <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);text-align:center">Avg from</div>
+                        <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);text-align:center">Low</div>
+                    </div>
+                    <?php foreach (PLP_COURSES as $course):
+                        $pr       = $passingMap[$course] ?? null;
+                        $highFrom = $pr && isset($pr['high_from']) ? (int)$pr['high_from'] : 7;
+                        $avgFrom  = $pr && isset($pr['avg_from'])  ? (int)$pr['avg_from']  : 4;
+                        $enc      = htmlspecialchars($course, ENT_QUOTES);
+                    ?>
+                    <div style="display:grid;grid-template-columns:1fr 100px 100px 90px;gap:var(--space-2);align-items:center;padding:var(--space-2) 0;border-bottom:1px solid var(--border)">
+                        <div style="font-size:var(--text-xs)"><?= e($course) ?></div>
+                        <div>
+                            <input type="number"
+                                   name="scores[<?= $enc ?>][high]"
+                                   class="form-control passing-high"
+                                   data-course="<?= $enc ?>"
+                                   value="<?= $highFrom ?>"
+                                   min="2" max="10"
+                                   style="font-size:var(--text-xs);padding:4px 6px;text-align:center"
+                                   title="Ranks <?= $highFrom ?>–10 = High">
+                        </div>
+                        <div>
+                            <input type="number"
+                                   name="scores[<?= $enc ?>][avg]"
+                                   class="form-control passing-avg"
+                                   data-course="<?= $enc ?>"
+                                   value="<?= $avgFrom ?>"
+                                   min="1" max="9"
+                                   style="font-size:var(--text-xs);padding:4px 6px;text-align:center"
+                                   title="Ranks <?= $avgFrom ?>–<?= $highFrom - 1 ?> = Average (passing threshold)">
+                        </div>
+                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:center" class="low-label" data-course="<?= $enc ?>">
+                            1–<?= max(0, $avgFrom - 1) ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                    <div style="margin-top:var(--space-4);display:flex;gap:var(--space-2);justify-content:flex-end;align-items:center">
+                        <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Passing = Average tier and above</span>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="togglePassingPanel()">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm">Save Passing Scores</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Question list header -->
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4)">
-            <div style="font-weight:var(--weight-semibold)">Questions</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4)">            <div style="font-weight:var(--weight-semibold)">Questions</div>
             <div style="display:flex;gap:var(--space-2)">
                 <button class="btn btn-ghost btn-sm"
                         onclick="openAddSectionModal()"
@@ -753,8 +868,7 @@ ob_start();
 
         <?php if (empty($sections) && empty($questions)): ?>
             <div class="card" style="padding:var(--space-12);text-align:center;color:var(--text-tertiary)">
-                <div style="font-size:var(--text-2xl);margin-bottom:var(--space-3)">📝</div>
-                <div style="font-size:var(--text-sm)">No questions yet. Click <strong>Add Section</strong> to create a section and start adding questions.</div>
+                <div style="font-size:var(--text-sm)">Click <strong>Add Section</strong> to create a section and start adding questions.</div>
             </div>
         <?php else: ?>
 
@@ -860,7 +974,8 @@ ob_start();
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
                 <div>
                     <label class="form-label">Title <span style="color:var(--error)">*</span></label>
-                    <input type="text" name="title" class="form-control" placeholder="e.g. PLP Admission Test 2025" required>
+                    <input type="text" name="title" class="form-control" placeholder="e.g. PLP Admissions Test (2025–2026)" required>
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Standard format: <em>PLP Admissions Test (Year)</em></p>
                 </div>
                 <div>
                     <label class="form-label">Description</label>
@@ -869,11 +984,13 @@ ob_start();
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
                     <div>
                         <label class="form-label">Duration (minutes)</label>
-                        <input type="number" name="duration_minutes" class="form-control" value="60" min="1" max="300">
+                        <input type="number" name="duration_minutes" class="form-control" value="90" min="1" max="300">
+                        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Default: 90 min (1 hr 30 min)</p>
                     </div>
                     <div>
-                        <label class="form-label">Passing Score</label>
-                        <input type="number" name="passing_score" class="form-control" placeholder="Optional" min="0">
+                        <label class="form-label">Global Passing Score <span style="font-size:var(--text-xs);font-weight:400;color:var(--text-tertiary)">(optional override)</span></label>
+                        <input type="number" name="passing_score" class="form-control" placeholder="Uses per-course score" min="0" max="10">
+                        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Per-course thresholds managed in Settings → Passing Scores</p>
                     </div>
                 </div>
 
@@ -1624,6 +1741,46 @@ async function saveInlineQuestion(secId, secType) {
         window.location.reload();
     }
 }
+
+// ── Per-course passing scores panel toggle ────────────────
+function togglePassingPanel() {
+    const panel   = document.getElementById('passing-edit-panel');
+    const summary = document.getElementById('passing-summary');
+    const icon    = document.getElementById('passing-toggle-icon');
+    const btn     = document.getElementById('passing-toggle-btn');
+    const isOpen  = panel.style.display !== 'none';
+    panel.style.display   = isOpen ? 'none' : 'block';
+    summary.style.display = isOpen ? '' : 'none';
+    icon.style.transform  = isOpen ? '' : 'rotate(180deg)';
+    btn.lastChild.textContent = isOpen ? ' Edit tiers' : ' Close';
+}
+
+// Live-update the Low label and enforce high > avg constraints
+(function() {
+    document.addEventListener('input', function(e) {
+        const el = e.target;
+        if (!el.classList.contains('passing-high') && !el.classList.contains('passing-avg')) return;
+        const course = el.dataset.course;
+        if (!course) return;
+        const row   = el.closest('div[style*="grid-template-columns"]');
+        if (!row) return;
+        const highEl = row.querySelector('.passing-high');
+        const avgEl  = row.querySelector('.passing-avg');
+        const lowEl  = row.querySelector('.low-label');
+        if (!highEl || !avgEl || !lowEl) return;
+        const highVal = parseInt(highEl.value, 10) || 7;
+        const avgVal  = parseInt(avgEl.value,  10) || 4;
+        // Enforce avg < high
+        if (el.classList.contains('passing-high') && avgVal >= highVal) {
+            avgEl.value = Math.max(1, highVal - 1);
+        }
+        if (el.classList.contains('passing-avg') && avgVal >= highVal) {
+            highEl.value = Math.min(10, avgVal + 1);
+        }
+        const finalAvg = parseInt(avgEl.value, 10) || 4;
+        lowEl.textContent = finalAvg <= 1 ? '—' : '1–' + (finalAvg - 1);
+    });
+})();
 
 (function() {
     const list = document.getElementById('questions-list');

@@ -23,9 +23,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email = strtolower(trim($_POST['email'] ?? ''));
             $role  = $_POST['role'] ?? '';
             $pass  = $_POST['password'] ?? '';
+            $dept  = trim($_POST['department'] ?? '');
 
             if (!$name || !$email || !in_array($role, ['staff', 'admin'], true) || strlen($pass) < 8) {
                 $errors[] = 'All fields are required. Password must be at least 8 characters.';
+                break;
+            }
+
+            if ($dept !== '' && !in_array($dept, departments_list(), true)) {
+                $errors[] = 'Invalid department selected.';
                 break;
             }
 
@@ -34,10 +40,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($check->fetch()) { $errors[] = 'Email already exists.'; break; }
 
             $hash = password_hash($pass, PASSWORD_BCRYPT, ['cost' => 12]);
-            $db->prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?,?,?,?)')
-               ->execute([$name, $email, $hash, $role]);
-            audit_log('user_created', "Created {$role} account for {$name} ({$email})", 'user', (int)$db->lastInsertId());
+            $db->prepare('INSERT INTO users (name, email, password_hash, role, department) VALUES (?,?,?,?,?)')
+               ->execute([$name, $email, $hash, $role, $dept]);
+            $newId = (int)$db->lastInsertId();
+            audit_log(
+                'user_created',
+                "Created {$role} account for {$name} ({$email})"
+                    . ($dept !== '' ? " in {$dept}" : ''),
+                'user',
+                $newId
+            );
             $success[] = "$name ($role) account created.";
+            break;
+
+        case 'update_department':
+            $uid  = (int)($_POST['user_id'] ?? 0);
+            $dept = trim($_POST['department'] ?? '');
+            if ($uid <= 0) {
+                $errors[] = 'Invalid user.';
+                break;
+            }
+            if ($dept !== '' && !in_array($dept, departments_list(), true)) {
+                $errors[] = 'Invalid department selected.';
+                break;
+            }
+            set_user_department($uid, $dept, $adminId);
+            $success[] = 'Department updated.';
             break;
 
         case 'toggle_active':
@@ -70,17 +98,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Load staff + admin users
-$stmt = $db->prepare(
-    'SELECT * FROM users WHERE role IN ("staff","admin") ORDER BY role, name'
-);
-$stmt->execute();
+// Filter: department
+$filterDept = trim($_GET['department'] ?? '');
+$availableDepts = departments_list();
+if ($filterDept !== '' && !in_array($filterDept, $availableDepts, true)) {
+    $filterDept = '';
+}
+
+$sql     = 'SELECT * FROM users WHERE role IN ("staff","admin")';
+$params  = [];
+if ($filterDept !== '') {
+    $sql    .= ' AND department = ?';
+    $params[] = $filterDept;
+}
+$sql    .= ' ORDER BY role, name';
+
+$stmt = $db->prepare($sql);
+$stmt->execute($params);
 $staffUsers = $stmt->fetchAll();
 
 ob_start();
 ?>
 
-<div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-6)">
+<div style="display:flex;align-items:center;gap:var(--space-3);justify-content:space-between;
+             flex-wrap:wrap;margin-bottom:var(--space-6)">
+    <form method="GET" style="display:flex;align-items:center;gap:var(--space-2)">
+        <label for="dept-filter" style="font-size:var(--text-sm);color:var(--text-secondary)">Department:</label>
+        <select id="dept-filter" name="department" class="form-control"
+                style="width:auto;min-width:240px" onchange="this.form.submit()">
+            <option value="">All departments</option>
+            <?php foreach ($availableDepts as $deptName): ?>
+                <option value="<?= e($deptName) ?>" <?= $filterDept === $deptName ? 'selected' : '' ?>>
+                    <?= e($deptName) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <?php if ($filterDept !== ''): ?>
+            <a href="<?= url('/admin/users') ?>" class="btn btn-ghost btn-sm">Clear</a>
+        <?php endif; ?>
+    </form>
     <button class="btn btn-primary" onclick="document.getElementById('create-user-modal').style.display='flex'">
         + New User
     </button>
@@ -100,6 +156,7 @@ ob_start();
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Department</th>
                 <th>Status</th>
                 <th>Created</th>
                 <th style="width:140px"></th>
@@ -107,13 +164,30 @@ ob_start();
         </thead>
         <tbody>
         <?php if (empty($staffUsers)): ?>
-            <tr><td colspan="6" style="text-align:center;padding:var(--space-8);color:var(--text-tertiary)">No staff or admin accounts.</td></tr>
+            <tr><td colspan="7" style="text-align:center;padding:var(--space-8);color:var(--text-tertiary)">No staff or admin accounts.</td></tr>
         <?php else: ?>
             <?php foreach ($staffUsers as $u): ?>
                 <tr>
                     <td style="font-weight:var(--weight-medium)"><?= e($u['name']) ?></td>
                     <td style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($u['email']) ?></td>
                     <td><span class="badge badge-<?= $u['role'] === 'admin' ? 'error' : 'info' ?>"><?= ucfirst($u['role']) ?></span></td>
+                    <td style="font-size:var(--text-sm)">
+                        <form method="POST" style="display:inline-flex;align-items:center;gap:var(--space-1)">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="update_department">
+                            <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                            <select name="department" class="form-control" style="font-size:var(--text-xs);padding:var(--space-1) var(--space-2);min-width:200px"
+                                    onchange="this.form.submit()">
+                                <option value="">— none —</option>
+                                <?php foreach ($availableDepts as $deptName): ?>
+                                    <option value="<?= e($deptName) ?>"
+                                            <?= ($u['department'] ?? '') === $deptName ? 'selected' : '' ?>>
+                                        <?= e($deptName) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </form>
+                    </td>
                     <td>
                         <?php if ($u['is_active']): ?>
                             <span class="badge badge-success">Active</span>
@@ -175,6 +249,18 @@ ob_start();
                         <option value="">Select role…</option>
                         <option value="staff">Staff</option>
                         <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">
+                        Department
+                        <span style="color:var(--text-tertiary);font-weight:400"> — optional for admins</span>
+                    </label>
+                    <select name="department" class="form-control">
+                        <option value="">— none —</option>
+                        <?php foreach ($availableDepts as $deptName): ?>
+                            <option value="<?= e($deptName) ?>"><?= e($deptName) ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 <div>

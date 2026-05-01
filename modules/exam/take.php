@@ -27,7 +27,10 @@ if ($applicant['overall_status'] !== 'exam') {
 $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
 $existing = $stmt->fetch();
-if ($existing) { redirect('/student/interview'); }
+if ($existing) {
+    // Only send to interview if they actually passed; failed applicants stay on exam stage
+    redirect($existing['passed'] ? '/student/interview' : '/student/documents');
+}
 
 // Fetch active exam
 $exam = $db->query('SELECT * FROM exams WHERE is_active=1 LIMIT 1')->fetch();
@@ -147,14 +150,194 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         json_encode($savedAnswers),
     ]);
 
-    $db->prepare('UPDATE applicants SET overall_status="interview" WHERE id=?')
-       ->execute([$applicantId]);
+    $rank     = score_to_rank($score, count($questions));
+    $tierInfo = rank_tier_info($rank);
+    $passed   = exam_passed($score, count($questions), $applicant['course_applied']);
+    $pct      = count($questions) > 0 ? round(($score / count($questions)) * 100) : 0;
 
-    Session::flash('success', sprintf(
-        'Exam submitted! You answered all questions.',
-        $score, count($questions)
-    ));
-    redirect('/student/interview');
+    // Determine next status
+    // Passed → advance to interview; failed → stay at exam so staff can review
+    // and suggest an alternative course before any further progression.
+    $nextStatus = $passed ? 'interview' : 'exam';
+    $db->prepare('UPDATE applicants SET overall_status=? WHERE id=?')
+       ->execute([$nextStatus, $applicantId]);
+
+    // Store pass/fail verdict alongside the result row
+    $db->prepare(
+        'UPDATE exam_results SET rank_score=?, passed=? WHERE applicant_id=? AND exam_id=?'
+    )->execute([$rank, $passed ? 1 : 0, $applicantId, $examId]);
+
+    // Build course suggestions if failed
+    $altCourses = [];
+    if (!$passed) {
+        $altCourses = suggest_alt_courses($score, count($questions), $applicant['course_applied']);
+    }
+
+    // ── Inline result screen ──────────────────────────────────────
+    ob_start();
+    ?>
+    <div style="max-width:520px;margin:0 auto;padding:var(--space-4) 0">
+
+        <!-- Score card -->
+        <div class="card" style="padding:var(--space-8);text-align:center;margin-bottom:var(--space-5)">
+
+            <!-- Big rank circle -->
+            <div style="width:96px;height:96px;border-radius:50%;
+                        background:<?= $tierInfo['bg'] ?>;
+                        border:3px solid <?= $tierInfo['color'] ?>;
+                        display:flex;flex-direction:column;align-items:center;justify-content:center;
+                        margin:0 auto var(--space-5)">
+                <span style="font-size:2rem;font-weight:var(--weight-bold);color:<?= $tierInfo['color'] ?>;line-height:1"><?= $rank ?></span>
+                <span style="font-size:var(--text-xs);color:<?= $tierInfo['color'] ?>;font-weight:var(--weight-medium)">/10</span>
+            </div>
+
+            <!-- Verdict banner -->
+            <div style="display:inline-flex;align-items:center;gap:6px;
+                        background:<?= $tierInfo['bg'] ?>;
+                        color:<?= $tierInfo['color'] ?>;
+                        border-radius:var(--radius-full);
+                        padding:4px 14px;
+                        font-weight:var(--weight-semibold);
+                        font-size:var(--text-sm);
+                        margin-bottom:var(--space-3)">
+                <?php if ($passed): ?>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    Passed
+                <?php else: ?>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    Failed
+                <?php endif; ?>
+            </div>
+
+            <h2 style="font-size:var(--text-xl);font-weight:var(--weight-bold);margin-bottom:var(--space-1)">
+                <?= $passed ? 'Congratulations!' : 'Better luck next time.' ?>
+            </h2>
+            <p style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:var(--space-6)">
+                <?= $passed
+                    ? 'You passed the entrance exam. Proceed to the next step.'
+                    : 'Your score did not meet the passing threshold for your chosen course.' ?>
+            </p>
+
+            <!-- Score breakdown grid -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3);
+                        background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5)">
+                <div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Raw Score</div>
+                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-bold)"><?= $score ?></div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary)">out of <?= count($questions) ?></div>
+                </div>
+                <div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Percentage</div>
+                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-bold)"><?= $pct ?>%</div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary)">of total items</div>
+                </div>
+                <div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Tier</div>
+                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-bold);color:<?= $tierInfo['color'] ?>"><?= $rank ?></div>
+                    <div style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:<?= $tierInfo['color'] ?>"><?= $tierInfo['label'] ?> tier</div>
+                </div>
+            </div>
+
+            <!-- Course + threshold row -->
+            <div style="margin-top:var(--space-4);padding:var(--space-3) var(--space-4);
+                        border:1px solid var(--border);border-radius:var(--radius-md);
+                        font-size:var(--text-xs);color:var(--text-secondary);text-align:left;
+                        display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <span style="color:var(--text-tertiary)">Course applied:</span>
+                    <strong style="margin-left:4px"><?= e($applicant['course_applied']) ?></strong>
+                </div>
+                <div>
+                    <span style="color:var(--text-tertiary)">Passing rank:</span>
+                    <strong style="margin-left:4px">≥ <?= get_pass_threshold($applicant['course_applied']) ?></strong>
+                </div>
+            </div>
+        </div>
+
+        <?php if ($passed): ?>
+        <!-- Passed → next step CTA -->
+        <div class="card" style="padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4)">
+            <div style="width:40px;height:40px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path stroke="#22c55e" stroke-width="2" stroke-linecap="round" d="M8 12l3 3 5-5"/></svg>
+            </div>
+            <div style="flex:1">
+                <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">Next: Schedule your Interview</div>
+                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">You'll be contacted with your interview schedule.</div>
+            </div>
+            <a href="<?= url('/student/interview') ?>" class="btn btn-primary btn-sm">Continue →</a>
+        </div>
+
+        <?php else: ?>
+        <!-- Failed → course suggestion panel -->
+        <?php if (!empty($altCourses)): ?>
+        <div class="card" style="padding:var(--space-5);margin-bottom:var(--space-4)">
+            <div style="display:flex;align-items:flex-start;gap:var(--space-3);margin-bottom:var(--space-4)">
+                <div style="width:36px;height:36px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path stroke="#f59e0b" stroke-width="2" stroke-linecap="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <div>
+                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">Available Alternatives</div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
+                        Your score (rank <?= $rank ?>) qualifies for the following courses that still have available slots.
+                        Your admissions officer can process a course shift for you.
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+                <?php foreach ($altCourses as $alt):
+                    $altThreshold = get_pass_threshold($alt);
+                    $altTier      = rank_tier_info($rank);
+                ?>
+                <div style="display:flex;align-items:center;justify-content:space-between;
+                             padding:var(--space-3) var(--space-4);
+                             background:var(--bg-subtle);border-radius:var(--radius-md);
+                             border:1px solid var(--border)">
+                    <div>
+                        <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($alt) ?></div>
+                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
+                            Passing rank: ≥ <?= $altThreshold ?> &nbsp;·&nbsp;
+                            Your rank: <span style="color:<?= $altTier['color'] ?>;font-weight:var(--weight-semibold)"><?= $rank ?> (<?= $altTier['label'] ?>)</span>
+                        </div>
+                    </div>
+                    <span class="badge badge-approved" style="font-size:10px;flex-shrink:0">Qualifies</span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <p style="margin-top:var(--space-3);font-size:var(--text-xs);color:var(--text-tertiary)">
+                ℹ Please approach the admissions office to request a course change. Final assignment is subject to staff approval.
+            </p>
+        </div>
+        <?php else: ?>
+        <div class="card" style="padding:var(--space-5);margin-bottom:var(--space-4)">
+            <div style="display:flex;align-items:center;gap:var(--space-3)">
+                <div style="width:36px;height:36px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path stroke="#ef4444" stroke-width="2" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </div>
+                <div style="font-size:var(--text-sm);color:var(--text-secondary)">
+                    Unfortunately, your score does not currently qualify for any available course.
+                    Please contact the admissions office for further guidance.
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <div class="card" style="padding:var(--space-4);background:var(--bg-subtle)">
+            <p style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:center">
+                Your result has been recorded. The admissions office will follow up with next steps.
+                You may also visit the office directly for assistance.
+            </p>
+        </div>
+        <?php endif; ?>
+
+    </div>
+
+    <?php
+    $content     = ob_get_clean();
+    $pageTitle   = 'Exam Result';
+    $activeNav   = 'exam';
+    $showStepper = true;
+    include VIEWS_PATH . '/layouts/app.php';
+    exit;
 }
 
 // ----------------------------------------------------------------
