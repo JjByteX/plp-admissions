@@ -74,7 +74,7 @@ $result = paginate(
      WHERE $whereStr",
     "SELECT a.*, u.name AS student_name, u.email,
             ar.result AS admission_result, ar.remarks AS admission_remarks, ar.released_at,
-            ar.enrollment_intent, ar.intent_deadline, ar.intent_submitted_at,
+
             ar.promoted_from_waitlist,
             er.score  AS exam_score, er.total_items AS exam_total,
             er.rank_score AS exam_rank, er.passed AS exam_passed,
@@ -122,7 +122,7 @@ ob_start();
     <div class="alert alert-info" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 
-<!-- ── Auto-Release Action ─────────────────────────────── -->
+<!-- ── Auto Actions ─────────────────────────────── -->
 <div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-4);gap:var(--space-3)">
     <form method="POST" action="<?= url('/staff/results/auto-release') ?>" style="margin:0">
         <?= csrf_field() ?>
@@ -236,7 +236,7 @@ ob_start();
                     <?= $tab['label'] ?>
                     <span style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= $tab['count'] ?></span>
                     <?php if ($isActive): ?>
-                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 13l4 4L19 7"/></svg>
+                        <?= icon('ic_fluent_checkmark_24_regular', 13) ?>
                     <?php endif; ?>
                 </a>
                 <?php endforeach; ?>
@@ -248,7 +248,7 @@ ob_start();
                             color:var(--text-tertiary);border-radius:var(--radius-sm);text-decoration:none;
                             transition:background var(--transition-fast);
                         " onmouseover="this.style.background='var(--bg-overlay)'" onmouseout="this.style.background='transparent'">
-                            <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                            <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
                             Clear filter
                         </a>
                     </div>
@@ -287,30 +287,41 @@ ob_start();
 
 <!-- ── Results table ──────────────────────────────────────── -->
 <div class="card" style="padding:0;overflow:hidden">
-    <table class="table">
+    <table class="table" id="results-table">
         <thead>
             <tr>
+                <th style="width:40px;padding-left:var(--space-3)">
+                    <input type="checkbox" id="res-select-all" onchange="resToggleAll(this)"
+                           style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                </th>
                 <?= results_sortable_th('applicant', 'Applicant',   $sortCol, $sortDir, $search, $filterRes) ?>
                 <?= results_sortable_th('course',    'Course',      $sortCol, $sortDir, $search, $filterRes) ?>
                 <th>Exam Score</th>
                 <th>Interview</th>
                 <?= results_sortable_th('result',    'Result',      $sortCol, $sortDir, $search, $filterRes) ?>
-                <th>Enrollment Intent</th>
                 <?= results_sortable_th('released',  'Released',    $sortCol, $sortDir, $search, $filterRes) ?>
                 <th style="width:100px"></th>
             </tr>
         </thead>
         <tbody>
         <?php if (empty($result['data'])): ?>
-            <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No applicants found.</td></tr>
+            <tr><td colspan="9" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No applicants found.</td></tr>
         <?php else: ?>
             <?php foreach ($result['data'] as $row):
                 $pct = null;
                 if ($row['exam_score'] !== null && (int)$row['exam_total'] > 0) {
                     $pct = round(($row['exam_score'] / $row['exam_total']) * 100);
                 }
+                $isWithdrawn = ($row['overall_status'] === 'withdrawn');
             ?>
-                <tr>
+                <tr class="res-bulk-row" data-id="<?= (int)$row['id'] ?>">
+                    <td style="padding-left:var(--space-3)">
+                        <?php if (!$isWithdrawn): ?>
+                        <input type="checkbox" class="res-check" value="<?= (int)$row['id'] ?>"
+                               onchange="resUpdateSelection()"
+                               style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <div style="font-weight:var(--weight-medium)"><?= e($row['student_name']) ?></div>
                         <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
@@ -350,9 +361,9 @@ ob_start();
                                         <span style="font-size:10px;font-weight:var(--weight-semibold);color:<?= $tierInfo['color'] ?>"><?= $tierInfo['label'] ?></span>
                                         <span style="font-size:10px;color:var(--text-tertiary)">·</span>
                                         <?php if ($passed): ?>
-                                            <span style="font-size:10px;color:#22c55e;font-weight:var(--weight-semibold)">✓ Passed</span>
+                                            <span style="font-size:10px;color:var(--success);font-weight:var(--weight-semibold)"><?= icon('ic_fluent_checkmark_24_regular', 10) ?> Passed</span>
                                         <?php else: ?>
-                                            <span style="font-size:10px;color:#ef4444;font-weight:var(--weight-semibold)">✗ Failed</span>
+                                            <span style="font-size:10px;color:var(--error);font-weight:var(--weight-semibold)"><?= icon('ic_fluent_dismiss_24_regular', 10) ?> Failed</span>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -433,54 +444,38 @@ ob_start();
                         <?php endif; ?>
                     </td>
 
-                    <!-- Enrollment intent -->
-                    <td>
-                        <?php if ($row['overall_status'] === 'withdrawn'): ?>
-                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">—</span>
-                        <?php elseif ($row['admission_result'] === 'accepted'): ?>
-                            <?php if ($row['enrollment_intent'] === 'confirmed'): ?>
-                                <span class="badge badge-approved" title="Submitted <?= e($row['intent_submitted_at'] ? format_date($row['intent_submitted_at'], 'M j, Y') : '') ?>">
-                                    ✓ Confirmed
-                                </span>
-                            <?php elseif ($row['enrollment_intent'] === 'declined'): ?>
-                                <span class="badge badge-rejected" title="Submitted <?= e($row['intent_submitted_at'] ? format_date($row['intent_submitted_at'], 'M j, Y') : '') ?>">
-                                    ✗ Declined
-                                </span>
-                            <?php elseif ($row['intent_deadline'] && date('Y-m-d') > $row['intent_deadline']): ?>
-                                <span class="badge badge-neutral" style="color:#c2410c">No response</span>
-                                <div style="font-size:10px;color:var(--text-tertiary);margin-top:2px">
-                                    Deadline: <?= format_date($row['intent_deadline'], 'M j') ?>
-                                </div>
-                            <?php else: ?>
-                                <span style="color:var(--text-tertiary);font-size:var(--text-sm)">Awaiting…</span>
-                                <?php if ($row['intent_deadline']): ?>
-                                    <div style="font-size:10px;color:var(--text-tertiary);margin-top:2px">
-                                        Due: <?= format_date($row['intent_deadline'], 'M j, Y') ?>
-                                    </div>
-                                <?php endif; ?>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">—</span>
-                        <?php endif; ?>
-                    </td>
-
                     <td style="font-size:var(--text-sm);color:var(--text-tertiary)">
                         <?= $row['released_at'] ? format_date($row['released_at'], 'M j, Y') : '—' ?>
                     </td>
 
                     <td>
-                        <?php if ($row['overall_status'] !== 'withdrawn'): ?>
-                        <button class="btn btn-secondary btn-sm"
-                                onclick="openReleaseModal(
-                                    <?= $row['id'] ?>,
-                                    <?= htmlspecialchars(json_encode($row['student_name']), ENT_QUOTES) ?>,
-                                    <?= htmlspecialchars(json_encode($row['admission_result']), ENT_QUOTES) ?>,
-                                    <?= htmlspecialchars(json_encode($row['admission_remarks'] ?? ''), ENT_QUOTES) ?>,
-                                    <?= htmlspecialchars(json_encode($row['intent_deadline'] ?? ''), ENT_QUOTES) ?>)">
-                            <?= $row['admission_result'] ? 'Edit' : 'Release' ?>
-                        </button>
-                        <?php else: ?>
+                        <?php if ($row['overall_status'] === 'withdrawn'): ?>
                             <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Withdrawn</span>
+                        <?php elseif ($row['admission_result'] === 'accepted'): ?>
+                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Accepted</span>
+                        <?php elseif ($row['admission_result'] === 'rejected'): ?>
+                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Rejected</span>
+                        <?php else: ?>
+                            <div style="display:flex;gap:var(--space-2)">
+                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="result" value="accepted">
+                                    <button type="submit" class="btn btn-sm"
+                                            style="background:var(--success);color:#fff;border-color:var(--success);font-size:var(--text-xs)"
+                                            onclick="return confirm('Approve <?= e(addslashes($row['student_name'])) ?>?')">
+                                        Approve
+                                    </button>
+                                </form>
+                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="result" value="rejected">
+                                    <button type="submit" class="btn btn-danger btn-sm"
+                                            style="font-size:var(--text-xs)"
+                                            onclick="return confirm('Reject <?= e(addslashes($row['student_name'])) ?>?')">
+                                        Reject
+                                    </button>
+                                </form>
+                            </div>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -560,16 +555,7 @@ ob_start();
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div id="intent-deadline-wrap" style="display:none">
-                    <label class="form-label">Enrollment Intent Deadline</label>
-                    <input type="date" name="intent_deadline" id="release-intent-deadline"
-                           class="form-control"
-                           min="<?= date('Y-m-d', strtotime('+1 day')) ?>"
-                           placeholder="Optional — leave blank for no deadline">
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">
-                        Set a date by which the accepted applicant must confirm or decline enrollment.
-                    </div>
-                </div>
+
                 <div>
                     <label class="form-label">Remarks (optional)</label>
                     <textarea name="remarks" class="form-control" rows="3" id="release-remarks"
@@ -585,20 +571,13 @@ ob_start();
 </div>
 
 <script>
-function openReleaseModal(appId, name, currentResult, currentRemarks, currentDeadline) {
+function openReleaseModal(appId, name, currentResult, currentRemarks) {
     document.getElementById('release-form').action = '<?= url('/staff/results/') ?>' + appId;
     document.getElementById('release-name').textContent = name;
     document.getElementById('release-result').value = currentResult || '';
     document.getElementById('release-remarks').value = currentRemarks || '';
-    document.getElementById('release-intent-deadline').value = currentDeadline || '';
-    var wrap = document.getElementById('intent-deadline-wrap');
-    wrap.style.display = (currentResult === 'accepted') ? 'block' : 'none';
     document.getElementById('release-modal').style.display = 'flex';
 }
-document.getElementById('release-result').addEventListener('change', function() {
-    document.getElementById('intent-deadline-wrap').style.display =
-        this.value === 'accepted' ? 'block' : 'none';
-});
 document.getElementById('release-modal').addEventListener('click', function(e){
     if(e.target===this) this.style.display='none';
 });
@@ -612,7 +591,7 @@ function openSuggestModal(appId, name, alts, rank) {
     list.innerHTML = '';
     alts.forEach(function(course) {
         const li = document.createElement('label');
-        li.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;font-size:var(--text-sm)';
+        li.style.cssText = 'display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;font-size:var(--text-sm)';
         li.innerHTML = '<input type="radio" name="suggest_course" value="' + escHtml(course) + '" style="accent-color:var(--accent)"> ' + escHtml(course);
         list.appendChild(li);
     });
@@ -625,6 +604,132 @@ function escHtml(str) {
 document.getElementById('suggest-modal').addEventListener('click', function(e){
     if(e.target===this) this.style.display='none';
 });
+</script>
+
+<!-- ============================================================
+     BULK ACTION TOOLBAR (floating, appears on selection)
+============================================================ -->
+<div id="res-bulk-toolbar" style="
+    display:none;
+    position:fixed;bottom:var(--space-6);left:50%;transform:translateX(-50%);z-index:500;
+    background:var(--bg-elevated);border:1px solid var(--border);
+    border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);
+    padding:var(--space-3) var(--space-5);
+    align-items:center;gap:var(--space-4);
+    animation:resToolbarSlideUp .2s ease-out;
+">
+    <div style="display:flex;align-items:center;gap:var(--space-2)">
+        <span id="res-bulk-count" style="
+            display:inline-flex;align-items:center;justify-content:center;
+            min-width:24px;height:24px;padding:0 var(--space-2);
+            border-radius:var(--radius-full);
+            background:var(--accent);color:var(--accent-text);
+            font-size:var(--text-xs);font-weight:var(--weight-semibold);
+        ">0</span>
+        <span style="font-size:var(--text-sm);color:var(--text-secondary);white-space:nowrap">selected</span>
+    </div>
+
+    <div style="width:1px;height:24px;background:var(--border)"></div>
+
+    <button type="button" class="btn btn-sm" onclick="resBulkAction('accepted')"
+            style="display:flex;align-items:center;gap:5px;white-space:nowrap;background:var(--success);color:#fff;border-color:var(--success)">
+        <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
+        Accept
+    </button>
+    <button type="button" class="btn btn-sm" onclick="resBulkAction('waitlisted')"
+            style="display:flex;align-items:center;gap:5px;white-space:nowrap;background:var(--warning);color:#fff;border-color:var(--warning)">
+        <?= icon('ic_fluent_clock_24_regular', 14) ?>
+        Waitlist
+    </button>
+    <button type="button" class="btn btn-danger btn-sm" onclick="resBulkAction('rejected')"
+            style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <?= icon('ic_fluent_dismiss_circle_24_regular', 14) ?>
+        Reject
+    </button>
+
+    <div style="width:1px;height:24px;background:var(--border)"></div>
+
+    <button type="button" class="btn btn-ghost btn-sm" onclick="resClearSelection()"
+            style="color:var(--text-tertiary);font-size:var(--text-xs);white-space:nowrap">
+        Clear
+    </button>
+</div>
+
+<!-- Hidden form for bulk result actions -->
+<form id="res-bulk-form" method="POST" action="<?= url('/staff/results/bulk') ?>" style="display:none">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" id="res-bulk-action" value="">
+</form>
+
+<style>
+@keyframes resToolbarSlideUp {
+    from { opacity:0; transform:translateX(-50%) translateY(16px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+tr.res-bulk-row.res-selected { background:var(--accent-muted); }
+tr.res-bulk-row.res-selected td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+</style>
+
+<script>
+/* ── Results bulk selection logic ───────────────────────── */
+function resGetSelectedIds() {
+    return Array.from(document.querySelectorAll('.res-check:checked')).map(function(cb) { return cb.value; });
+}
+
+function resUpdateSelection() {
+    var ids     = resGetSelectedIds();
+    var count   = ids.length;
+    var toolbar = document.getElementById('res-bulk-toolbar');
+    var badge   = document.getElementById('res-bulk-count');
+    var allCb   = document.getElementById('res-select-all');
+    var total   = document.querySelectorAll('.res-check').length;
+
+    badge.textContent     = count;
+    toolbar.style.display = count > 0 ? 'flex' : 'none';
+    allCb.checked         = count > 0 && count === total;
+    allCb.indeterminate   = count > 0 && count < total;
+
+    document.querySelectorAll('.res-bulk-row').forEach(function(tr) {
+        var cb = tr.querySelector('.res-check');
+        if (cb && cb.checked) { tr.classList.add('res-selected'); }
+        else { tr.classList.remove('res-selected'); }
+    });
+}
+
+function resToggleAll(masterCb) {
+    document.querySelectorAll('.res-check').forEach(function(cb) {
+        cb.checked = masterCb.checked;
+    });
+    resUpdateSelection();
+}
+
+function resClearSelection() {
+    document.getElementById('res-select-all').checked = false;
+    document.querySelectorAll('.res-check').forEach(function(cb) { cb.checked = false; });
+    resUpdateSelection();
+}
+
+function resBulkAction(action) {
+    var ids = resGetSelectedIds();
+    if (ids.length === 0) return;
+
+    var labels = { accepted: 'Accept', waitlisted: 'Waitlist', rejected: 'Reject' };
+    var label = labels[action] || action;
+
+    if (!confirm(label + ' ' + ids.length + ' selected applicant(s)?\n\nThis will release their admission result immediately.')) return;
+
+    var form = document.getElementById('res-bulk-form');
+    document.getElementById('res-bulk-action').value = action;
+    form.querySelectorAll('input[name="ids[]"]').forEach(function(el) { el.remove(); });
+    ids.forEach(function(id) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'ids[]';
+        input.value = id;
+        form.appendChild(input);
+    });
+    form.submit();
+}
 </script>
 
 <?php

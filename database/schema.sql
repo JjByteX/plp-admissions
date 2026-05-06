@@ -40,6 +40,7 @@ DROP TABLE IF EXISTS `course_suggestions`;
 DROP TABLE IF EXISTS `custom_courses`;
 DROP TABLE IF EXISTS `department_schedules`;
 DROP TABLE IF EXISTS `departments`;
+DROP TABLE IF EXISTS `document_validations`;
 DROP TABLE IF EXISTS `documents`;
 DROP TABLE IF EXISTS `exam_results`;
 DROP TABLE IF EXISTS `exam_sections`;
@@ -48,6 +49,7 @@ DROP TABLE IF EXISTS `exams`;
 DROP TABLE IF EXISTS `interview_queue`;
 DROP TABLE IF EXISTS `interview_slots`;
 DROP TABLE IF EXISTS `interview_desks`;
+DROP TABLE IF EXISTS `notifications`;
 DROP TABLE IF EXISTS `password_resets`;
 DROP TABLE IF EXISTS `questions`;
 DROP TABLE IF EXISTS `reschedule_logs`;
@@ -300,6 +302,8 @@ CREATE TABLE `applicant_exam_slots` (
 CREATE TABLE `interview_desks` (
     `id`          INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
     `department`  VARCHAR(120)     NOT NULL DEFAULT '',
+    `assigned_to` INT(10) UNSIGNED DEFAULT NULL
+                  COMMENT 'Staff user assigned to this desk',
     `desk_label`  VARCHAR(120)     NOT NULL DEFAULT '',
     `desk_notes`  TEXT             DEFAULT NULL,
     `is_active`   TINYINT(1)      NOT NULL DEFAULT 1,
@@ -307,7 +311,7 @@ CREATE TABLE `interview_desks` (
     `created_at`  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_desk_department` (`department`),
+    KEY `idx_desk_department` (`department`),
     CONSTRAINT `fk_desk_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -324,13 +328,18 @@ CREATE TABLE `interview_slots` (
                   COMMENT 'College this slot serves (see departments.name)',
     `status`      ENUM('open','closed') NOT NULL DEFAULT 'open',
     `created_by`  INT(10) UNSIGNED NOT NULL,
+    `desk_id`     INT(10) UNSIGNED DEFAULT NULL
+                  COMMENT 'FK to interview_desks',
     `created_at`  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_slot_date`        (`slot_date`),
     KEY `idx_created_by`       (`created_by`),
     KEY `idx_slots_department` (`department`),
+    KEY `idx_slots_desk`       (`desk_id`),
     CONSTRAINT `fk_slots_creator`
-        FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
+        FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
+    CONSTRAINT `fk_slots_desk`
+        FOREIGN KEY (`desk_id`) REFERENCES `interview_desks` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `interview_queue` (
@@ -527,6 +536,46 @@ CREATE TABLE `sessions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
+-- 8b. Notifications (in-app)
+-- ============================================================
+CREATE TABLE `notifications` (
+    `id`           BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `user_id`      INT(10) UNSIGNED    NOT NULL,
+    `type`         VARCHAR(80)         NOT NULL
+                   COMMENT 'e.g. docs_approved, exam_slot_assigned, result_released',
+    `title`        VARCHAR(255)        NOT NULL,
+    `message`      TEXT                DEFAULT NULL,
+    `link`         VARCHAR(500)        DEFAULT NULL
+                   COMMENT 'URL path to navigate to when clicked',
+    `is_read`      TINYINT(1)          NOT NULL DEFAULT 0,
+    `created_at`   DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_notif_user`    (`user_id`, `is_read`),
+    KEY `idx_notif_created` (`created_at`),
+    CONSTRAINT `fk_notif_user`
+        FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 8c. Document validation logs (OCR / AI results)
+-- ============================================================
+CREATE TABLE `document_validations` (
+    `id`              BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `document_id`     INT(10) UNSIGNED    NOT NULL,
+    `validation_type` ENUM('ocr','ai','file_check') NOT NULL DEFAULT 'file_check',
+    `status`          ENUM('passed','failed','uncertain') NOT NULL,
+    `confidence`      DECIMAL(5,2)        DEFAULT NULL
+                      COMMENT 'Confidence score 0-100',
+    `details`         TEXT                DEFAULT NULL
+                      COMMENT 'JSON details of validation result',
+    `validated_at`    DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_dv_document` (`document_id`),
+    CONSTRAINT `fk_dv_document`
+        FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
 -- 9. Seed data
 -- ============================================================
 
@@ -538,11 +587,21 @@ INSERT INTO `school_settings` (`setting_key`, `setting_value`) VALUES
     ('current_school_year',   '2026-2027'),
     ('admissions_open',       '2026-01-06'),
     ('admissions_close',      '2026-03-31'),
+    ('document_deadline',     ''),
 
     ('system_version',        '1.0.0'),
     ('exam_default_duration', '90'),
     ('exam_room_capacity',    '35'),
-    ('exam_daily_cap',        '3000');
+    ('exam_daily_cap',        '3000'),
+
+    ('auto_validate_documents', '1'),
+    ('auto_assign_exam_slots',  '1'),
+    ('auto_promote_waitlist',   '1'),
+    ('auto_reschedule_noshows', '1'),
+    ('auto_release_results',    '0'),
+    ('idle_applicant_days',     '7'),
+    ('doc_reminder_days',       '3'),
+    ('acceptance_deadline_days','7');
 
 -- 9b. Default admin account
 -- Email:    admin@plp.edu.ph

@@ -601,7 +601,7 @@ ob_start();
     display: flex;
     flex-direction: column;
     align-items: center;
-    text-align: center;
+    text-align: left;
     gap: var(--space-4);
     padding: var(--space-10) var(--space-6);
     background: var(--bg-elevated);
@@ -743,7 +743,7 @@ elseif ($selectedExamId) $view = 'editor';
         </div>
         <div class="exam-landing-title">Exam Builder</div>
         <div class="exam-landing-desc">
-            Create and manage entrance exams — set questions, answer keys, schedules, and access passwords.
+            Create exams, set questions, and manage schedules.
         </div>
         <div class="exam-landing-meta">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
@@ -771,7 +771,7 @@ elseif ($selectedExamId) $view = 'editor';
         </div>
         <div class="exam-landing-title">Room Slots</div>
         <div class="exam-landing-desc">
-            Assign applicants to exam rooms, manage seating capacity, and organize exam-day logistics.
+            Assign rooms, manage seating, and organize exam-day logistics.
         </div>
         <div class="exam-landing-meta">
             <?php if (empty($exams)): ?>
@@ -797,8 +797,8 @@ elseif ($selectedExamId) $view = 'editor';
 <?php elseif ($view === 'exams'): ?>
 
 <!-- Directory header -->
-<div style="display:flex;align-items:center;margin-bottom:var(--space-5)">
-    <a href="<?= url('/staff/exam') ?>" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:5px">
+<div style="margin-bottom:var(--space-5)">
+    <a href="<?= url('/staff/exam') ?>" class="btn btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:5px">
         <?= icon('ic_fluent_arrow_left_24_regular', 15) ?>
         Back
     </a>
@@ -887,19 +887,12 @@ elseif ($selectedExamId) $view = 'editor';
 ════════════════════════════════════════════════════ */ ?>
 <?php else: ?>
 
-<!-- Back breadcrumb -->
-<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-5)">
-    <a href="<?= url('/staff/exam') ?>?view=exams" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:5px">
+<!-- Back -->
+<div style="margin-bottom:var(--space-5)">
+    <a href="<?= url('/staff/exam') ?>?view=exams" class="btn btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:5px">
         <?= icon('ic_fluent_arrow_left_24_regular', 15) ?>
         Back
     </a>
-    <?php if ($selectedExam): ?>
-        <span style="color:var(--text-tertiary);font-size:var(--text-sm)">/</span>
-        <span style="font-size:var(--text-sm);color:var(--text-secondary);font-weight:var(--weight-medium)"><?= e($selectedExam['title']) ?></span>
-        <?php if ($selectedExam['is_active']): ?>
-            <span class="badge badge-success" style="font-size:10px">Active</span>
-        <?php endif; ?>
-    <?php endif; ?>
 </div>
 
 <?php if ($selectedExam): ?>
@@ -936,15 +929,45 @@ elseif ($selectedExamId) $view = 'editor';
                 background: var(--bg-elevated);
             }
             .exam-inline--title { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
-            .exam-inline--desc  { display: block; font-size: var(--text-sm); color: var(--text-secondary); margin-top: 2px; }
+            .exam-inline--desc  { display: block; font-size: var(--text-sm); color: var(--text-secondary); margin-top: var(--space-2); }
             #exam-header-card[data-edit-state="read"] .exam-inline--desc:placeholder-shown { display: none; }
+
+            /* Password field — read-only badge in read mode, editable input in edit mode */
+            #pw-display {
+                font-family: monospace;
+                font-size: var(--text-sm);
+                font-weight: var(--weight-semibold);
+                letter-spacing: .1em;
+                padding: 1px 8px;
+                background: var(--bg-subtle);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-sm);
+                color: var(--text-primary);
+                cursor: default;
+                user-select: all;
+                width: auto;
+                min-width: 60px;
+                max-width: 200px;
+                outline: none;
+                transition: border-color .15s, background .15s, border-radius .15s, padding .15s;
+            }
+            #pw-display[readonly]::placeholder { font-style: italic; font-weight: normal; letter-spacing: normal; color: var(--text-tertiary); }
+            #pw-display:not([readonly]) {
+                background: var(--bg-elevated);
+                border-color: var(--accent);
+                border-radius: var(--radius-md);
+                padding: 4px 10px;
+                cursor: text;
+                letter-spacing: .06em;
+                max-width: 240px;
+            }
+            #pw-display:not([readonly]):focus { box-shadow: 0 0 0 3px rgba(45,106,79,.12); }
         </style>
 
         <form method="POST" id="exam-edit-form">
             <?= csrf_field() ?>
             <input type="hidden" name="action"   value="edit_exam">
             <input type="hidden" name="exam_id"  value="<?= $selectedExam['id'] ?>">
-            <input type="hidden" name="access_password" id="exam-edit-pw-hidden" value="<?= e($selectedExam['access_password'] ?? '') ?>">
 
             <div class="card" id="exam-header-card" data-edit-state="read"
                  style="margin-bottom:var(--space-5);padding:var(--space-4)">
@@ -989,29 +1012,22 @@ elseif ($selectedExamId) $view = 'editor';
                         <?php endif; ?>
 
                         <div id="pw-manager-card" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px;display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">
-                            <span style="display:inline-flex;align-items:center;gap:4px">
+                            <span style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0">
                                 <?= icon('ic_fluent_lock_closed_24_regular', 12) ?>
                                 Access Password
                             </span>
+                            <!-- Single input: badge in read mode, editable in edit mode -->
+                            <input type="text" id="pw-display" name="access_password"
+                                   value="<?= e($selectedExam['access_password'] ?? '') ?>"
+                                   readonly
+                                   placeholder="none"
+                                   autocomplete="off"
+                                   title="<?= $hasPw ? 'Click Edit to change password' : 'Click Edit to set a password' ?>">
                             <?php if ($hasPw): ?>
-                                <span id="pw-display"
-                                      title="Click to select / copy"
-                                      style="font-family:monospace;font-size:var(--text-sm);font-weight:var(--weight-semibold);
-                                             letter-spacing:.12em;padding:1px 8px;
-                                             background:var(--bg-subtle);border:1px solid var(--border);
-                                             border-radius:var(--radius-sm);color:var(--text-primary);
-                                             user-select:all;cursor:text"><?= e($selectedExam['access_password']) ?></span>
-                                <span aria-hidden="true">·</span>
-                                <?php if ($pwValid): ?>
-                                    <span id="pw-timer-badge" style="color:var(--success)">
-                                        Expires in <span id="pw-timer"><?= $pwSecsLeft ?></span>s
-                                    </span>
-                                <?php else: ?>
-                                    <span id="pw-timer-badge" style="color:var(--error);display:inline-flex;align-items:center;gap:4px">
-                                        <?= icon('ic_fluent_warning_24_regular', 12) ?>
-                                        Expired
-                                    </span>
-                                <?php endif; ?>
+                                <span aria-hidden="true" id="pw-dot">·</span>
+                                <span id="pw-timer-badge" style="color:var(--success)">
+                                    Expires in <span id="pw-timer"><?= $pwSecsLeft ?></span>s
+                                </span>
                                 <button type="button" class="btn btn-ghost btn-sm"
                                         onclick="ajaxGeneratePassword(<?= $selectedExam['id'] ?>)"
                                         style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
@@ -1021,14 +1037,14 @@ elseif ($selectedExamId) $view = 'editor';
                                 <button type="button" class="btn btn-ghost btn-sm"
                                         onclick="ajaxReissuePassword(<?= $selectedExam['id'] ?>)"
                                         id="pw-reissue-btn"
-                                        style="display:<?= $pwValid ? 'none' : 'inline-flex' ?>;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
+                                        style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
                                     <?= icon('ic_fluent_clock_24_regular', 12) ?>
                                     Extend
                                 </button>
                             <?php else: ?>
-                                <span style="font-style:italic">none</span>
                                 <button type="button" class="btn btn-ghost btn-sm"
                                         onclick="ajaxGeneratePassword(<?= $selectedExam['id'] ?>)"
+                                        id="pw-generate-btn"
                                         style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
                                     <?= icon('ic_fluent_arrow_sync_24_regular', 12) ?>
                                     Generate
@@ -1196,7 +1212,7 @@ elseif ($selectedExamId) $view = 'editor';
         <?php } ?>
 
         <?php if (empty($sections) && empty($questions)): ?>
-            <div class="card" style="padding:var(--space-12);text-align:center;color:var(--text-tertiary)">
+            <div class="card" style="padding:var(--space-12);text-align:left;color:var(--text-tertiary)">
                 <div style="font-size:var(--text-sm)">Click <strong>Add Section</strong> to create a section and start adding questions.</div>
             </div>
         <?php else: ?>
@@ -1218,6 +1234,9 @@ elseif ($selectedExamId) $view = 'editor';
                                   title="Click to rename"><?= e($sec['title']) ?></span>
                             <span style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.65" id="sec-count-<?= $sec['id'] ?>"><?= count($secQs) ?> question<?= count($secQs)!==1?'s':'' ?></span>
                         </div>
+                        <?php if (!empty($sec['description'])): ?>
+                            <div style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.7;margin-top:2px;padding-left:var(--space-2)"><?= e($sec['description']) ?></div>
+                        <?php endif; ?>
                         <div id="sec-title-edit-<?= $sec['id'] ?>" style="display:none;flex:1">
                             <input type="text" id="sec-title-input-<?= $sec['id'] ?>"
                                    class="inline-edit-input"
@@ -1284,7 +1303,7 @@ elseif ($selectedExamId) $view = 'editor';
         </div>
 
 <?php else: ?>
-    <div class="card" style="padding:var(--space-16);text-align:center;color:var(--text-tertiary)">
+    <div class="card" style="padding:var(--space-16);text-align:left;color:var(--text-tertiary)">
         <div style="font-size:var(--text-2xl);margin-bottom:var(--space-3)">📋</div>
         <p style="font-size:var(--text-sm)">Select an exam from the directory or create a new one.</p>
         <div style="margin-top:var(--space-4)">
@@ -1485,6 +1504,11 @@ elseif ($selectedExamId) $view = 'editor';
                            placeholder="e.g. Part 1: Multiple Choice" required>
                 </div>
                 <div>
+                    <label class="form-label">Description / Instructions</label>
+                    <textarea name="section_desc" id="sec-desc-field" class="form-control" rows="2"
+                              placeholder="e.g. Choose the best answer for each question."></textarea>
+                </div>
+                <div>
                     <label class="form-label">Answer Mode</label>
                     <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-2)">
                         All questions added to this section will automatically use this type.
@@ -1521,6 +1545,112 @@ elseif ($selectedExamId) $view = 'editor';
 
 
 <script>
+// ── Password countdown engine ─────────────────────────────────
+let _pwCountdownTimer = null;
+
+function startPwCountdown(secsLeft) {
+    if (_pwCountdownTimer) clearInterval(_pwCountdownTimer);
+
+    const badge      = document.getElementById('pw-timer-badge');
+    const reissueBtn = document.getElementById('pw-reissue-btn');
+    const dot        = document.getElementById('pw-dot');
+
+    function render(s) {
+        if (!badge) return;
+        if (s > 0) {
+            const mins = Math.floor(s / 60);
+            const secs = s % 60;
+            const label = mins > 0
+                ? mins + 'm ' + String(secs).padStart(2, '0') + 's'
+                : secs + 's';
+            badge.style.color = s <= 30 ? '#d97706' : 'var(--success)';
+            badge.innerHTML = 'Expires in ' + label;
+            if (dot) dot.style.visibility = '';
+            // Extend button: always visible but styled differently when active
+            if (reissueBtn) {
+                reissueBtn.style.display = 'inline-flex';
+                reissueBtn.style.opacity = '0.6';
+                reissueBtn.title = 'Reset the 5-minute timer';
+            }
+        } else {
+            badge.style.color = 'var(--error)';
+            badge.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> Expired';
+            badge.style.display = 'inline-flex';
+            badge.style.alignItems = 'center';
+            badge.style.gap = '4px';
+            if (dot) dot.style.visibility = '';
+            if (reissueBtn) {
+                reissueBtn.style.display = 'inline-flex';
+                reissueBtn.style.opacity = '1';
+                reissueBtn.title = 'Extend the password for another 5 minutes';
+            }
+        }
+    }
+
+    render(secsLeft);
+
+    if (secsLeft > 0) {
+        _pwCountdownTimer = setInterval(() => {
+            secsLeft--;
+            render(secsLeft);
+            if (secsLeft <= 0) { clearInterval(_pwCountdownTimer); _pwCountdownTimer = null; }
+        }, 1000);
+    }
+}
+
+// Auto-start countdown on page load
+<?php if ($hasPw): ?>
+startPwCountdown(<?= (int)$pwSecsLeft ?>);
+<?php endif; ?>
+
+// ── AJAX password generation / reissue ───────────────────────
+async function ajaxGeneratePassword(examId) {
+    const csrfInput = document.querySelector('input[name^="_csrf"]');
+    const fd = new FormData();
+    fd.append('action', 'generate_exam_password');
+    fd.append('exam_id', examId);
+    fd.append(csrfInput.name, csrfInput.value);
+    try {
+        const resp = await fetch(location.href, { method: 'POST', body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const d = await resp.json();
+        if (d.ok) {
+            const pwInput = document.getElementById('pw-display');
+            if (pwInput) pwInput.value = d.password;
+            // Restart the 5-minute countdown
+            startPwCountdown(d.expires_in);
+            // First-time generation (no timer badge existed yet) — reload to show full UI
+            const generateBtn = document.getElementById('pw-generate-btn');
+            if (generateBtn) window.location.reload();
+        } else {
+            alert(d.error || 'Could not generate password.');
+        }
+    } catch (e) {
+        alert('Network error. Try again.');
+    }
+}
+
+async function ajaxReissuePassword(examId) {
+    const csrfInput = document.querySelector('input[name^="_csrf"]');
+    const fd = new FormData();
+    fd.append('action', 'reissue_exam_password');
+    fd.append('exam_id', examId);
+    fd.append(csrfInput.name, csrfInput.value);
+    try {
+        const resp = await fetch(location.href, { method: 'POST', body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const d = await resp.json();
+        if (d.ok) {
+            // Restart the 5-minute countdown from full
+            startPwCountdown(d.expires_in);
+        } else {
+            alert(d.error || 'Could not extend password.');
+        }
+    } catch (e) {
+        alert('Network error. Try again.');
+    }
+}
+
 // ── Modal helpers ─────────────────────────────────────────────
 function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
@@ -1579,6 +1709,36 @@ function openEditExamModal(exam) {
         });
     }
 })();
+
+// ── Exam header edit mode toggle ──────────────────────────────
+function enterExamEditMode() {
+    document.getElementById('exam-header-card').dataset.editState = 'edit';
+    // Make password field editable
+    const pwInput = document.getElementById('pw-display');
+    if (pwInput) {
+        pwInput.removeAttribute('readonly');
+        pwInput.title = 'Type a new password or click New to generate one';
+    }
+    // Hide timer info (not relevant while editing)
+    ['pw-timer-badge','pw-dot'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.visibility = 'hidden';
+    });
+}
+function exitExamEditMode() {
+    document.getElementById('exam-header-card').dataset.editState = 'read';
+    // Restore password field to read-only badge
+    const pwInput = document.getElementById('pw-display');
+    if (pwInput) {
+        pwInput.setAttribute('readonly', '');
+        pwInput.title = 'Click Edit to change password';
+    }
+    // Restore timer visibility
+    ['pw-timer-badge','pw-dot'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.visibility = '';
+    });
+}
 
 // ── Inline exam title edit ────────────────────────────────────
 function startInlineExamEdit() {
@@ -1653,6 +1813,7 @@ function openAddSectionModal() {
     document.getElementById('sec-action').value            = 'create_section';
     document.getElementById('sec-id').value                = '';
     document.getElementById('sec-title-field').value       = '';
+    document.getElementById('sec-desc-field').value        = '';
     document.getElementById('sec-submit-btn').textContent  = 'Create Section';
     selectSectionType('multiple_choice');
     openModal('section-modal');
@@ -1667,6 +1828,7 @@ function openEditSectionModal(sec) {
     document.getElementById('sec-action').value            = 'edit_section';
     document.getElementById('sec-id').value               = sec.id;
     document.getElementById('sec-title-field').value      = sec.title;
+    document.getElementById('sec-desc-field').value       = sec.description || '';
     document.getElementById('sec-submit-btn').textContent  = 'Save Section';
     selectSectionType(sec.question_type);
     openModal('section-modal');
@@ -2276,7 +2438,7 @@ function togglePassingPanel() {
                         <span class="ai-file-tag">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="#fff" stroke-width="2.2" stroke-linecap="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2z"/></svg>
                             <span id="ai-file-tag-name"></span>
-                            <button class="rm" onclick="event.stopPropagation();clearAiFile()" title="Remove">✕</button>
+                            <button class="rm" onclick="event.stopPropagation();clearAiFile()" title="Remove"><?= icon('ic_fluent_dismiss_24_regular', 12) ?></button>
                         </span>
                     </div>
                     <input type="file" id="ai-file-input" accept=".jpg,.jpeg,.png,.pdf,.docx,.txt,.doc" style="display:none" onchange="handleAiFileSelect(this)">

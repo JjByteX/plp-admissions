@@ -25,6 +25,13 @@ $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
 
 $requiredDocs = docs_for_type($applicant['applicant_type']);
 
+// Document deadline enforcement
+$docDeadlineStr = school_setting('document_deadline', '');
+$docDeadlinePassed = false;
+if ($docDeadlineStr) {
+    $docDeadlinePassed = (new DateTime())->format('Y-m-d') > $docDeadlineStr;
+}
+
 $errors   = [];
 $success  = [];
 
@@ -37,6 +44,17 @@ $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
 // ----------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
+
+    // Block all document submissions after the deadline
+    if ($docDeadlinePassed && !$isSubmitted) {
+        $errors[] = 'The document submission deadline has passed.';
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'message' => $errors[0]]);
+            exit;
+        }
+        redirect('/student/documents');
+    }
 
     $action = $_POST['action'] ?? 'upload';
 
@@ -375,6 +393,37 @@ foreach ($requiredDocs as $slug => $label) {
 }
 
 // ----------------------------------------------------------------
+// Deadline-passed page for students who haven't submitted
+// ----------------------------------------------------------------
+if ($docDeadlinePassed && !$isSubmitted && !$pastDocuments) {
+    ob_start();
+    $deadlineFormatted = date('F j, Y', strtotime($docDeadlineStr));
+?>
+<div style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+    <div style="text-align:center;max-width:480px;padding:var(--space-8)">
+        <div style="font-size:48px;margin-bottom:var(--space-4)">
+            <?= icon('ic_fluent_dismiss_circle_24_regular', 48) ?>
+        </div>
+        <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-3);color:var(--text-primary)">
+            Document Submission Closed
+        </h2>
+        <p style="font-size:var(--text-sm);color:var(--text-secondary);line-height:1.6;margin-bottom:var(--space-4)">
+            The deadline for submitting documents was <strong><?= e($deadlineFormatted) ?></strong>.
+            Unfortunately, we are no longer accepting document submissions for this admissions period.
+        </p>
+        <p style="font-size:var(--text-xs);color:var(--text-tertiary);line-height:1.5">
+            If you believe this is an error or have special circumstances, please contact the admissions office for assistance.
+        </p>
+    </div>
+</div>
+<?php
+    $content   = ob_get_clean();
+    $pageTitle = 'Document Submission Closed';
+    include VIEWS_PATH . '/layouts/app.php';
+    return;
+}
+
+// ----------------------------------------------------------------
 // View
 // ----------------------------------------------------------------
 ob_start();
@@ -405,17 +454,18 @@ ob_start();
     $doc    = $docRows[$slug] ?? null;
     $status = $doc['status'] ?? 'pending';
     $statusMap = [
-        'pending'      => ['label' => 'Pending',      'class' => 'badge-pending'],
-        'uploaded'     => ['label' => 'Uploaded',     'class' => 'badge-info'],
-        'under_review' => ['label' => 'Under Review', 'class' => 'badge-warning'],
-        'approved'     => ['label' => 'Approved',     'class' => 'badge-success'],
-        'rejected'     => ['label' => 'Rejected',     'class' => 'badge-error'],
+        'pending'               => ['label' => 'Pending',              'class' => 'badge-pending'],
+        'uploaded'              => ['label' => 'Uploaded',             'class' => 'badge-info'],
+        'under_review'          => ['label' => 'Under Review',         'class' => 'badge-warning'],
+        'approved'              => ['label' => 'Approved',             'class' => 'badge-success'],
+        'rejected'              => ['label' => 'Rejected',             'class' => 'badge-error'],
+        'resubmission_required' => ['label' => 'Resubmission Required','class' => 'badge-error'],
     ];
     $badge      = $statusMap[$status] ?? $statusMap['pending'];
     $canUpload  = $isSubmitted
-        ? $status === 'rejected'
-        : in_array($status, ['pending', 'rejected', 'uploaded'], true);
-    $uploadLabel = $status === 'pending' ? 'Upload' : 'Replace';
+        ? in_array($status, ['rejected', 'resubmission_required'], true)
+        : in_array($status, ['pending', 'rejected', 'resubmission_required', 'uploaded'], true);
+    $uploadLabel = $status === 'pending' ? 'Upload' : 'Resubmit';
     $isApproved = $status === 'approved';
 ?>
     <div class="card" style="padding:var(--space-4) var(--space-5)">
@@ -433,7 +483,14 @@ ob_start();
             <!-- Info -->
             <div style="flex:1;min-width:0">
                 <div style="font-weight:var(--weight-medium);color:var(--text-primary)"><?= e($label) ?></div>
-                <?php if ($doc && $doc['staff_remarks']): ?>
+                <?php if ($status === 'resubmission_required'): ?>
+                    <div style="font-size:var(--text-sm);color:var(--error);margin-top:2px;font-weight:var(--weight-semibold)">
+                        ⚠ Resubmission required<?php if ($doc && $doc['staff_remarks']): ?>: <?= e($doc['staff_remarks']) ?><?php endif; ?>
+                    </div>
+                    <div style="font-size:var(--text-xs);color:var(--warning);margin-top:2px">
+                        Please upload a corrected version of this document to continue your application.
+                    </div>
+                <?php elseif ($doc && $doc['staff_remarks']): ?>
                     <div style="font-size:var(--text-sm);color:var(--error);margin-top:2px">
                         Staff note: <?= e($doc['staff_remarks']) ?>
                     </div>

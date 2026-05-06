@@ -96,6 +96,13 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
+<div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-4);max-width:560px">
+    <a href="javascript:history.back()" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:5px">
+        <?= icon('ic_fluent_arrow_left_24_regular', 16) ?>
+        Back
+    </a>
+</div>
+
 <div style="display:flex;flex-direction:column;gap:var(--space-6);max-width:560px">
 
     <!-- Profile -->

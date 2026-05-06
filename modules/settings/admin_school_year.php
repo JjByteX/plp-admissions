@@ -17,18 +17,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'set_admissions_window') {
-        $open  = trim($_POST['admissions_open']  ?? '');
-        $close = trim($_POST['admissions_close'] ?? '');
+        $open     = trim($_POST['admissions_open']  ?? '');
+        $close    = trim($_POST['admissions_close'] ?? '');
+        $docDeadline = trim($_POST['document_deadline'] ?? '');
 
         if (!$open || !$close) {
             $errors[] = 'Set both open and close dates.';
         } elseif ($close <= $open) {
             $errors[] = 'Close date must be after open date.';
+        } elseif ($docDeadline && $docDeadline <= $open) {
+            $errors[] = 'Document deadline must be after the admissions open date.';
         } else {
             $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
                        ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)';
             $db->prepare($upsert)->execute(['admissions_open',  $open]);
             $db->prepare($upsert)->execute(['admissions_close', $close]);
+            $db->prepare($upsert)->execute(['document_deadline', $docDeadline]);
 
             // Derive and persist school year for reference
             $openYear  = (int) date('Y', strtotime($open));
@@ -54,9 +58,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Reload settings after possible save
-$admissionsOpen  = school_setting('admissions_open',  '');
-$admissionsClose = school_setting('admissions_close', '');
-$currentYear     = school_setting('current_school_year', '—');
+$admissionsOpen    = school_setting('admissions_open',  '');
+$admissionsClose   = school_setting('admissions_close', '');
+$docDeadline       = school_setting('document_deadline', '');
+$currentYear       = school_setting('current_school_year', '—');
 $isOpen          = admissions_is_open();
 
 // Check if exam & interview are set up for readiness indicators
@@ -138,7 +143,7 @@ ob_start();
         <form method="POST">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="set_admissions_window">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-5)">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-5)">
                 <div>
                     <label class="form-label">Admissions Opens</label>
                     <input type="date" name="admissions_open" class="form-input"
@@ -148,6 +153,11 @@ ob_start();
                     <label class="form-label">Admissions Closes</label>
                     <input type="date" name="admissions_close" class="form-input"
                            value="<?= e($admissionsClose) ?>">
+                </div>
+                <div>
+                    <label class="form-label">Document Deadline</label>
+                    <input type="date" name="document_deadline" class="form-input"
+                           value="<?= e($docDeadline) ?>">
                 </div>
             </div>
             <button type="submit" class="btn btn-primary">Save Window</button>

@@ -210,183 +210,145 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div style="max-width:960px">
+<div>
 
     <!-- ── Unified Courses Table ────────────────────────────────── -->
-    <div class="card" style="padding:var(--space-6);margin-bottom:var(--space-6)">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-5)">
-            <div>
-                <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">Courses & Settings</div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
-                    School year <strong><?= e($schoolYear) ?></strong>. Tiers use rank scores 1–10; passing = Average and above. Enrollment cap auto-disables a course when full; leave blank for unlimited.
-                </div>
-            </div>
-            <div style="display:flex;gap:var(--space-2);flex-shrink:0">
-                <button type="button" id="tiers-edit-btn" class="btn btn-ghost btn-sm" onclick="toggleTiersEdit(true)">Edit</button>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4)">
+        <div>
+            <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">Courses & Settings</div>
+            <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
+                School year <strong><?= e($schoolYear) ?></strong>. Tiers use rank scores 1–10; passing = Average and above. Enrollment cap auto-disables a course when full; leave blank for unlimited.
             </div>
         </div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;font-size:var(--text-xs);margin-bottom:var(--space-6);background:var(--surface)">
+        <?php
+        $hStyle = 'padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)';
+        $hStyleC = $hStyle . ';text-align:center';
+        ?>
+        <div style="display:grid;grid-template-columns:1fr 120px 80px 80px 80px 80px 80px 48px">
+            <div style="<?= $hStyle ?>">Course</div>
+            <div style="<?= $hStyle ?>">Strands</div>
+            <div style="<?= $hStyleC ?>">High</div>
+            <div style="<?= $hStyleC ?>">Average</div>
+            <div style="<?= $hStyleC ?>">Low</div>
+            <div style="<?= $hStyleC ?>">Accepted</div>
+            <div style="<?= $hStyleC ?>">Max Slots</div>
+            <div style="<?= $hStyleC ?>"></div>
+        </div>
 
-        <!-- ── Read-only view ── -->
-        <div id="tiers-summary">
-            <div style="display:grid;grid-template-columns:1fr 120px 80px 80px 80px 80px 80px;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;font-size:var(--text-xs)">
-                <!-- Header -->
-                <?php
-                $hStyle = 'padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)';
-                $hStyleC = $hStyle . ';text-align:center';
-                ?>
-                <div style="<?= $hStyle ?>">Course</div>
-                <div style="<?= $hStyle ?>">Strands</div>
-                <div style="<?= $hStyleC ?>">High</div>
-                <div style="<?= $hStyleC ?>">Average</div>
-                <div style="<?= $hStyleC ?>">Low</div>
-                <div style="<?= $hStyleC ?>">Accepted</div>
-                <div style="<?= $hStyleC ?>">Max Slots</div>
-
-                <?php foreach ($allCoursesList as $ci => $course):
-                    $pr       = $tierMap[$course] ?? null;
-                    $highFrom = $pr['high_from'] ?? 7;
-                    $avgFrom  = $pr['avg_from']  ?? 4;
-                    $maxSlots = array_key_exists($course, $capRows) ? $capRows[$course] : null;
-                    $accepted = $acceptedCounts[$course] ?? 0;
-                    $isFull   = $maxSlots !== null && $accepted >= $maxSlots;
-                    $isBuiltIn = in_array($course, PLP_COURSES, true);
-                    $strands  = $isBuiltIn
-                        ? (COURSE_STRAND_MAP[$course] ?? [])
-                        : (json_decode($customCourses[array_search($course, array_column($customCourses, 'course_name'))]['strands'] ?? '[]', true) ?: []);
-                    $isLast   = $ci === count($allCoursesList) - 1;
-                    $bb       = !$isLast ? 'border-bottom:1px solid var(--border)' : '';
-                ?>
-                <div style="padding:var(--space-2) var(--space-3);<?= $bb ?>">
-                    <?= e($course) ?>
-                    <?php if ($isFull): ?>
-                        <span style="font-size:10px;padding:1px 6px;background:#fee2e2;color:#b91c1c;border-radius:9999px;margin-left:4px">Full</span>
+        <?php foreach ($allCoursesList as $ci => $course):
+            $pr       = $tierMap[$course] ?? null;
+            $highFrom = $pr['high_from'] ?? 7;
+            $avgFrom  = $pr['avg_from']  ?? 4;
+            $maxSlots = array_key_exists($course, $capRows) ? $capRows[$course] : null;
+            $accepted = $acceptedCounts[$course] ?? 0;
+            $isFull   = $maxSlots !== null && $accepted >= $maxSlots;
+            $isBuiltIn = in_array($course, PLP_COURSES, true);
+            $strands  = $isBuiltIn
+                ? (COURSE_STRAND_MAP[$course] ?? [])
+                : (json_decode($customCourses[array_search($course, array_column($customCourses, 'course_name'))]['strands'] ?? '[]', true) ?: []);
+            $isLast   = $ci === count($allCoursesList) - 1;
+            $bb       = !$isLast ? 'border-bottom:1px solid var(--border)' : '';
+            $enc      = htmlspecialchars($course, ENT_QUOTES);
+        ?>
+        <!-- Read-only row -->
+        <div id="row-read-<?= $ci ?>" style="display:grid;grid-template-columns:1fr 120px 80px 80px 80px 80px 80px 48px;<?= $bb ?>">
+            <div style="padding:var(--space-2) var(--space-3)">
+                <?= e($course) ?>
+                <?php if ($isFull): ?>
+                    <span style="font-size:10px;padding:1px 6px;background:#fee2e2;color:#b91c1c;border-radius:9999px;margin-left:4px">Full</span>
+                <?php endif; ?>
+            </div>
+            <div style="padding:var(--space-2) var(--space-3)">
+                <div style="display:flex;gap:3px;flex-wrap:wrap">
+                    <?php if ($strands): foreach ($strands as $s): ?>
+                        <span style="font-size:10px;padding:1px 6px;background:var(--bg-subtle);border-radius:9999px;color:var(--text-secondary);white-space:nowrap"><?= e($s) ?></span>
+                    <?php endforeach; else: ?>
+                        <span style="font-size:var(--text-xs);color:var(--text-tertiary)">—</span>
                     <?php endif; ?>
                 </div>
-                <div style="padding:var(--space-2) var(--space-3);<?= $bb ?>">
+            </div>
+            <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary)"><?= $highFrom ?>–10</div>
+            <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary)"><?= $avgFrom ?>–<?= $highFrom - 1 ?></div>
+            <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary)">1–<?= max(0, $avgFrom - 1) ?></div>
+            <div style="padding:var(--space-2) var(--space-3);text-align:center"><strong><?= $accepted ?></strong></div>
+            <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-tertiary)"><?= $maxSlots !== null ? $maxSlots : '∞' ?></div>
+            <div style="padding:var(--space-2) var(--space-3);text-align:center">
+                <button type="button" class="btn-icon" title="Edit" onclick="startRowEdit(<?= $ci ?>)" style="color:var(--text-tertiary)">
+                    <?= icon('ic_fluent_edit_24_regular', 13) ?>
+                </button>
+            </div>
+        </div>
+        <!-- Edit row -->
+        <div id="row-edit-<?= $ci ?>" style="display:none;<?= $bb ?>;background:var(--bg-subtle)">
+            <form method="POST" class="row-edit-form" data-row="<?= $ci ?>" style="display:grid;grid-template-columns:1fr 120px 80px 80px 80px 80px 80px 48px;align-items:center">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="update_tiers">
+                <input type="hidden" name="scores[<?= $enc ?>][course]" value="<?= $enc ?>">
+                <div style="padding:var(--space-2) var(--space-3);font-weight:var(--weight-medium)"><?= e($course) ?></div>
+                <div style="padding:var(--space-2) var(--space-3)">
                     <div style="display:flex;gap:3px;flex-wrap:wrap">
                         <?php if ($strands): foreach ($strands as $s): ?>
                             <span style="font-size:10px;padding:1px 6px;background:var(--bg-subtle);border-radius:9999px;color:var(--text-secondary);white-space:nowrap"><?= e($s) ?></span>
                         <?php endforeach; else: ?>
-                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">—</span>
+                            <span style="color:var(--text-tertiary)">—</span>
                         <?php endif; ?>
                     </div>
                 </div>
-                <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary);<?= $bb ?>"><?= $highFrom ?>–10</div>
-                <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary);<?= $bb ?>"><?= $avgFrom ?>–<?= $highFrom - 1 ?></div>
-                <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary);<?= $bb ?>">1–<?= max(0, $avgFrom - 1) ?></div>
-                <div style="padding:var(--space-2) var(--space-3);text-align:center;<?= $bb ?>"><strong><?= $accepted ?></strong></div>
-                <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-tertiary);<?= $bb ?>"><?= $maxSlots !== null ? $maxSlots : '∞' ?></div>
-                <?php endforeach; ?>
+                <div style="padding:var(--space-2) var(--space-3)">
+                    <input type="number" name="scores[<?= $enc ?>][high]"
+                           class="form-control tier-high" data-course="<?= $enc ?>" data-row="<?= $ci ?>"
+                           value="<?= $highFrom ?>" min="2" max="10"
+                           style="font-size:var(--text-xs);padding:4px 6px;text-align:center;width:100%">
+                </div>
+                <div style="padding:var(--space-2) var(--space-3)">
+                    <input type="number" name="scores[<?= $enc ?>][avg]"
+                           class="form-control tier-avg" data-course="<?= $enc ?>" data-row="<?= $ci ?>"
+                           value="<?= $avgFrom ?>" min="1" max="9"
+                           style="font-size:var(--text-xs);padding:4px 6px;text-align:center;width:100%">
+                </div>
+                <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-tertiary)" class="low-label" data-row="<?= $ci ?>">
+                    1–<?= max(0, $avgFrom - 1) ?>
+                </div>
+                <div style="padding:var(--space-2) var(--space-3);text-align:center"><strong><?= $accepted ?></strong></div>
+                <div style="padding:var(--space-2) var(--space-3)">
+                    <input type="number" name="caps[<?= $enc ?>]" class="form-control"
+                           min="0" max="99999"
+                           value="<?= $maxSlots !== null ? (int)$maxSlots : '' ?>"
+                           placeholder="∞"
+                           style="font-size:var(--text-xs);padding:4px 6px;text-align:center;width:100%">
+                </div>
+                <div style="padding:var(--space-2) var(--space-3);text-align:center">
+                    <button type="button" class="btn-icon" title="Cancel" onclick="cancelRowEdit(<?= $ci ?>)" style="color:var(--text-tertiary)">
+                        <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
+                    </button>
+                </div>
+            </form>
+            <div style="display:flex;gap:var(--space-2);justify-content:flex-end;padding:var(--space-2) var(--space-3)">
+                <button type="button" class="btn btn-primary btn-sm" onclick="saveRowEdit(<?= $ci ?>)">Save</button>
             </div>
         </div>
-
-        <!-- ── Edit view (two forms submitted independently) ── -->
-        <div id="tiers-edit-panel" style="display:none">
-            <!-- Outer wrapper: tiers form wraps the whole table; caps inputs are inside but submitted via the caps form -->
-            <form method="POST" id="tiers-form">
-                <?= csrf_field() ?>
-                <input type="hidden" name="action" value="update_tiers">
-                <!-- caps fields appended dynamically by JS before submit -->
-
-                <div style="display:grid;grid-template-columns:1fr 120px 90px 90px 70px 80px 90px;gap:0;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;font-size:var(--text-xs);margin-bottom:var(--space-4)">
-                    <!-- Header -->
-                    <?php
-                    $eh = 'padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:2px solid var(--border)';
-                    $ehc = $eh . ';text-align:center';
-                    ?>
-                    <div style="<?= $eh ?>">Course</div>
-                    <div style="<?= $eh ?>">Strands</div>
-                    <div style="<?= $ehc ?>">High from</div>
-                    <div style="<?= $ehc ?>">Avg from</div>
-                    <div style="<?= $ehc ?>">Low</div>
-                    <div style="<?= $ehc ?>">Accepted</div>
-                    <div style="<?= $ehc ?>">Max Slots</div>
-
-                    <?php foreach ($allCoursesList as $ci => $course):
-                        $pr       = $tierMap[$course] ?? null;
-                        $highFrom = $pr['high_from'] ?? 7;
-                        $avgFrom  = $pr['avg_from']  ?? 4;
-                        $maxSlots = array_key_exists($course, $capRows) ? $capRows[$course] : null;
-                        $accepted = $acceptedCounts[$course] ?? 0;
-                        $isBuiltIn = in_array($course, PLP_COURSES, true);
-                        $strands  = $isBuiltIn
-                            ? (COURSE_STRAND_MAP[$course] ?? [])
-                            : (json_decode($customCourses[array_search($course, array_column($customCourses, 'course_name'))]['strands'] ?? '[]', true) ?: []);
-                        $isLast   = $ci === count($allCoursesList) - 1;
-                        $bb       = !$isLast ? 'border-bottom:1px solid var(--border)' : '';
-                        $enc      = htmlspecialchars($course, ENT_QUOTES);
-                    ?>
-                    <div style="padding:var(--space-2) var(--space-3);<?= $bb ?>"><?= e($course) ?></div>
-                    <div style="padding:var(--space-2) var(--space-3);<?= $bb ?>">
-                        <div style="display:flex;gap:3px;flex-wrap:wrap">
-                            <?php if ($strands): foreach ($strands as $s): ?>
-                                <span style="font-size:10px;padding:1px 6px;background:var(--bg-subtle);border-radius:9999px;color:var(--text-secondary);white-space:nowrap"><?= e($s) ?></span>
-                            <?php endforeach; else: ?>
-                                <span style="color:var(--text-tertiary)">—</span>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <div style="padding:var(--space-2) var(--space-3);<?= $bb ?>">
-                        <input type="number" name="scores[<?= $enc ?>][high]"
-                               class="form-control tier-high" data-course="<?= $enc ?>"
-                               value="<?= $highFrom ?>" min="2" max="10"
-                               style="font-size:var(--text-xs);padding:4px 6px;text-align:center;width:100%">
-                    </div>
-                    <div style="padding:var(--space-2) var(--space-3);<?= $bb ?>">
-                        <input type="number" name="scores[<?= $enc ?>][avg]"
-                               class="form-control tier-avg" data-course="<?= $enc ?>"
-                               value="<?= $avgFrom ?>" min="1" max="9"
-                               style="font-size:var(--text-xs);padding:4px 6px;text-align:center;width:100%">
-                    </div>
-                    <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-tertiary);<?= $bb ?>" class="low-label" data-course="<?= $enc ?>">
-                        1–<?= max(0, $avgFrom - 1) ?>
-                    </div>
-                    <div style="padding:var(--space-2) var(--space-3);text-align:center;<?= $bb ?>">
-                        <strong><?= $accepted ?></strong>
-                    </div>
-                    <div style="padding:var(--space-2) var(--space-3);<?= $bb ?>">
-                        <input type="number" class="form-control cap-input" data-course="<?= $enc ?>"
-                               min="0" max="99999"
-                               value="<?= $maxSlots !== null ? (int)$maxSlots : '' ?>"
-                               placeholder="∞"
-                               style="font-size:var(--text-xs);padding:4px 6px;text-align:center;width:100%">
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-
-                <div style="display:flex;gap:var(--space-2);justify-content:flex-end;align-items:center">
-                    <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Passing = Average tier and above</span>
-                    <button type="button" class="btn btn-ghost btn-sm" onclick="toggleTiersEdit(false)">Cancel</button>
-                    <button type="button" class="btn btn-primary btn-sm" onclick="saveAllCourseSettings()">Save All Changes</button>
-                </div>
-            </form>
-
-            <!-- Hidden caps form (submitted programmatically) -->
-            <form method="POST" id="caps-form" style="display:none">
-                <?= csrf_field() ?>
-                <input type="hidden" name="action" value="update_course_caps">
-                <div id="caps-hidden-inputs"></div>
-            </form>
-        </div>
+        <?php endforeach; ?>
     </div>
 
     <!-- ── Section 4: Custom Courses ───────────────────────────── -->
-    <div class="card" style="padding:var(--space-6);margin-bottom:var(--space-6)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
-            <div>
-                <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">Custom Courses</div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
-                    Additional programs you've added. They appear in dropdowns and strand-match suggestions.
-                </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
+        <div>
+            <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">Custom Courses</div>
+            <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
+                Additional programs you've added. They appear in dropdowns and strand-match suggestions.
             </div>
-            <button class="btn btn-primary btn-sm"
-                    onclick="document.getElementById('add-course-modal').style.display='flex'">
-                + Add Course
-            </button>
         </div>
+        <button class="btn btn-primary btn-sm"
+                onclick="document.getElementById('add-course-modal').style.display='flex'">
+            + Add Course
+        </button>
+    </div>
+    <div class="card" style="padding:var(--space-5);margin-bottom:var(--space-6)">
 
         <?php if (!$customCourses): ?>
-            <div style="text-align:center;padding:var(--space-8);color:var(--text-tertiary);font-size:var(--text-sm)">
+            <div style="text-align:left;padding:var(--space-8);color:var(--text-tertiary);font-size:var(--text-sm)">
                 No custom courses yet. Click <strong>+ Add Course</strong> to add a new program.
             </div>
         <?php else: ?>
@@ -414,20 +376,21 @@ ob_start();
                     <?php endif; ?>
                 </div>
             </div>
-            <div style="display:flex;gap:var(--space-2)">
-                <button class="btn btn-ghost btn-sm"
+            <div style="display:flex;gap:var(--space-2);align-items:center">
+                <button class="btn-icon" title="Edit"
                         onclick="openEditModal(<?= $cc['id'] ?>, <?= e(json_encode($cc['course_name'])) ?>,
-                                 <?= e(json_encode($ccStrands)) ?>, <?= $cc['is_active'] ?>)">
-                    Edit
+                                 <?= e(json_encode($ccStrands)) ?>, <?= $cc['is_active'] ?>)"
+                        style="color:var(--text-tertiary)">
+                    <?= icon('ic_fluent_edit_24_regular', 14) ?>
                 </button>
                 <form method="POST" style="display:inline"
                       onsubmit="return confirm('Delete this course? This cannot be undone.')">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="delete_course">
                     <input type="hidden" name="course_id" value="<?= $cc['id'] ?>">
-                    <button type="submit" class="btn btn-sm"
-                            style="color:var(--error);border-color:var(--error);background:transparent">
-                        Delete
+                    <button type="submit" class="btn-icon" title="Delete"
+                            style="color:var(--error)">
+                        <?= icon('ic_fluent_delete_24_regular', 14) ?>
                     </button>
                 </form>
             </div>
@@ -438,8 +401,8 @@ ob_start();
     </div>
 
     <!-- ── Section 5: Strand Reference ─────────────────────────── -->
-    <div class="card" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-4)">SHS Strand Reference</div>
+    <div style="font-weight:var(--weight-semibold);font-size:var(--text-base);margin-bottom:var(--space-4)">SHS Strand Reference</div>
+    <div class="card" style="padding:var(--space-5)">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-3)">
         <?php foreach (SHS_STRANDS as $key => $label): ?>
             <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);
@@ -460,8 +423,9 @@ ob_start();
                 max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-xl)">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
             <div style="font-weight:var(--weight-semibold);font-size:var(--text-lg)">Add Custom Course</div>
-            <button type="button" onclick="document.getElementById('add-course-modal').style.display='none'"
-                    style="background:none;border:none;cursor:pointer;color:var(--text-tertiary);font-size:1.25rem">✕</button>
+            <button type="button" class="btn-icon" onclick="document.getElementById('add-course-modal').style.display='none'">
+                <?= icon('ic_fluent_dismiss_24_regular', 16) ?>
+            </button>
         </div>
         <form method="POST">
             <?= csrf_field() ?>
@@ -516,8 +480,9 @@ ob_start();
                 max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-xl)">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
             <div style="font-weight:var(--weight-semibold);font-size:var(--text-lg)">Edit Course</div>
-            <button type="button" onclick="document.getElementById('edit-course-modal').style.display='none'"
-                    style="background:none;border:none;cursor:pointer;color:var(--text-tertiary);font-size:1.25rem">✕</button>
+            <button type="button" class="btn-icon" onclick="document.getElementById('edit-course-modal').style.display='none'">
+                <?= icon('ic_fluent_dismiss_24_regular', 16) ?>
+            </button>
         </div>
         <form method="POST" id="edit-course-form">
             <?= csrf_field() ?>
@@ -576,62 +541,56 @@ function openEditModal(id, name, strands, isActive) {
     document.getElementById('edit-course-modal').style.display = 'flex';
 }
 
-function toggleTiersEdit(showEdit) {
-    const editPanel = document.getElementById('tiers-edit-panel');
-    const summary   = document.getElementById('tiers-summary');
-    const editBtn   = document.getElementById('tiers-edit-btn');
-    if (showEdit) {
-        editPanel.style.display = 'block';
-        summary.style.display   = 'none';
-        editBtn.style.display   = 'none';
-    } else {
-        editPanel.style.display = 'none';
-        summary.style.display   = '';
-        editBtn.style.display   = '';
-    }
+function startRowEdit(i) {
+    document.getElementById('row-read-' + i).style.display = 'none';
+    document.getElementById('row-edit-' + i).style.display = 'block';
 }
-
-function saveAllCourseSettings() {
-    // Collect cap inputs and inject into the hidden caps form
-    const capsContainer = document.getElementById('caps-hidden-inputs');
-    capsContainer.innerHTML = '';
-    document.querySelectorAll('.cap-input').forEach(function(input) {
-        const hidden = document.createElement('input');
-        hidden.type  = 'hidden';
-        hidden.name  = 'caps[' + input.dataset.course + ']';
-        hidden.value = input.value;
-        capsContainer.appendChild(hidden);
-    });
-
-    // Submit caps via fetch, then navigate via tiers form
-    const tiersForm = document.getElementById('tiers-form');
-    const capsForm  = document.getElementById('caps-form');
-    const capsData  = new FormData(capsForm);
-    fetch(window.location.pathname, { method: 'POST', body: capsData })
-        .then(function() { tiersForm.submit(); })
-        .catch(function() { tiersForm.submit(); });
+function cancelRowEdit(i) {
+    document.getElementById('row-edit-' + i).style.display = 'none';
+    document.getElementById('row-read-' + i).style.display = 'grid';
+}
+function saveRowEdit(i) {
+    var editDiv = document.getElementById('row-edit-' + i);
+    var form = editDiv.querySelector('form');
+    // Inject cap value as a hidden field alongside the tiers form
+    var capInput = form.querySelector('input[name^="caps["]');
+    if (capInput) {
+        // Also submit caps via a separate fetch, then submit tiers form
+        var capsData = new FormData();
+        capsData.append('action', 'update_course_caps');
+        // Add CSRF token
+        var csrfInput = form.querySelector('input[name="csrf_token"]');
+        if (csrfInput) capsData.append('csrf_token', csrfInput.value);
+        capsData.append(capInput.name, capInput.value);
+        fetch(window.location.pathname, { method: 'POST', body: capsData })
+            .then(function() { form.submit(); })
+            .catch(function() { form.submit(); });
+    } else {
+        form.submit();
+    }
 }
 
 // Live constraints: avg < high; live-update Low band label.
 (function() {
     document.addEventListener('input', function(e) {
-        const el = e.target;
+        var el = e.target;
         if (!el.classList.contains('tier-high') && !el.classList.contains('tier-avg')) return;
-        const row = el.closest('div[style*="grid-template-columns"]');
-        if (!row) return;
-        const highEl = row.querySelector('.tier-high');
-        const avgEl  = row.querySelector('.tier-avg');
-        const lowEl  = row.querySelector('.low-label');
+        var rowIdx = el.dataset.row;
+        var editDiv = document.getElementById('row-edit-' + rowIdx);
+        if (!editDiv) return;
+        var highEl = editDiv.querySelector('.tier-high');
+        var avgEl  = editDiv.querySelector('.tier-avg');
+        var lowEl  = editDiv.querySelector('.low-label');
         if (!highEl || !avgEl || !lowEl) return;
-        let highVal = parseInt(highEl.value, 10) || 7;
-        let avgVal  = parseInt(avgEl.value,  10) || 4;
+        var highVal = parseInt(highEl.value, 10) || 7;
+        var avgVal  = parseInt(avgEl.value,  10) || 4;
         if (el.classList.contains('tier-high') && avgVal >= highVal) {
             avgEl.value = Math.max(1, highVal - 1);
         }
         if (el.classList.contains('tier-avg')  && avgVal >= highVal) {
             highEl.value = Math.min(10, avgVal + 1);
         }
-        const finalAvg = parseInt(avgEl.value, 10) || 4;
+        var finalAvg = parseInt(avgEl.value, 10) || 4;
         lowEl.textContent = finalAvg <= 1 ? '—' : '1–' + (finalAvg - 1);
     });
 })();

@@ -6,6 +6,70 @@
 require_once ROOT_PATH . '/core/Auth.php';
 Auth::requireRole(ROLE_STAFF);
 
+// ── A4: Dashboard POST handlers ──────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    $action = $_POST['action'] ?? '';
+    $staffId = Auth::id();
+
+    if ($action === 'approve_all_pending_docs') {
+        $db = db();
+        $stmt = $db->prepare(
+            "UPDATE documents SET status='approved', reviewed_by=?
+             WHERE status IN ('uploaded','under_review')"
+        );
+        $stmt->execute([$staffId]);
+        $count = $stmt->rowCount();
+        // Advance applicants whose docs are all approved
+        $db->query(
+            "UPDATE applicants a SET a.overall_status = 'exam', a.documents_approved_at = NOW()
+             WHERE a.overall_status IN ('submitted','documents','pending')
+               AND NOT EXISTS (
+                   SELECT 1 FROM documents d WHERE d.applicant_id = a.id AND d.status NOT IN ('approved','pending')
+               )
+               AND EXISTS (
+                   SELECT 1 FROM documents d WHERE d.applicant_id = a.id AND d.status = 'approved'
+               )"
+        );
+        audit_log('bulk_approve_docs', "Approved all pending documents ({$count} docs)");
+        Session::flash('success', "Approved {$count} pending document(s).");
+        redirect('/staff/dashboard');
+    }
+
+    if ($action === 'reschedule_absent') {
+        $db = db();
+        $stmt = $db->query(
+            "SELECT DISTINCT iq.applicant_id
+             FROM interview_queue iq
+             WHERE iq.status = 'no_show'
+               AND NOT EXISTS (
+                   SELECT 1 FROM interview_queue iq2
+                   WHERE iq2.applicant_id = iq.applicant_id
+                     AND iq2.status IN ('scheduled','checked_in','in_progress','completed')
+               )"
+        );
+        $rescheduled = 0;
+        foreach ($stmt->fetchAll() as $row) {
+            $result = auto_reschedule_noshow((int)$row['applicant_id'], $staffId);
+            if ($result) $rescheduled++;
+        }
+        Session::flash('success', "Rescheduled {$rescheduled} absent student(s).");
+        redirect('/staff/dashboard');
+    }
+
+    if ($action === 'send_doc_reminders') {
+        $count = send_document_reminders();
+        Session::flash('success', "Sent document reminders to {$count} applicant(s).");
+        redirect('/staff/dashboard');
+    }
+
+    if ($action === 'close_expired_sessions') {
+        $count = auto_close_expired_sessions();
+        Session::flash('success', "Closed {$count} expired interview session(s).");
+        redirect('/staff/dashboard');
+    }
+}
+
 // ── Fetch summary counts ─────────────────────────────────────
 $stats = db()->query(
     "SELECT
@@ -90,10 +154,22 @@ $idleDays = (int) school_setting('idle_applicant_days', '7');
 $idleSummary = get_idle_summary($idleDays);
 $totalIdle = array_sum(array_column($idleSummary, 'count'));
 
+// B6: Check if there are interview sessions today
+$hasTodayStmt = db()->prepare('SELECT COUNT(*) FROM interview_slots WHERE slot_date = ? AND status = "open"');
+$hasTodayStmt->execute([date('Y-m-d')]);
+$hasToday = (int)$hasTodayStmt->fetchColumn() > 0;
+
 $activeNav = 'dashboard';
 $pageTitle = 'Dashboard';
 include VIEWS_PATH . '/layouts/app.php';
 ?>
+
+<?php if ($msg = Session::getFlash('success')): ?>
+    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+<?php endif; ?>
+<?php if ($msg = Session::getFlash('error')): ?>
+    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+<?php endif; ?>
 
 <div class="page-header">
     <h1 class="page-title">Dashboard</h1>
@@ -168,10 +244,50 @@ include VIEWS_PATH . '/layouts/app.php';
                 Auto-Release Results
             </button>
         </form>
-        <a href="<?= url('/staff/interviews/batch') ?>" class="btn btn-sm">
+        <a href="<?= url('/staff/interviews') ?>?view=sessions" class="btn btn-sm">
             <?= icon('ic_fluent_calendar_add_24_regular', 14) ?>
             Batch Create Interviews
         </a>
+        <form method="POST" action="<?= url('/staff/dashboard') ?>" style="margin:0">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="approve_all_pending_docs">
+            <button type="submit" class="btn btn-sm"
+                    onclick="return confirm('Approve all uploaded documents currently pending review?')">
+                <?= icon('ic_fluent_document_checkmark_24_regular', 14) ?>
+                Approve All Pending Docs
+            </button>
+        </form>
+        <form method="POST" action="<?= url('/staff/dashboard') ?>" style="margin:0">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="reschedule_absent">
+            <button type="submit" class="btn btn-sm"
+                    onclick="return confirm('Reschedule all no-show students to available interview slots?')">
+                <?= icon('ic_fluent_calendar_sync_24_regular', 14) ?>
+                Reschedule Absent Students
+            </button>
+        </form>
+        <a href="<?= url('/staff/applicants') ?>?status=pending&sort_col=applied&sort_dir=asc" class="btn btn-sm">
+            <?= icon('ic_fluent_clock_24_regular', 14) ?>
+            View Idle Applicants
+        </a>
+        <form method="POST" action="<?= url('/staff/dashboard') ?>" style="margin:0">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="send_doc_reminders">
+            <button type="submit" class="btn btn-sm"
+                    onclick="return confirm('Send reminder notifications to students with incomplete documents?')">
+                <?= icon('ic_fluent_mail_24_regular', 14) ?>
+                Send Doc Reminders
+            </button>
+        </form>
+        <form method="POST" action="<?= url('/staff/dashboard') ?>" style="margin:0">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="close_expired_sessions">
+            <button type="submit" class="btn btn-sm"
+                    onclick="return confirm('Auto-close all interview sessions past their end time and mark remaining as no-shows?')">
+                <?= icon('ic_fluent_calendar_cancel_24_regular', 14) ?>
+                Close Expired Sessions
+            </button>
+        </form>
     </div>
 </div>
 
@@ -262,3 +378,38 @@ include VIEWS_PATH . '/layouts/app.php';
     </div>
     <?php endforeach; ?>
 </div>
+
+<!-- B6: Real-time dashboard polling on interview days -->
+<?php if ($hasToday ?? false): ?>
+<script>
+(function(){
+    var POLL_INTERVAL = 30000;
+    var statsArea = document.querySelector('.stat-grid');
+    var pipelineArea = document.querySelector('.dashboard-grid');
+    if (!statsArea && !pipelineArea) return;
+
+    function pollDashboard() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', window.location.href, true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(xhr.responseText, 'text/html');
+                var newStats = doc.querySelector('.stat-grid');
+                var newPipeline = doc.querySelector('.dashboard-grid');
+                if (newStats && statsArea) {
+                    statsArea.innerHTML = newStats.innerHTML;
+                }
+                if (newPipeline && pipelineArea) {
+                    pipelineArea.innerHTML = newPipeline.innerHTML;
+                }
+            }
+        };
+        xhr.send();
+    }
+
+    setInterval(pollDashboard, POLL_INTERVAL);
+})();
+</script>
+<?php endif; ?>

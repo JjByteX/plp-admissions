@@ -85,8 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-}
-
 // Current settings
 $schoolName  = school_setting('school_name', 'Pamantasan ng Lungsod ng Pasig');
 $accentColor = school_setting('accent_color', '#2d6a4f');

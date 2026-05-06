@@ -1,7 +1,7 @@
 <?php
 // ============================================================
 // modules/interview/staff_queue.php
-// M5 — Staff: Live interview queue for today
+// Live interview queue — call students, evaluate inline
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -12,23 +12,54 @@ $staffId = Auth::id();
 $today   = date('Y-m-d');
 
 $myDept = user_department($staffId);
+
+// Load desk info for this interviewer
 $deskLabel = '';
 $deskNotes = '';
-if ($myDept) {
-    $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM interview_desks WHERE department = ? LIMIT 1');
-    $deskStmt->execute([$myDept]);
+try {
+    $deskStmt = $db->prepare(
+        'SELECT desk_label, desk_notes FROM interview_desks
+         WHERE assigned_to = ? AND is_active = 1
+         ORDER BY id LIMIT 1'
+    );
+    $deskStmt->execute([$staffId]);
     $deskRow = $deskStmt->fetch();
     if ($deskRow) {
         $deskLabel = $deskRow['desk_label'] ?? '';
         $deskNotes = $deskRow['desk_notes'] ?? '';
     }
+} catch (\Throwable $e) {}
+
+// Fallback: try department-based desk or user's own desk_label
+if (!$deskLabel && $myDept) {
+    try {
+        $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM interview_desks WHERE department = ? LIMIT 1');
+        $deskStmt->execute([$myDept]);
+        $deskRow = $deskStmt->fetch();
+        if ($deskRow) {
+            $deskLabel = $deskRow['desk_label'] ?? '';
+            $deskNotes = $deskRow['desk_notes'] ?? '';
+        }
+    } catch (\Throwable $e) {}
 }
 if (!$deskLabel) {
-    $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM users WHERE id=?');
-    $deskStmt->execute([$staffId]);
-    $deskRow   = $deskStmt->fetch();
-    $deskLabel = $deskRow['desk_label'] ?? '';
-    $deskNotes = $deskRow['desk_notes'] ?? '';
+    try {
+        $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM users WHERE id=?');
+        $deskStmt->execute([$staffId]);
+        $deskRow   = $deskStmt->fetch();
+        $deskLabel = $deskRow['desk_label'] ?? '';
+        $deskNotes = $deskRow['desk_notes'] ?? '';
+    } catch (\Throwable $e) {}
+}
+
+// Ensure evaluation_result column exists
+try { $db->query("SELECT evaluation_result FROM interview_queue LIMIT 0"); }
+catch (\Throwable $e) {
+    $db->exec("ALTER TABLE interview_queue ADD COLUMN evaluation_result VARCHAR(10) DEFAULT NULL AFTER interview_notes");
+}
+try { $db->query("SELECT evaluated_at FROM interview_queue LIMIT 0"); }
+catch (\Throwable $e) {
+    $db->exec("ALTER TABLE interview_queue ADD COLUMN evaluated_at DATETIME DEFAULT NULL AFTER evaluation_result");
 }
 
 // ----------------------------------------------------------------
@@ -40,6 +71,7 @@ $stmt = $db->prepare(
             q.status,
             q.checked_in_at,
             q.interview_notes,
+            q.evaluation_result,
             a.id          AS app_id,
             a.course_applied,
             a.applicant_type,
@@ -78,42 +110,18 @@ ob_start();
 ?>
 
 <!-- ================================================================
-     TAB STRIP
+     BACK BUTTON
 ================================================================ -->
-<div style="display:flex;justify-content:center;margin-bottom:var(--space-5)">
-    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-md);
-                 overflow:hidden;background:var(--bg-elevated)">
-        <a href="<?= url('/staff/interviews/queue') ?>"
-           style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
-                  text-decoration:none;
-                  background:var(--bg-subtle);color:var(--text-primary);font-weight:var(--weight-medium);
-                  display:flex;align-items:center;gap:var(--space-2);
-                  border-right:1px solid var(--border)">
-            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
-                          background:var(--accent);animation:pulse-dot 1.8s ease-in-out infinite"></span>
-            Live Queue
-        </a>
-        <a href="<?= url('/staff/interviews') ?>?view=sessions"
-           style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
-                  text-decoration:none;border-right:1px solid var(--border);
-                  color:var(--text-secondary)">
-            Upcoming
-        </a>
-        <a href="<?= url('/staff/interviews') ?>?view=sessions&past=1"
-           style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
-                  text-decoration:none;border-right:1px solid var(--border);
-                  color:var(--text-secondary)">
-            Past
-        </a>
-        <a href="<?= url('/staff/interviews/absent') ?>"
-           style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
-                  text-decoration:none;color:var(--text-secondary)">
-            Absent
-        </a>
-    </div>
+<div style="margin-bottom:var(--space-5)">
+    <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
 </div>
 
-<!-- pulse-dot animation defined in app.css -->
+<style>
+@keyframes pulse-dot {
+    0%,100%{opacity:1;transform:scale(1)}
+    50%{opacity:.5;transform:scale(1.3)}
+}
+</style>
 
 <!-- ================================================================
      DESK INFO STRIP
@@ -123,28 +131,21 @@ ob_start();
                  padding:var(--space-3) var(--space-4);margin-bottom:var(--space-5);
                  background:var(--bg-elevated);border:1px solid var(--border);
                  border-radius:var(--radius-md);font-size:var(--text-sm)">
-        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" style="color:var(--text-tertiary);flex-shrink:0">
-            <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-            <path stroke="currentColor" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-        </svg>
+        <?= icon('ic_fluent_location_24_regular', 13, 'color:var(--text-tertiary);flex-shrink:0') ?>
         <span style="font-weight:var(--weight-medium)"><?= e($deskLabel) ?></span>
         <?php if ($deskNotes): ?>
             <span style="color:var(--text-tertiary)"><?= e($deskNotes) ?></span>
         <?php endif; ?>
-        <a href="<?= url('/staff/interviews') ?>"
+        <a href="<?= url('/staff/interviews/setup') ?>"
            style="margin-left:auto;font-size:var(--text-xs);color:var(--text-tertiary);text-decoration:none">
             Edit
         </a>
     </div>
 <?php else: ?>
     <div class="alert alert-warning" style="margin-bottom:var(--space-5)">
-        <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-            <path stroke="currentColor" stroke-width="2"
-                  d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-        </svg>
+        <?= icon('ic_fluent_warning_24_regular', 15) ?>
         <span>No desk location set.
-            <a href="<?= url('/staff/interviews') ?>">Set it on the Sessions page</a>
+            <a href="<?= url('/staff/interviews/setup') ?>">Set it up in Interview Setup</a>
             so students know where to go.
         </span>
     </div>
@@ -177,7 +178,7 @@ $stats = [
 </div>
 
 <!-- ================================================================
-     NOW INTERVIEWING
+     NOW INTERVIEWING (with inline evaluation)
 ================================================================ -->
 <?php if (!empty($inProgress)): ?>
     <div style="margin-bottom:var(--space-5)">
@@ -206,31 +207,58 @@ $stats = [
                             <?= e($entry['student_email'] ?? '') ?>
                         </div>
                     </div>
-                    <div style="display:flex;gap:var(--space-2)">
-                        <form method="POST" action="<?= url('/staff/interviews/' . $entry['queue_id']) ?>">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="action" value="mark_completed">
-                            <button class="btn btn-primary btn-sm">Done</button>
-                        </form>
-                        <form method="POST" action="<?= url('/staff/interviews/' . $entry['queue_id']) ?>">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="action" value="mark_no_show">
-                            <button class="btn btn-ghost btn-sm" style="color:var(--error)">No-show</button>
-                        </form>
-                    </div>
                 </div>
 
-                <!-- Notes always visible for active interview -->
+                <!-- Inline evaluation form -->
                 <form method="POST" action="<?= url('/staff/interviews/' . $entry['queue_id']) ?>">
                     <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="save_notes">
+                    <input type="hidden" name="action" value="complete_with_evaluation">
+
+                    <!-- Pass / Fail -->
+                    <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-3)">
+                        <span style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-secondary);min-width:70px">
+                            Evaluation
+                        </span>
+                        <label style="display:inline-flex;align-items:center;gap:var(--space-1);cursor:pointer;
+                                       font-size:var(--text-sm)">
+                            <input type="radio" name="evaluation_result" value="pass"
+                                   <?= ($entry['evaluation_result'] ?? '') === 'pass' ? 'checked' : '' ?>>
+                            Pass
+                        </label>
+                        <label style="display:inline-flex;align-items:center;gap:var(--space-1);cursor:pointer;
+                                       font-size:var(--text-sm)">
+                            <input type="radio" name="evaluation_result" value="fail"
+                                   <?= ($entry['evaluation_result'] ?? '') === 'fail' ? 'checked' : '' ?>>
+                            Fail
+                        </label>
+                    </div>
+
+                    <!-- Notes -->
                     <textarea name="interview_notes" rows="3"
-                              placeholder="Evaluation notes…"
+                              placeholder="Interview notes / evaluation remarks…"
                               class="form-control"
-                              style="font-size:var(--text-sm);resize:vertical"
+                              style="font-size:var(--text-sm);resize:vertical;margin-bottom:var(--space-3)"
                               ><?= e($entry['interview_notes'] ?? '') ?></textarea>
-                    <div style="margin-top:var(--space-2);display:flex;justify-content:flex-end">
-                        <button type="submit" class="btn btn-ghost btn-sm">Save Notes</button>
+
+                    <div style="display:flex;align-items:center;gap:var(--space-2);justify-content:space-between">
+                        <button type="submit" class="btn btn-primary btn-sm"
+                                onclick="if(!document.querySelector('input[name=evaluation_result]:checked')){alert('Please select Pass or Fail');return false;}">
+                            <?= icon('ic_fluent_checkmark_24_regular', 14) ?>
+                            Complete Interview
+                        </button>
+                        <div style="display:flex;gap:var(--space-2)">
+                            <button type="button" class="btn btn-ghost btn-sm"
+                                    onclick="this.closest('form').querySelector('[name=action]').value='save_notes';this.closest('form').submit()">
+                                Save Notes
+                            </button>
+                            <form method="POST" action="<?= url('/staff/interviews/' . $entry['queue_id']) ?>"
+                                  style="margin:0">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="mark_no_show">
+                                <button class="btn btn-ghost btn-sm" style="color:var(--error)"
+                                        onclick="return confirm('Mark as no-show?')">No-show</button>
+                            </form>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -257,7 +285,7 @@ $stats = [
 
     <?php if (empty($waiting)): ?>
         <div style="padding:var(--space-6);background:var(--bg-subtle);border-radius:var(--radius-md);
-                     text-align:center;color:var(--text-tertiary);font-size:var(--text-sm)">
+                     text-align:left;color:var(--text-tertiary);font-size:var(--text-sm)">
             No one waiting right now.
         </div>
     <?php else: ?>
@@ -295,35 +323,7 @@ $stats = [
                                 <input type="hidden" name="action" value="start_interview">
                                 <button class="btn btn-secondary btn-sm">Start</button>
                             </form>
-                            <button class="btn btn-ghost btn-sm"
-                                    onclick="toggleNotes(<?= $entry['queue_id'] ?>)"
-                                    style="color:var(--text-tertiary)"
-                                    title="Notes">
-                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24">
-                                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                </svg>
-                                <?php if ($entry['interview_notes']): ?>
-                                    <span style="width:5px;height:5px;border-radius:50%;
-                                                  background:var(--accent);display:inline-block"></span>
-                                <?php endif; ?>
-                            </button>
                         </div>
-                    </div>
-
-                    <div id="notes-<?= $entry['queue_id'] ?>" style="display:none;margin-top:var(--space-3)">
-                        <form method="POST" action="<?= url('/staff/interviews/' . $entry['queue_id']) ?>">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="action" value="save_notes">
-                            <textarea name="interview_notes" rows="2"
-                                      placeholder="Pre-interview notes…"
-                                      class="form-control"
-                                      style="font-size:var(--text-sm);resize:vertical"
-                                      ><?= e($entry['interview_notes'] ?? '') ?></textarea>
-                            <div style="margin-top:var(--space-2);display:flex;justify-content:flex-end">
-                                <button type="submit" class="btn btn-ghost btn-sm">Save</button>
-                            </div>
-                        </form>
                     </div>
                 </div>
             <?php endforeach; ?>
@@ -388,16 +388,18 @@ $stats = [
                         </span>
                     <?php endif; ?>
                     <div style="flex:1;font-size:var(--text-sm)"><?= e($entry['student_name'] ?? '—') ?></div>
+                    <?php if ($entry['evaluation_result'] ?? ''): ?>
+                        <span class="badge <?= $entry['evaluation_result'] === 'pass' ? 'badge-approved' : 'badge-rejected' ?>">
+                            <?= ucfirst($entry['evaluation_result']) ?>
+                        </span>
+                    <?php endif; ?>
                     <span class="badge <?= $entry['status'] === 'completed' ? 'badge-approved' : 'badge-rejected' ?>">
                         <?= $entry['status'] === 'completed' ? 'Done' : 'No-show' ?>
                     </span>
                     <?php if ($entry['interview_notes']): ?>
                         <button class="btn-icon" onclick="toggleNotes(<?= $entry['queue_id'] ?>)"
                                 style="color:var(--text-tertiary)" title="View notes">
-                            <svg width="13" height="13" fill="none" viewBox="0 0 24 24">
-                                <path stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                            </svg>
+                            <?= icon('ic_fluent_edit_24_regular', 13) ?>
                         </button>
                     <?php endif; ?>
                 </div>

@@ -77,17 +77,6 @@ function admissions_is_open(): bool
     return $now >= $open && $now <= $close;
 }
 
-// -- Flash messages ----------------------------------------------
-function flash(string $key, mixed $value): void
-{
-    Session::flash($key, $value);
-}
-
-function flash_get(string $key, mixed $default = null): mixed
-{
-    return Session::getFlash($key, $default);
-}
-
 // -- School settings cache --------------------------------------
 function school_setting(string $key, string $default = ''): string
 {

@@ -202,6 +202,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // ── B3: Batch create exam slots ────────────────────────────
+    if ($action === 'batch_create_slots') {
+        $bStartDate = trim($_POST['batch_start_date'] ?? '');
+        $bEndDate   = trim($_POST['batch_end_date']   ?? '');
+        $bTime      = trim($_POST['batch_time']       ?? '08:00');
+        $bRooms     = $_POST['batch_rooms'] ?? [];
+        if (!is_array($bRooms)) $bRooms = [$bRooms];
+        $bRooms     = array_filter(array_map('trim', $bRooms));
+        $bCapacity  = max(1, (int)($_POST['batch_capacity'] ?? $examRoomCap ?? 35));
+        $bDept      = $isAdmin ? trim($_POST['batch_department'] ?? '') : user_department($staffId);
+        $bDays      = array_map('intval', $_POST['batch_days'] ?? [1,2,3,4,5]);
+
+        if (!$bStartDate || !$bEndDate) $errors[] = 'Start and end dates are required.';
+        elseif ($bEndDate < $bStartDate) $errors[] = 'End date must be after start date.';
+        elseif (empty($bRooms)) $errors[] = 'At least one room label is required.';
+        elseif (!$bDept) $errors[] = 'Department is required.';
+        else {
+            $totalCreated = 0;
+            foreach ($bRooms as $bRoom) {
+                $created = batch_create_exam_slots([
+                    'start_date' => $bStartDate,
+                    'end_date'   => $bEndDate,
+                    'slot_time'  => $bTime,
+                    'room_label' => $bRoom,
+                    'capacity'   => $bCapacity,
+                    'days'       => $bDays,
+                ], $bDept, $staffId);
+                $totalCreated += $created;
+            }
+            $success[] = "Created {$totalCreated} exam slot(s) in batch across " . count($bRooms) . " room(s).";
+        }
+    }
+
     // ── Unassign applicant from their slot ──────────────────────
     if ($action === 'unassign') {
         $applicantId = (int)($_POST['applicant_id'] ?? 0);
@@ -287,10 +320,16 @@ ob_start();
 
 <div style="display:flex;align-items:center;margin-bottom:var(--space-5)">
     <a href="<?= url('/staff/exam') ?>" class="btn btn-ghost btn-sm" style="margin-right:auto">← Back</a>
+    <button class="btn btn-sm"
+            onclick="document.getElementById('batch-exam-modal').style.display='flex'"
+            style="font-size:var(--text-xs)">
+        <?= icon('ic_fluent_calendar_add_24_regular', 14) ?>
+        Batch Create
+    </button>
     <button class="btn btn-ghost btn-sm"
             onclick="document.getElementById('exam-config-modal').style.display='flex'"
             style="font-size:var(--text-xs);color:var(--text-secondary)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <?= icon('ic_fluent_settings_24_regular', 14) ?>
         Config
     </button>
 </div>
@@ -315,7 +354,7 @@ ob_start();
         </div>
     </div>
     <?php if (!$slots): ?>
-        <div style="padding:var(--space-8);text-align:center;color:var(--text-tertiary);display:flex;flex-direction:column;align-items:center;gap:var(--space-4)">
+        <div style="padding:var(--space-8);text-align:left;color:var(--text-tertiary);display:flex;flex-direction:column;align-items:center;gap:var(--space-4)">
             <span>No slots yet.</span>
             <button class="btn btn-primary btn-sm"
                     onclick="document.getElementById('add-slot-modal').style.display='flex'">
@@ -432,7 +471,7 @@ ob_start();
         </div>
     </div>
     <?php if (!$unassigned): ?>
-        <div style="padding:var(--space-8);text-align:center;color:var(--text-tertiary)">
+        <div style="padding:var(--space-8);text-align:left;color:var(--text-tertiary)">
             No applicants are waiting for a slot right now.
         </div>
     <?php else: ?>
@@ -658,11 +697,110 @@ function toggleRoster(slotId) {
     </div>
 </div>
 
+<!-- B3: Batch Create Exam Slots Modal -->
+<div id="batch-exam-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
+    <div class="modal" style="max-width:460px">
+        <div class="modal-header">
+            <div class="modal-title">Batch Create Exam Slots</div>
+            <button class="btn-icon" onclick="document.getElementById('batch-exam-modal').style.display='none'">
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
+            </button>
+        </div>
+        <form method="POST">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="batch_create_slots">
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div style="display:flex;gap:var(--space-3)">
+                    <div style="flex:1">
+                        <label class="form-label">Start Date</label>
+                        <input type="date" name="batch_start_date" class="form-control" value="<?= e($defaultDate) ?>" required>
+                    </div>
+                    <div style="flex:1">
+                        <label class="form-label">End Date</label>
+                        <input type="date" name="batch_end_date" class="form-control" value="<?= e(date('Y-m-d', strtotime($defaultDate . ' +6 days'))) ?>" required>
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Time</label>
+                    <input type="time" name="batch_time" class="form-control" value="08:00" required>
+                </div>
+                <div>
+                    <label class="form-label">Rooms</label>
+                    <div id="batch-rooms-list" style="display:flex;flex-direction:column;gap:var(--space-2)">
+                        <input type="text" name="batch_rooms[]" class="form-control" placeholder="e.g. Room 101" required>
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm" style="margin-top:var(--space-2);font-size:var(--text-xs)"
+                            onclick="addBatchRoom()">+ Add another room</button>
+                </div>
+                <div>
+                    <label class="form-label">College / Department</label>
+                    <?php if ($isAdmin): ?>
+                        <select name="batch_department" class="form-control" required>
+                            <option value="">— Select college —</option>
+                            <?php foreach (departments_list() as $dept): ?>
+                                <option value="<?= e($dept) ?>"><?= e($dept) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php else: ?>
+                        <?php $myDept = user_department($staffId); ?>
+                        <input type="text" class="form-control" value="<?= e($myDept ?: 'Not assigned') ?>" disabled>
+                        <input type="hidden" name="batch_department" value="<?= e($myDept) ?>">
+                    <?php endif; ?>
+                </div>
+                <div>
+                    <label class="form-label">Seats per Slot</label>
+                    <input type="number" name="batch_capacity" class="form-control" value="<?= $examRoomCap ?>" min="1" max="500">
+                </div>
+                <div>
+                    <label class="form-label">Days of Week</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:var(--space-2)">
+                        <?php foreach ([1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri',6=>'Sat',0=>'Sun'] as $dv => $dl): ?>
+                            <label style="display:flex;align-items:center;gap:4px;font-size:var(--text-sm)">
+                                <input type="checkbox" name="batch_days[]" value="<?= $dv ?>" <?= $dv >= 1 && $dv <= 5 ? 'checked' : '' ?>>
+                                <?= $dl ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost"
+                        onclick="document.getElementById('batch-exam-modal').style.display='none'">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Slots</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-['add-slot-modal','exam-config-modal','edit-slot-modal'].forEach(function(id){
+['add-slot-modal','exam-config-modal','edit-slot-modal','batch-exam-modal'].forEach(function(id){
     var m = document.getElementById(id);
     if(m) m.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
 });
+
+function addBatchRoom() {
+    var list = document.getElementById('batch-rooms-list');
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display:flex;gap:var(--space-2);align-items:center';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.name = 'batch_rooms[]';
+    input.className = 'form-control';
+    input.placeholder = 'e.g. Room 102';
+    input.required = true;
+    input.style.flex = '1';
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn-icon';
+    removeBtn.title = 'Remove';
+    removeBtn.style.cssText = 'color:var(--error);padding:var(--space-1);flex-shrink:0';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.onclick = function() { wrapper.remove(); };
+    wrapper.appendChild(input);
+    wrapper.appendChild(removeBtn);
+    list.appendChild(wrapper);
+    input.focus();
+}
 
 function openEditExamSlot(id, date, time, room, dept, cap) {
     document.getElementById('edit-slot-id').value   = id;

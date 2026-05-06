@@ -507,67 +507,6 @@ function get_system_user_id(): int
 }
 
 // ----------------------------------------------------------------
-// AUTO-RESCHEDULE NO-SHOWS
-// ----------------------------------------------------------------
-
-/**
- * Auto-reschedule all no-show applicants from completed interview sessions
- * to the next available session in their department.
- */
-function auto_reschedule_noshows(): int
-{
-    if (school_setting('auto_reschedule_noshows', '1') !== '1') return 0;
-
-    $pdo = db();
-    $rescheduled = 0;
-
-    // Find no-show applicants from past interview slots
-    $noshows = $pdo->query(
-        'SELECT iq.id AS queue_id, iq.applicant_id, iq.slot_id,
-                isl.department, isl.slot_date, isl.slot_time,
-                a.user_id
-         FROM interview_queue iq
-         JOIN interview_slots isl ON isl.id = iq.slot_id
-         JOIN applicants a ON a.id = iq.applicant_id
-         WHERE iq.status = "no_show"
-           AND iq.interview_status = "absent"
-           AND isl.slot_date < CURDATE()
-           AND a.overall_status = "interview"'
-    )->fetchAll();
-
-    foreach ($noshows as $ns) {
-        $newSlotId = reschedule_interview((int) $ns['applicant_id']);
-        if ($newSlotId) {
-            $rescheduled++;
-
-            // Get new slot details for notification
-            $stmt = $pdo->prepare('SELECT slot_date, slot_time FROM interview_slots WHERE id = ?');
-            $stmt->execute([$newSlotId]);
-            $newSlot = $stmt->fetch();
-
-            if ($newSlot) {
-                $dateStr = date('F j, Y', strtotime($newSlot['slot_date']));
-                $timeStr = $newSlot['slot_time'] ? date('g:i A', strtotime($newSlot['slot_time'])) : '';
-
-                create_notification(
-                    (int) $ns['user_id'],
-                    'interview_rescheduled',
-                    'Interview Rescheduled',
-                    "You have been rescheduled for a new interview on {$dateStr}" . ($timeStr ? " at {$timeStr}" : '') . ". Please make sure to attend.",
-                    '/student/interview'
-                );
-            }
-        }
-    }
-
-    if ($rescheduled > 0) {
-        audit_log('auto_reschedule_noshows', "Auto-rescheduled {$rescheduled} no-show applicant(s)");
-    }
-
-    return $rescheduled;
-}
-
-// ----------------------------------------------------------------
 // AUTO-RELEASE RESULTS
 // ----------------------------------------------------------------
 
@@ -608,7 +547,7 @@ function auto_release_results(): array
         $interviewPassed = ($appl['evaluation_result'] ?? '') !== 'fail';
 
         if ($rank >= $threshold && $interviewPassed) {
-            $decision = ($rank >= 7) ? 'accepted' : 'accepted';
+            $decision = 'accepted';
         } elseif ($rank >= ($threshold - 1) && $interviewPassed) {
             $decision = 'waitlisted';
         } else {
@@ -664,8 +603,16 @@ function batch_create_interview_sessions(array $config, string $department, int 
     $endTime   = $config['end_time']   ?? '16:00';
     $capacity  = max(1, (int)($config['capacity'] ?? 30));
     $days      = $config['days'] ?? [1, 2, 3, 4, 5]; // Mon-Fri by default
+    $deskId    = isset($config['desk_id']) ? (int)$config['desk_id'] : null;
 
     $departments = $department ? [$department] : departments_list();
+
+    // Check if desk_id column exists
+    $hasDeskCol = false;
+    try {
+        $pdo->query("SELECT desk_id FROM interview_slots LIMIT 0");
+        $hasDeskCol = true;
+    } catch (\Throwable $e) {}
 
     $current = clone $startDate;
     while ($current <= $endDate) {
@@ -675,19 +622,35 @@ function batch_create_interview_sessions(array $config, string $department, int 
             $dateStr = $current->format('Y-m-d');
 
             foreach ($departments as $dept) {
-                // Check if slot already exists for this date/dept
-                $stmt = $pdo->prepare(
-                    'SELECT id FROM interview_slots
-                     WHERE slot_date = ? AND department = ?
-                     LIMIT 1'
-                );
-                $stmt->execute([$dateStr, $dept]);
+                // Check if slot already exists for this date/dept/desk
+                if ($deskId && $hasDeskCol) {
+                    $stmt = $pdo->prepare(
+                        'SELECT id FROM interview_slots
+                         WHERE slot_date = ? AND department = ? AND desk_id = ?
+                         LIMIT 1'
+                    );
+                    $stmt->execute([$dateStr, $dept, $deskId]);
+                } else {
+                    $stmt = $pdo->prepare(
+                        'SELECT id FROM interview_slots
+                         WHERE slot_date = ? AND department = ?
+                         LIMIT 1'
+                    );
+                    $stmt->execute([$dateStr, $dept]);
+                }
                 if ($stmt->fetch()) continue;
 
-                $pdo->prepare(
-                    'INSERT INTO interview_slots (slot_date, slot_time, end_time, capacity, department, created_by)
-                     VALUES (?, ?, ?, ?, ?, ?)'
-                )->execute([$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId]);
+                if ($deskId && $hasDeskCol) {
+                    $pdo->prepare(
+                        'INSERT INTO interview_slots (slot_date, slot_time, end_time, capacity, department, created_by, desk_id)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)'
+                    )->execute([$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId, $deskId]);
+                } else {
+                    $pdo->prepare(
+                        'INSERT INTO interview_slots (slot_date, slot_time, end_time, capacity, department, created_by)
+                         VALUES (?, ?, ?, ?, ?, ?)'
+                    )->execute([$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId]);
+                }
                 $created++;
 
                 // Auto-assign pending applicants to this new session
@@ -710,27 +673,6 @@ function batch_create_interview_sessions(array $config, string $department, int 
 // ----------------------------------------------------------------
 // IDLE APPLICANT ALERTS
 // ----------------------------------------------------------------
-
-/**
- * Get applicants stuck at any stage for more than X days.
- */
-function get_idle_applicants(int $days = 7): array
-{
-    $pdo = db();
-
-    $stmt = $pdo->prepare(
-        'SELECT a.id, a.overall_status, a.course_applied, a.updated_at,
-                u.name, u.email,
-                DATEDIFF(NOW(), a.updated_at) AS days_idle
-         FROM applicants a
-         JOIN users u ON u.id = a.user_id
-         WHERE a.overall_status NOT IN ("released", "withdrawn")
-           AND DATEDIFF(NOW(), a.updated_at) >= ?
-         ORDER BY days_idle DESC'
-    );
-    $stmt->execute([$days]);
-    return $stmt->fetchAll();
-}
 
 /**
  * Get summary of idle applicants by stage.
@@ -805,27 +747,490 @@ function ensure_document_validations_table(): void
     }
 }
 
-function ensure_automation_settings(): void
-{
-    static $checked = false;
-    if ($checked) return;
-    $checked = true;
+// ----------------------------------------------------------------
+// A3: STAFF NOTIFICATIONS
+// ----------------------------------------------------------------
 
-    $defaults = [
-        'auto_validate_documents' => '1',
-        'auto_assign_exam_slots'  => '1',
-        'auto_promote_waitlist'   => '1',
-        'auto_reschedule_noshows' => '1',
-        'auto_release_results'    => '0',
-        'idle_applicant_days'     => '7',
-        'doc_reminder_days'       => '3',
-    ];
+/**
+ * Notify all staff/admin users about an event.
+ */
+function notify_staff(string $type, string $title, string $message = '', string $link = ''): void
+{
+    try {
+        $staff = db()->query("SELECT id FROM users WHERE role IN ('staff','admin') AND is_active=1")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($staff as $userId) {
+            create_notification((int)$userId, $type, $title, $message, $link);
+        }
+    } catch (\Throwable $e) {
+        error_log('notify_staff error: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Notify staff when new documents are uploaded and awaiting review.
+ */
+function notify_staff_new_documents(int $applicantId, string $applicantName): void
+{
+    notify_staff(
+        'staff_docs_uploaded',
+        'New Documents Uploaded',
+        "{$applicantName} has uploaded documents awaiting review.",
+        '/staff/applicants/' . $applicantId
+    );
+}
+
+/**
+ * Notify staff when an interview session is about to start (30 min reminder).
+ */
+function notify_staff_interview_reminder(int $slotId, string $date, string $time, string $dept): void
+{
+    notify_staff(
+        'staff_interview_reminder',
+        'Interview Starting Soon',
+        "Interview session for {$dept} on " . date('M j', strtotime($date)) . " at " . date('g:i A', strtotime($time)) . " starts in 30 minutes.",
+        '/staff/interviews/queue'
+    );
+}
+
+/**
+ * Notify staff when a no-show is detected.
+ */
+function notify_staff_no_show(int $applicantId, string $applicantName): void
+{
+    notify_staff(
+        'staff_no_show',
+        'No-Show Detected',
+        "{$applicantName} was marked as a no-show for their interview.",
+        '/staff/interviews/absent'
+    );
+}
+
+/**
+ * Notify staff when results are pending release.
+ */
+function notify_staff_results_pending(int $count): void
+{
+    notify_staff(
+        'staff_results_pending',
+        'Results Pending Release',
+        "{$count} applicant(s) have completed interviews but don't have a decision yet.",
+        '/staff/results?result=pending'
+    );
+}
+
+// ----------------------------------------------------------------
+// B1: AUTO-RESCHEDULE NO-SHOWS
+// ----------------------------------------------------------------
+
+/**
+ * Auto-reschedule a no-show applicant to the next available interview slot.
+ * Called from record_interview_evaluation() when absent=true.
+ */
+function auto_reschedule_noshow(int $applicantId, ?int $actorUserId = null): ?int
+{
+    if (school_setting('auto_reschedule_noshows', '1') !== '1') return null;
+
+    $pdo = db();
+
+    // Clear the old queue entry status
+    $pdo->prepare(
+        'UPDATE interview_queue SET interview_status = "no_show" WHERE applicant_id = ? AND interview_status = "pending"'
+    )->execute([$applicantId]);
+
+    // Ensure applicant stays in interview stage
+    $pdo->prepare(
+        'UPDATE applicants SET overall_status = "interview" WHERE id = ? AND overall_status IN ("interview","result")'
+    )->execute([$applicantId]);
+
+    // Try to reschedule using the scheduler
+    try {
+        $newSlotId = reschedule_interview($applicantId, $actorUserId);
+        if ($newSlotId) {
+            // Notify the student
+            $stmt = $pdo->prepare('SELECT user_id FROM applicants WHERE id = ?');
+            $stmt->execute([$applicantId]);
+            $userId = (int)$stmt->fetchColumn();
+
+            $slotStmt = $pdo->prepare('SELECT slot_date, slot_time FROM interview_slots WHERE id = ?');
+            $slotStmt->execute([$newSlotId]);
+            $slotInfo = $slotStmt->fetch();
+
+            if ($slotInfo && $userId) {
+                create_notification(
+                    $userId,
+                    'interview_rescheduled',
+                    'Interview Rescheduled',
+                    'You missed your previous interview. You have been rescheduled to '
+                        . date('F j, Y', strtotime($slotInfo['slot_date']))
+                        . ' at ' . date('g:i A', strtotime($slotInfo['slot_time'])) . '.',
+                    '/student/interview'
+                );
+            }
+
+            audit_log('auto_reschedule_noshow', "Auto-rescheduled no-show applicant {$applicantId} to slot {$newSlotId}", 'applicant', $applicantId);
+            return $newSlotId;
+        }
+    } catch (\Throwable $e) {
+        error_log('auto_reschedule_noshow error: ' . $e->getMessage());
+    }
+
+    return null;
+}
+
+// ----------------------------------------------------------------
+// B2: DOCUMENT REMINDER NUDGES
+// ----------------------------------------------------------------
+
+/**
+ * Send document reminder notifications to idle students.
+ * Returns count of students notified.
+ */
+function send_document_reminders(): int
+{
+    $reminderDays = (int) school_setting('doc_reminder_days', '3');
+    if ($reminderDays <= 0) return 0;
+
+    $pdo = db();
+    $notified = 0;
+
+    $stmt = $pdo->prepare(
+        "SELECT a.id, a.user_id, u.name
+         FROM applicants a
+         JOIN users u ON u.id = a.user_id
+         WHERE a.overall_status IN ('pending','documents')
+           AND DATEDIFF(NOW(), a.updated_at) >= ?
+           AND NOT EXISTS (
+               SELECT 1 FROM notifications n
+               WHERE n.user_id = a.user_id
+                 AND n.type = 'doc_reminder'
+                 AND n.created_at > DATE_SUB(NOW(), INTERVAL ? DAY)
+           )"
+    );
+    $stmt->execute([$reminderDays, $reminderDays]);
+    $stalled = $stmt->fetchAll();
+
+    foreach ($stalled as $row) {
+        create_notification(
+            (int)$row['user_id'],
+            'doc_reminder',
+            'Document Reminder',
+            'You have incomplete documents. Please upload them to continue your application.',
+            '/student/documents'
+        );
+        $notified++;
+    }
+
+    if ($notified > 0) {
+        audit_log('doc_reminders_sent', "Sent document reminders to {$notified} applicant(s)");
+    }
+
+    return $notified;
+}
+
+// ----------------------------------------------------------------
+// B3: BATCH EXAM SLOT CREATION
+// ----------------------------------------------------------------
+
+/**
+ * Create exam slots in batch based on a date range template.
+ */
+function batch_create_exam_slots(array $config, string $department, int $staffId): int
+{
+    $pdo = db();
+    $created = 0;
+
+    $startDate = new DateTime($config['start_date']);
+    $endDate   = new DateTime($config['end_date']);
+    $time      = $config['slot_time']   ?? '08:00';
+    $room      = $config['room_label']  ?? '';
+    $capacity  = max(1, (int)($config['capacity'] ?? 35));
+    $days      = $config['days'] ?? [1, 2, 3, 4, 5];
+
+    $schoolYear = school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
+    $activeExam = $pdo->query('SELECT id FROM exams WHERE is_active=1 LIMIT 1')->fetch();
+    $examId     = $activeExam ? (int)$activeExam['id'] : null;
+
+    $current = clone $startDate;
+    while ($current <= $endDate) {
+        $dayOfWeek = (int) $current->format('N');
+
+        if (in_array($dayOfWeek, $days, true)) {
+            $dateStr = $current->format('Y-m-d');
+
+            // Check if slot already exists for this date/dept/room
+            $stmt = $pdo->prepare(
+                'SELECT id FROM exam_slot_schedule
+                 WHERE exam_date = ? AND department = ? AND room_label = ?
+                 LIMIT 1'
+            );
+            $stmt->execute([$dateStr, $department, $room]);
+            if (!$stmt->fetch()) {
+                $pdo->prepare(
+                    'INSERT INTO exam_slot_schedule
+                        (exam_id, exam_date, slot_time, room_label, department, capacity, school_year, created_by)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                )->execute([$examId, $dateStr, $time . ':00', $room, $department, $capacity, $schoolYear, $staffId]);
+                $created++;
+            }
+        }
+
+        $current->modify('+1 day');
+    }
+
+    if ($created > 0) {
+        audit_log('batch_exam_slots',
+            "Batch-created {$created} exam slot(s) for " . ($department ?: 'unassigned'),
+            'exam_slot');
+    }
+
+    return $created;
+}
+
+// ----------------------------------------------------------------
+// B4: AUTO-CLOSE EXPIRED INTERVIEW SESSIONS
+// ----------------------------------------------------------------
+
+/**
+ * Auto-close interview sessions past their end time.
+ * Marks remaining scheduled applicants as no-shows.
+ * Returns count of sessions closed.
+ */
+function auto_close_expired_sessions(): int
+{
+    $pdo = db();
+    $closed = 0;
+
+    $stmt = $pdo->query(
+        "SELECT s.id, s.slot_date, s.end_time, s.department
+         FROM interview_slots s
+         WHERE s.status = 'open'
+           AND (
+               s.slot_date < CURDATE()
+               OR (s.slot_date = CURDATE() AND s.end_time IS NOT NULL AND s.end_time < CURTIME())
+           )"
+    );
+    $expired = $stmt->fetchAll();
+
+    foreach ($expired as $slot) {
+        // Close the slot
+        $pdo->prepare('UPDATE interview_slots SET status = "closed" WHERE id = ?')
+            ->execute([$slot['id']]);
+
+        // Mark remaining "scheduled" applicants as no-shows
+        $pdo->prepare(
+            'UPDATE interview_queue
+             SET status = "no_show", interview_status = "no_show"
+             WHERE slot_id = ? AND status = "scheduled" AND interview_status = "pending"'
+        )->execute([$slot['id']]);
+
+        $noShows = (int)($pdo->query('SELECT ROW_COUNT()')->fetchColumn() ?: 0);
+
+        audit_log('auto_close_session',
+            "Auto-closed expired session #{$slot['id']} ({$slot['slot_date']}). {$noShows} marked as no-show.",
+            'interview_slot', $slot['id']);
+
+        $closed++;
+    }
+
+    return $closed;
+}
+
+// ----------------------------------------------------------------
+// B5: ACCEPTANCE CONFIRMATION DEADLINE
+// ----------------------------------------------------------------
+
+/**
+ * Auto-expire accepted applicants who haven't taken action within the deadline.
+ * Promotes the next waitlisted applicant.
+ * Returns count of expired applicants.
+ */
+function auto_expire_accepted(): int
+{
+    $deadlineDays = (int) school_setting('acceptance_deadline_days', '0');
+    if ($deadlineDays <= 0) return 0;
+
+    $pdo = db();
+    $expired = 0;
+
+    $stmt = $pdo->prepare(
+        "SELECT a.id, a.user_id, a.course_applied, ar.released_at
+         FROM applicants a
+         JOIN admission_results ar ON ar.applicant_id = a.id
+         WHERE ar.result = 'accepted'
+           AND a.overall_status = 'released'
+           AND ar.released_at IS NOT NULL
+           AND DATEDIFF(NOW(), ar.released_at) > ?"
+    );
+    $stmt->execute([$deadlineDays]);
+    $stale = $stmt->fetchAll();
+
+    foreach ($stale as $row) {
+        // Mark as slot_expired
+        $pdo->prepare(
+            "UPDATE admission_results SET result = 'rejected',
+                    remarks = CONCAT(COALESCE(remarks,''), '\nSlot expired — no action within {$deadlineDays} days')
+             WHERE applicant_id = ?"
+        )->execute([$row['id']]);
+
+        $pdo->prepare("UPDATE applicants SET overall_status = 'withdrawn' WHERE id = ?")
+            ->execute([$row['id']]);
+
+        // Notify
+        create_notification(
+            (int)$row['user_id'],
+            'acceptance_expired',
+            'Acceptance Slot Expired',
+            "Your acceptance for {$row['course_applied']} has expired because no action was taken within {$deadlineDays} days.",
+            '/student/result'
+        );
+
+        // Promote next waitlisted
+        auto_promote_waitlist($row['id']);
+
+        $expired++;
+    }
+
+    if ($expired > 0) {
+        audit_log('auto_expire_accepted', "Auto-expired {$expired} accepted applicant(s) past deadline");
+    }
+
+    return $expired;
+}
+
+// ----------------------------------------------------------------
+// B7: SMART EXAM SCHEDULING
+// ----------------------------------------------------------------
+
+/**
+ * Smart exam slot assignment — assigns to least-filled slot instead of first available.
+ * Enhanced version of auto_assign_exam_slot().
+ */
+function smart_assign_exam_slot(int $applicantId): ?int
+{
+    if (school_setting('auto_assign_exam_slots', '1') !== '1') return null;
+
+    $pdo = db();
+
+    // Check if already assigned
+    $stmt = $pdo->prepare('SELECT id FROM applicant_exam_slots WHERE applicant_id = ?');
+    $stmt->execute([$applicantId]);
+    if ($stmt->fetch()) return null;
+
+    // Get applicant's department
+    $stmt = $pdo->prepare(
+        'SELECT a.course_applied, u.department
+         FROM applicants a JOIN users u ON u.id = a.user_id
+         WHERE a.id = ?'
+    );
+    $stmt->execute([$applicantId]);
+    $appl = $stmt->fetch();
+    if (!$appl) return null;
+
+    $dept = $appl['department'] ?: course_to_department($appl['course_applied']);
+
+    // Find the LEAST FILLED slot (smart load balancing) instead of first available
+    $params = [$dept];
+    $sql = 'SELECT ess.id, ess.capacity,
+                   (SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id = ess.id) AS filled
+            FROM exam_slot_schedule ess
+            WHERE ess.exam_date >= CURDATE()';
+
+    if ($dept) {
+        $sql .= ' AND (ess.department = ? OR ess.department = "")';
+    } else {
+        $sql .= ' AND 1=1';
+        $params = [];
+    }
+    $sql .= ' HAVING filled < ess.capacity
+              ORDER BY (filled / ess.capacity) ASC, ess.exam_date ASC, ess.slot_time ASC
+              LIMIT 1';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $slot = $stmt->fetch();
+
+    if (!$slot) return null;
+
+    $slotId = (int) $slot['id'];
 
     try {
-        foreach ($defaults as $key => $val) {
-            db()->prepare(
-                'INSERT IGNORE INTO school_settings (setting_key, setting_value) VALUES (?, ?)'
-            )->execute([$key, $val]);
+        $pdo->prepare(
+            'INSERT INTO applicant_exam_slots (applicant_id, slot_id) VALUES (?, ?)'
+        )->execute([$applicantId, $slotId]);
+
+        $pdo->prepare(
+            'UPDATE exam_slot_schedule SET filled = filled + 1 WHERE id = ?'
+        )->execute([$slotId]);
+
+        // Notification
+        $stmt = $pdo->prepare('SELECT exam_date, slot_time, room_label FROM exam_slot_schedule WHERE id = ?');
+        $stmt->execute([$slotId]);
+        $slotInfo = $stmt->fetch();
+
+        if ($slotInfo) {
+            $stmt = $pdo->prepare('SELECT user_id FROM applicants WHERE id = ?');
+            $stmt->execute([$applicantId]);
+            $userId = (int) $stmt->fetchColumn();
+
+            // Day-before reminder
+            create_notification(
+                $userId,
+                'exam_slot_assigned',
+                'Exam Slot Assigned',
+                "You have been assigned to take the exam on "
+                    . date('F j, Y', strtotime($slotInfo['exam_date']))
+                    . " at " . date('g:i A', strtotime($slotInfo['slot_time']))
+                    . " in {$slotInfo['room_label']}.",
+                '/student/exam'
+            );
         }
-    } catch (\Throwable) {}
+
+        audit_log('smart_exam_slot_assigned', "Smart-assigned applicant {$applicantId} to least-filled slot {$slotId}", 'applicant', $applicantId);
+        return $slotId;
+    } catch (\Throwable $e) {
+        error_log('Smart assign exam slot error: ' . $e->getMessage());
+        return null;
+    }
 }
+
+/**
+ * Send exam day-before reminder notifications.
+ */
+function send_exam_reminders(): int
+{
+    $pdo = db();
+    $tomorrow = date('Y-m-d', strtotime('+1 day'));
+    $notified = 0;
+
+    $stmt = $pdo->prepare(
+        "SELECT aes.applicant_id, a.user_id, ess.exam_date, ess.slot_time, ess.room_label
+         FROM applicant_exam_slots aes
+         JOIN exam_slot_schedule ess ON ess.id = aes.slot_id
+         JOIN applicants a ON a.id = aes.applicant_id
+         WHERE ess.exam_date = ?
+           AND NOT EXISTS (
+               SELECT 1 FROM notifications n
+               WHERE n.user_id = a.user_id
+                 AND n.type = 'exam_reminder'
+                 AND n.created_at > DATE_SUB(NOW(), INTERVAL 1 DAY)
+           )"
+    );
+    $stmt->execute([$tomorrow]);
+
+    foreach ($stmt->fetchAll() as $row) {
+        create_notification(
+            (int)$row['user_id'],
+            'exam_reminder',
+            'Exam Tomorrow',
+            'Your exam is tomorrow, ' . date('F j, Y', strtotime($row['exam_date']))
+                . ' at ' . date('g:i A', strtotime($row['slot_time']))
+                . ' in ' . $row['room_label'] . '. Good luck!',
+            '/student/exam'
+        );
+        $notified++;
+    }
+
+    return $notified;
+}
+
+

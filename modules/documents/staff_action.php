@@ -188,6 +188,51 @@ switch ($action) {
         redirect('/staff/applicants/' . $id);
         break;
 
+    // A7: Request document resubmission
+    case 'request_resubmission':
+        $remarks = trim($_POST['remarks'] ?? '');
+        if (!$remarks) {
+            Session::flash('error', 'Provide a reason for resubmission.');
+            $stmt = $db->prepare('SELECT applicant_id FROM documents WHERE id=?');
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+            redirect('/staff/applicants/' . ($row['applicant_id'] ?? 0));
+        }
+        $stmt = $db->prepare(
+            'UPDATE documents SET status="resubmission_required", staff_remarks=?, reviewed_by=? WHERE id=?'
+        );
+        $stmt->execute([$remarks, $staffId, $id]);
+
+        $stmt = $db->prepare('SELECT applicant_id FROM documents WHERE id=?');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+        $applicantId = $row['applicant_id'] ?? 0;
+
+        // Reset to documents stage
+        $db->prepare(
+            'UPDATE applicants SET overall_status = "documents"
+              WHERE id = ? AND overall_status = "submitted"'
+        )->execute([$applicantId]);
+
+        // Notify student
+        $stmt = $db->prepare('SELECT user_id FROM applicants WHERE id = ?');
+        $stmt->execute([$applicantId]);
+        $studentUserId = (int)$stmt->fetchColumn();
+        if ($studentUserId) {
+            create_notification(
+                $studentUserId,
+                'doc_resubmission',
+                'Document Resubmission Required',
+                "A document requires corrections: {$remarks}. Please upload a corrected version.",
+                '/student/documents'
+            );
+        }
+
+        Session::flash('success', 'Resubmission requested. Student has been notified.');
+        audit_log('document_resubmission_requested', "Requested resubmission for document ID {$id} — {$remarks}", 'document', $id);
+        redirect('/staff/applicants/' . $applicantId);
+        break;
+
     default:
         redirect('/staff/applicants');
 }

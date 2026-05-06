@@ -10,6 +10,78 @@ Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
 $db = db();
 
 // ----------------------------------------------------------------
+// Bulk approve SELECTED applicants' documents
+// ----------------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_approve_selected') {
+    csrf_check();
+    $staffId = Auth::id();
+    $ids = array_values(array_unique(array_filter(array_map('intval', $_POST['applicant_ids'] ?? []))));
+
+    if (empty($ids)) {
+        Session::flash('error', 'No applicants selected.');
+        redirect('/staff/applicants');
+    }
+
+    $approved = 0;
+    $advanced = 0;
+    foreach ($ids as $aid) {
+        $db->prepare(
+            'UPDATE documents SET status="approved", staff_remarks=NULL, reviewed_by=?
+              WHERE applicant_id=? AND status IN ("uploaded","under_review")'
+        )->execute([$staffId, $aid]);
+        $cnt = (int)($db->query('SELECT ROW_COUNT()')->fetchColumn() ?: 0);
+        if ($cnt > 0) $approved++;
+
+        $rem = $db->prepare('SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != "approved"');
+        $rem->execute([$aid]);
+        if ((int)$rem->fetchColumn() === 0) {
+            $db->prepare(
+                'UPDATE applicants SET overall_status="exam", documents_approved_at=COALESCE(documents_approved_at,NOW())
+                  WHERE id=? AND overall_status NOT IN ("exam","interview","result")'
+            )->execute([$aid]);
+            $advanced++;
+            notify_stage_transition($aid, 'exam');
+            auto_assign_exam_slot($aid);
+        }
+    }
+    audit_log('bulk_approve_selected', "Bulk-approved docs for {$approved} applicant(s), {$advanced} advanced to exam");
+    Session::flash('success', "Approved documents for {$approved} applicant(s). {$advanced} advanced to exam.");
+    redirect('/staff/applicants');
+}
+
+// ----------------------------------------------------------------
+// Bulk reject SELECTED applicants' documents
+// ----------------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_reject_selected') {
+    csrf_check();
+    $staffId = Auth::id();
+    $ids = array_values(array_unique(array_filter(array_map('intval', $_POST['applicant_ids'] ?? []))));
+    $reason = trim($_POST['remarks'] ?? '');
+
+    if (empty($ids)) {
+        Session::flash('error', 'No applicants selected.');
+        redirect('/staff/applicants');
+    }
+    if ($reason === '') {
+        Session::flash('error', 'A reason is required when rejecting documents.');
+        redirect('/staff/applicants');
+    }
+
+    $rejected = 0;
+    foreach ($ids as $aid) {
+        $db->prepare(
+            'UPDATE documents SET status="rejected", staff_remarks=?, reviewed_by=?
+              WHERE applicant_id=? AND status IN ("uploaded","under_review")'
+        )->execute([$reason, $staffId, $aid]);
+        $cnt = (int)($db->query('SELECT ROW_COUNT()')->fetchColumn() ?: 0);
+        if ($cnt > 0) $rejected++;
+    }
+    audit_log('bulk_reject_selected', "Bulk-rejected docs for {$rejected} applicant(s): {$reason}");
+    Session::flash('success', "Rejected documents for {$rejected} applicant(s).");
+    redirect('/staff/applicants');
+}
+
+// ----------------------------------------------------------------
 // Bulk approve all applicants with pending documents
 // ----------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'approve_all_in_review') {
@@ -123,7 +195,7 @@ if ($applicantId) {
     </span>
     <?php if ($approvableCount > 0): ?>
         <button type="button" class="btn btn-sm" onclick="openAiValidateAllModal()" id="ai-validate-all-btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="margin-right:3px"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 3c-1.2 5.4-4.5 7.5-9 9 4.5 1.5 7.8 3.6 9 9 1.2-5.4 4.5-7.5 9-9-4.5-1.5-7.8-3.6-9-9z"/></svg>
+            <?= icon('ic_fluent_sparkle_24_regular', 14, 'margin-right:3px') ?>
             AI Validate All
         </button>
         <form method="POST" action="<?= url('/staff/documents/' . $applicantId) ?>"
@@ -213,6 +285,8 @@ if ($applicantId) {
                     </form>
                     <button class="btn btn-danger btn-sm"
                             onclick="openRejectModal(<?= $doc['id'] ?>)">Reject</button>
+                    <button class="btn btn-warning btn-sm"
+                            onclick="openResubmitModal(<?= $doc['id'] ?>)">Resubmit</button>
                 </div>
             <?php endif; ?>
             <?php if ($canUndo && $doc && $status === 'approved'): ?>
@@ -265,6 +339,34 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
             <div class="modal-footer">
                 <button type="button" class="btn btn-ghost" onclick="closeRejectModal()">Cancel</button>
                 <button type="submit" class="btn btn-danger">Reject</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- A7: Request Resubmission modal -->
+<div id="resubmit-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
+    <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+            <div class="modal-title">Request Resubmission</div>
+            <button class="btn-icon" onclick="document.getElementById('resubmit-modal').style.display='none'">
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
+            </button>
+        </div>
+        <form method="POST" id="resubmit-form" action="">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="request_resubmission">
+            <div class="modal-body">
+                <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">
+                    The student will be notified and asked to upload a corrected version.
+                </p>
+                <label class="form-label">What needs to be corrected? <span style="color:var(--error)">*</span></label>
+                <textarea name="remarks" class="form-control" rows="3"
+                          placeholder="e.g. Document is blurry, wrong page uploaded, expired ID" required></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('resubmit-modal').style.display='none'">Cancel</button>
+                <button type="submit" class="btn btn-warning">Request Resubmission</button>
             </div>
         </form>
     </div>
@@ -530,6 +632,10 @@ function openRejectModal(docId) {
     document.getElementById('reject-form').action = '<?= url('/staff/documents/') ?>' + docId;
     document.getElementById('reject-modal').style.display = 'flex';
 }
+function openResubmitModal(docId) {
+    document.getElementById('resubmit-form').action = '<?= url('/staff/documents/') ?>' + docId;
+    document.getElementById('resubmit-modal').style.display = 'flex';
+}
 function closeRejectModal() {
     document.getElementById('reject-modal').style.display = 'none';
 }
@@ -548,7 +654,7 @@ document.getElementById('reject-modal').addEventListener('click', function(e){
         <div class="modal-header" style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)">
             <div style="display:flex;align-items:center;gap:var(--space-3)">
                 <div style="width:34px;height:34px;border-radius:var(--radius-md);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 3c-1.2 5.4-4.5 7.5-9 9 4.5 1.5 7.8 3.6 9 9 1.2-5.4 4.5-7.5 9-9-4.5-1.5-7.8-3.6-9-9z"/></svg>
+                    <?= icon('ic_fluent_sparkle_24_regular', 17, 'color:#fff') ?>
                 </div>
                 <div>
                     <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">AI Document Validation</div>
@@ -585,8 +691,8 @@ document.getElementById('reject-modal').addEventListener('click', function(e){
 
             <!-- Error step -->
             <div id="ai-doc-step-error" style="display:none;flex-direction:column;gap:var(--space-3)">
-                <div style="display:flex;align-items:flex-start;gap:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--radius-md);padding:12px 14px;font-size:var(--text-sm);color:#991b1b">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
+                <div style="display:flex;align-items:flex-start;gap:var(--space-2);background:var(--error-bg);border:1px solid var(--error);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);font-size:var(--text-sm);color:var(--error)">
+                    <?= icon('ic_fluent_info_24_regular', 16, 'flex-shrink:0;margin-top:1px') ?>
                     <span id="ai-doc-error-msg"></span>
                 </div>
                 <button class="btn btn-ghost btn-sm" style="align-self:flex-start" onclick="resetAiDocModal()">Try again</button>
@@ -602,7 +708,7 @@ document.getElementById('reject-modal').addEventListener('click', function(e){
         <div class="modal-footer" style="border-top:1px solid var(--border)">
             <button type="button" class="btn btn-ghost" onclick="closeAiValidateModal()">Close</button>
             <button type="button" class="btn btn-primary" id="ai-doc-validate-btn" onclick="startAiValidateAll()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="margin-right:5px"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 3c-1.2 5.4-4.5 7.5-9 9 4.5 1.5 7.8 3.6 9 9 1.2-5.4 4.5-7.5 9-9-4.5-1.5-7.8-3.6-9-9z"/></svg>
+                <?= icon('ic_fluent_sparkle_24_regular', 14, 'margin-right:5px') ?>
                 Validate All
             </button>
         </div>
@@ -921,7 +1027,8 @@ async function startAiValidateAll() {
 // ----------------------------------------------------------------
 // List all applicants with filters
 // ----------------------------------------------------------------
-$statusFilter = $_GET['status'] ?? '';
+// Default to 'pending' tab when no filter is set
+$statusFilter = $_GET['status'] ?? (empty($_GET) ? 'pending' : '');
 $typeFilter   = $_GET['type']   ?? '';
 $search       = trim($_GET['q'] ?? '');
 $sortCol      = $_GET['sort_col'] ?? 'applied';
@@ -1163,9 +1270,13 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
 
 <!-- Table -->
 <div class="card" style="padding:0;overflow:hidden">
-    <table class="table">
+    <table class="table" id="applicants-table">
         <thead>
             <tr>
+                <th style="width:40px;padding-left:var(--space-3)">
+                    <input type="checkbox" id="bulk-select-all" onchange="bulkToggleAll(this)"
+                           style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                </th>
                 <?= sortable_th('applicant',    'Applicant',    $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
                 <?= sortable_th('type',         'Type',         $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
                 <?= sortable_th('course',       'Course',       $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
@@ -1177,10 +1288,17 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
         </thead>
         <tbody>
         <?php if (empty($result['data'])): ?>
-            <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No applicants found.</td></tr>
+            <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No applicants found.</td></tr>
         <?php else: ?>
-            <?php foreach ($result['data'] as $row): ?>
-                <tr>
+            <?php foreach ($result['data'] as $row):
+                $hasPending = (int)$row['pending_review'] > 0;
+            ?>
+                <tr class="bulk-row <?= $hasPending ? 'has-pending-docs' : '' ?>" data-id="<?= (int)$row['id'] ?>">
+                    <td style="padding-left:var(--space-3)">
+                        <input type="checkbox" class="bulk-check" value="<?= (int)$row['id'] ?>"
+                               onchange="bulkUpdateSelection()"
+                               style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                    </td>
                     <td>
                         <div style="font-weight:var(--weight-medium)"><?= e($row['student_name']) ?></div>
                         <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
@@ -1189,7 +1307,7 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
                     <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>
                     <td><span class="badge badge-<?= $row['overall_status'] ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span></td>
                     <td>
-                        <?php if ($row['pending_review'] > 0): ?>
+                        <?php if ($hasPending): ?>
                             <span style="color:var(--warning);font-weight:var(--weight-semibold);font-size:var(--text-sm)"><?= $row['pending_review'] ?> to review</span>
                         <?php else: ?>
                             <span style="color:var(--text-tertiary);font-size:var(--text-sm)">—</span>
@@ -1216,6 +1334,219 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
         <?php endfor; ?>
     </div>
 <?php endif; ?>
+
+<!-- ============================================================
+     BULK ACTION TOOLBAR (floating, appears on selection)
+============================================================ -->
+<div id="bulk-toolbar" style="
+    display:none;
+    position:fixed;bottom:var(--space-6);left:50%;transform:translateX(-50%);z-index:500;
+    background:var(--bg-elevated);border:1px solid var(--border);
+    border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);
+    padding:var(--space-3) var(--space-5);
+    display:none;align-items:center;gap:var(--space-4);
+    animation:bulkToolbarSlideUp .2s ease-out;
+">
+    <div style="display:flex;align-items:center;gap:var(--space-2)">
+        <span id="bulk-count" style="
+            display:inline-flex;align-items:center;justify-content:center;
+            min-width:24px;height:24px;padding:0 var(--space-2);
+            border-radius:var(--radius-full);
+            background:var(--accent);color:var(--accent-text);
+            font-size:var(--text-xs);font-weight:var(--weight-semibold);
+        ">0</span>
+        <span style="font-size:var(--text-sm);color:var(--text-secondary);white-space:nowrap">selected</span>
+    </div>
+
+    <div style="width:1px;height:24px;background:var(--border)"></div>
+
+    <button type="button" class="btn btn-success btn-sm" onclick="bulkApproveSelected()"
+            style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
+        Approve Docs
+    </button>
+    <button type="button" class="btn btn-danger btn-sm" onclick="openBulkRejectModal()"
+            style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <?= icon('ic_fluent_dismiss_circle_24_regular', 14) ?>
+        Reject Docs
+    </button>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="bulkExportCsv()"
+            style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <?= icon('ic_fluent_arrow_download_24_regular', 14) ?>
+        Export CSV
+    </button>
+
+    <div style="width:1px;height:24px;background:var(--border)"></div>
+
+    <button type="button" class="btn btn-ghost btn-sm" onclick="bulkClearSelection()"
+            style="color:var(--text-tertiary);font-size:var(--text-xs);white-space:nowrap">
+        Clear
+    </button>
+</div>
+
+<!-- Bulk approve hidden form -->
+<form id="bulk-approve-form" method="POST" style="display:none">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="bulk_approve_selected">
+</form>
+
+<!-- Bulk reject modal -->
+<div id="bulk-reject-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
+    <div class="modal" style="max-width:440px">
+        <div class="modal-header">
+            <div class="modal-title">Reject Documents</div>
+            <button class="btn-icon" onclick="closeBulkRejectModal()">
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
+            </button>
+        </div>
+        <form id="bulk-reject-form" method="POST">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="bulk_reject_selected">
+            <div class="modal-body">
+                <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">
+                    Rejecting documents for <strong id="bulk-reject-count">0</strong> applicant(s).
+                </p>
+                <label class="form-label">Reason for rejection <span style="color:var(--error)">*</span></label>
+                <textarea name="remarks" class="form-control" rows="3"
+                          placeholder="e.g. Document is blurry, expired, or does not match requirements" required></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeBulkRejectModal()">Cancel</button>
+                <button type="submit" class="btn btn-danger">Reject Selected</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+@keyframes bulkToolbarSlideUp {
+    from { opacity:0; transform:translateX(-50%) translateY(16px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+tr.bulk-row.bulk-selected { background:var(--accent-muted); }
+tr.bulk-row.bulk-selected td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+</style>
+
+<script>
+/* ── Bulk selection logic ──────────────────────────────── */
+function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.bulk-check:checked')).map(cb => cb.value);
+}
+
+function bulkUpdateSelection() {
+    var ids     = getSelectedIds();
+    var count   = ids.length;
+    var toolbar = document.getElementById('bulk-toolbar');
+    var badge   = document.getElementById('bulk-count');
+    var allCb   = document.getElementById('bulk-select-all');
+    var total   = document.querySelectorAll('.bulk-check').length;
+
+    badge.textContent  = count;
+    toolbar.style.display = count > 0 ? 'flex' : 'none';
+    allCb.checked      = count > 0 && count === total;
+    allCb.indeterminate = count > 0 && count < total;
+
+    document.querySelectorAll('.bulk-row').forEach(function(tr) {
+        var cb = tr.querySelector('.bulk-check');
+        if (cb && cb.checked) { tr.classList.add('bulk-selected'); }
+        else { tr.classList.remove('bulk-selected'); }
+    });
+}
+
+function bulkToggleAll(masterCb) {
+    document.querySelectorAll('.bulk-check').forEach(function(cb) {
+        cb.checked = masterCb.checked;
+    });
+    bulkUpdateSelection();
+}
+
+function bulkClearSelection() {
+    document.getElementById('bulk-select-all').checked = false;
+    document.querySelectorAll('.bulk-check').forEach(function(cb) { cb.checked = false; });
+    bulkUpdateSelection();
+}
+
+function bulkApproveSelected() {
+    var ids = getSelectedIds();
+    if (ids.length === 0) return;
+    if (!confirm('Approve all pending documents for ' + ids.length + ' selected applicant(s)?\n\nApplicants with all docs approved will advance to the exam stage.')) return;
+
+    var form = document.getElementById('bulk-approve-form');
+    // Remove old hidden inputs
+    form.querySelectorAll('input[name="applicant_ids[]"]').forEach(function(el) { el.remove(); });
+    ids.forEach(function(id) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'applicant_ids[]';
+        input.value = id;
+        form.appendChild(input);
+    });
+    form.submit();
+}
+
+function openBulkRejectModal() {
+    var ids = getSelectedIds();
+    if (ids.length === 0) return;
+    document.getElementById('bulk-reject-count').textContent = ids.length;
+
+    var form = document.getElementById('bulk-reject-form');
+    form.querySelectorAll('input[name="applicant_ids[]"]').forEach(function(el) { el.remove(); });
+    ids.forEach(function(id) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'applicant_ids[]';
+        input.value = id;
+        form.appendChild(input);
+    });
+
+    document.getElementById('bulk-reject-modal').style.display = 'flex';
+    document.getElementById('bulk-reject-modal').setAttribute('aria-hidden', 'false');
+}
+
+function closeBulkRejectModal() {
+    document.getElementById('bulk-reject-modal').style.display = 'none';
+    document.getElementById('bulk-reject-modal').setAttribute('aria-hidden', 'true');
+}
+
+function bulkExportCsv() {
+    var ids = getSelectedIds();
+    if (ids.length === 0) return;
+    var rows = [['Name','Email','Type','Course','Status','Applied']];
+    ids.forEach(function(id) {
+        var tr = document.querySelector('.bulk-row[data-id="'+id+'"]');
+        if (!tr) return;
+        var cells = tr.querySelectorAll('td');
+        rows.push([
+            (cells[1]?.querySelector('div')?.textContent||'').trim(),
+            (cells[1]?.querySelectorAll('div')[1]?.textContent||'').trim(),
+            (cells[2]?.textContent||'').trim(),
+            (cells[3]?.textContent||'').trim(),
+            (cells[4]?.textContent||'').trim(),
+            (cells[6]?.textContent||'').trim()
+        ]);
+    });
+    var csv = rows.map(function(r){return r.map(function(c){return '"'+c.replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+    var blob = new Blob([csv], {type:'text/csv'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'applicants_export_'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click();
+}
+
+/* Close bulk reject modal on backdrop click */
+document.getElementById('bulk-reject-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeBulkRejectModal();
+});
+
+/* Keyboard: Escape closes modal */
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        if (document.getElementById('bulk-reject-modal')?.style.display === 'flex') {
+            closeBulkRejectModal();
+        }
+    }
+});
+</script>
 
 <script>
 function toggleFilterDropdown() {

@@ -31,6 +31,10 @@ $isStudent    = ($userRole === 'student');
 
     <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
 
+    <?php if ($schoolLogo): ?>
+    <link rel="preload" as="image" href="<?= str_starts_with($schoolLogo, 'http') ? e($schoolLogo) : e(url('/' . $schoolLogo)) ?>">
+    <?php endif; ?>
+
     <!-- Inject accent color from DB before paint -->
     <script>
         // Apply saved theme before render to prevent flash
@@ -68,14 +72,14 @@ $isStudent    = ($userRole === 'student');
         </div>
 
         <!-- Progress Stepper — centered in header (students only) -->
-        <?php if ($showStepper && $isStudent): ?>
-            <div class="student-header-stepper">
+        <div class="student-header-stepper">
+            <?php if ($showStepper): ?>
                 <?php include __DIR__ . '/../partials/stepper.php'; ?>
-            </div>
-        <?php endif; ?>
+            <?php endif; ?>
+        </div>
 
         <!-- Notification bell + Profile menu -->
-        <div style="display:flex;align-items:center;gap:var(--space-3)">
+        <div style="display:flex;align-items:center;gap:var(--space-3);justify-content:flex-end">
 
         <!-- Notification Bell -->
         <?php $notifCount = notification_count(Auth::id()); ?>

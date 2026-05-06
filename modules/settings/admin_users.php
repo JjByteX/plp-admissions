@@ -120,6 +120,13 @@ $staffUsers = $stmt->fetchAll();
 ob_start();
 ?>
 
+<?php foreach ($errors as $err): ?>
+    <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($err) ?></div>
+<?php endforeach; ?>
+<?php foreach ($success as $suc): ?>
+    <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($suc) ?></div>
+<?php endforeach; ?>
+
 <div style="margin-bottom:var(--space-6)">
     <form method="GET" style="display:flex;align-items:center;gap:var(--space-2)">
         <label for="dept-filter" style="font-size:var(--text-sm);color:var(--text-secondary)">Department:</label>

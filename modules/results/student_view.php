@@ -46,9 +46,8 @@ $_interviewSlot = $stmt->fetch() ?: null;
 $stepperCurrent = current_step($applicant, $_examResult, $_interviewSlot, $result);
 
 // Withdrawal state helpers
-$isWithdrawn         = ($applicant['overall_status'] === 'withdrawn');
-$enrollmentConfirmed = ($result && $result['enrollment_intent'] === 'confirmed');
-$canWithdraw         = !$isWithdrawn && !$enrollmentConfirmed;
+$isWithdrawn = ($applicant['overall_status'] === 'withdrawn');
+$canWithdraw = !$isWithdrawn;
 
 ob_start();
 ?>
@@ -186,9 +185,9 @@ ob_start();
                             <?= $eTier['label'] ?> Tier
                         </span>
                         <?php if ($ePassed): ?>
-                            <span style="font-size:var(--text-xs);color:#22c55e;font-weight:var(--weight-semibold)">✓ Passed</span>
+                            <span style="font-size:var(--text-xs);color:var(--success);font-weight:var(--weight-semibold)"><?= icon('ic_fluent_checkmark_24_regular', 12) ?> Passed</span>
                         <?php else: ?>
-                            <span style="font-size:var(--text-xs);color:#ef4444;font-weight:var(--weight-semibold)">✗ Did not pass</span>
+                            <span style="font-size:var(--text-xs);color:var(--error);font-weight:var(--weight-semibold)"><?= icon('ic_fluent_dismiss_24_regular', 12) ?> Did not pass</span>
                         <?php endif; ?>
                     </div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
