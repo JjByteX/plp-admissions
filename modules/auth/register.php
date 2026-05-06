@@ -229,6 +229,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user->execute([$userId]);
             Auth::login($user->fetch());
 
+            // Send welcome email
+            send_registration_email($old['email'], $displayName);
+
             Session::flash('success', 'Account created successfully. Please upload your documents to continue.');
             redirect('/student/documents');
 

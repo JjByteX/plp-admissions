@@ -1,0 +1,14 @@
+# Environment secrets
+.env
+
+# Uploads (local dev)
+public/uploads/documents/*
+!public/uploads/documents/.gitkeep
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

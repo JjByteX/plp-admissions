@@ -100,7 +100,14 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div style="display:flex;flex-direction:column;gap:var(--space-6);max-width:560px">
+<div style="display:flex;justify-content:flex-start;margin-bottom:var(--space-4);max-width:560px;margin-left:auto;margin-right:auto">
+    <a href="javascript:history.back()" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:5px">
+        <?= icon('ic_fluent_arrow_left_24_regular', 16) ?>
+        Back
+    </a>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:var(--space-6);max-width:560px;margin:0 auto">
 
     <!-- Appearance: theme toggle -->
     <div class="card" style="padding:var(--space-6)">

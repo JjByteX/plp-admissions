@@ -95,6 +95,46 @@ function notify_stage_transition(int $applicantId, string $newStatus, string $ex
 
     [$title, $message, $link] = $messages[$newStatus];
     create_notification($userId, 'stage_' . $newStatus, $title, $message, $link);
+
+    // Send email notification
+    try {
+        $userStmt = $pdo->prepare('SELECT email, name FROM users WHERE id = ?');
+        $userStmt->execute([$userId]);
+        $user = $userStmt->fetch();
+        if ($user && !empty($user['email'])) {
+            $fullLink = rtrim(BASE_URL, '/') . $link;
+            $emailBody = '<p>' . e($message) . '</p>'
+                . '<p style="margin-top:16px"><a href="' . e($fullLink) . '" '
+                . 'style="display:inline-block;padding:10px 24px;background:' . e(school_setting('accent_color', '#2d6a4f')) . ';color:#fff;'
+                . 'text-decoration:none;border-radius:6px;font-weight:bold">View Details</a></p>';
+            send_email(
+                $user['email'],
+                $title . ' — ' . school_setting('school_name', 'PLP Admissions'),
+                email_template($title, $emailBody),
+                $user['name']
+            );
+        }
+    } catch (\Throwable $e) {
+        error_log('Stage email failed: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Send a welcome email after registration.
+ */
+function send_registration_email(string $email, string $name): void
+{
+    $body = '<p>Welcome, <strong>' . e($name) . '</strong>!</p>'
+        . '<p>Your account has been created successfully. Please log in and upload your required documents to continue with your application.</p>'
+        . '<p style="margin-top:16px"><a href="' . e(rtrim(BASE_URL, '/')) . '/student/documents" '
+        . 'style="display:inline-block;padding:10px 24px;background:' . e(school_setting('accent_color', '#2d6a4f')) . ';color:#fff;'
+        . 'text-decoration:none;border-radius:6px;font-weight:bold">Upload Documents</a></p>';
+    send_email(
+        $email,
+        'Welcome to ' . school_setting('school_name', 'PLP Admissions'),
+        email_template('Welcome!', $body),
+        $name
+    );
 }
 
 // ----------------------------------------------------------------

@@ -319,6 +319,76 @@ function hcaptcha_verify(): bool
     return !empty($data['success']);
 }
 
+// -- Email (PHPMailer + Gmail SMTP) ------------------------------
+function send_email(string $to, string $subject, string $htmlBody, string $toName = ''): bool
+{
+    if (!SMTP_ENABLED) {
+        error_log('Email skipped (SMTP not configured): ' . $subject . ' → ' . $to);
+        return false;
+    }
+
+    require_once ROOT_PATH . '/lib/PHPMailer/src/Exception.php';
+    require_once ROOT_PATH . '/lib/PHPMailer/src/PHPMailer.php';
+    require_once ROOT_PATH . '/lib/PHPMailer/src/SMTP.php';
+
+    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host       = SMTP_HOST;
+        $mail->SMTPAuth   = true;
+        $mail->Username   = SMTP_USER;
+        $mail->Password   = SMTP_PASS;
+        $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = SMTP_PORT;
+
+        $mail->setFrom(SMTP_USER, SMTP_FROM_NAME);
+        $mail->addAddress($to, $toName);
+
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body    = $htmlBody;
+        $mail->AltBody = strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>'], "\n", $htmlBody));
+
+        $mail->send();
+        return true;
+    } catch (\Throwable $e) {
+        error_log('Email send failed: ' . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Build a styled HTML email body using school branding.
+ */
+function email_template(string $title, string $body): string
+{
+    $schoolName  = school_setting('school_name', 'PLP Admissions');
+    $accentColor = school_setting('accent_color', '#2d6a4f');
+
+    return '<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+    <tr><td style="background:' . e($accentColor) . ';padding:24px 32px">
+        <h1 style="margin:0;color:#ffffff;font-size:20px">' . e($schoolName) . '</h1>
+    </td></tr>
+    <tr><td style="padding:32px">
+        <h2 style="margin:0 0 16px;color:#1a1a1a;font-size:18px">' . $title . '</h2>
+        <div style="color:#374151;font-size:14px;line-height:1.6">' . $body . '</div>
+    </td></tr>
+    <tr><td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center">
+        <p style="margin:0;font-size:12px;color:#9ca3af">This is an automated email from ' . e($schoolName) . '. Please do not reply.</p>
+    </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>';
+}
+
 // -- Audit log --------------------------------------------------
 function audit_log(
     string  $action,

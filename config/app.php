@@ -4,6 +4,23 @@
 // Application-wide constants
 // ============================================================
 
+// -- Load .env file (local secrets) ------------------------------
+(function () {
+    $envFile = dirname(__DIR__) . '/.env';
+    if (!file_exists($envFile)) return;
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') continue;
+        if (strpos($line, '=') === false) continue;
+        [$key, $val] = explode('=', $line, 2);
+        $key = trim($key);
+        $val = trim($val);
+        if (!getenv($key)) {
+            putenv("$key=$val");
+        }
+    }
+})();
+
 // -- Environment -------------------------------------------------
 define('APP_ENV', getenv('APP_ENV') ?: 'development');   // 'development' | 'production'
 define('APP_DEBUG', APP_ENV === 'development');
@@ -21,7 +38,10 @@ define('UPLOAD_PATH', PUBLIC_PATH . '/uploads');
 if (APP_ENV === 'production') {
     define('BASE_URL', rtrim(getenv('APP_URL') ?: 'https://plp-admissions.vercel.app', '/'));
 } else {
-    $__scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $__forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+    $__scheme = ($__forwarded === 'https'
+        || (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'))
+        ? 'https' : 'http';
     $__host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $__script = $_SERVER['SCRIPT_NAME'] ?? '/plp-admissions/public/index.php';
     $__base   = rtrim(dirname(dirname($__script)), '/\\');
@@ -235,6 +255,14 @@ define('COURSE_PASSING_SCORES', [
 define('HCAPTCHA_SITE_KEY',   getenv('HCAPTCHA_SITE_KEY')   ?: '');
 define('HCAPTCHA_SECRET_KEY', getenv('HCAPTCHA_SECRET_KEY') ?: '');
 define('HCAPTCHA_ENABLED',    !empty(HCAPTCHA_SITE_KEY) && !empty(HCAPTCHA_SECRET_KEY));
+
+// -- Email (Gmail SMTP via PHPMailer) -----------------------------
+define('SMTP_HOST',       getenv('SMTP_HOST')       ?: 'smtp.gmail.com');
+define('SMTP_PORT',       getenv('SMTP_PORT')       ?: 587);
+define('SMTP_USER',       getenv('SMTP_USER')       ?: '');
+define('SMTP_PASS',       getenv('SMTP_PASS')       ?: '');
+define('SMTP_FROM_NAME',  getenv('SMTP_FROM_NAME')  ?: 'PLP Admissions');
+define('SMTP_ENABLED',    !empty(SMTP_USER) && !empty(SMTP_PASS));
 
 // -- Progress steps (student tracker) ---------------------------
 define('PROGRESS_STEPS', [
