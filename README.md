@@ -17,6 +17,7 @@ A web-based admissions management system for **Pamantasan ng Lungsod ng Pasig (P
 
 - [XAMPP](https://www.apachefriends.org/) (Apache + MySQL)
 - PHP 8.0+
+- [ngrok](https://ngrok.com/download) (free account — for sharing the app publicly during demos)
 - A modern web browser
 
 ---
@@ -117,6 +118,55 @@ Log in with the admin account:
 | Password | Admin@123          |
 
 > ⚠️ Change the admin password immediately after your first login.
+
+---
+
+## Sharing with ngrok (Demo / Presentation)
+
+ngrok gives your local XAMPP server a public URL so anyone on the internet can access it — no cloud database or cloud file storage required.
+
+### 1. Install ngrok
+
+Download from [ngrok.com/download](https://ngrok.com/download) and sign up for a free account.
+
+### 2. Add your auth token
+
+```bash
+ngrok config add-authtoken <YOUR_AUTHTOKEN>
+```
+
+You can find your token at [dashboard.ngrok.com/get-started/your-authtoken](https://dashboard.ngrok.com/get-started/your-authtoken).
+
+### 3. Start the tunnel
+
+Make sure XAMPP (Apache + MySQL) is running, then open a terminal and run:
+
+```bash
+ngrok http 80
+```
+
+ngrok will display a public URL like:
+
+```
+Forwarding  https://xxxx-xxxx-xxxx.ngrok-free.app -> http://localhost:80
+```
+
+### 4. Share the URL
+
+Give your classmates / panel the ngrok URL. They can access the system at:
+
+```
+https://xxxx-xxxx-xxxx.ngrok-free.app/plp-admissions/public/
+```
+
+> **Note:** The free ngrok plan generates a new URL each time you restart the tunnel. You can set up a [static domain](https://dashboard.ngrok.com/domains) (one free static domain is included with the free plan) for a stable URL.
+
+### Tips
+
+- **File uploads** are stored locally in `public/uploads/documents/` — no external cloud storage needed.
+- **Database** runs on your local XAMPP MySQL — no external database service needed.
+- Keep the terminal running ngrok open for the entire demo session.
+- If the ngrok tunnel disconnects, just run `ngrok http 80` again (you'll get a new URL).
 
 ---
 

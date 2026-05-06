@@ -1,10 +1,8 @@
 <?php
 // ============================================================
 // config/db.php
-// Works for both:
-//   Local XAMPP  → uses localhost / root / no password
-//   Vercel       → reads DB_HOST, DB_NAME, DB_USER, DB_PASS,
-//                  DB_PORT env vars set in Vercel dashboard
+// Local XAMPP — uses localhost / root / no password by default.
+// Override via environment variables if needed.
 // ============================================================
 
 define('DB_HOST',    getenv('DB_HOST')    ?: 'localhost');
@@ -34,14 +32,7 @@ function db(): PDO
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES   => false,
-        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
     ];
-
-    // Aiven (and other cloud DBs) require SSL — enable when not on localhost
-    if (DB_HOST !== 'localhost' && DB_HOST !== '127.0.0.1') {
-        $options[PDO::MYSQL_ATTR_SSL_CA]     = true;
-        $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = false;
-    }
 
     try {
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);

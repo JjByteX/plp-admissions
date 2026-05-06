@@ -231,11 +231,6 @@ define('COURSE_PASSING_SCORES', [
     'BS Nursing (BSN)'                                                   => ['pass_from' => 4, 'confirmed' => false],
 ]);
 
-// -- Uploadcare (file storage) -----------------------------------
-define('UPLOADCARE_PUB_KEY',    getenv('UPLOADCARE_PUB_KEY')    ?: '');
-define('UPLOADCARE_SECRET_KEY', getenv('UPLOADCARE_SECRET_KEY') ?: '');
-define('UPLOADCARE_ENABLED',    !empty(UPLOADCARE_PUB_KEY));
-
 // -- hCaptcha ----------------------------------------------------
 define('HCAPTCHA_SITE_KEY',   getenv('HCAPTCHA_SITE_KEY')   ?: '');
 define('HCAPTCHA_SECRET_KEY', getenv('HCAPTCHA_SECRET_KEY') ?: '');
