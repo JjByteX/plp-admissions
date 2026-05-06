@@ -14,7 +14,7 @@ $course      = trim($_POST['suggest_course'] ?? '');
 $note        = trim($_POST['suggest_note']   ?? '');
 $staffId     = Auth::id();
 
-if (!$applicantId || !in_array($course, PLP_COURSES, true)) {
+if (!$applicantId || !in_array($course, get_all_courses(), true)) {
     Session::flash('error', 'Invalid suggestion data.');
     redirect('/staff/results');
 }

@@ -70,9 +70,6 @@ function admissions_close_date(): ?DateTime
 
 function admissions_is_open(): bool
 {
-    // Admin override bypasses the date window (for testing/development)
-    if (school_setting('admissions_override') === '1') return true;
-
     $open  = admissions_open_date();
     $close = admissions_close_date();
     if (!$open || !$close) return false;
@@ -278,10 +275,22 @@ function current_step(array $applicant, ?array $examResult, ?array $interviewSlo
 // -- Uploadcare file upload -------------------------------------
 function uploadcare_upload(string $tmpPath, string $filename, string $mimeType): ?string
 {
+    // ── Local fallback (dev / localhost — no Uploadcare keys configured) ──
     if (!UPLOADCARE_ENABLED) {
-        return null;
+        $destDir = PUBLIC_PATH . '/uploads/documents';
+        if (!is_dir($destDir)) {
+            mkdir($destDir, 0755, true);
+        }
+        $dest = $destDir . '/' . $filename;
+        if (!move_uploaded_file($tmpPath, $dest) && !copy($tmpPath, $dest)) {
+            return null;
+        }
+        // Return a root-relative path; stored as-is in the DB.
+        // The file_url() helper (and viewer) will convert this to a full URL.
+        return '/uploads/documents/' . $filename;
     }
 
+    // ── Uploadcare (production) ────────────────────────────────────────────
     $boundary = '----UploadcareBoundary' . uniqid();
     $body  = "--{$boundary}\r\n";
     $body .= "Content-Disposition: form-data; name=\"UPLOADCARE_PUB_KEY\"\r\n\r\n" . UPLOADCARE_PUB_KEY . "\r\n";
@@ -308,6 +317,19 @@ function uploadcare_upload(string $tmpPath, string $filename, string $mimeType):
 
     $cdnBase = getenv('UPLOADCARE_CDN_BASE') ?: 'ucarecdn.com';
     return 'https://' . $cdnBase . '/' . $data['file'] . '/';
+}
+
+/**
+ * Convert a stored file_path (either a full https:// CDN URL or a
+ * root-relative local path like /uploads/documents/foo.pdf) into a
+ * fully-qualified URL safe for use in <img src> / <iframe src>.
+ */
+function file_url(string $filePath): string
+{
+    if (str_starts_with($filePath, 'http://') || str_starts_with($filePath, 'https://')) {
+        return $filePath; // Already a full CDN URL — return as-is.
+    }
+    return url($filePath); // Local path — prepend BASE_URL.
 }
 
 // -- hCaptcha verification --------------------------------------
@@ -421,4 +443,134 @@ function paginate(PDO $pdo, string $countSql, string $dataSql, array $params, in
         'last_page'    => $pages,
         'per_page'     => $perPage,
     ];
+}
+
+// ================================================================
+// FEATURE: Custom Courses + Strand Map (admin-managed)
+// ================================================================
+
+/**
+ * Return the merged list of ALL courses — built-in PLP_COURSES
+ * plus any active custom courses added by the admin.
+ * Returns a flat array of course name strings.
+ */
+function get_all_courses(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $courses = PLP_COURSES;
+    try {
+        $rows = db()->query(
+            "SELECT course_name FROM custom_courses WHERE is_active=1 ORDER BY course_name"
+        )->fetchAll(\PDO::FETCH_COLUMN);
+        foreach ($rows as $cn) {
+            if (!in_array($cn, $courses, true)) $courses[] = $cn;
+        }
+    } catch (\Throwable $e) {}
+    return $cache = $courses;
+}
+
+/**
+ * Return the merged strand map — built-in COURSE_STRAND_MAP
+ * plus strand data from admin-added custom_courses.
+ * Returns: array<string, string[]>  course_name => [strand_key, ...]
+ */
+function get_all_strand_map(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $map = COURSE_STRAND_MAP;
+    try {
+        $rows = db()->query(
+            "SELECT course_name, strands FROM custom_courses WHERE is_active=1"
+        )->fetchAll();
+        foreach ($rows as $row) {
+            $strands = json_decode($row['strands'] ?? '[]', true) ?: [];
+            $map[$row['course_name']] = $strands;
+        }
+    } catch (\Throwable $e) {}
+    return $cache = $map;
+}
+
+/**
+ * Return alternative courses a student with $strand qualifies for
+ * based on their rank score, excluding the course they applied for.
+ *
+ * Used in student result view to politely suggest alternatives when
+ * the applicant's rank is below the threshold for their chosen course.
+ *
+ * @param  int    $rankScore    The student's 1–10 rank
+ * @param  string $appliedCourse The course they originally applied for
+ * @param  string $strand        The student's SHS strand key (e.g. 'STEM')
+ * @return array<string>         List of qualifying course names
+ */
+function strand_qualified_courses(int $rankScore, string $appliedCourse, string $strand): array
+{
+    $strandMap = get_all_strand_map();
+    $result    = [];
+
+    foreach ($strandMap as $course => $strands) {
+        if ($course === $appliedCourse)               continue; // skip applied course
+        if (!in_array($strand, $strands, true))       continue; // strand not accepted
+        $threshold = get_pass_threshold($course);
+        if ($rankScore >= $threshold) $result[] = $course;      // rank qualifies
+    }
+    return $result;
+}
+
+// ================================================================
+// FEATURE: Exam Password Expiry helpers
+// ================================================================
+
+define('EXAM_PASSWORD_EXPIRY_SECONDS', 300); // 5 minutes
+
+/**
+ * Generate a random, readable 6-character exam access code.
+ * Uses uppercase letters + digits, avoiding ambiguous characters (0/O, 1/I/L).
+ */
+function generate_exam_password(): string
+{
+    $chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    $pwd   = '';
+    for ($i = 0; $i < 6; $i++) {
+        $pwd .= $chars[random_int(0, strlen($chars) - 1)];
+    }
+    return $pwd;
+}
+
+/**
+ * Check whether the exam's access password is currently valid
+ * (i.e. was issued within the last EXAM_PASSWORD_EXPIRY_SECONDS).
+ *
+ * @param  array  $exam  Row from `exams` table
+ * @return bool
+ */
+function exam_password_is_valid(array $exam): bool
+{
+    if (empty($exam['access_password']))    return false;
+    if (empty($exam['password_issued_at'])) return false;
+    $issuedAt = strtotime($exam['password_issued_at']);
+    return (time() - $issuedAt) <= EXAM_PASSWORD_EXPIRY_SECONDS;
+}
+
+/**
+ * Return the number of seconds remaining before the exam password expires.
+ * Returns 0 if already expired or never issued.
+ */
+function exam_password_seconds_remaining(array $exam): int
+{
+    if (empty($exam['password_issued_at'])) return 0;
+    $issuedAt = strtotime($exam['password_issued_at']);
+    $remaining = EXAM_PASSWORD_EXPIRY_SECONDS - (time() - $issuedAt);
+    return max(0, (int) $remaining);
+}
+
+/**
+ * Return true if today's date matches the exam's scheduled start date.
+ * If the exam has no scheduled_start, returns true (always on exam day).
+ */
+function is_exam_day(array $exam): bool
+{
+    if (empty($exam['scheduled_start'])) return true;
+    return date('Y-m-d') === date('Y-m-d', strtotime($exam['scheduled_start']));
 }

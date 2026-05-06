@@ -120,8 +120,7 @@ $staffUsers = $stmt->fetchAll();
 ob_start();
 ?>
 
-<div style="display:flex;align-items:center;gap:var(--space-3);justify-content:space-between;
-             flex-wrap:wrap;margin-bottom:var(--space-6)">
+<div style="margin-bottom:var(--space-6)">
     <form method="GET" style="display:flex;align-items:center;gap:var(--space-2)">
         <label for="dept-filter" style="font-size:var(--text-sm);color:var(--text-secondary)">Department:</label>
         <select id="dept-filter" name="department" class="form-control"
@@ -137,9 +136,6 @@ ob_start();
             <a href="<?= url('/admin/users') ?>" class="btn btn-ghost btn-sm">Clear</a>
         <?php endif; ?>
     </form>
-    <button class="btn btn-primary" onclick="document.getElementById('create-user-modal').style.display='flex'">
-        + New User
-    </button>
 </div>
 
 <?php foreach ($errors as $e): ?>
@@ -149,8 +145,8 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div class="card" style="padding:0;overflow:hidden">
-    <table class="table">
+<div class="card" style="padding:0;overflow:hidden;width:100%">
+    <table class="table" style="width:100%">
         <thead>
             <tr>
                 <th>Name</th>
@@ -220,6 +216,14 @@ ob_start();
         <?php endif; ?>
         </tbody>
     </table>
+</div>
+
+<!-- New User button below table -->
+<div style="margin-top:var(--space-4);display:flex;justify-content:center">
+    <button class="btn btn-primary" onclick="document.getElementById('create-user-modal').style.display='flex'">
+        <?= icon('ic_fluent_add_24_regular', 15) ?>
+        New User
+    </button>
 </div>
 
 <!-- Create user modal -->
@@ -318,4 +322,5 @@ function openResetModal(uid, name) {
 $content   = ob_get_clean();
 $pageTitle = 'User Management';
 $activeNav = 'users';
+$pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

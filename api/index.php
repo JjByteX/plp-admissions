@@ -60,6 +60,8 @@ $router->get( '/admin/school-year','settings/admin_school_year');
 $router->post('/admin/school-year','settings/admin_school_year');
 $router->get( '/admin/settings',   'settings/admin');
 $router->post('/admin/settings',   'settings/admin');
+$router->get( '/admin/courses',    'settings/admin_courses');
+$router->post('/admin/courses',    'settings/admin_courses');
 $router->get( '/admin/results',    'results/admin_export');
 
 $router->get( '/admin/audit-log',  'audit/log');

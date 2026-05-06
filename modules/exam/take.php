@@ -43,6 +43,212 @@ if (!$exam) {
 }
 $examId = $exam['id'];
 
+// ── Slot-aware gate ────────────────────────────────────────────────────────
+// Look up the applicant's assigned exam slot. If they don't have one, they
+// see a "waiting" screen. If their slot is in the future, they see a slot
+// card. Only on their actual slot date do they reach the password gate.
+$slotStmt = $db->prepare(
+    'SELECT s.id, s.exam_date, s.slot_time, s.room_label
+       FROM applicant_exam_slots aes
+       JOIN exam_slot_schedule  s ON s.id = aes.slot_id
+      WHERE aes.applicant_id = ?
+      LIMIT 1'
+);
+$slotStmt->execute([$applicantId]);
+$mySlot = $slotStmt->fetch();
+
+if (!$mySlot) {
+    ob_start();
+    ?>
+    <div style="max-width:480px;margin:var(--space-12) auto;text-align:center">
+        <div style="width:72px;height:72px;border-radius:50%;background:var(--bg-subtle);
+                    display:flex;align-items:center;justify-content:center;margin:0 auto var(--space-6)">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="var(--text-secondary)" stroke-width="1.8"/>
+                <path stroke="var(--text-secondary)" stroke-width="1.8" stroke-linecap="round" d="M12 7v5l3 2"/>
+            </svg>
+        </div>
+        <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">
+            Awaiting Slot Assignment
+        </h2>
+        <p style="color:var(--text-secondary)">
+            Your documents are approved. The admissions office will assign you to an exam date and room shortly. Check back here, or watch your email for a notification.
+        </p>
+    </div>
+    <?php
+    $content = ob_get_clean(); $pageTitle='Entrance Exam'; $activeNav='exam'; $showStepper=true;
+    include VIEWS_PATH . '/layouts/app.php';
+    return;
+}
+
+$slotTs       = strtotime($mySlot['exam_date']);
+$todayTs      = strtotime(date('Y-m-d'));
+$isSlotToday  = $slotTs === $todayTs;
+$isSlotFuture = $slotTs > $todayTs;
+$isSlotPast   = $slotTs < $todayTs;
+$slotDateNice = date('l, F j, Y', $slotTs);
+$slotTimeNice = date('g:i A',     strtotime($mySlot['slot_time']));
+
+if ($isSlotFuture) {
+    ob_start();
+    ?>
+    <div style="max-width:520px;margin:var(--space-12) auto">
+        <div class="card" style="padding:var(--space-6);text-align:center">
+            <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">
+                Your Exam is Scheduled
+            </div>
+            <div style="font-size:var(--text-3xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">
+                <?= e($slotDateNice) ?>
+            </div>
+            <div style="font-size:var(--text-lg);color:var(--text-secondary);margin-bottom:var(--space-5)">
+                <?= e($slotTimeNice) ?>
+            </div>
+            <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-4);margin-bottom:var(--space-5)">
+                <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Room</div>
+                <div style="font-size:var(--text-lg);font-weight:var(--weight-medium)"><?= e($mySlot['room_label']) ?></div>
+            </div>
+            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+                On exam day, log in here and click <strong>Start Exam</strong>. The proctor in your room will announce the access code when the exam opens — you'll have 5 minutes to enter it.
+            </p>
+        </div>
+    </div>
+    <?php
+    $content = ob_get_clean(); $pageTitle='Entrance Exam'; $activeNav='exam'; $showStepper=true;
+    include VIEWS_PATH . '/layouts/app.php';
+    return;
+}
+
+if ($isSlotPast) {
+    ob_start();
+    ?>
+    <div style="max-width:520px;margin:var(--space-12) auto;text-align:center">
+        <div class="alert alert-warning" style="text-align:left">
+            <strong>Your exam date has passed.</strong>
+            <p style="margin:var(--space-2) 0 0">
+                Your scheduled exam was on <?= e($slotDateNice) ?> in <?= e($mySlot['room_label']) ?>.
+                If you missed it, please contact the admissions office to request a reschedule.
+            </p>
+        </div>
+    </div>
+    <?php
+    $content = ob_get_clean(); $pageTitle='Entrance Exam'; $activeNav='exam'; $showStepper=true;
+    include VIEWS_PATH . '/layouts/app.php';
+    return;
+}
+
+// $isSlotToday — fall through to the existing password gate below.
+
+// ── Password gate: required on exam day ─────────────────────────────────────
+// Students must enter the current (non-expired) access password before seeing
+// exam questions. The password is valid for 5 minutes from when staff issued it.
+$pwGateKey   = 'exam_pw_unlocked_' . $examId;          // session key
+$needsPwGate = !empty($exam['access_password']) && $isSlotToday;
+$isUnlocked  = isset($_SESSION[$pwGateKey]);
+
+if ($needsPwGate && !$isUnlocked) {
+    $pwValid    = exam_password_is_valid($exam);
+    $pwSecsLeft = exam_password_seconds_remaining($exam);
+
+    // Handle password submission
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['exam_access_password'])) {
+        csrf_check();
+        $submitted = strtoupper(trim($_POST['exam_access_password'] ?? ''));
+        $correct   = strtoupper(trim($exam['access_password']));
+
+        if (!$pwValid) {
+            $pwError = 'The access code has expired. Please ask your proctor to generate a new one.';
+        } elseif ($submitted !== $correct) {
+            $pwError = 'Incorrect access code. Please check with your proctor and try again.';
+        } else {
+            // Correct and still valid — unlock for this session.
+            // Redirect (POST → GET) so the answer-submission handler below
+            // is never triggered by the password form POST.
+            $_SESSION[$pwGateKey] = time();
+            redirect('/student/exam');
+        }
+    }
+
+    if (!$isUnlocked) {
+        // Show the password entry screen instead of the exam
+        ob_start();
+        ?>
+        <div style="max-width:420px;margin:var(--space-12) auto;text-align:center">
+            <div style="width:72px;height:72px;border-radius:50%;background:var(--bg-subtle);
+                        display:flex;align-items:center;justify-content:center;margin:0 auto var(--space-6)">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="11" width="18" height="11" rx="2" stroke="var(--text-secondary)" stroke-width="1.8"/>
+                    <path stroke="var(--text-secondary)" stroke-width="1.8" stroke-linecap="round" d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+            </div>
+            <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">
+                Exam Access Code
+            </h2>
+            <p style="color:var(--text-secondary);margin-bottom:var(--space-6)">
+                Your proctor will give you an access code before the exam begins.
+                Enter it below to start.
+            </p>
+
+            <?php if (isset($pwError)): ?>
+                <div class="alert alert-error" style="margin-bottom:var(--space-4);text-align:left"><?= e($pwError) ?></div>
+            <?php endif; ?>
+
+            <?php if (!$pwValid): ?>
+                <div class="alert alert-warning" style="margin-bottom:var(--space-4);text-align:left">
+                    <strong>No active code right now.</strong>
+                    The access code has not been issued yet or has expired.
+                    Please wait for your proctor to provide one — they can generate a fresh code from the Exams page.
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" style="text-align:left">
+                <?= csrf_field() ?>
+                <label class="form-label" style="display:block;margin-bottom:var(--space-2)">
+                    Access Code
+                </label>
+                <input type="text" name="exam_access_password" class="form-control"
+                       autocomplete="off" autocorrect="off" spellcheck="false"
+                       style="font-family:monospace;font-size:var(--text-2xl);letter-spacing:.4em;
+                              text-align:center;text-transform:uppercase;margin-bottom:var(--space-4)"
+                       placeholder="ACCESS CODE" <?= !$pwValid ? 'disabled' : '' ?>
+                       oninput="this.value=this.value.toUpperCase()" autofocus>
+                <?php if ($pwValid): ?>
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-4)">
+                        Code expires in <strong id="gate-timer"><?= $pwSecsLeft ?></strong> seconds.
+                    </p>
+                <?php endif; ?>
+                <button type="submit" class="btn btn-primary" style="width:100%" <?= !$pwValid ? 'disabled' : '' ?>>
+                    Enter Exam
+                </button>
+            </form>
+        </div>
+        <?php if ($pwValid): ?>
+        <script>
+        (function() {
+            let s = <?= $pwSecsLeft ?>;
+            const el = document.getElementById('gate-timer');
+            const iv = setInterval(() => {
+                if (!el) { clearInterval(iv); return; }
+                s--;
+                el.textContent = s;
+                if (s <= 0) {
+                    clearInterval(iv);
+                    location.reload(); // refresh to show expired state
+                }
+            }, 1000);
+        })();
+        </script>
+        <?php endif; ?>
+        <?php
+        $content   = ob_get_clean();
+        $pageTitle = 'Entrance Exam';
+        $activeNav = 'exam';
+        $showStepper = true;
+        include VIEWS_PATH . '/layouts/app.php';
+        return;
+    }
+}
+// ── End password gate ────────────────────────────────────────────────────────
+
 // Fetch questions
 $stmt = $db->prepare('SELECT * FROM questions WHERE exam_id=? ORDER BY sort_order, id');
 $stmt->execute([$examId]);
@@ -66,6 +272,7 @@ foreach ($questions as $q) {
 // Shuffle if configured
 if ($exam['shuffle_questions']) {
     foreach ($questionsBySection as &$secQs) shuffle($secQs);
+    unset($secQs); // prevent dangling reference from corrupting render loop
     shuffle($unsectioned);
 }
 
@@ -111,6 +318,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 break;
 
+            case 'identification':
             case 'short_answer':
                 $text = trim($answers[$qId] ?? '');
                 $savedAnswers[$qId] = $text;
@@ -187,7 +395,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         border:3px solid <?= $tierInfo['color'] ?>;
                         display:flex;flex-direction:column;align-items:center;justify-content:center;
                         margin:0 auto var(--space-5)">
-                <span style="font-size:2rem;font-weight:var(--weight-bold);color:<?= $tierInfo['color'] ?>;line-height:1"><?= $rank ?></span>
+                <span style="font-size:2rem;font-weight:var(--weight-semibold);color:<?= $tierInfo['color'] ?>;line-height:1"><?= $rank ?></span>
                 <span style="font-size:var(--text-xs);color:<?= $tierInfo['color'] ?>;font-weight:var(--weight-medium)">/10</span>
             </div>
 
@@ -209,7 +417,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php endif; ?>
             </div>
 
-            <h2 style="font-size:var(--text-xl);font-weight:var(--weight-bold);margin-bottom:var(--space-1)">
+            <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">
                 <?= $passed ? 'Congratulations!' : 'Better luck next time.' ?>
             </h2>
             <p style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:var(--space-6)">
@@ -223,17 +431,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5)">
                 <div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Raw Score</div>
-                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-bold)"><?= $score ?></div>
+                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-semibold)"><?= $score ?></div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary)">out of <?= count($questions) ?></div>
                 </div>
                 <div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Percentage</div>
-                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-bold)"><?= $pct ?>%</div>
+                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-semibold)"><?= $pct ?>%</div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary)">of total items</div>
                 </div>
                 <div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Tier</div>
-                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-bold);color:<?= $tierInfo['color'] ?>"><?= $rank ?></div>
+                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);color:<?= $tierInfo['color'] ?>"><?= $rank ?></div>
                     <div style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:<?= $tierInfo['color'] ?>"><?= $tierInfo['label'] ?> tier</div>
                 </div>
             </div>
@@ -385,10 +593,22 @@ ob_start();
     font-weight: var(--weight-semibold);
     font-size: var(--text-sm);
 }
-.exam-section-desc {
+.exam-section-directions {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: rgba(255,255,255,.55);
+    border-radius: var(--radius-sm);
     font-size: var(--text-xs);
-    opacity: .8;
-    margin-top: 2px;
+    line-height: 1.5;
+    opacity: .95;
+}
+.exam-section-directions-label {
+    font-weight: var(--weight-semibold);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 .q-number {
     font-size: var(--text-xs);
@@ -546,7 +766,7 @@ ob_start();
 .progress-bar-wrap {
     flex: 1;
     height: 6px;
-    background: var(--neutral-200, #e5e7eb);
+    background: var(--bg-subtle);
     border-radius: 99px;
     overflow: hidden;
 }
@@ -563,7 +783,7 @@ ob_start();
     display: inline-flex; align-items: center; gap: 6px;
     font-size: var(--text-sm); font-weight: var(--weight-semibold);
     padding: 4px 12px;
-    background: var(--neutral-100);
+    background: var(--bg-subtle);
     border-radius: 99px;
     font-variant-numeric: tabular-nums;
 }
@@ -577,7 +797,7 @@ ob_start();
             <p class="page-description"><?= e($exam['description']) ?></p>
         <?php else: ?>
             <p class="page-description">
-                <?= count($questions) ?> questions &middot; <?= $exam['duration_minutes'] ?> minutes &middot;
+                <?= count($questions) ?> questions &middot;
                 Answer all required questions before submitting.
             </p>
         <?php endif; ?>
@@ -587,8 +807,17 @@ ob_start();
 <div class="alert alert-warning" style="margin-bottom:var(--space-6)">
     <?= icon('ic_fluent_warning_24_regular', 16) ?>
     <span>You can only submit <strong>once</strong>. Do not close this page until you click <strong>Submit Exam</strong>.</span>
-    <?php if ($exam['duration_minutes'] > 0): ?>
-        &nbsp;&nbsp;Time remaining: <span id="timer" class="timer-chip"><?= str_pad($exam['duration_minutes'],2,'0',STR_PAD_LEFT) ?>:00</span>
+    <?php
+        if (!empty($exam['scheduled_end'])) {
+            $dispRemaining = max(0, strtotime($exam['scheduled_end']) - time());
+        } else {
+            $dispRemaining = 0;
+        }
+        if ($dispRemaining > 0):
+        $dispM = str_pad(floor($dispRemaining / 60), 2, '0', STR_PAD_LEFT);
+        $dispS = str_pad($dispRemaining % 60, 2, '0', STR_PAD_LEFT);
+    ?>
+        &nbsp;&nbsp;Time remaining: <span id="timer" class="timer-chip"><?= $dispM ?>:<?= $dispS ?></span>
     <?php endif; ?>
 </div>
 
@@ -613,6 +842,7 @@ ob_start();
         'checkboxes'      => ['bg' => '#d1fae5', 'text' => '#065f46', 'border' => '#6ee7b7'],
         'dropdown'        => ['bg' => '#ede9fe', 'text' => '#5b21b6', 'border' => '#c4b5fd'],
         'short_answer'    => ['bg' => '#fef3c7', 'text' => '#92400e', 'border' => '#fcd34d'],
+        'identification'  => ['bg' => '#fef3c7', 'text' => '#92400e', 'border' => '#fcd34d'],
         'paragraph'       => ['bg' => '#fce7f3', 'text' => '#9d174d', 'border' => '#f9a8d4'],
         'linear_scale'    => ['bg' => '#f3f4f6', 'text' => '#374151', 'border' => '#d1d5db'],
     ];
@@ -685,8 +915,8 @@ ob_start();
                     <?php endforeach; ?>
                 </select>
 
-            <!-- ── SHORT ANSWER ── -->
-            <?php elseif ($qType === 'short_answer'): ?>
+            <!-- ── SHORT ANSWER / IDENTIFICATION ── -->\
+            <?php elseif ($qType === 'short_answer' || $qType === 'identification'): ?>
                 <input type="text"
                        name="answers[<?= $q['id'] ?>]"
                        class="short-answer-input"
@@ -738,7 +968,10 @@ ob_start();
         <div class="exam-section-header" style="background:<?= $sc['bg'] ?>;border-color:<?= $sc['border'] ?>">
             <div class="exam-section-title" style="color:<?= $sc['text'] ?>"><?= e($sec['title']) ?></div>
             <?php if (!empty($sec['description'])): ?>
-                <div class="exam-section-desc" style="color:<?= $sc['text'] ?>"><?= e($sec['description']) ?></div>
+                <div class="exam-section-directions" style="color:<?= $sc['text'] ?>">
+                    <span class="exam-section-directions-label">Directions:</span>
+                    <span><?= e($sec['description']) ?></span>
+                </div>
             <?php endif; ?>
         </div>
         <?php foreach ($secQs as $q): renderStudentQuestion($q, $globalI, $shuffleChoices); endforeach; ?>
@@ -855,8 +1088,15 @@ function confirmSubmit() {
 }
 
 // ── Countdown timer ──────────────────────────────────────────
-<?php if ($exam['duration_minutes'] > 0): ?>
-let seconds = <?= $exam['duration_minutes'] ?> * 60;
+<?php
+    if (!empty($exam['scheduled_end'])) {
+        $secondsRemaining = max(0, strtotime($exam['scheduled_end']) - time());
+    } else {
+        $secondsRemaining = 0;
+    }
+    if ($secondsRemaining > 0):
+?>
+let seconds = <?= $secondsRemaining ?>;
 const timerEl = document.getElementById('timer');
 const interval = setInterval(() => {
     seconds--;

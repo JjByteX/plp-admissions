@@ -132,6 +132,13 @@ if (!empty($absent)) {
     }
 }
 
+// Check for today's sessions (needed for Live Queue tab)
+$todayStmt = $db->prepare(
+    'SELECT COUNT(*) FROM interview_slots WHERE created_by = ? AND slot_date = ?'
+);
+$todayStmt->execute([$staffId, $today]);
+$hasToday = (int)$todayStmt->fetchColumn() > 0;
+
 ob_start();
 ?>
 
@@ -142,16 +149,27 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
+<div style="display:flex;justify-content:center;margin-bottom:var(--space-5)">
     <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-md);
                  overflow:hidden;background:var(--bg-elevated)">
-        <a href="<?= url('/staff/interviews') ?>"
+        <?php if ($hasToday): ?>
+            <a href="<?= url('/staff/interviews/queue') ?>"
+               style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
+                      text-decoration:none;color:var(--text-secondary);
+                      display:flex;align-items:center;gap:var(--space-2);
+                      border-right:1px solid var(--border)">
+                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
+                              background:var(--accent);animation:pulse-dot 1.8s ease-in-out infinite"></span>
+                Live Queue
+            </a>
+        <?php endif; ?>
+        <a href="<?= url('/staff/interviews') ?>?view=sessions"
            style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
                   text-decoration:none;border-right:1px solid var(--border);
                   color:var(--text-secondary)">
             Upcoming
         </a>
-        <a href="<?= url('/staff/interviews') ?>?past=1"
+        <a href="<?= url('/staff/interviews') ?>?view=sessions&past=1"
            style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
                   text-decoration:none;border-right:1px solid var(--border);
                   color:var(--text-secondary)">
@@ -165,6 +183,13 @@ ob_start();
         </a>
     </div>
 </div>
+
+<style>
+@keyframes pulse-dot {
+    0%,100%{opacity:1;transform:scale(1)}
+    50%{opacity:.5;transform:scale(1.3)}
+}
+</style>
 
 <?php if (empty($absent)): ?>
     <div class="card" style="padding:var(--space-8);text-align:center;color:var(--text-tertiary)">

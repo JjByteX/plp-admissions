@@ -157,6 +157,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
 
             $success[] = $requiredDocs[$docSlug] . ' uploaded successfully.';
+
+            // Automation: auto-validate the uploaded document
+            $docId = $docRows[$docSlug]['id'] ?? 0;
+            $validationResult = 'uncertain';
+            if ($docId) {
+                $validationResult = auto_validate_document($docId);
+                if ($validationResult === 'passed') {
+                    // Re-fetch after auto-approval
+                    $stmt = $db->prepare('SELECT * FROM documents WHERE applicant_id = ?');
+                    $stmt->execute([$applicantId]);
+                    $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
+                    $success[] = 'Document auto-validated and approved.';
+                }
+            }
         }
     }
 
@@ -164,7 +178,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($isAjax) {
         header('Content-Type: application/json');
         if (empty($errors)) {
-            echo json_encode(['ok' => true, 'message' => $success[0] ?? 'Uploaded successfully.']);
+            echo json_encode([
+                'ok' => true,
+                'message' => $success[0] ?? 'Uploaded successfully.',
+                'validation' => $validationResult ?? 'uncertain',
+                'auto_approved' => ($validationResult ?? '') === 'passed',
+            ]);
         } else {
             echo json_encode(['ok' => false, 'message' => implode(' ', $errors)]);
         }
@@ -181,8 +200,9 @@ $allApproved  = count($docRows) === count($requiredDocs)
 $uploadedOrApproved = ($statusCounts['uploaded'] ?? 0) + ($statusCounts['approved'] ?? 0);
 $allUploaded  = count($docRows) === count($requiredDocs) && $uploadedOrApproved === count($requiredDocs);
 $pastDocuments = in_array($applicant['overall_status'] ?? '', ['exam', 'interview', 'released'], true);
+$hasRejected   = ($statusCounts['rejected'] ?? 0) > 0;
 $canSubmit     = $allUploaded && !$isSubmitted && !$pastDocuments;
-$canWithdraw   = $isSubmitted && !$allApproved && !$pastDocuments;
+$canWithdraw   = $isSubmitted && !$allApproved && !$pastDocuments && !$hasRejected;
 
 // Stepper current step
 $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
@@ -212,10 +232,13 @@ if ($_examResult) {
     $stmt = $db->prepare(
         'SELECT q.*,
                 s.slot_date, s.slot_time, s.end_time, s.capacity,
-                u.name AS staff_name, u.desk_label, u.desk_notes
+                u.name AS staff_name,
+                COALESCE(d.desk_label, u.desk_label) AS desk_label,
+                COALESCE(d.desk_notes, u.desk_notes) AS desk_notes
          FROM   interview_queue q
          JOIN   interview_slots s ON s.id = q.slot_id
          JOIN   users u           ON u.id = s.created_by
+         LEFT JOIN interview_desks d ON d.department = s.department
          WHERE  q.applicant_id = ?
          LIMIT 1'
     );
@@ -289,10 +312,13 @@ if ($_examResult) {
             // Reload
             $stmt = $db->prepare(
                 'SELECT q.*, s.slot_date, s.slot_time, s.end_time, s.capacity,
-                        u.name AS staff_name, u.desk_label, u.desk_notes
+                        u.name AS staff_name,
+                        COALESCE(d.desk_label, u.desk_label) AS desk_label,
+                        COALESCE(d.desk_notes, u.desk_notes) AS desk_notes
                  FROM   interview_queue q
                  JOIN   interview_slots s ON s.id = q.slot_id
                  JOIN   users u           ON u.id = s.created_by
+                 LEFT JOIN interview_desks d ON d.department = s.department
                  WHERE  q.applicant_id = ? LIMIT 1'
             );
             $stmt->execute([$applicantId]);
@@ -304,9 +330,13 @@ if ($_examResult) {
     if (!$myEntry) {
         $nowTime = date('H:i:s');
         $stmt = $db->prepare(
-            'SELECT s.*, u.name AS staff_name, u.desk_label, u.desk_notes, COUNT(q.id) AS booked
+            'SELECT s.*, u.name AS staff_name,
+                    COALESCE(d.desk_label, u.desk_label) AS desk_label,
+                    COALESCE(d.desk_notes, u.desk_notes) AS desk_notes,
+                    COUNT(q.id) AS booked
              FROM   interview_slots s
              JOIN   users u ON u.id = s.created_by
+             LEFT JOIN interview_desks d ON d.department = s.department
              LEFT JOIN interview_queue q ON q.slot_id = s.id
              WHERE  s.slot_date >= ? AND s.status = "open"
                AND  NOT (s.slot_date = ? AND s.end_time IS NOT NULL AND s.end_time <= ?)
@@ -339,7 +369,7 @@ foreach ($requiredDocs as $slug => $label) {
         $viewableFiles[] = [
             'label'     => $label,
             'file_path' => $doc['file_path'],
-            'url'       => str_starts_with($doc['file_path'], 'http') ? $doc['file_path'] : url('/' . $doc['file_path']),
+            'url'       => file_url($doc['file_path']),
         ];
     }
 }
@@ -392,7 +422,7 @@ ob_start();
         <div style="display:flex;align-items:center;gap:var(--space-4)">
 
             <!-- Icon -->
-            <div style="width:40px;height:40px;border-radius:var(--radius-md);background:var(--neutral-100);display:flex;align-items:center;justify-content:center;flex-shrink:0;<?= $isApproved ? 'background:var(--success-bg)' : '' ?>">
+            <div style="width:40px;height:40px;border-radius:var(--radius-md);background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;flex-shrink:0;<?= $isApproved ? 'background:var(--success-bg)' : '' ?>">
                 <?php if ($isApproved): ?>
                     <?= icon('ic_fluent_checkmark_circle_24_regular', 18, 'color:var(--success)') ?>
                 <?php else: ?>
@@ -408,8 +438,20 @@ ob_start();
                         Staff note: <?= e($doc['staff_remarks']) ?>
                     </div>
                 <?php elseif ($status === 'approved'): ?>
+                    <?php
+                    $autoValidated = false;
+                    if ($doc) {
+                        try {
+                            ensure_document_validations_table();
+                            $vStmt = db()->prepare('SELECT status FROM document_validations WHERE document_id = ? ORDER BY validated_at DESC LIMIT 1');
+                            $vStmt->execute([$doc['id']]);
+                            $vRow = $vStmt->fetch();
+                            $autoValidated = $vRow && $vRow['status'] === 'passed';
+                        } catch (\Throwable) {}
+                    }
+                    ?>
                     <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:2px">
-                        Approved by admissions staff
+                        <?= $autoValidated ? 'Auto-validated and approved' : 'Approved by admissions staff' ?>
                     </div>
                 <?php endif; ?>
             </div>
@@ -748,13 +790,7 @@ function updateDropLabel(name) {
                 will-change:transform;
                 transform-origin:center center;
             ">
-                <img id="fv-img" src="" alt="Document preview" style="
-                    max-width:100%;max-height:78vh;
-                    border-radius:var(--radius-sm);
-                    box-shadow:var(--shadow-md);
-                    display:block;pointer-events:none;
-                    user-select:none;-webkit-user-drag:none;
-                ">
+                <!-- content injected by _render() -->
             </div>
             <div id="fv-hint" style="
                 position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
@@ -801,7 +837,7 @@ function updateDropLabel(name) {
     window.closeFileViewer = function() {
         document.getElementById('file-viewer-modal').style.display='none';
         document.body.style.overflow='';
-        document.getElementById('fv-img').src='';
+        document.getElementById('fv-transform-wrap').innerHTML='';
     };
 
     window.fvNavigate = function(d) {
@@ -821,7 +857,13 @@ function updateDropLabel(name) {
     function _render() {
         var f=_files[_idx];
         if(!f) return;
-        document.getElementById('fv-img').src=f.url;
+        var wrap=document.getElementById('fv-transform-wrap');
+        var isPdf=f.url.toLowerCase().split('?')[0].endsWith('.pdf');
+        if(isPdf){
+            wrap.innerHTML='<iframe src="'+f.url+'" style="width:100%;height:78vh;border:none;border-radius:var(--radius-sm);background:#fff;"></iframe>';
+        } else {
+            wrap.innerHTML='<img src="'+f.url+'" alt="Document preview" style="max-width:100%;max-height:78vh;border-radius:var(--radius-sm);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;">';
+        }
         document.getElementById('fv-label').textContent=f.label;
         document.getElementById('fv-counter').textContent=(_idx+1)+' of '+_files.length;
         var p=document.getElementById('fv-prev');

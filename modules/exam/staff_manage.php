@@ -32,12 +32,17 @@ $SECTION_COLORS = [
     'dropdown'        => ['bg' => '#ede9fe', 'text' => '#5b21b6', 'border' => '#c4b5fd'],
     'short_answer'    => ['bg' => '#fef3c7', 'text' => '#92400e', 'border' => '#fcd34d'],
     'paragraph'       => ['bg' => '#fce7f3', 'text' => '#9d174d', 'border' => '#f9a8d4'],
-    'linear_scale'    => ['bg' => '#f3f4f6', 'text' => '#374151', 'border' => '#d1d5db'],
+    'linear_scale'    => ['bg' => '#f3f4f6', 'text' => 'var(--text-secondary)', 'border' => '#d1d5db'],
 ];
 
 // ----------------------------------------------------------------
 // POST handlers
 // ----------------------------------------------------------------
+// AJAX detection: X-Requested-With header OR explicit _ajax POST param (fallback for servers that strip custom headers)
+function is_ajax_request(): bool {
+    return !empty($_SERVER['HTTP_X_REQUESTED_WITH']) || !empty($_POST['_ajax']);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
@@ -47,9 +52,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // ── Exam CRUD ────────────────────────────────────────────
         case 'create_exam':
             $title          = trim($_POST['title'] ?? '');
-            $desc           = trim($_POST['description'] ?? '');
-            $duration       = (int)($_POST['duration_minutes'] ?? 60);
-            $passing        = $_POST['passing_score'] !== '' ? (int)$_POST['passing_score'] : null;
             $shuffleQ       = isset($_POST['shuffle_questions']) ? 1 : 0;
             $shuffleC       = isset($_POST['shuffle_choices'])   ? 1 : 0;
             $schedStart     = trim($_POST['scheduled_start'] ?? '') ?: null;
@@ -57,26 +59,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $schedEnd       = ($schedStart && $schedEndTime)
                 ? date('Y-m-d', strtotime($schedStart)) . ' ' . $schedEndTime . ':00'
                 : null;
-            $accessPassword = trim($_POST['access_password'] ?? '') ?: null;
-            if (!$title) { $errors[] = 'Exam title is required.'; break; }
+            $accessPassword = trim($_POST['access_password'] ?? '');
+            if (!$title)          { $errors[] = 'Exam title is required.'; break; }
+            if (!$schedStart)     { $errors[] = 'Open date and time is required.'; break; }
+            if (!$schedEndTime)   { $errors[] = 'Close time is required.'; break; }
+            if (!$accessPassword) { $errors[] = 'Access password is required. Use the Generate button or type one.'; break; }
             $db->prepare('UPDATE exams SET is_active=0')->execute();
             $db->prepare(
-                'INSERT INTO exams (title, description, duration_minutes, passing_score,
-                 shuffle_questions, shuffle_choices, scheduled_start, scheduled_end,
-                 access_password, is_active)
-                 VALUES (?,?,?,?,?,?,?,?,?,1)'
-            )->execute([$title, $desc ?: null, $duration, $passing, $shuffleQ, $shuffleC,
-                        $schedStart, $schedEnd, $accessPassword]);
+                'INSERT INTO exams (title, shuffle_questions, shuffle_choices, scheduled_start, scheduled_end,
+                 access_password, password_issued_at, is_active)
+                 VALUES (?,?,?,?,?,?,NOW(),1)'
+            )->execute([$title, $shuffleQ, $shuffleC, $schedStart, $schedEnd, $accessPassword]);
+            $newExamId = (int)$db->lastInsertId();
             $success[] = 'Exam created and set as active.';
-            audit_log('exam_created', "Created exam: {$title}", 'exam', (int)$db->lastInsertId());
-            break;
+            audit_log('exam_created', "Created exam: {$title}", 'exam', $newExamId);
+            // Redirect to this exam's explicit URL so the page always has ?exam=ID
+            header('Location: ' . url('/staff/exam') . '?exam=' . $newExamId . '&created=1');
+            exit;
 
         case 'edit_exam':
             $examId         = (int)($_POST['exam_id'] ?? 0);
             $title          = trim($_POST['title'] ?? '');
-            $desc           = trim($_POST['description'] ?? '');
-            $duration       = (int)($_POST['duration_minutes'] ?? 60);
-            $passing        = $_POST['passing_score'] !== '' ? (int)$_POST['passing_score'] : null;
             $shuffleQ       = isset($_POST['shuffle_questions']) ? 1 : 0;
             $shuffleC       = isset($_POST['shuffle_choices'])   ? 1 : 0;
             $schedStart     = trim($_POST['scheduled_start'] ?? '') ?: null;
@@ -84,16 +87,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $schedEnd       = ($schedStart && $schedEndTime)
                 ? date('Y-m-d', strtotime($schedStart)) . ' ' . $schedEndTime . ':00'
                 : null;
-            $accessPassword = trim($_POST['access_password'] ?? '') ?: null;
-            if (!$title) { $errors[] = 'Exam title is required.'; break; }
+            $accessPassword = trim($_POST['access_password'] ?? '');
+            if (!$title)          { $errors[] = 'Exam title is required.'; break; }
+            if (!$accessPassword) { $errors[] = 'Access password is required. Use the Generate button or type one.'; break; }
+            // Fetch current password to detect if it changed
+            $curPwStmt = $db->prepare('SELECT access_password FROM exams WHERE id=?');
+            $curPwStmt->execute([$examId]);
+            $curPw = $curPwStmt->fetchColumn();
+            $pwChanged = ($accessPassword !== $curPw);
             $db->prepare(
-                'UPDATE exams SET title=?, description=?, duration_minutes=?, passing_score=?,
-                 shuffle_questions=?, shuffle_choices=?, scheduled_start=?, scheduled_end=?,
-                 access_password=? WHERE id=?'
-            )->execute([$title, $desc ?: null, $duration, $passing, $shuffleQ, $shuffleC,
-                        $schedStart, $schedEnd, $accessPassword, $examId]);
+                'UPDATE exams SET title=?, shuffle_questions=?, shuffle_choices=?,
+                 scheduled_start=?, scheduled_end=?, access_password=?,
+                 password_issued_at = IF(? = 1, NOW(), password_issued_at) WHERE id=?'
+            )->execute([$title, $shuffleQ, $shuffleC, $schedStart, $schedEnd,
+                        $accessPassword, $pwChanged ? 1 : 0, $examId]);
             // Handle inline-edit AJAX
-            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+            if (is_ajax_request()) {
                 header('Content-Type: application/json');
                 echo json_encode(['ok' => true, 'title' => $title]);
                 exit;
@@ -125,15 +134,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $examId    = (int)($_POST['exam_id'] ?? 0);
             $secTitle  = trim($_POST['section_title'] ?? '');
             $secType   = $_POST['section_type'] ?? 'multiple_choice';
+            $secDesc   = trim($_POST['section_desc'] ?? '');
             if (!$secTitle) { $errors[] = 'Section title is required.'; break; }
             if (!array_key_exists($secType, $QUESTION_TYPES)) $secType = 'multiple_choice';
             $maxOrd = $db->prepare('SELECT COALESCE(MAX(sort_order),0) FROM exam_sections WHERE exam_id=?');
             $maxOrd->execute([$examId]);
             $db->prepare(
-                'INSERT INTO exam_sections (exam_id, title, question_type, sort_order) VALUES (?,?,?,?)'
-            )->execute([$examId, $secTitle, $secType, (int)$maxOrd->fetchColumn() + 1]);
+                'INSERT INTO exam_sections (exam_id, title, description, question_type, sort_order) VALUES (?,?,?,?,?)'
+            )->execute([$examId, $secTitle, $secDesc ?: null, $secType, (int)$maxOrd->fetchColumn() + 1]);
             $newSecId = (int)$db->lastInsertId();
-            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+            if (is_ajax_request()) {
                 header('Content-Type: application/json');
                 echo json_encode(['ok' => true, 'section_id' => $newSecId]);
                 exit;
@@ -145,12 +155,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $secId    = (int)($_POST['section_id'] ?? 0);
             $secTitle = trim($_POST['section_title'] ?? '');
             $secType  = $_POST['section_type'] ?? 'multiple_choice';
+            $secDesc  = trim($_POST['section_desc'] ?? '');
             if (!$secTitle) { $errors[] = 'Section title is required.'; break; }
             if (!array_key_exists($secType, $QUESTION_TYPES)) $secType = 'multiple_choice';
-            $db->prepare('UPDATE exam_sections SET title=?, question_type=? WHERE id=?')
-               ->execute([$secTitle, $secType, $secId]);
+            $db->prepare('UPDATE exam_sections SET title=?, description=?, question_type=? WHERE id=?')
+               ->execute([$secTitle, $secDesc ?: null, $secType, $secId]);
             // Handle inline AJAX
-            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+            if (is_ajax_request()) {
                 header('Content-Type: application/json');
                 echo json_encode(['ok' => true, 'title' => $secTitle, 'type' => $secType]);
                 exit;
@@ -235,7 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $scaleMin, $scaleMax, $scaleMinLabel, $scaleMaxLabel,
                     $sectionId, (int)$maxOrder->fetchColumn() + 1
                 ]);
-                if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+                if (is_ajax_request()) {
                     header('Content-Type: application/json');
                     echo json_encode(['ok' => true, 'id' => (int)$db->lastInsertId()]);
                     exit;
@@ -260,22 +271,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['ok' => true]);
             exit;
 
-        case 'update_passing_scores':
-            $scores = $_POST['scores'] ?? [];
-            foreach ($scores as $courseName => $vals) {
-                if (!in_array($courseName, PLP_COURSES, true)) continue;
-                $highFrom = max(1, min(10, (int)($vals['high'] ?? 7)));
-                $avgFrom  = max(1, min($highFrom - 1, (int)($vals['avg']  ?? 4)));
-                $pf       = $avgFrom; // passing = average tier and above
+        // ── Generate / refresh exam access password ─────────────
+        case 'generate_exam_password':
+            // Discard any prior output (display_errors warnings, etc.)
+            // so the JSON response can never be corrupted by a stray notice.
+            while (ob_get_level()) ob_end_clean();
+            ob_start();
+            try {
+                $examId = (int)($_POST['exam_id'] ?? 0);
+                if (!$examId) {
+                    ob_end_clean();
+                    header('Content-Type: application/json');
+                    echo json_encode(['ok' => false, 'error' => 'Invalid exam.']);
+                    exit;
+                }
+                $newPwd = generate_exam_password();
                 $db->prepare(
-                    'INSERT INTO course_passing_scores (course_name, pass_from, high_from, avg_from, confirmed)
-                     VALUES (?, ?, ?, ?, 1)
-                     ON DUPLICATE KEY UPDATE pass_from=VALUES(pass_from), high_from=VALUES(high_from), avg_from=VALUES(avg_from), confirmed=1'
-                )->execute([$courseName, $pf, $highFrom, $avgFrom]);
+                    'UPDATE exams SET access_password=?, password_issued_at=NOW() WHERE id=?'
+                )->execute([$newPwd, $examId]);
+                audit_log('exam_password_generated', "Generated new access password for exam ID {$examId}", 'exam', $examId);
+                ob_end_clean();
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'ok'       => true,
+                    'password' => $newPwd,
+                    'expires_in' => EXAM_PASSWORD_EXPIRY_SECONDS,
+                ]);
+            } catch (Throwable $e) {
+                ob_end_clean();
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => false, 'error' => 'Server error: ' . $e->getMessage()]);
             }
-            audit_log('passing_scores_updated', 'Updated per-course passing score tiers');
-            $success[] = 'Passing score tiers saved.';
-            break;
+            exit;
+
+        // ── Re-issue same password (reset 5-min timer) ──────────
+        case 'reissue_exam_password':
+            while (ob_get_level()) ob_end_clean();
+            ob_start();
+            try {
+                $examId = (int)($_POST['exam_id'] ?? 0);
+                if (!$examId) {
+                    ob_end_clean();
+                    header('Content-Type: application/json');
+                    echo json_encode(['ok' => false, 'error' => 'Invalid exam.']);
+                    exit;
+                }
+                // Only reissue if password already set
+                $curPwRow = $db->prepare('SELECT access_password FROM exams WHERE id=?');
+                $curPwRow->execute([$examId]);
+                $curPw = $curPwRow->fetchColumn();
+                if (!$curPw) {
+                    ob_end_clean();
+                    header('Content-Type: application/json');
+                    echo json_encode(['ok' => false, 'error' => 'No password set. Please set one first.']);
+                    exit;
+                }
+                $db->prepare('UPDATE exams SET password_issued_at=NOW() WHERE id=?')->execute([$examId]);
+                audit_log('exam_password_reissued', "Re-issued access password for exam ID {$examId}", 'exam', $examId);
+                ob_end_clean();
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'ok'         => true,
+                    'password'   => $curPw,
+                    'expires_in' => EXAM_PASSWORD_EXPIRY_SECONDS,
+                ]);
+            } catch (Throwable $e) {
+                ob_end_clean();
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => false, 'error' => 'Server error: ' . $e->getMessage()]);
+            }
+            exit;
 
         case 'inline_edit_question':
             // Quick inline text edit for a single question
@@ -295,9 +360,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ----------------------------------------------------------------
 $exams        = $db->query('SELECT * FROM exams ORDER BY id DESC')->fetchAll();
 $activeExam   = $db->query('SELECT * FROM exams WHERE is_active=1 LIMIT 1')->fetch() ?: null;
+$schoolYear    = school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
+$slotCountStmt = $db->prepare('SELECT COUNT(*) FROM exam_slot_schedule WHERE school_year = ?');
+$slotCountStmt->execute([$schoolYear]);
+$slotCount     = (int) $slotCountStmt->fetchColumn();
+$hasRoomSlots  = $slotCount > 0;
 $questions    = [];
 $sections     = [];
-$selectedExamId = (int)($_GET['exam'] ?? ($activeExam['id'] ?? 0));
+$selectedExamId = (int)($_GET['exam'] ?? 0);
 $selectedExam   = null;
 
 if ($selectedExamId) {
@@ -361,12 +431,26 @@ ob_start();
 ?>
 
 <style>
-/* ── Question card ───────────────────────────────── */
-.q-card { transition: box-shadow .15s, border-color .15s; }
-.q-card:hover { border-color: var(--accent); }
-.q-card.dragging { opacity:.5; }
-.drag-handle { cursor: grab; color: var(--text-tertiary); padding: 4px; }
+/* ── Question rows (no nested card; dividers extend edge-to-edge) ────── */
+.q-card.card {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    transition: background .12s;
+}
+.q-card.card:hover { background: var(--bg-subtle); }
+.q-card.card.dragging { opacity:.5; }
+.section-questions > .q-card.card:last-of-type { border-bottom: none; }
+.drag-handle {
+    cursor: grab; color: var(--text-tertiary);
+    background: transparent; border: none;
+    padding: 4px; line-height: 0;
+}
 .drag-handle:active { cursor: grabbing; }
+.drag-handle:hover { color: var(--text-secondary); }
 
 /* ── Section header bar ──────────────────────────── */
 .section-header {
@@ -411,7 +495,7 @@ ob_start();
 .type-pill {
     display: inline-flex; align-items: center; gap: 4px;
     font-size: var(--text-xs); padding: 2px 8px;
-    background: var(--neutral-100); border-radius: 99px;
+    background: var(--bg-subtle); border-radius: 99px;
     color: var(--text-secondary);
 }
 .type-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-2); }
@@ -434,26 +518,16 @@ ob_start();
     border-radius: 99px;
 }
 
-/* ── Exam sidebar ────────────────────────────────── */
-.exam-link {
-    display:block; padding:var(--space-3) var(--space-4);
-    border-radius:var(--radius-md); text-decoration:none;
-    margin-bottom:var(--space-1); color:var(--text-primary);
-    transition: background .12s;
-}
-.exam-link:hover { background: var(--neutral-100); }
-.exam-link.active { background: var(--neutral-100); }
-
 /* ── Toggle ──────────────────────────────────────── */
 .toggle { position:relative; width:36px; height:20px; }
 .toggle input { opacity:0; width:0; height:0; }
 .toggle-slider {
     position:absolute; inset:0; border-radius:99px;
-    background:var(--neutral-300); cursor:pointer; transition:.2s;
+    background:var(--border); cursor:pointer; transition:.2s;
 }
 .toggle-slider:before {
     content:''; position:absolute; width:14px; height:14px;
-    left:3px; top:3px; border-radius:50%; background:#fff; transition:.2s;
+    left:3px; top:3px; border-radius:50%; background:var(--bg-elevated); transition:.2s;
 }
 .toggle input:checked + .toggle-slider { background:var(--accent); }
 .toggle input:checked + .toggle-slider:before { transform:translateX(16px); }
@@ -466,17 +540,6 @@ ob_start();
     font-size:var(--text-sm); font-weight:var(--weight-medium);
     background:var(--surface); color:var(--text-primary);
 }
-
-/* ── Schedule / password info strip ─────────────── */
-.exam-meta-strip {
-    display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5);
-    padding: var(--space-3) var(--space-4);
-    background: var(--bg-subtle); border-radius: var(--radius-md);
-    font-size: var(--text-xs); color: var(--text-secondary);
-    margin-top: var(--space-3);
-}
-.exam-meta-item { display: flex; align-items: center; gap: 5px; }
-.exam-meta-item svg { flex-shrink: 0; color: var(--text-tertiary); }
 
 /* ── Section card container ──────────────────────── */
 .section-block.card {
@@ -502,282 +565,554 @@ ob_start();
     to   { opacity:1; transform: translateY(0); }
 }
 .iq-body { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
-.iq-footer { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--neutral-50); }
+.iq-footer { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg); }
 .iq-type-badge { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); padding: 3px 10px; border-radius: 99px; font-weight: var(--weight-medium); }
 .iq-choice-row { display: flex; align-items: center; gap: 8px; }
 .iq-choice-row input[type=text] { flex: 1; }
 .iq-add-choice { font-size: var(--text-xs); color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 0; display: flex; align-items: center; gap: 4px; }
+
+/* ── Schedule / password info strip ─────────────── */
+.exam-meta-strip {
+    display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-subtle); border-radius: var(--radius-md);
+    font-size: var(--text-xs); color: var(--text-secondary);
+    margin-top: var(--space-3);
+}
+.exam-meta-item { display: flex; align-items: center; gap: 5px; }
+.exam-meta-item svg { flex-shrink: 0; color: var(--text-tertiary); }
+
+/* ── LANDING PAGE ────────────────────────────────── */
+.exam-landing-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 200px);
+    padding-bottom: var(--space-16);
+}
+.exam-landing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-6);
+    width: 100%;
+    max-width: 640px;
+}
+.exam-landing-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--space-4);
+    padding: var(--space-10) var(--space-6);
+    background: var(--bg-elevated);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: border-color .18s, box-shadow .18s, transform .15s;
+    cursor: pointer;
+}
+.exam-landing-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    transform: translateY(-4px);
+}
+.exam-landing-icon {
+    width: 60px; height: 60px;
+    border-radius: var(--radius-lg);
+    background: var(--accent-muted);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+.exam-landing-title {
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
+    color: var(--text-primary);
+    letter-spacing: -0.2px;
+    margin-top: var(--space-1);
+}
+.exam-landing-desc {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin-top: var(--space-1);
+}
+.exam-landing-meta {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    display: flex; align-items: center; gap: var(--space-2);
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: var(--space-2);
+}
+.exam-landing-card--disabled {
+    opacity: 0.45;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+/* ── EXAM DIRECTORY ──────────────────────────────── */
+.exam-dir-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--space-4);
+    margin-top: var(--space-5);
+}
+.exam-dir-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-5);
+    background: var(--bg-elevated);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: border-color .15s, box-shadow .15s;
+    position: relative;
+}
+.exam-dir-card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-sm);
+}
+.exam-dir-card.is-active {
+    border-color: var(--accent);
+    background: var(--accent-muted);
+}
+.exam-dir-title {
+    font-size: var(--text-base);
+    font-weight: var(--weight-semibold);
+    color: var(--text-primary);
+    line-height: 1.35;
+}
+.exam-dir-meta {
+    display: flex; flex-direction: column; gap: 4px;
+    font-size: var(--text-xs); color: var(--text-tertiary);
+}
+.exam-dir-meta-row {
+    display: flex; align-items: center; gap: 5px;
+}
+.exam-dir-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: auto; padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+    .exam-landing-grid { grid-template-columns: 1fr; max-width: 320px; }
+}
 </style>
 
 <?php foreach ($errors as $e): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
 <?php endforeach; ?>
+<?php if (!empty($_GET['created'])): ?>
+    <div class="alert alert-success" style="margin-bottom:var(--space-3)">Exam created and set as active.</div>
+<?php endif; ?>
 <?php foreach ($success as $s): ?>
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div style="display:grid;grid-template-columns:220px 1fr;gap:var(--space-6);align-items:start">
+<?php
+// ── View routing ──────────────────────────────────────────────
+$view = 'landing';
+if (isset($_GET['view']) && $_GET['view'] === 'exams') $view = 'exams';
+elseif ($selectedExamId) $view = 'editor';
+?>
 
-    <!-- ── Sidebar ── -->
-    <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3)">
-            <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary)">Exams</div>
-            <button onclick="openModal('create-exam-modal')" title="New Exam"
-                    style="display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:var(--radius-sm);border:none;background:transparent;color:var(--text-tertiary);font-size:16px;line-height:1;cursor:pointer;padding:0;transition:background var(--transition-fast),color var(--transition-fast)"
-                    onmouseover="this.style.background='var(--bg-overlay)';this.style.color='var(--text-primary)'"
-                    onmouseout="this.style.background='transparent';this.style.color='var(--text-tertiary)'">+</button>
+<?php /* ════════════════════════════════════════════════════
+   LANDING — two big entry-point cards
+════════════════════════════════════════════════════ */ ?>
+<?php if ($view === 'landing'): ?>
+
+<div class="exam-landing-wrap">
+<div class="exam-landing-grid">
+
+    <!-- Exam Builder (left) — always enabled -->
+    <a href="<?= url('/staff/exam') ?>?view=exams" class="exam-landing-card">
+        <div class="exam-landing-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                      d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2z"/>
+                <polyline stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                          points="14 2 14 8 20 8"/>
+                <line stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="8" y1="13" x2="16" y2="13"/>
+                <line stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="8" y1="17" x2="13" y2="17"/>
+            </svg>
         </div>
-        <?php if (empty($exams)): ?>
-            <p style="font-size:var(--text-sm);color:var(--text-tertiary)">No exams yet.</p>
-        <?php else: ?>
-            <?php foreach ($exams as $ex): ?>
-                <a href="?exam=<?= $ex['id'] ?>" class="exam-link <?= $selectedExamId===$ex['id']?'active':'' ?>">
-                    <div style="font-size:var(--text-sm);font-weight:var(--weight-medium)"><?= e($ex['title']) ?></div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= $ex['duration_minutes'] ?> min</div>
-                    <?php if ($ex['is_active']): ?>
-                        <span class="badge badge-success" style="margin-top:4px">Active</span>
-                    <?php endif; ?>
-                    <?php if ($ex['scheduled_start']): ?>
-                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px;display:flex;align-items:center;gap:3px">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
-                            <?= date('M j', strtotime($ex['scheduled_start'])) ?>
-                        </div>
-                    <?php endif; ?>
-                    <?php if ($ex['access_password']): ?>
-                        <div style="font-size:var(--text-xs);color:var(--warning);margin-top:2px;display:flex;align-items:center;gap:3px">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                            Password protected
-                        </div>
-                    <?php endif; ?>
-                </a>
-            <?php endforeach; ?>
-        <?php endif; ?>
-    </div>
-
-    <!-- ── Main panel ── -->
-    <div>
-    <?php if ($selectedExam): ?>
-
-        <!-- Exam header card with INLINE EDITING -->
-        <div class="card" style="margin-bottom:var(--space-5);padding:var(--space-5)" id="exam-header-card">
-            <div style="display:flex;align-items:flex-start;gap:var(--space-4)">
-                <div style="flex:1;min-width:0">
-
-                    <!-- Inline-editable title -->
-                    <div id="exam-title-view">
-                        <div style="display:flex;align-items:center;gap:var(--space-2)">
-                            <span id="exam-title-text" style="font-weight:var(--weight-semibold);font-size:var(--text-lg)"><?= e($selectedExam['title']) ?></span>
-                            <button onclick="startInlineExamEdit()" title="Edit title"
-                                    style="opacity:.4;background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;transition:opacity .15s"
-                                    onmouseover="this.style.opacity='.9'" onmouseout="this.style.opacity='.4'">
-                                <?= icon('ic_fluent_edit_24_regular', 13) ?>
-                            </button>
-                        </div>
-                    </div>
-                    <div id="exam-title-edit" style="display:none">
-                        <input type="text" id="exam-title-input" class="inline-edit-input"
-                               value="<?= e($selectedExam['title']) ?>"
-                               style="font-weight:var(--weight-semibold);font-size:var(--text-lg)">
-                        <div class="inline-edit-actions">
-                            <button class="inline-save-btn" onclick="saveInlineExamTitle()">Save</button>
-                            <button class="inline-cancel-btn" onclick="cancelInlineExamEdit()">Cancel</button>
-                        </div>
-                    </div>
-
-                    <?php if ($selectedExam['description']): ?>
-                        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:2px"><?= e($selectedExam['description']) ?></div>
-                    <?php endif; ?>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2);display:flex;gap:var(--space-4);flex-wrap:wrap">
-                        <span><?= $selectedExam['duration_minutes'] ?> minutes</span>
-                        <span><?= count($questions) ?> questions</span>
-                        <span><?= $totalPoints ?> total points</span>
-                        <?php if ($selectedExam['passing_score']): ?>
-                            <span>Passing: <?= $selectedExam['passing_score'] ?></span>
-                        <?php endif; ?>
-                        <?php if ($selectedExam['shuffle_questions']): ?>
-                            <span>🔀 Shuffled</span>
-                        <?php endif; ?>
-                    </div>
-
-                    <!-- Schedule + Password info strip -->
-                    <?php if ($selectedExam['scheduled_start'] || $selectedExam['access_password']): ?>
-                        <div class="exam-meta-strip">
-                            <?php if ($selectedExam['scheduled_start']): ?>
-                                <div class="exam-meta-item">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
-                                    Opens: <strong><?= e(fmtDateTime($selectedExam['scheduled_start'])) ?></strong>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ($selectedExam['scheduled_end']): ?>
-                                <div class="exam-meta-item">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 6v6l4 2"/></svg>
-                                    Closes: <strong><?= e(fmtDateTime($selectedExam['scheduled_end'])) ?></strong>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ($selectedExam['access_password']): ?>
-                                <div class="exam-meta-item" style="color:var(--warning)">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                                    Password protected
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                <div style="display:flex;gap:var(--space-2);flex-shrink:0;align-items:center">
-                    <button class="btn btn-ghost btn-sm"
-                            onclick="openEditExamModal(<?= htmlspecialchars(json_encode($selectedExam)) ?>)">Edit</button>
-                    <?php if (!$selectedExam['is_active']): ?>
-                        <form method="POST" style="display:inline">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="action" value="activate_exam">
-                            <input type="hidden" name="exam_id" value="<?= $selectedExam['id'] ?>">
-                            <button class="btn btn-secondary btn-sm">Set Active</button>
-                        </form>
-                    <?php else: ?>
-                        <span class="badge badge-success">Active</span>
-                    <?php endif; ?>
-                    <form method="POST" style="display:inline"
-                          onsubmit="return confirm('Delete this exam and all its questions? This cannot be undone.')">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="action" value="delete_exam">
-                        <input type="hidden" name="exam_id" value="<?= $selectedExam['id'] ?>">
-                        <button class="btn btn-sm" style="color:var(--error);border-color:var(--error);background:transparent"
-                                type="submit">Delete Exam</button>
-                    </form>
-                </div>
-            </div>
-
-            <?php if (!empty($resultStats) && $resultStats['total'] > 0): ?>
-                <div style="display:flex;gap:var(--space-6);margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border)">
-                    <div><div style="font-size:var(--text-xs);color:var(--text-tertiary)">Takers</div><div style="font-weight:var(--weight-semibold)"><?= $resultStats['total'] ?></div></div>
-                    <div><div style="font-size:var(--text-xs);color:var(--text-tertiary)">Avg Score</div><div style="font-weight:var(--weight-semibold)"><?= round($resultStats['avg_score'],1) ?></div></div>
-                    <div><div style="font-size:var(--text-xs);color:var(--text-tertiary)">Highest</div><div style="font-weight:var(--weight-semibold)"><?= $resultStats['max_score'] ?></div></div>
-                    <div><div style="font-size:var(--text-xs);color:var(--text-tertiary)">Lowest</div><div style="font-weight:var(--weight-semibold)"><?= $resultStats['min_score'] ?></div></div>
-                </div>
+        <div class="exam-landing-title">Exam Builder</div>
+        <div class="exam-landing-desc">
+            Create and manage entrance exams — set questions, answer keys, schedules, and access passwords.
+        </div>
+        <div class="exam-landing-meta">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
+            <?= count($exams) ?> exam<?= count($exams) !== 1 ? 's' : '' ?> created
+            <?php if ($activeExam): ?>
+                &nbsp;&middot;&nbsp;
+                <span style="color:var(--success);font-weight:var(--weight-medium)"><?= e($activeExam['title']) ?> is active</span>
             <?php endif; ?>
         </div>
+    </a>
 
-        <!-- Per-course passing scores panel -->
-        <?php
-        $passingRows = [];
-        try {
-            $passingRows = $db->query("SELECT course_name, pass_from, high_from, avg_from, confirmed FROM course_passing_scores ORDER BY course_name")->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) { /* table may not exist yet */ }
-        $passingMap  = [];
-        foreach ($passingRows as $pr) $passingMap[$pr['course_name']] = $pr;
+    <!-- Room Slots (right) — disabled if no exams set up yet -->
+    <?php if (!empty($exams)): ?>
+    <a href="<?= url('/staff/exam/slots') ?>" class="exam-landing-card">
+    <?php else: ?>
+    <div class="exam-landing-card exam-landing-card--disabled" title="Create an exam first before setting up room slots">
+    <?php endif; ?>
+        <div class="exam-landing-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+            </svg>
+        </div>
+        <div class="exam-landing-title">Room Slots</div>
+        <div class="exam-landing-desc">
+            Assign applicants to exam rooms, manage seating capacity, and organize exam-day logistics.
+        </div>
+        <div class="exam-landing-meta">
+            <?php if (empty($exams)): ?>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/></svg>
+                Create an exam first
+            <?php else: ?>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
+                <?= $slotCount ?> slot<?= $slotCount !== 1 ? 's' : '' ?> configured
+            <?php endif; ?>
+        </div>
+    <?php if (!empty($exams)): ?>
+    </a>
+    <?php else: ?>
+    </div>
+    <?php endif; ?>
+
+</div>
+</div>
+
+<?php /* ════════════════════════════════════════════════════
+   EXAM DIRECTORY — card grid of all exams
+════════════════════════════════════════════════════ */ ?>
+<?php elseif ($view === 'exams'): ?>
+
+<!-- Directory header -->
+<div style="display:flex;align-items:center;margin-bottom:var(--space-5)">
+    <a href="<?= url('/staff/exam') ?>" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:5px">
+        <?= icon('ic_fluent_arrow_left_24_regular', 15) ?>
+        Back
+    </a>
+</div>
+
+<?php if (empty($exams)): ?>
+    <div class="exam-dir-grid" style="max-width:320px;margin:var(--space-10) auto 0">
+        <div class="exam-dir-card" onclick="openModal('create-exam-modal')"
+             style="align-items:center;justify-content:center;min-height:220px;border-style:dashed;cursor:pointer">
+            <div style="width:56px;height:56px;border-radius:50%;background:var(--accent-muted);
+                        display:flex;align-items:center;justify-content:center;color:var(--accent)">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+            </div>
+            <div style="font-size:var(--text-base);font-weight:var(--weight-semibold);color:var(--accent);margin-top:var(--space-2)">Create Your First Exam</div>
+            <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:var(--space-1)">Get started by creating an entrance exam.</div>
+        </div>
+    </div>
+<?php else: ?>
+    <div class="exam-dir-grid">
+        <?php foreach ($exams as $ex):
+            $qCount = $examMeta[$ex['id']]['question_count'] ?? 0;
+            $isActive = (bool)$ex['is_active'];
         ?>
-        <div class="card" style="margin-bottom:var(--space-5);padding:var(--space-5)">
-            <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4)">
-                <div style="flex:1">
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">Per-Course Passing Tiers</div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
-                        Set the minimum passing tier per course.
+            <a href="<?= url('/staff/exam') ?>?exam=<?= $ex['id'] ?>" class="exam-dir-card <?= $isActive ? 'is-active' : '' ?>">
+
+                <!-- Active badge -->
+                <?php if ($isActive): ?>
+                    <div style="position:absolute;top:var(--space-4);right:var(--space-4)">
+                        <span class="badge badge-success" style="font-size:10px">Active</span>
+                    </div>
+                <?php endif; ?>
+
+                <!-- Title -->
+                <div class="exam-dir-title"><?= e($ex['title']) ?></div>
+
+                <!-- Meta info -->
+                <div class="exam-dir-meta">
+                    <div class="exam-dir-meta-row">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
+                        <?= $qCount ?> question<?= $qCount !== 1 ? 's' : '' ?>
+                    </div>
+                    <?php if ($ex['scheduled_start']): ?>
+                        <div class="exam-dir-meta-row">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
+                            <?= e(fmtDateTime($ex['scheduled_start'])) ?>
+                            <?php if ($ex['scheduled_end']): ?>
+                                &rarr; <?= e(fmtDateTime($ex['scheduled_end'])) ?>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($ex['access_password'])): ?>
+                        <div class="exam-dir-meta-row">
+                            <?= icon('ic_fluent_lock_closed_24_regular', 12) ?>
+                            Password set
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Footer -->
+                <div class="exam-dir-footer">
+                    <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                        Created <?= e(format_date($ex['created_at'] ?? null, 'M j, Y')) ?>
+                    </span>
+                    <span style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);display:flex;align-items:center;gap:4px">
+                        Edit
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    </span>
+                </div>
+            </a>
+        <?php endforeach; ?>
+
+        <!-- New Exam card (always last in grid) -->
+        <div class="exam-dir-card" onclick="openModal('create-exam-modal')"
+             style="align-items:center;justify-content:center;min-height:200px;border-style:dashed;cursor:pointer">
+            <div style="width:48px;height:48px;border-radius:50%;background:var(--accent-muted);
+                        display:flex;align-items:center;justify-content:center;color:var(--accent)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+            </div>
+            <div style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--accent);margin-top:var(--space-2)">New Exam</div>
+        </div>
+    </div>
+<?php endif; ?>
+
+<?php /* ════════════════════════════════════════════════════
+   EXAM EDITOR — full question builder for a selected exam
+════════════════════════════════════════════════════ */ ?>
+<?php else: ?>
+
+<!-- Back breadcrumb -->
+<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-5)">
+    <a href="<?= url('/staff/exam') ?>?view=exams" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:5px">
+        <?= icon('ic_fluent_arrow_left_24_regular', 15) ?>
+        Back
+    </a>
+    <?php if ($selectedExam): ?>
+        <span style="color:var(--text-tertiary);font-size:var(--text-sm)">/</span>
+        <span style="font-size:var(--text-sm);color:var(--text-secondary);font-weight:var(--weight-medium)"><?= e($selectedExam['title']) ?></span>
+        <?php if ($selectedExam['is_active']): ?>
+            <span class="badge badge-success" style="font-size:10px">Active</span>
+        <?php endif; ?>
+    <?php endif; ?>
+</div>
+
+<?php if ($selectedExam): ?>
+
+        <!-- Exam header card (title/schedule editable in-place; password subsection folded in) -->
+        <?php
+            $pwValid    = exam_password_is_valid($selectedExam);
+            $pwSecsLeft = exam_password_seconds_remaining($selectedExam);
+            $hasPw      = !empty($selectedExam['access_password']);
+            $startVal   = $selectedExam['scheduled_start'] ? (new DateTime($selectedExam['scheduled_start']))->format('Y-m-d\TH:i') : '';
+            $endVal     = $selectedExam['scheduled_end']   ? substr($selectedExam['scheduled_end'], 11, 5) : '';
+        ?>
+        <style>
+            #exam-header-card[data-edit-state="read"] .exam-show-edit { display: none !important; }
+            #exam-header-card[data-edit-state="edit"] .exam-show-read { display: none !important; }
+            .exam-inline {
+                width: 100%;
+                font: inherit;
+                color: inherit;
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: var(--radius-sm);
+                padding: 4px 8px;
+                margin: 0 -8px;
+                box-sizing: border-box;
+                resize: none;
+                transition: border-color .15s, background .15s;
+            }
+            .exam-inline[readonly] { cursor: default; pointer-events: none; }
+            .exam-inline:not([readonly]):hover { border-color: var(--border); }
+            .exam-inline:not([readonly]):focus {
+                outline: none;
+                border-color: var(--accent);
+                background: var(--bg-elevated);
+            }
+            .exam-inline--title { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
+            .exam-inline--desc  { display: block; font-size: var(--text-sm); color: var(--text-secondary); margin-top: 2px; }
+            #exam-header-card[data-edit-state="read"] .exam-inline--desc:placeholder-shown { display: none; }
+        </style>
+
+        <form method="POST" id="exam-edit-form">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action"   value="edit_exam">
+            <input type="hidden" name="exam_id"  value="<?= $selectedExam['id'] ?>">
+            <input type="hidden" name="access_password" id="exam-edit-pw-hidden" value="<?= e($selectedExam['access_password'] ?? '') ?>">
+
+            <div class="card" id="exam-header-card" data-edit-state="read"
+                 style="margin-bottom:var(--space-5);padding:var(--space-4)">
+                <div style="display:flex;align-items:flex-start;gap:var(--space-4)">
+                    <div style="flex:1;min-width:0">
+
+                        <input class="exam-inline exam-inline--title" name="title"
+                               value="<?= e($selectedExam['title']) ?>"
+                               data-original="<?= e($selectedExam['title']) ?>"
+                               readonly required>
+
+                        <textarea class="exam-inline exam-inline--desc" name="description" rows="1"
+                                  placeholder="Add description (optional)"
+                                  data-original="<?= e($selectedExam['description'] ?? '') ?>"
+                                  readonly><?= e($selectedExam['description'] ?? '') ?></textarea>
+
+                        <div class="exam-show-read" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2);display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center">
+                            <span><?= count($questions) ?> questions</span>
+                            <span aria-hidden="true">·</span>
+                            <span><?= $totalPoints ?> total points</span>
+                            <?php if ($selectedExam['shuffle_questions']): ?>
+                                <span aria-hidden="true">·</span>
+                                <span style="display:inline-flex;align-items:center;gap:4px">
+                                    <?= icon('ic_fluent_arrow_sync_24_regular', 12) ?>
+                                    Shuffled
+                                </span>
+                            <?php endif; ?>
+                        </div>
+
+                        <?php if ($selectedExam['scheduled_start'] || $selectedExam['scheduled_end']): ?>
+                            <div class="exam-show-read" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">
+                                <?php if ($selectedExam['scheduled_start']): ?>
+                                    Opens <strong style="color:var(--text-secondary);font-weight:var(--weight-medium)"><?= e(fmtDateTime($selectedExam['scheduled_start'])) ?></strong>
+                                <?php endif; ?>
+                                <?php if ($selectedExam['scheduled_start'] && $selectedExam['scheduled_end']): ?>
+                                    and
+                                <?php endif; ?>
+                                <?php if ($selectedExam['scheduled_end']): ?>
+                                    Closes <strong style="color:var(--text-secondary);font-weight:var(--weight-medium)"><?= e(fmtDateTime($selectedExam['scheduled_end'])) ?></strong>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <div id="pw-manager-card" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px;display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">
+                            <span style="display:inline-flex;align-items:center;gap:4px">
+                                <?= icon('ic_fluent_lock_closed_24_regular', 12) ?>
+                                Access Password
+                            </span>
+                            <?php if ($hasPw): ?>
+                                <span id="pw-display"
+                                      title="Click to select / copy"
+                                      style="font-family:monospace;font-size:var(--text-sm);font-weight:var(--weight-semibold);
+                                             letter-spacing:.12em;padding:1px 8px;
+                                             background:var(--bg-subtle);border:1px solid var(--border);
+                                             border-radius:var(--radius-sm);color:var(--text-primary);
+                                             user-select:all;cursor:text"><?= e($selectedExam['access_password']) ?></span>
+                                <span aria-hidden="true">·</span>
+                                <?php if ($pwValid): ?>
+                                    <span id="pw-timer-badge" style="color:var(--success)">
+                                        Expires in <span id="pw-timer"><?= $pwSecsLeft ?></span>s
+                                    </span>
+                                <?php else: ?>
+                                    <span id="pw-timer-badge" style="color:var(--error);display:inline-flex;align-items:center;gap:4px">
+                                        <?= icon('ic_fluent_warning_24_regular', 12) ?>
+                                        Expired
+                                    </span>
+                                <?php endif; ?>
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        onclick="ajaxGeneratePassword(<?= $selectedExam['id'] ?>)"
+                                        style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
+                                    <?= icon('ic_fluent_arrow_sync_24_regular', 12) ?>
+                                    New
+                                </button>
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        onclick="ajaxReissuePassword(<?= $selectedExam['id'] ?>)"
+                                        id="pw-reissue-btn"
+                                        style="display:<?= $pwValid ? 'none' : 'inline-flex' ?>;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
+                                    <?= icon('ic_fluent_clock_24_regular', 12) ?>
+                                    Extend
+                                </button>
+                            <?php else: ?>
+                                <span style="font-style:italic">none</span>
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        onclick="ajaxGeneratePassword(<?= $selectedExam['id'] ?>)"
+                                        style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
+                                    <?= icon('ic_fluent_arrow_sync_24_regular', 12) ?>
+                                    Generate
+                                </button>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="exam-show-edit" style="margin-top:var(--space-3);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
+                            <div>
+                                <label class="form-label" style="font-size:var(--text-xs);margin-bottom:4px">Opens</label>
+                                <input type="datetime-local" name="scheduled_start" class="form-control"
+                                       value="<?= $startVal ?>" data-original="<?= $startVal ?>"
+                                       style="min-height:32px;padding:0 var(--space-3);font-size:var(--text-sm)">
+                            </div>
+                            <div>
+                                <label class="form-label" style="font-size:var(--text-xs);margin-bottom:4px">Closes (time)</label>
+                                <input type="time" name="scheduled_end_time" class="form-control"
+                                       value="<?= $endVal ?>" data-original="<?= $endVal ?>"
+                                       style="min-height:32px;padding:0 var(--space-3);font-size:var(--text-sm)">
+                            </div>
+                        </div>
+                        <div class="exam-show-edit" style="display:flex;gap:var(--space-4);flex-wrap:wrap;margin-top:var(--space-3)">
+                            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:var(--text-sm)">
+                                <input type="checkbox" name="shuffle_questions"
+                                       data-original-checked="<?= $selectedExam['shuffle_questions'] ? '1' : '0' ?>"
+                                       style="accent-color:var(--accent)" <?= $selectedExam['shuffle_questions'] ? 'checked' : '' ?>>
+                                Shuffle questions
+                            </label>
+                            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:var(--text-sm)">
+                                <input type="checkbox" name="shuffle_choices"
+                                       data-original-checked="<?= $selectedExam['shuffle_choices'] ? '1' : '0' ?>"
+                                       style="accent-color:var(--accent)" <?= $selectedExam['shuffle_choices'] ? 'checked' : '' ?>>
+                                Shuffle choices
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:var(--space-2);flex-shrink:0;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                        <button type="button" class="btn btn-ghost btn-sm exam-show-read"
+                                onclick="enterExamEditMode()">Edit</button>
+                        <button type="button" class="btn btn-ghost btn-sm exam-show-edit"
+                                onclick="exitExamEditMode()">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm exam-show-edit">Save</button>
+
+                        <?php if (!$selectedExam['is_active']): ?>
+                            <button type="button" class="btn btn-secondary btn-sm exam-show-read"
+                                    onclick="document.getElementById('activate-exam-form').submit()">Set Active</button>
+                        <?php endif; ?>
+                        <button type="button" class="btn btn-sm exam-show-read"
+                                style="color:var(--error);border-color:var(--error);background:transparent"
+                                onclick="if(confirm('Delete this exam? All questions will be removed.')) document.getElementById('delete-exam-form').submit();">Delete</button>
                     </div>
                 </div>
-                <button class="btn btn-ghost btn-sm" onclick="togglePassingPanel()" id="passing-toggle-btn" style="display:flex;align-items:center;gap:5px">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" id="passing-toggle-icon"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 9l6 6 6-6"/></svg>
-                    Edit tiers
-                </button>
-            </div>
 
+                <?php if (!empty($resultStats) && $resultStats['total'] > 0): ?>
+                    <div style="display:flex;gap:var(--space-6);margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border)">
+                        <div><div style="font-size:var(--text-xs);color:var(--text-tertiary)">Takers</div><div style="font-weight:var(--weight-semibold)"><?= $resultStats['total'] ?></div></div>
+                        <div><div style="font-size:var(--text-xs);color:var(--text-tertiary)">Avg Score</div><div style="font-weight:var(--weight-semibold)"><?= round($resultStats['avg_score'],1) ?></div></div>
+                        <div><div style="font-size:var(--text-xs);color:var(--text-tertiary)">Highest</div><div style="font-weight:var(--weight-semibold)"><?= $resultStats['max_score'] ?></div></div>
+                        <div><div style="font-size:var(--text-xs);color:var(--text-tertiary)">Lowest</div><div style="font-weight:var(--weight-semibold)"><?= $resultStats['min_score'] ?></div></div>
+                    </div>
+                <?php endif; ?>
 
-            <!-- Read-only summary -->
-            <div id="passing-summary">
-                <div style="display:grid;grid-template-columns:1fr auto auto auto;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;font-size:var(--text-xs)">
-                    <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)">Course</div>
-                    <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border);text-align:center">High</div>
-                    <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border);text-align:center">Average</div>
-                    <div style="padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border);text-align:center">Low</div>
-                    <?php foreach (PLP_COURSES as $ci => $course):
-                        $pr       = $passingMap[$course] ?? null;
-                        $highFrom = $pr && isset($pr['high_from']) ? (int)$pr['high_from'] : 7;
-                        $avgFrom  = $pr && isset($pr['avg_from'])  ? (int)$pr['avg_from']  : 4;
-                        $isLast   = $ci === count(PLP_COURSES) - 1;
-                        $bb = !$isLast ? 'border-bottom:1px solid var(--border)' : '';
-                    ?>
-                    <div style="padding:var(--space-2) var(--space-3);<?= $bb ?>"><?= e($course) ?></div>
-                    <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary);<?= $bb ?>"><?= $highFrom ?>–10</div>
-                    <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary);<?= $bb ?>"><?= $avgFrom ?>–<?= $highFrom - 1 ?></div>
-                    <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary);<?= $bb ?>">1–<?= $avgFrom - 1 ?></div>
-                    <?php endforeach; ?>
-                </div>
             </div>
-            <!-- Editable form (hidden) -->
-            <div id="passing-edit-panel" style="display:none;margin-top:var(--space-4)">
-                <form method="POST">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="update_passing_scores">
-                    <!-- Column headers -->
-                    <div style="display:grid;grid-template-columns:1fr 100px 100px 90px;gap:var(--space-2);align-items:center;padding:var(--space-2) 0;border-bottom:2px solid var(--border);margin-bottom:var(--space-1)">
-                        <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary)">Course</div>
-                        <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);text-align:center">High from</div>
-                        <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);text-align:center">Avg from</div>
-                        <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);text-align:center">Low</div>
-                    </div>
-                    <?php foreach (PLP_COURSES as $course):
-                        $pr       = $passingMap[$course] ?? null;
-                        $highFrom = $pr && isset($pr['high_from']) ? (int)$pr['high_from'] : 7;
-                        $avgFrom  = $pr && isset($pr['avg_from'])  ? (int)$pr['avg_from']  : 4;
-                        $enc      = htmlspecialchars($course, ENT_QUOTES);
-                    ?>
-                    <div style="display:grid;grid-template-columns:1fr 100px 100px 90px;gap:var(--space-2);align-items:center;padding:var(--space-2) 0;border-bottom:1px solid var(--border)">
-                        <div style="font-size:var(--text-xs)"><?= e($course) ?></div>
-                        <div>
-                            <input type="number"
-                                   name="scores[<?= $enc ?>][high]"
-                                   class="form-control passing-high"
-                                   data-course="<?= $enc ?>"
-                                   value="<?= $highFrom ?>"
-                                   min="2" max="10"
-                                   style="font-size:var(--text-xs);padding:4px 6px;text-align:center"
-                                   title="Ranks <?= $highFrom ?>–10 = High">
-                        </div>
-                        <div>
-                            <input type="number"
-                                   name="scores[<?= $enc ?>][avg]"
-                                   class="form-control passing-avg"
-                                   data-course="<?= $enc ?>"
-                                   value="<?= $avgFrom ?>"
-                                   min="1" max="9"
-                                   style="font-size:var(--text-xs);padding:4px 6px;text-align:center"
-                                   title="Ranks <?= $avgFrom ?>–<?= $highFrom - 1 ?> = Average (passing threshold)">
-                        </div>
-                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:center" class="low-label" data-course="<?= $enc ?>">
-                            1–<?= max(0, $avgFrom - 1) ?>
-                        </div>
-                    </div>
-                    <?php endforeach; ?>
-                    <div style="margin-top:var(--space-4);display:flex;gap:var(--space-2);justify-content:flex-end;align-items:center">
-                        <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Passing = Average tier and above</span>
-                        <button type="button" class="btn btn-ghost btn-sm" onclick="togglePassingPanel()">Cancel</button>
-                        <button type="submit" class="btn btn-primary btn-sm">Save Passing Scores</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+        </form>
 
-        <!-- Question list header -->
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4)">            <div style="font-weight:var(--weight-semibold)">Questions</div>
-            <div style="display:flex;gap:var(--space-2)">
-                <button class="btn btn-ghost btn-sm"
-                        onclick="openAddSectionModal()"
-                        style="display:flex;align-items:center;gap:5px">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h16M4 18h8"/><circle cx="19" cy="18" r="3" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M19 16v4M17 18h4"/></svg>
-                    Add Section
-                </button>
-                <button class="btn btn-secondary btn-sm" onclick="openAiImportModal()" style="display:flex;align-items:center;gap:5px">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2a7 7 0 017 7c0 2.5-1.3 4.7-3.3 6L12 22l-3.7-7C6.3 13.7 5 11.5 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>
-                    Import with AI
-                </button>
-            </div>
-        </div>
+        <?php if (!$selectedExam['is_active']): ?>
+            <form method="POST" id="activate-exam-form" style="display:none">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action"  value="activate_exam">
+                <input type="hidden" name="exam_id" value="<?= $selectedExam['id'] ?>">
+            </form>
+        <?php endif; ?>
+        <form method="POST" id="delete-exam-form" style="display:none">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action"  value="delete_exam">
+            <input type="hidden" name="exam_id" value="<?= $selectedExam['id'] ?>">
+        </form>
 
         <!-- ── Sectioned question list ── -->
         <div id="questions-list">
 
         <?php
         $globalQNum = 0;
-        // Helper to render a single question card
         function renderQuestionCard($q, &$globalQNum, $QUESTION_TYPES, $CHOICE_TYPES): void {
             global $selectedExam;
             $globalQNum++;
@@ -785,31 +1120,21 @@ ob_start();
             $typeMeta = $QUESTION_TYPES[$q['question_type']] ?? $QUESTION_TYPES['multiple_choice'];
             $qJson    = htmlspecialchars(json_encode($q));
         ?>
-            <div class="card q-card" style="padding:0;overflow:hidden" data-qid="<?= $q['id'] ?>" data-q="<?= $qJson ?>">
-                <div class="q-view-mode" style="padding:var(--space-4) var(--space-5)">
-                    <div style="display:flex;gap:var(--space-3);align-items:flex-start">
-                        <div class="drag-handle" title="Drag to reorder">
-                            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M8 6a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM8 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM8 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 6a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
-                            </svg>
-                        </div>
+            <div class="card q-card" data-qid="<?= $q['id'] ?>" data-q="<?= $qJson ?>">
+                <div class="q-view-mode" style="display:flex;gap:var(--space-3);align-items:flex-start">
                         <div style="flex:1;min-width:0">
-                            <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)">
-                                <span style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= $globalQNum ?>.</span>
-                                <span class="type-pill">
-                                    <?= typeIcon($q['question_type']) ?>
-                                    <?= $typeMeta['label'] ?>
-                                </span>
-                                <span class="pts-badge"><?= $q['points'] ?> pt<?= $q['points']!=1?'s':'' ?></span>
+                            <div style="display:flex;align-items:baseline;gap:var(--space-2);flex-wrap:wrap">
+                                <span style="font-weight:var(--weight-medium);color:var(--text-tertiary);min-width:1.5em;text-align:right"><?= $globalQNum ?>.</span>
+                                <span style="font-weight:var(--weight-medium);flex:1;min-width:0"><?= e($q['question_text']) ?></span>
+                                <span style="font-size:var(--text-xs);color:var(--text-tertiary);white-space:nowrap"><?= $q['points'] ?> pt<?= $q['points']!=1?'s':'' ?></span>
                                 <?php if (!$q['is_required']): ?>
                                     <span class="type-pill">Optional</span>
                                 <?php endif; ?>
                             </div>
-                            <p style="font-weight:var(--weight-medium);margin-bottom:var(--space-2)"><?= e($q['question_text']) ?></p>
                             <?php if ($q['description']): ?>
-                                <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin-bottom:var(--space-3)"><?= e($q['description']) ?></p>
+                                <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:4px 0 0 calc(1.5em + var(--space-2))"><?= e($q['description']) ?></p>
                             <?php endif; ?>
-                            <!-- Answer preview -->
+                            <div style="margin-top:var(--space-2);margin-left:calc(1.5em + var(--space-2))">
                             <?php if (in_array($q['question_type'], $CHOICE_TYPES) && !empty($choices)): ?>
                                 <div style="display:flex;flex-direction:column;gap:var(--space-1)">
                                 <?php
@@ -846,22 +1171,26 @@ ob_start();
                             <?php elseif ($q['question_type'] === 'paragraph'): ?>
                                 <div style="height:48px;border-bottom:2px solid var(--border);font-size:var(--text-sm);color:var(--text-tertiary);display:flex;align-items:flex-end;padding-bottom:4px">Paragraph text</div>
                             <?php endif; ?>
+                            </div>
                         </div>
-                        <!-- Actions -->
-                        <div style="display:flex;gap:var(--space-1)">
-                            <button class="btn-icon" title="Edit question" onclick="startInlineQFullEdit(<?= $q['id'] ?>)">
-                                <?= icon('ic_fluent_edit_24_regular', 15) ?>
+                        <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;align-items:center">
+                            <button type="button" class="drag-handle" title="Drag to reorder">
+                                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 6a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM8 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM8 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 6a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
+                                </svg>
                             </button>
-                            <form method="POST" onsubmit="return confirm('Delete this question?')" style="display:inline">
+                            <button class="btn-icon" title="Edit question" onclick="startInlineQFullEdit(<?= $q['id'] ?>)">
+                                <?= icon('ic_fluent_edit_24_regular', 14) ?>
+                            </button>
+                            <form method="POST" onsubmit="return confirm('Remove this question?')" style="display:inline">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete_question">
                                 <input type="hidden" name="question_id" value="<?= $q['id'] ?>">
                                 <button class="btn-icon" style="color:var(--error)" title="Delete">
-                                    <?= icon('ic_fluent_delete_24_regular', 15) ?>
+                                    <?= icon('ic_fluent_delete_24_regular', 14) ?>
                                 </button>
                             </form>
                         </div>
-                    </div>
                 </div>
             </div>
         <?php } ?>
@@ -872,7 +1201,6 @@ ob_start();
             </div>
         <?php else: ?>
 
-            <!-- Sections -->
             <?php foreach ($sections as $sec):
                 $sc = $SECTION_COLORS[$sec['question_type']] ?? $SECTION_COLORS['multiple_choice'];
                 $secQs    = $questionsBySection[$sec['id']] ?? [];
@@ -880,8 +1208,6 @@ ob_start();
                 $secJson   = htmlspecialchars(json_encode($sec));
             ?>
                 <div class="card section-block" style="margin-bottom:var(--space-5);padding:0;overflow:visible" data-section-id="<?= $sec['id'] ?>">
-
-                    <!-- Section header -->
                     <div class="section-header" style="background:<?= $sc['bg'] ?>;border-color:<?= $sc['border'] ?>;border-radius:var(--radius-md) var(--radius-md) 0 0;margin-bottom:0">
                         <div id="sec-title-view-<?= $sec['id'] ?>" style="display:flex;align-items:center;gap:var(--space-2);flex:1;min-width:0">
                             <?= typeIcon($sec['question_type']) ?>
@@ -919,8 +1245,7 @@ ob_start();
                         </div>
                     </div>
 
-                    <!-- Questions in this section -->
-                    <div class="section-questions" id="sec-questions-<?= $sec['id'] ?>" style="display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4)">
+                    <div class="section-questions" id="sec-questions-<?= $sec['id'] ?>" style="display:flex;flex-direction:column;padding:0">
                         <?php if (empty($secQs)): ?>
                             <div id="sec-empty-<?= $sec['id'] ?>" style="padding:var(--space-4) var(--space-5);border:1.5px dashed var(--border);border-radius:var(--radius-md);text-align:center;color:var(--text-tertiary);font-size:var(--text-sm)">
                                 No questions yet — click <strong>Add question</strong> below to get started.
@@ -928,12 +1253,9 @@ ob_start();
                         <?php else: ?>
                             <?php foreach ($secQs as $q): renderQuestionCard($q, $globalQNum, $QUESTION_TYPES, $CHOICE_TYPES); endforeach; ?>
                         <?php endif; ?>
-
-                        <!-- Inline question creator (hidden by default) -->
                         <div id="inline-creator-<?= $sec['id'] ?>" class="inline-question-creator" style="display:none" data-section-id="<?= $sec['id'] ?>" data-section-type="<?= $sec['question_type'] ?>"></div>
                     </div>
 
-                    <!-- Add question footer -->
                     <div style="border-top:1px solid var(--border);padding:var(--space-3) var(--space-4)">
                         <button class="btn btn-ghost btn-sm" id="sec-add-btn-<?= $sec['id'] ?>"
                                 onclick="showInlineCreator(<?= $sec['id'] ?>, '<?= $sec['question_type'] ?>')"
@@ -948,14 +1270,31 @@ ob_start();
         <?php endif; ?>
         </div><!-- /questions-list -->
 
-    <?php else: ?>
-        <div class="card" style="padding:var(--space-16);text-align:center;color:var(--text-tertiary)">
-            <div style="font-size:var(--text-2xl);margin-bottom:var(--space-3)">📋</div>
-            <p style="font-size:var(--text-sm)">Select an exam from the list or create a new one.</p>
+        <div style="display:flex;justify-content:center;gap:var(--space-2);margin-top:var(--space-4)">
+            <button class="btn btn-ghost btn-sm"
+                    onclick="openAddSectionModal()"
+                    style="display:flex;align-items:center;gap:5px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h16M4 18h8"/><circle cx="19" cy="18" r="3" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M19 16v4M17 18h4"/></svg>
+                Add Section
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="openAiImportModal()" style="display:flex;align-items:center;gap:5px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2a7 7 0 017 7c0 2.5-1.3 4.7-3.3 6L12 22l-3.7-7C6.3 13.7 5 11.5 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>
+                Import with AI
+            </button>
         </div>
-    <?php endif; ?>
+
+<?php else: ?>
+    <div class="card" style="padding:var(--space-16);text-align:center;color:var(--text-tertiary)">
+        <div style="font-size:var(--text-2xl);margin-bottom:var(--space-3)">📋</div>
+        <p style="font-size:var(--text-sm)">Select an exam from the directory or create a new one.</p>
+        <div style="margin-top:var(--space-4)">
+            <a href="<?= url('/staff/exam') ?>?view=exams" class="btn btn-primary btn-sm">Go to Exam Builder</a>
+        </div>
     </div>
-</div>
+<?php endif; ?>
+
+<?php endif; /* end view routing */ ?>
+
 
 <!-- ════════════════════════════════════════════════════════════
      CREATE EXAM MODAL
@@ -973,25 +1312,14 @@ ob_start();
             <input type="hidden" name="action" value="create_exam">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
                 <div>
-                    <label class="form-label">Title <span style="color:var(--error)">*</span></label>
-                    <input type="text" name="title" class="form-control" placeholder="e.g. PLP Admissions Test (2025–2026)" required>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Standard format: <em>PLP Admissions Test (Year)</em></p>
+                    <label class="form-label">Year <span style="color:var(--error)">*</span></label>
+                    <input type="text" name="exam_year" id="create-exam-year" class="form-control" placeholder="e.g. 2025–2026" required>
+                    <input type="hidden" name="title" id="create-exam-title-hidden">
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Title will be: <strong>PLP Admissions Test (<span id="create-year-preview">Year</span>)</strong></p>
                 </div>
                 <div>
                     <label class="form-label">Description</label>
                     <textarea name="description" class="form-control" rows="2" placeholder="Brief instructions shown to students…"></textarea>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
-                    <div>
-                        <label class="form-label">Duration (minutes)</label>
-                        <input type="number" name="duration_minutes" class="form-control" value="90" min="1" max="300">
-                        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Default: 90 min (1 hr 30 min)</p>
-                    </div>
-                    <div>
-                        <label class="form-label">Global Passing Score <span style="font-size:var(--text-xs);font-weight:400;color:var(--text-tertiary)">(optional override)</span></label>
-                        <input type="number" name="passing_score" class="form-control" placeholder="Uses per-course score" min="0" max="10">
-                        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Per-course thresholds managed in Settings → Passing Scores</p>
-                    </div>
                 </div>
 
                 <!-- Schedule -->
@@ -1002,15 +1330,14 @@ ob_start();
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
                         <div>
-                            <label class="form-label">Opens</label>
-                            <input type="datetime-local" name="scheduled_start" class="form-control">
+                            <label class="form-label">Opens <span style="color:var(--error)">*</span></label>
+                            <input type="datetime-local" name="scheduled_start" class="form-control" required id="create-exam-start">
                         </div>
                         <div>
-                            <label class="form-label">Closes (time)</label>
-                            <input type="time" name="scheduled_end_time" class="form-control">
+                            <label class="form-label">Closes <span style="color:var(--error)">*</span></label>
+                            <input type="time" name="scheduled_end_time" class="form-control" required id="create-exam-end">
                         </div>
                     </div>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:6px">Close time is on the same day as the open date. Leave blank to allow access at any time.</p>
                 </div>
 
                 <!-- Password -->
@@ -1019,8 +1346,7 @@ ob_start();
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M7 11V7a5 5 0 0110 0v4"/></svg>
                         Access Password
                     </div>
-                    <input type="text" name="access_password" class="form-control" placeholder="Leave blank for no password requirement">
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:6px">Students must enter this password before starting the exam.</p>
+                    <input type="text" name="access_password" id="create-exam-password" class="form-control" placeholder="Enter or generate a password" required>
                 </div>
 
                 <div style="display:flex;flex-direction:column;gap:var(--space-2)">
@@ -1039,11 +1365,27 @@ ob_start();
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-ghost" onclick="closeModal('create-exam-modal')">Cancel</button>
-                <button type="submit" class="btn btn-primary">Create Exam</button>
+                <button type="submit" class="btn btn-primary" id="create-exam-submit" disabled>Create Exam</button>
             </div>
         </form>
     </div>
 </div>
+<script>
+(function() {
+    const fields = ['create-exam-year', 'create-exam-start', 'create-exam-end', 'create-exam-password'];
+    const btn = document.getElementById('create-exam-submit');
+    function checkForm() {
+        btn.disabled = fields.some(id => !document.getElementById(id)?.value.trim());
+    }
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', checkForm);
+    });
+    // Also watch the hidden title field driven by the year input
+    const yearEl = document.getElementById('create-exam-year');
+    if (yearEl) yearEl.addEventListener('input', checkForm);
+})();
+</script>
 
 <!-- ════════════════════════════════════════════════════════════
      EDIT EXAM MODAL
@@ -1062,22 +1404,14 @@ ob_start();
             <input type="hidden" name="exam_id" id="edit-exam-id">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
                 <div>
-                    <label class="form-label">Title <span style="color:var(--error)">*</span></label>
-                    <input type="text" name="title" id="edit-exam-title" class="form-control" required>
+                    <label class="form-label">Year <span style="color:var(--error)">*</span></label>
+                    <input type="text" name="exam_year" id="edit-exam-year" class="form-control" required>
+                    <input type="hidden" name="title" id="edit-exam-title">
+                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Title will be: <strong>PLP Admissions Test (<span id="edit-year-preview">Year</span>)</strong></p>
                 </div>
                 <div>
                     <label class="form-label">Description</label>
                     <textarea name="description" id="edit-exam-desc" class="form-control" rows="2"></textarea>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
-                    <div>
-                        <label class="form-label">Duration (minutes)</label>
-                        <input type="number" name="duration_minutes" id="edit-exam-duration" class="form-control" min="1" max="300">
-                    </div>
-                    <div>
-                        <label class="form-label">Passing Score</label>
-                        <input type="number" name="passing_score" id="edit-exam-passing" class="form-control" placeholder="Optional" min="0">
-                    </div>
                 </div>
 
                 <!-- Schedule -->
@@ -1194,10 +1528,14 @@ function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 // ── Edit exam modal ───────────────────────────────────────────
 function openEditExamModal(exam) {
     document.getElementById('edit-exam-id').value       = exam.id;
-    document.getElementById('edit-exam-title').value    = exam.title;
+    // Extract year from title like "PLP Admissions Test (2025-2026)"
+    var yearMatch = exam.title.match(/\(([^)]+)\)\s*$/);
+    var yearVal = yearMatch ? yearMatch[1] : exam.title;
+    document.getElementById('edit-exam-year').value = yearVal;
+    document.getElementById('edit-year-preview').textContent = yearVal;
+    document.getElementById('edit-exam-title').value = 'PLP Admissions Test (' + yearVal + ')';
     document.getElementById('edit-exam-desc').value     = exam.description || '';
-    document.getElementById('edit-exam-duration').value = exam.duration_minutes;
-    document.getElementById('edit-exam-passing').value  = exam.passing_score || '';
+
     document.getElementById('edit-exam-shuffleQ').checked = exam.shuffle_questions == 1;
     document.getElementById('edit-exam-shuffleC').checked = exam.shuffle_choices == 1;
     const toLocal = v => v ? v.replace(' ', 'T').substring(0,16) : '';
@@ -1208,6 +1546,39 @@ function openEditExamModal(exam) {
     document.getElementById('edit-exam-password').value = exam.access_password || '';
     openModal('edit-exam-modal');
 }
+
+// ── Year → Title auto-generation ──────────────────────────────
+(function() {
+    // Create exam modal
+    var createYear = document.getElementById('create-exam-year');
+    var createPreview = document.getElementById('create-year-preview');
+    var createHidden = document.getElementById('create-exam-title-hidden');
+    if (createYear) {
+        createYear.addEventListener('input', function() {
+            var y = this.value.trim() || 'Year';
+            createPreview.textContent = y;
+            createHidden.value = 'PLP Admissions Test (' + this.value.trim() + ')';
+        });
+        // Set on form submit
+        createYear.closest('form').addEventListener('submit', function() {
+            createHidden.value = 'PLP Admissions Test (' + createYear.value.trim() + ')';
+        });
+    }
+    // Edit exam modal
+    var editYear = document.getElementById('edit-exam-year');
+    var editPreview = document.getElementById('edit-year-preview');
+    var editHidden = document.getElementById('edit-exam-title');
+    if (editYear) {
+        editYear.addEventListener('input', function() {
+            var y = this.value.trim() || 'Year';
+            editPreview.textContent = y;
+            editHidden.value = 'PLP Admissions Test (' + this.value.trim() + ')';
+        });
+        editYear.closest('form').addEventListener('submit', function() {
+            editHidden.value = 'PLP Admissions Test (' + editYear.value.trim() + ')';
+        });
+    }
+})();
 
 // ── Inline exam title edit ────────────────────────────────────
 function startInlineExamEdit() {
@@ -1287,8 +1658,8 @@ function openAddSectionModal() {
     openModal('section-modal');
 }
 function confirmDeleteSection(form, qCount, title) {
-    if (qCount === 0) return confirm(`Delete section "${title}"?`);
-    return confirm(`Delete "${title}" and all ${qCount} question${qCount !== 1 ? 's' : ''} inside it? This cannot be undone.`);
+    if (qCount === 0) return confirm(`Remove "${title}"?`);
+    return confirm(`Remove "${title}" and its ${qCount} question${qCount !== 1 ? 's' : ''}?`);
 }
 
 function openEditSectionModal(sec) {
@@ -1451,7 +1822,7 @@ function cancelInlineQFullEdit(qid) {
     delete card.dataset.editing; delete IQ_EDIT_CHOICES[qid];
     card.style.borderColor = '';
     card.querySelector('.q-edit-mode')?.remove();
-    card.querySelector('.q-view-mode').style.display = '';
+    card.querySelector('.q-view-mode').style.display = 'flex';
 }
 async function saveInlineQFullEdit(qid) {
     const card = document.querySelector(`.q-card[data-qid="${qid}"]`); if (!card) return;
@@ -1479,7 +1850,7 @@ async function saveInlineQFullEdit(qid) {
 
     if (CHOICE_TYPES.includes(q.question_type)) {
         const texts = choices.map(c=>c.text).filter(t=>t.trim());
-        if (texts.length < 2) { alert('Please enter at least 2 choices.'); if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save changes';} return; }
+        if (texts.length < 2) { alert('Add at least 2 choices.'); if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save changes';} return; }
         texts.forEach(t=>fd.append('choices[]',t));
         if (q.question_type==='checkboxes') choices.forEach((c,i)=>{if(c.correct)fd.append('correct_indices[]',i);});
         else { const ci=choices.findIndex(c=>c.correct); fd.append('correct_index',ci>=0?ci:0); }
@@ -1494,7 +1865,7 @@ async function saveInlineQFullEdit(qid) {
     try {
         const resp = await fetch(location.href,{method:'POST',body:fd});
         if (resp.ok) window.location.reload();
-        else { if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save changes';} alert('Failed to save.'); }
+        else { if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save changes';} alert('Unable to save. Try again.'); }
     } catch(e) { window.location.reload(); }
 }
 function escQT(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -1703,7 +2074,7 @@ async function saveInlineQuestion(secId, secType) {
     if (isChoice) {
         const texts = choices.map(c => c.text).filter(t => t.trim());
         if (texts.length < 2) {
-            alert('Please enter at least 2 choices.');
+            alert('Add at least 2 choices.');
             return;
         }
         texts.forEach(t => fd.append('choices[]', t));
@@ -1735,7 +2106,7 @@ async function saveInlineQuestion(secId, secType) {
             window.location.reload();
         } else {
             if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save question'; }
-            alert('Failed to save. Please try again.');
+            alert('Unable to save. Try again.');
         }
     } catch(e) {
         window.location.reload();
@@ -1782,21 +2153,37 @@ function togglePassingPanel() {
     });
 })();
 
+// Section-scoped drag-and-drop (questions stay inside their section)
 (function() {
-    const list = document.getElementById('questions-list');
-    if (!list) return;
+    const sectionContainers = document.querySelectorAll('.section-questions');
+    if (!sectionContainers.length) return;
     let dragged = null;
-    list.querySelectorAll('.q-card').forEach(card => {
-        card.draggable = true;
-        card.addEventListener('dragstart', () => { dragged = card; card.classList.add('dragging'); });
-        card.addEventListener('dragend',   () => { card.classList.remove('dragging'); saveOrder(); });
-        card.addEventListener('dragover',  e => {
+    let sourceContainer = null;
+
+    sectionContainers.forEach(container => {
+        container.querySelectorAll('.q-card').forEach(card => {
+            card.draggable = true;
+            card.addEventListener('dragstart', () => {
+                dragged = card;
+                sourceContainer = container;
+                card.classList.add('dragging');
+            });
+            card.addEventListener('dragend', () => {
+                card.classList.remove('dragging');
+                dragged = null;
+                saveOrder();
+            });
+        });
+
+        container.addEventListener('dragover', e => {
             e.preventDefault();
-            const after = getDragAfterElement(list, e.clientY);
-            if (after === null) list.appendChild(dragged);
-            else list.insertBefore(dragged, after);
+            if (!dragged || sourceContainer !== container) return;
+            const after = getDragAfterElement(container, e.clientY);
+            if (after === null) container.appendChild(dragged);
+            else container.insertBefore(dragged, after);
         });
     });
+
     function getDragAfterElement(container, y) {
         const els = [...container.querySelectorAll('.q-card:not(.dragging)')];
         return els.reduce((closest, el) => {
@@ -1805,8 +2192,12 @@ function togglePassingPanel() {
             return offset < 0 && offset > closest.offset ? {offset, el} : closest;
         }, {offset: Number.NEGATIVE_INFINITY}).el ?? null;
     }
+
     function saveOrder() {
-        const order = [...list.querySelectorAll('.q-card')].map(el => el.dataset.qid);
+        const order = [];
+        document.querySelectorAll('.section-questions .q-card').forEach(el => {
+            order.push(el.dataset.qid);
+        });
         const csrfInput = document.querySelector('input[name^="_csrf"]');
         const fd = new FormData();
         fd.append('action', 'reorder_questions');
@@ -1840,8 +2231,8 @@ function togglePassingPanel() {
 .ai-progress-track { height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:var(--space-3); }
 .ai-progress-fill { height:100%;background:var(--accent);border-radius:99px;width:0%;transition:width .4s cubic-bezier(.4,0,.2,1); }
 .ai-progress-step { font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px; }
-.ai-q-card { border:1px solid #e5e7eb;border-radius:var(--radius-md);overflow:hidden;background:#fff; }
-.ai-q-card-head { display:flex;align-items:center;gap:8px;padding:9px 14px;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:var(--text-xs);color:#6b7280; }
+.ai-q-card { border:1px solid #e5e7eb;border-radius:var(--radius-md);overflow:hidden;background:#fff;flex-shrink:0; }
+.ai-q-card-head { display:flex;align-items:center;gap:8px;padding:9px 14px;background:#f9fafb;font-size:var(--text-xs);color:#6b7280; }
 .ai-q-card-body { padding:12px 14px;background:#fff; }
 .ai-q-text { font-size:var(--text-sm);font-weight:var(--weight-medium);color:#111827;margin-bottom:8px;line-height:1.45; }
 .ai-choice-row { display:flex;align-items:center;gap:7px;padding:3px 0;font-size:var(--text-sm);color:#374151; }
@@ -1895,18 +2286,16 @@ function togglePassingPanel() {
                     <input type="number" id="ai-default-points" class="form-control" value="1" min="0" max="100" style="width:64px;padding:var(--space-1) var(--space-2);text-align:center">
                 </div>
             </div>
-            <div id="ai-step-processing" style="display:none;padding:var(--space-6) 0">
-                <div style="font-weight:var(--weight-medium);font-size:var(--text-sm);margin-bottom:var(--space-4)" id="ai-processing-label">Reading file…</div>
-                <div class="ai-progress-wrap">
+            <div id="ai-step-processing" style="display:none;flex-direction:column;gap:var(--space-3);padding:var(--space-6) 0;text-align:center">
+                <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)" id="ai-processing-label">AI is processing your file…</div>
+                <div class="ai-progress-wrap" style="padding:0">
                     <div class="ai-progress-track">
                         <div class="ai-progress-fill" id="ai-progress-fill"></div>
                     </div>
-                    <div style="display:flex;justify-content:space-between;align-items:center">
-                        <div class="ai-progress-step" id="ai-progress-step">Preparing…</div>
-                        <div class="ai-progress-step" id="ai-progress-pct">0%</div>
-                    </div>
                 </div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-4)">A Puter sign-in popup may appear during this step</div>
+                <div class="ai-progress-step" id="ai-progress-step" style="font-size:var(--text-xs);color:var(--text-tertiary)">Preparing…</div>
+                <div style="font-size:var(--text-xs);color:var(--text-tertiary);opacity:.7;margin-top:var(--space-1)">A Puter sign-in popup may appear</div>
+                <div class="ai-progress-step" id="ai-progress-pct" style="display:none">0%</div>
             </div>
             <div id="ai-step-preview" style="display:none;flex-direction:column;gap:var(--space-3)">
                 <div style="display:flex;align-items:center;justify-content:space-between">
@@ -2011,7 +2400,7 @@ function resetAiImport(clearFile) {
     document.getElementById('ai-modal-footer').style.display=''; document.getElementById('ai-save-footer').style.display='none';
 }
 function showAiStep(step) {
-    ['upload','processing','preview','error'].forEach(s=>{ const el=document.getElementById('ai-step-'+s); if(!el) return; el.style.display=s===step?(s==='processing'||s==='preview'?'flex':''):'none'; if(s==='preview') el.style.flexDirection='column'; });
+    ['upload','processing','preview','error'].forEach(s=>{ const el=document.getElementById('ai-step-'+s); if(!el) return; el.style.display=s===step?(s==='processing'||s==='preview'?'flex':''):'none'; });
 }
 // ── Progress bar helpers ──────────────────────────────────────
 let _progressTarget = 0, _progressCurrent = 0, _progressTimer = null;
@@ -2300,8 +2689,8 @@ async function saveAiQuestions(){
     const examId=<?= $selectedExam['id'] ?? 0 ?>;
     const csrfInput=document.querySelector('#ai-import-modal input[type="hidden"]');
     const csrfName=csrfInput?.name||'_csrf_token', csrf=csrfInput?.value||'';
-    if(!examId){alert('No exam selected.');btn.disabled=false;return;}
-    if(!csrf){alert('Security token missing. Please refresh.');btn.disabled=false;return;}
+    if(!examId){alert('Select an exam first.');btn.disabled=false;return;}
+    if(!csrf){alert('Session expired. Refresh and try again.');btn.disabled=false;return;}
 
     const CT=['multiple_choice','checkboxes','dropdown'];
     const totalQ=aiGeneratedSections.reduce((sum,s)=>sum+s.questions.length,0);

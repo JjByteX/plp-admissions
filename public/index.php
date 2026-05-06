@@ -28,9 +28,16 @@ $router->get('/student/exam',       'exam/take');
 $router->post('/student/exam',      'exam/take');
 $router->get('/student/interview',  'interview/student_view');
 $router->post('/student/interview', 'interview/student_view');
-$router->get('/student/result',     'results/student_view');
+$router->get( '/student/result',    'results/student_view');
+$router->post('/student/result',    'results/enrollment_intent');
 $router->get('/student/settings',   'settings/student');
 $router->post('/student/settings',  'settings/student');
+
+// -- API (AJAX) --------------------------------------------------
+$router->get( '/api/notifications',      'api/notifications');
+$router->post('/api/notifications',      'api/notifications');
+$router->post('/api/auto-validate',      'api/auto_validate');
+$router->get( '/api/auto-validate',      'api/auto_validate');
 
 // -- Staff -------------------------------------------------------
 $router->get( '/staff/dashboard',           'auth/staff/dashboard');
@@ -39,18 +46,27 @@ $router->get( '/staff/applicants/{id}',     'documents/staff_review');
 $router->post('/staff/documents/{id}',      'documents/staff_action');
 $router->get( '/staff/interviews',              'interview/staff_manage');
 $router->post('/staff/interviews',              'interview/staff_manage');
+$router->get( '/staff/interviews/desks',        'interview/staff_desks');
+$router->post('/staff/interviews/desks',        'interview/staff_desks');
 $router->get( '/staff/interviews/queue',        'interview/staff_queue');
 $router->post('/staff/interviews/call-next',    'interview/staff_call_next');
 $router->get( '/staff/interviews/absent',       'interview/staff_absent');
 $router->post('/staff/interviews/absent',       'interview/staff_absent');
+$router->get( '/staff/interviews/batch',        'interview/staff_batch');
+$router->post('/staff/interviews/batch',        'interview/staff_batch');
 $router->get( '/staff/interviews/{id}/roster',  'interview/staff_slot_view');
 $router->post('/staff/interviews/{id}/roster',  'interview/staff_slot_view');
 $router->post('/staff/interviews/{id}',         'interview/staff_action');
 $router->get( '/staff/results',                  'results/staff_manage');
+$router->post('/staff/results/bulk',             'results/staff_bulk');
+$router->post('/staff/results/auto-waitlist',    'results/staff_auto_waitlist');
+$router->post('/staff/results/auto-release',    'results/staff_auto_release');
 $router->post('/staff/results/{id}',             'results/staff_action');
 $router->post('/staff/results/suggest/{id}',     'results/staff_suggest');
 $router->get( '/staff/exam',                'exam/staff_manage');
 $router->post('/staff/exam',                'exam/staff_manage');
+$router->get( '/staff/exam/slots',          'exam/staff_slots');
+$router->post('/staff/exam/slots',          'exam/staff_slots');
 $router->get( '/staff/settings',            'settings/staff');
 $router->post('/staff/settings',            'settings/staff');
 
@@ -60,6 +76,8 @@ $router->get( '/admin/users',      'settings/admin_users');
 $router->post('/admin/users',      'settings/admin_users');
 $router->get( '/admin/school-year','settings/admin_school_year');
 $router->post('/admin/school-year','settings/admin_school_year');
+$router->get( '/admin/courses',    'settings/admin_courses');
+$router->post('/admin/courses',    'settings/admin_courses');
 $router->get( '/admin/settings',   'settings/admin');
 $router->post('/admin/settings',   'settings/admin');
 $router->get( '/admin/results',    'results/admin_export');

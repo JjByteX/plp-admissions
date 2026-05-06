@@ -1,7 +1,7 @@
 <?php
 // ============================================================
 // modules/results/staff_auto_waitlist.php
-// M6 — Auto-waitlist all pending applicants with score < 60%
+// M6 — Auto-waitlist all pending applicants with rank score < 4 (Low tier)
 // ============================================================
 require_once CORE_PATH . '/bootstrap.php';
 Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
@@ -36,7 +36,7 @@ $upStatus = $db->prepare('UPDATE applicants SET overall_status="released" WHERE 
 foreach ($rows as $aid) {
     $upsert->execute([$aid, $staffId]);
     $upStatus->execute([$aid]);
-    audit_log('admission_result', "Auto-waitlisted applicant {$aid} (score < 60%)", 'applicant', $aid);
+    audit_log('admission_result', "Auto-waitlisted applicant {$aid} (rank score < 4 / Low tier)", 'applicant', $aid);
 }
 
 Session::flash('success', count($rows) . ' applicant(s) automatically set to Waitlisted.');

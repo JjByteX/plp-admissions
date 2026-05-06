@@ -25,9 +25,11 @@ if ($slotId <= 0) { redirect('/staff/interviews'); }
 // Load slot + ownership check
 // ----------------------------------------------------------------
 $stmt = $db->prepare(
-    'SELECT s.*, u.name AS staff_name, u.desk_label
+    'SELECT s.*, u.name AS staff_name,
+            COALESCE(d.desk_label, u.desk_label) AS desk_label
        FROM interview_slots s
        JOIN users u ON u.id = s.created_by
+       LEFT JOIN interview_desks d ON d.department = s.department
       WHERE s.id = ?
       LIMIT 1'
 );

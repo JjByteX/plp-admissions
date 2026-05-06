@@ -196,7 +196,6 @@ define('RESULT_LABELS', [
 define('EXAM_DEFAULT_DURATION',   90);   // 1 hr 30 min default (customizable)
 define('EXAM_ROOM_CAPACITY',      35);   // max applicants per room
 define('EXAM_DAILY_CAP',        3000);   // max applicants per day (all courses)
-define('INTERVIEW_DAILY_CAP',     45);   // max per day (40-50 range; 45 default)
 
 // ----------------------------------------------------------------
 // PER-COURSE PASSING SCORE TIERS

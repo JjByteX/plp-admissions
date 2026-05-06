@@ -110,6 +110,15 @@
     --transition-fast:   150ms ease;
     --transition-normal: 200ms ease;
     --transition-slow:   300ms ease;
+
+    /* Chart colors — semantic tokens for bar/pie fills */
+    --chart-blue:   #378ADD;
+    --chart-green:  #1D9E75;
+    --chart-amber:  #BA7517;
+    --chart-purple: #7F77DD;
+    --chart-red:    #E24B4A;
+    --chart-pink:   #D4537E;
+    --chart-lime:   #639922;
 }
 
 /* Dark mode */
@@ -144,6 +153,15 @@
     --shadow-sm:  0 1px 4px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
     --shadow-md:  0 4px 12px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
     --shadow-lg:  0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+
+    /* Chart colors — desaturated for dark backgrounds */
+    --chart-blue:   #5499e8;
+    --chart-green:  #2fc99e;
+    --chart-amber:  #d9913a;
+    --chart-purple: #9e99e8;
+    --chart-red:    #f06b6a;
+    --chart-pink:   #e87aa0;
+    --chart-lime:   #7ab824;
 }
 
 /* ============================================================
@@ -282,11 +300,12 @@ button { cursor: pointer; }
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: 10px var(--space-5);
+    padding: 10px var(--space-4);
+    margin: 0 var(--space-3);
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
     color: var(--text-secondary);
-    border-radius: 0;
+    border-radius: var(--radius-md);
     transition: color var(--transition-fast), background-color var(--transition-fast);
     text-decoration: none;
     position: relative;
@@ -300,19 +319,8 @@ button { cursor: pointer; }
 }
 
 .nav-item.active {
-    color: var(--accent);
+    color: var(--text-primary);
     background: var(--accent-muted);
-}
-
-.nav-item.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 6px;
-    bottom: 6px;
-    width: 3px;
-    background: var(--accent);
-    border-radius: 0 var(--radius-full) var(--radius-full) 0;
 }
 
 .nav-item svg {
@@ -1470,11 +1478,8 @@ tbody tr:hover { background: var(--bg-overlay); }
     flex: 1;
     padding: var(--space-4) var(--space-4);
     text-align: center;
-    border-right: 1px solid var(--border);
     min-width: 0;
 }
-
-.pipeline-stage:last-child { border-right: none; }
 
 .pipeline-stage-count {
     font-size: var(--text-xl);
@@ -1851,33 +1856,22 @@ tbody tr:hover { background: var(--bg-overlay); }
     --color-pending-text: #185FA5;
 }
 
-/* ── SHARED: page header ────────────────────────────────── */
-.page-header {
-    display: flex;
-    align-items: flex-start;
-    gap: 1rem;
-    margin-bottom: 1.25rem;
-}
-
-.page-title {
-    font-size: 1.25rem;
-    font-weight: 500;
-    color: var(--bs-body-color);
-    margin-bottom: 0.125rem;
-}
-
+/* ── SHARED: page subtitle ──────────────────────────────── */
 .page-subtitle {
-    font-size: 0.8125rem;
-    color: var(--bs-secondary-color);
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
     margin: 0;
 }
+
+/* (Exam header read/edit-state CSS now lives inline in modules/exam/staff_manage.php
+    so it isn't blocked by an aggressive browser cache on app.css.) */
 
 /* ── DASHBOARD: stat cards ──────────────────────────────── */
 .stat-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 0.75rem;
-    margin-bottom: 1rem;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
 }
 
 @media (max-width: 900px) {
@@ -1885,16 +1879,16 @@ tbody tr:hover { background: var(--bg-overlay); }
 }
 
 .stat-card {
-    background: var(--bs-body-bg);
-    border: 0.5px solid var(--bs-border-color);
-    border-radius: 0.5rem;
-    padding: 0.875rem 1rem;
+    background: var(--bg-elevated);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-4);
 }
 
 .stat-label {
-    font-size: 0.6875rem;
-    color: var(--bs-secondary-color);
-    margin-bottom: 0.25rem;
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-1);
 }
 
 .stat-value {
@@ -1905,10 +1899,10 @@ tbody tr:hover { background: var(--bg-overlay); }
 
 .stat-badge {
     display: inline-block;
-    font-size: 0.6875rem;
-    padding: 0.125rem 0.375rem;
+    font-size: var(--text-xs);
+    padding: var(--space-1) var(--space-1);
     border-radius: 99px;
-    margin-top: 0.25rem;
+    margin-top: var(--space-1);
 }
 
 .badge-green   { background: var(--color-high-bg);    color: var(--color-high-text); }
@@ -1927,8 +1921,8 @@ tbody tr:hover { background: var(--bg-overlay); }
 .dashboard-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
 }
 
 @media (max-width: 768px) {
@@ -1936,25 +1930,25 @@ tbody tr:hover { background: var(--bg-overlay); }
 }
 
 .chart-card {
-    background: var(--bs-body-bg);
-    border: 0.5px solid var(--bs-border-color);
-    border-radius: 0.5rem;
-    padding: 1rem 1.125rem;
+    background: var(--bg-elevated);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-4);
 }
 
 .chart-title {
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     font-weight: 500;
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
 }
 
 /* The row that holds label + bar + numbers */
-.bar-list  { display: flex; flex-direction: column; gap: 0.5rem; }
+.bar-list  { display: flex; flex-direction: column; gap: var(--space-2); }
 
 .bar-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;          /* spacing between all four columns */
+    gap: var(--space-2);          /* spacing between all four columns */
     min-width: 0;         /* let flex children shrink past content size */
 }
 
@@ -1963,7 +1957,7 @@ tbody tr:hover { background: var(--bg-overlay); }
     width: 120px;         /* ← the main fix: was 'flex:1' before */
     flex-shrink: 0;
     font-size: 0.75rem;
-    color: var(--bs-secondary-color);
+    color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1974,7 +1968,7 @@ tbody tr:hover { background: var(--bg-overlay); }
     flex: 1;
     min-width: 0;         /* prevents overflow in narrow containers */
     height: 8px;
-    background: var(--bs-tertiary-bg);
+    background: var(--bg-subtle);
     border-radius: 99px;
     overflow: hidden;
 }
@@ -1989,7 +1983,7 @@ tbody tr:hover { background: var(--bg-overlay); }
 .bar-count {
     width: 32px;
     flex-shrink: 0;
-    font-size: 0.6875rem;
+    font-size: var(--text-xs);
     font-weight: 500;
     text-align: right;
 }
@@ -1997,8 +1991,8 @@ tbody tr:hover { background: var(--bg-overlay); }
 .bar-pct {
     width: 36px;
     flex-shrink: 0;
-    font-size: 0.6875rem;
-    color: var(--bs-secondary-color);
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
     text-align: right;
 }
 
@@ -2006,7 +2000,7 @@ tbody tr:hover { background: var(--bg-overlay); }
 .step-strip {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 0.625rem;
+    gap: var(--space-2);
 }
 
 @media (max-width: 640px) {
@@ -2014,10 +2008,10 @@ tbody tr:hover { background: var(--bg-overlay); }
 }
 
 .step-card {
-    background: var(--bs-body-bg);
-    border: 0.5px solid var(--bs-border-color);
-    border-radius: 0.5rem;
-    padding: 0.75rem;
+    background: var(--bg-elevated);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
     text-align: center;
 }
 
@@ -2028,16 +2022,16 @@ tbody tr:hover { background: var(--bg-overlay); }
 }
 
 .step-label {
-    font-size: 0.6875rem;
-    color: var(--bs-secondary-color);
-    margin-top: 0.125rem;
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin-top: var(--space-1);
 }
 
 .step-bar {
     height: 4px;
-    background: var(--bs-tertiary-bg);
+    background: var(--bg-subtle);
     border-radius: 99px;
-    margin-top: 0.5rem;
+    margin-top: var(--space-2);
     overflow: hidden;
 }
 
@@ -2052,20 +2046,20 @@ tbody tr:hover { background: var(--bg-overlay); }
     flex-wrap: wrap;
     align-items: center;
     gap: 0.375rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
 }
 
 .filter-group {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--space-1);
     flex-wrap: wrap;
 }
 
 .filter-sep {
     width: 1px;
     height: 20px;
-    background: var(--bs-border-color);
+    background: var(--border);
     flex-shrink: 0;
     margin: 0 0.125rem;
 }
@@ -2074,27 +2068,27 @@ tbody tr:hover { background: var(--bg-overlay); }
 .filter-pill {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.625rem;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
     border-radius: 99px;
-    border: 0.5px solid var(--bs-border-color);
-    background: var(--bs-body-bg);
+    border: 0.5px solid var(--border);
+    background: var(--bg-elevated);
     font-size: 0.75rem;
-    color: var(--bs-secondary-color);
+    color: var(--text-secondary);
     text-decoration: none;
     white-space: nowrap;
     transition: background 0.15s, border-color 0.15s;
 }
 
-.filter-pill:hover { background: var(--bs-tertiary-bg); color: var(--bs-body-color); }
+.filter-pill:hover { background: var(--bg-subtle); color: var(--text-primary); }
 
 .pill-count {
     font-size: 0.625rem;
     font-weight: 500;
     padding: 0.0625rem 0.3125rem;
     border-radius: 99px;
-    background: var(--bs-tertiary-bg);
-    color: var(--bs-secondary-color);
+    background: var(--bg-subtle);
+    color: var(--text-secondary);
 }
 
 /* Score-tier active states */
@@ -2163,11 +2157,11 @@ tbody tr:hover { background: var(--bg-overlay); }
 
 /* Search input in filter bar */
 .filter-search {
-    padding: 0.25rem 0.625rem;
-    border-radius: 0.375rem;
-    border: 0.5px solid var(--bs-border-color);
-    background: var(--bs-body-bg);
-    color: var(--bs-body-color);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
     font-size: 0.75rem;
     width: 180px;
 }
@@ -2180,10 +2174,10 @@ tbody tr:hover { background: var(--bg-overlay); }
 
 .sort-btn {
     font-size: 0.75rem;
-    padding: 0.25rem 0.625rem;
+    padding: var(--space-1) var(--space-2);
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--space-1);
 }
 
 .sort-btn svg { width: 14px; height: 14px; }
@@ -2191,14 +2185,14 @@ tbody tr:hover { background: var(--bg-overlay); }
 /* ── RESULTS: score legend ──────────────────────────────── */
 .score-legend {
     display: flex;
-    gap: 0.875rem;
+    gap: var(--space-4);
     align-items: center;
     font-size: 0.75rem;
-    color: var(--bs-secondary-color);
-    margin-bottom: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
 }
 
-.legend-item { display: flex; align-items: center; gap: 0.3rem; }
+.legend-item { display: flex; align-items: center; gap: var(--space-1); }
 
 .legend-dot {
     width: 8px;
@@ -2215,8 +2209,8 @@ tbody tr:hover { background: var(--bg-overlay); }
 .btn-outline-warning {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    font-size: 0.8125rem;
+    gap: var(--space-1);
+    font-size: var(--text-sm);
 }
 
 .btn-outline-warning svg { width: 15px; height: 15px; }
@@ -2225,12 +2219,12 @@ tbody tr:hover { background: var(--bg-overlay); }
 .bulk-bar {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.875rem;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
     background: #EBF2FA;
     border: 0.5px solid #B5D4F4;
-    border-radius: 0.5rem;
-    margin-bottom: 0.625rem;
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-2);
     font-size: 0.75rem;
     color: #185FA5;
     flex-wrap: wrap;
@@ -2240,8 +2234,8 @@ tbody tr:hover { background: var(--bg-overlay); }
     border: 0.5px solid var(--color-high);
     background: var(--color-high-bg);
     color: var(--color-high-text);
-    padding: 0.1875rem 0.625rem;
-    border-radius: 0.375rem;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
     font-size: 0.75rem;
     cursor: pointer;
     font-weight: 500;
@@ -2251,8 +2245,8 @@ tbody tr:hover { background: var(--bg-overlay); }
     border: 0.5px solid var(--color-avg);
     background: var(--color-avg-bg);
     color: var(--color-avg-text);
-    padding: 0.1875rem 0.625rem;
-    border-radius: 0.375rem;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
     font-size: 0.75rem;
     cursor: pointer;
     font-weight: 500;
@@ -2262,8 +2256,8 @@ tbody tr:hover { background: var(--bg-overlay); }
     border: 0.5px solid var(--color-low);
     background: var(--color-low-bg);
     color: var(--color-low-text);
-    padding: 0.1875rem 0.625rem;
-    border-radius: 0.375rem;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
     font-size: 0.75rem;
     cursor: pointer;
     font-weight: 500;
@@ -2271,9 +2265,9 @@ tbody tr:hover { background: var(--bg-overlay); }
 
 /* ── RESULTS: table ─────────────────────────────────────── */
 .table-card {
-    background: var(--bs-body-bg);
-    border: 0.5px solid var(--bs-border-color);
-    border-radius: 0.5rem;
+    background: var(--bg-elevated);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
     overflow: hidden;
 }
 
@@ -2285,23 +2279,23 @@ tbody tr:hover { background: var(--bg-overlay); }
 
 .results-table th,
 .results-table td {
-    padding: 0.5rem 0.625rem;
+    padding: var(--space-2) var(--space-2);
     font-size: 0.75rem;
     text-align: left;
-    border-bottom: 0.5px solid var(--bs-border-color);
+    border-bottom: 0.5px solid var(--border);
     vertical-align: middle;
 }
 
 .results-table thead th {
-    font-size: 0.6875rem;
+    font-size: var(--text-xs);
     font-weight: 500;
-    color: var(--bs-secondary-color);
-    background: var(--bs-tertiary-bg);
+    color: var(--text-secondary);
+    background: var(--bg-subtle);
 }
 
 .results-table tbody tr:last-child td { border-bottom: none; }
 
-.results-table tbody tr:hover td { background: var(--bs-tertiary-bg); }
+.results-table tbody tr:hover td { background: var(--bg-subtle); }
 
 /* Column widths */
 .col-cb     { width: 32px; }
@@ -2313,15 +2307,15 @@ tbody tr:hover { background: var(--bg-overlay); }
 .col-status { width: 90px; }
 .col-action { width: 90px; }
 
-.text-muted { color: var(--bs-secondary-color) !important; }
-.mono       { font-family: var(--bs-font-monospace); font-size: 0.6875rem; }
+.text-muted { color: var(--text-secondary) !important; }
+.mono       { font-family: var(--font-mono); font-size: var(--text-xs); }
 
 /* Score badges */
 .score-badge {
     display: inline-block;
-    padding: 0.125rem 0.4375rem;
+    padding: var(--space-1) var(--space-2);
     border-radius: 99px;
-    font-size: 0.6875rem;
+    font-size: var(--text-xs);
     font-weight: 500;
 }
 
@@ -2332,9 +2326,9 @@ tbody tr:hover { background: var(--bg-overlay); }
 /* Result pills */
 .result-pill {
     display: inline-block;
-    padding: 0.125rem 0.5rem;
+    padding: var(--space-1) var(--space-2);
     border-radius: 99px;
-    font-size: 0.6875rem;
+    font-size: var(--text-xs);
     font-weight: 500;
 }
 
@@ -2345,12 +2339,12 @@ tbody tr:hover { background: var(--bg-overlay); }
 
 /* Per-row status dropdown */
 .status-select {
-    font-size: 0.6875rem;
-    padding: 0.125rem 0.375rem;
-    border-radius: 0.25rem;
-    border: 0.5px solid var(--bs-border-color);
-    background: var(--bs-body-bg);
-    color: var(--bs-body-color);
+    font-size: var(--text-xs);
+    padding: var(--space-1) var(--space-1);
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
     width: 100%;
     cursor: pointer;
 }
@@ -2365,10 +2359,218 @@ tbody tr:hover { background: var(--bg-overlay); }
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
-    padding: 2.5rem 1rem;
-    color: var(--bs-secondary-color);
+    gap: var(--space-2);
+    padding: var(--space-10) var(--space-4);
+    color: var(--text-secondary);
     font-size: 0.875rem;
 }
 
 .empty-state svg { width: 32px; height: 32px; opacity: 0.4; }
+
+/* ============================================================
+   MISSING BADGE ALIASES
+   Map generic semantic names to the existing status tokens
+   ============================================================ */
+
+/* These aliases allow modules to use badge-info, badge-warning etc.
+   without creating new token definitions */
+.badge-info      { color: var(--status-uploaded);  background: var(--status-uploaded-bg);  }
+.badge-warning   { color: var(--status-review);    background: var(--status-review-bg);    }
+.badge-success   { color: var(--status-approved);  background: var(--status-approved-bg);  }
+.badge-error     { color: var(--status-rejected);  background: var(--status-rejected-bg);  }
+.badge-neutral   { color: var(--status-pending);   background: var(--status-pending-bg);   }
+
+/* ============================================================
+   TAB STRIP — reusable filter tabs
+   Used in: staff_review, results/staff_manage, staff_queue
+   ============================================================ */
+
+.tab-strip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+}
+
+.tab-strip-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-full);
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-regular);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.tab-strip-item:hover {
+    background: var(--bg-overlay);
+    color: var(--text-primary);
+    opacity: 1;
+}
+
+.tab-strip-item.active {
+    background: var(--bg-subtle);
+    border-color: var(--border);
+    color: var(--text-primary);
+    font-weight: var(--weight-semibold);
+}
+
+.tab-strip-count {
+    font-size: var(--text-xs);
+    padding: 1px var(--space-1);
+    border-radius: var(--radius-full);
+    background: var(--bg-overlay);
+    color: var(--text-tertiary);
+    min-width: 18px;
+    text-align: center;
+}
+
+.tab-strip-item.active .tab-strip-count {
+    background: var(--border);
+    color: var(--text-secondary);
+}
+
+/* ============================================================
+   LIVE STATUS PULSE DOT
+   Extracted from staff_queue inline <style>
+   ============================================================ */
+
+@keyframes pulse-dot {
+    0%, 100% { transform: scale(1);   opacity: 1; }
+    50%       { transform: scale(1.3); opacity: 0.6; }
+}
+
+/* ============================================================
+   SESSION TIMEOUT MODAL COMPONENTS
+   Named classes to replace inline styles in views/layouts/app.php
+   ============================================================ */
+
+.session-modal {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: var(--space-8);
+    max-width: 360px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 24px 48px rgba(0,0,0,.3);
+}
+
+.session-modal-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--warning-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--space-4);
+    color: var(--warning);
+}
+
+.session-modal-icon svg { width: 24px; height: 24px; }
+
+/* ============================================================
+   WITHDRAWN CARD COMPONENTS
+   Named classes to replace inline styles in student_view.php
+   ============================================================ */
+
+.withdrawn-card {
+    padding: var(--space-8);
+    text-align: center;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.status-icon-lg {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--space-6);
+}
+
+.result-info-grid {
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+    text-align: left;
+    margin-bottom: var(--space-6);
+}
+
+/* step-card-label: used in dashboard step strip (renamed from .step-label to avoid collision) */
+.step-card-label {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin-top: var(--space-1);
+}
+
+/* ── Notification badge ─────────────────────────────────────── */
+.notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    font-weight: var(--weight-bold);
+    line-height: 16px;
+    text-align: center;
+    color: #fff;
+    background: var(--error);
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+/* ── Automation status badges ───────────────────────────────── */
+.auto-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    border-radius: var(--radius-full);
+    white-space: nowrap;
+}
+.auto-badge-passed {
+    background: #dcfce7;
+    color: #166534;
+}
+.auto-badge-failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+.auto-badge-uncertain {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+/* ── Idle applicant alert cards ─────────────────────────────── */
+.idle-alert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+}
+.idle-alert-count {
+    font-weight: var(--weight-bold);
+    font-size: var(--text-lg);
+    color: #c2410c;
+    min-width: 32px;
+    text-align: center;
+}

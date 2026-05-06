@@ -112,8 +112,8 @@ ob_start();
                 <div style="font-size:var(--text-sm);font-weight:var(--weight-medium)">Dark Mode</div>
                 <div style="font-size:var(--text-xs);color:var(--text-tertiary)">Saved to this device</div>
             </div>
-            <button id="theme-toggle-btn" class="btn btn-secondary btn-sm" onclick="toggleThemeFromSettings()">
-                <span id="theme-toggle-label">Toggle</span>
+            <button id="theme-toggle-btn" class="btn btn-secondary btn-sm" onclick="toggleThemeFromSettings()" aria-pressed="false">
+                <span id="theme-toggle-label">Switch to Dark</span>
             </button>
         </div>
     </div>
@@ -223,11 +223,17 @@ function toggleThemeFromSettings() {
     const theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
     html.dataset.theme = theme;
     localStorage.setItem('plp_theme', theme);
+    const btn = document.getElementById('theme-toggle-btn');
     document.getElementById('theme-toggle-label').textContent = theme === 'dark' ? 'Switch to Light' : 'Switch to Dark';
+    btn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+    // sync the sidebar pill too
+    const pill = document.querySelector('.theme-pill');
+    if (pill) pill.dataset.theme = theme;
 }
 document.addEventListener('DOMContentLoaded', function() {
     const t = localStorage.getItem('plp_theme') || 'light';
     document.getElementById('theme-toggle-label').textContent = t === 'dark' ? 'Switch to Light' : 'Switch to Dark';
+    document.getElementById('theme-toggle-btn').setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false');
 });
 </script>
 

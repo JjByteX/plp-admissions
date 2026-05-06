@@ -56,13 +56,13 @@ $stepUrls = [
 
                 <?php if ($state === 'done'): ?>
                     <!-- Checkmark -->
-                    <svg viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    <?= icon('ic_fluent_checkmark_24_regular', 12) ?>
                 <?php elseif ($state === 'active'): ?>
                     <!-- Dot -->
                     <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
                 <?php else: ?>
                     <!-- Lock -->
-                    <svg viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                    <?= icon('ic_fluent_lock_closed_24_regular', 12) ?>
                 <?php endif; ?>
 
             <?php if ($href): ?></a><?php else: ?></div><?php endif; ?>

@@ -16,25 +16,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'toggle_override') {
-        $current = school_setting('admissions_override', '0');
-        $newVal  = $current === '1' ? '0' : '1';
-        $db->prepare(
-            'INSERT INTO school_settings (setting_key, setting_value) VALUES ("admissions_override",?)
-             ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)'
-        )->execute([$newVal]);
-        audit_log('admissions_override', $newVal === '1' ? 'Admissions override enabled' : 'Admissions override disabled');
-        $success[] = $newVal === '1' ? 'Override enabled — admissions is now forced open.' : 'Override disabled — admissions window is back in effect.';
-    }
-
     if ($action === 'set_admissions_window') {
         $open  = trim($_POST['admissions_open']  ?? '');
         $close = trim($_POST['admissions_close'] ?? '');
 
         if (!$open || !$close) {
-            $errors[] = 'Both open and close dates are required.';
+            $errors[] = 'Set both open and close dates.';
         } elseif ($close <= $open) {
-            $errors[] = 'Close date must be after the open date.';
+            $errors[] = 'Close date must be after open date.';
         } else {
             $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
                        ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)';
@@ -48,18 +37,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             audit_log('admissions_window_set',
                 "Admissions window set: {$open} to {$close} (AY {$schoolYear})");
-            $success[] = "Admissions window saved. School year automatically set to AY {$schoolYear}.";
+            $success[] = "Admissions window saved (AY {$schoolYear}).";
         }
     }
 
     if ($action === 'new_cycle') {
         $confirm = trim($_POST['confirm_text'] ?? '');
         if ($confirm !== 'START NEW CYCLE') {
-            $errors[] = 'Type START NEW CYCLE exactly to confirm.';
+            $errors[] = 'Type START NEW CYCLE to confirm.';
         } else {
             $db->exec('UPDATE exams SET is_active=0');
             audit_log('new_cycle_started', 'Started new admission cycle — exam deactivated.');
-            $success[] = 'New cycle started. All previous applicant data is preserved. Create a new exam for the new cycle.';
+            $success[] = 'New cycle started. Previous data preserved.';
         }
     }
 }
@@ -68,9 +57,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $admissionsOpen  = school_setting('admissions_open',  '');
 $admissionsClose = school_setting('admissions_close', '');
 $currentYear     = school_setting('current_school_year', '—');
-$isOverride      = school_setting('admissions_override', '0') === '1';
 $isOpen          = admissions_is_open();
 
+// Check if exam & interview are set up for readiness indicators
+$syCheck           = $currentYear !== '—' ? $currentYear : date('Y').'-'.(date('Y')+1);
+$hasActiveExam     = (int)$db->query('SELECT COUNT(*) FROM exams WHERE is_active=1')->fetchColumn() > 0;
+$_q2 = $db->prepare('SELECT COUNT(*) FROM exam_slot_schedule WHERE school_year=?');
+$_q2->execute([$syCheck]);
+$hasExamSlots      = (int)$_q2->fetchColumn() > 0;
+$hasInterviewSlots = (int)$db->query("SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURDATE()")->fetchColumn() > 0;
+$examReady         = $hasActiveExam && $hasExamSlots;
+$interviewReady    = $hasInterviewSlots;
 // Stats by school year
 $stmt = $db->query(
     'SELECT school_year, overall_status, COUNT(*) as cnt
@@ -99,27 +96,44 @@ ob_start();
     <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
             <div class="card-title" style="margin:0">Admissions Window</div>
-            <div style="display:flex;align-items:center;gap:var(--space-3)">
-                <?php if ($isOpen): ?>
-                    <span class="badge badge-approved"><?= $isOverride ? 'Open (Override)' : 'Open' ?></span>
-                <?php else: ?>
-                    <span class="badge badge-pending">Closed</span>
-                <?php endif; ?>
-                <form method="POST" style="margin:0">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="toggle_override">
-                    <button type="submit" class="btn btn-sm <?= $isOverride ? 'btn-danger' : 'btn-ghost' ?>">
-                        <?= $isOverride ? 'Disable Override' : 'Force Open' ?>
-                    </button>
-                </form>
-            </div>
+            <?php if ($isOpen): ?>
+                <span class="badge badge-approved">Open</span>
+            <?php elseif ($admissionsOpen || $admissionsClose): ?>
+                <span class="badge badge-pending">Closed</span>
+            <?php else: ?>
+                <span class="badge" style="background:var(--bg-subtle);color:var(--text-tertiary)">Not set</span>
+            <?php endif; ?>
         </div>
 
-        <?php if ($currentYear !== '—'): ?>
-            <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-5)">
-                School year <strong><?= e($currentYear) ?></strong> — derived automatically from the open date.
+
+
+        <!-- Readiness indicators -->
+        <div style="display:flex;gap:var(--space-4);margin-bottom:var(--space-5);flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm)">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                             background:<?= $examReady ? 'var(--success)' : 'var(--error)' ?>"></span>
+                <span style="color:var(--text-secondary)">Exams</span>
+                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                    <?php if (!$hasActiveExam && !$hasExamSlots): ?>
+                        — No active exam or room slots
+                    <?php elseif (!$hasActiveExam): ?>
+                        — No active exam
+                    <?php elseif (!$hasExamSlots): ?>
+                        — No room slots configured
+                    <?php else: ?>
+                        — Ready
+                    <?php endif; ?>
+                </span>
             </div>
-        <?php endif; ?>
+            <div style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm)">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                             background:<?= $interviewReady ? 'var(--success)' : 'var(--error)' ?>"></span>
+                <span style="color:var(--text-secondary)">Interviews</span>
+                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                    <?= $interviewReady ? '— Ready' : '— No upcoming interview sessions' ?>
+                </span>
+            </div>
+        </div>
 
         <form method="POST">
             <?= csrf_field() ?>
@@ -181,8 +195,7 @@ ob_start();
     <div class="card card-danger">
         <div class="card-title" style="color:var(--error);margin-bottom:var(--space-1)">Start New Admission Cycle</div>
         <p class="card-description" style="margin-bottom:var(--space-5)">
-            Deactivates the current entrance exam so you can create a fresh one for the new cycle.
-            All existing applicant data is preserved. Set the new admissions window above first.
+            Starts a new admissions cycle. The current exam is deactivated and all previous applicant data is preserved.
         </p>
         <form method="POST">
             <?= csrf_field() ?>
@@ -202,6 +215,6 @@ ob_start();
 
 <?php
 $content   = ob_get_clean();
-$pageTitle = 'Admissions Window';
+$pageTitle = 'Admissions';
 $activeNav = 'school-year';
 include VIEWS_PATH . '/layouts/app.php';

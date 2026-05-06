@@ -11,11 +11,25 @@ $db      = db();
 $staffId = Auth::id();
 $today   = date('Y-m-d');
 
-$deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM users WHERE id=?');
-$deskStmt->execute([$staffId]);
-$deskRow   = $deskStmt->fetch();
-$deskLabel = $deskRow['desk_label'] ?? '';
-$deskNotes = $deskRow['desk_notes'] ?? '';
+$myDept = user_department($staffId);
+$deskLabel = '';
+$deskNotes = '';
+if ($myDept) {
+    $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM interview_desks WHERE department = ? LIMIT 1');
+    $deskStmt->execute([$myDept]);
+    $deskRow = $deskStmt->fetch();
+    if ($deskRow) {
+        $deskLabel = $deskRow['desk_label'] ?? '';
+        $deskNotes = $deskRow['desk_notes'] ?? '';
+    }
+}
+if (!$deskLabel) {
+    $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM users WHERE id=?');
+    $deskStmt->execute([$staffId]);
+    $deskRow   = $deskStmt->fetch();
+    $deskLabel = $deskRow['desk_label'] ?? '';
+    $deskNotes = $deskRow['desk_notes'] ?? '';
+}
 
 // ----------------------------------------------------------------
 // Load today's queue
@@ -66,38 +80,40 @@ ob_start();
 <!-- ================================================================
      TAB STRIP
 ================================================================ -->
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
+<div style="display:flex;justify-content:center;margin-bottom:var(--space-5)">
     <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-md);
                  overflow:hidden;background:var(--bg-elevated)">
         <a href="<?= url('/staff/interviews/queue') ?>"
            style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
-                  text-decoration:none;border-right:1px solid var(--border);
+                  text-decoration:none;
                   background:var(--bg-subtle);color:var(--text-primary);font-weight:var(--weight-medium);
-                  display:flex;align-items:center;gap:var(--space-2)">
+                  display:flex;align-items:center;gap:var(--space-2);
+                  border-right:1px solid var(--border)">
             <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
                           background:var(--accent);animation:pulse-dot 1.8s ease-in-out infinite"></span>
             Live Queue
         </a>
-        <a href="<?= url('/staff/interviews') ?>"
+        <a href="<?= url('/staff/interviews') ?>?view=sessions"
            style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
-                  text-decoration:none;color:var(--text-secondary);border-right:1px solid var(--border)">
+                  text-decoration:none;border-right:1px solid var(--border);
+                  color:var(--text-secondary)">
             Upcoming
         </a>
-        <a href="<?= url('/staff/interviews') ?>?past=1"
+        <a href="<?= url('/staff/interviews') ?>?view=sessions&past=1"
            style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
-                  text-decoration:none;color:var(--text-secondary)">
+                  text-decoration:none;border-right:1px solid var(--border);
+                  color:var(--text-secondary)">
             Past
         </a>
+        <a href="<?= url('/staff/interviews/absent') ?>"
+           style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);
+                  text-decoration:none;color:var(--text-secondary)">
+            Absent
+        </a>
     </div>
-    <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= format_date($today, 'l, F j, Y') ?></div>
 </div>
 
-<style>
-    @keyframes pulse-dot {
-        0%,100%{opacity:1;transform:scale(1)}
-        50%{opacity:.5;transform:scale(1.3)}
-    }
-</style>
+<!-- pulse-dot animation defined in app.css -->
 
 <!-- ================================================================
      DESK INFO STRIP

@@ -65,7 +65,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new     = $_POST['new_password']     ?? '';
         $confirm = $_POST['confirm_password']  ?? '';
 
-        if (!password_verify($current, $user['password_hash'] ?? '')) {
+        $stmt = $db->prepare('SELECT password_hash FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $dbUser = $stmt->fetch();
+
+        if (!password_verify($current, $dbUser['password_hash'] ?? '')) {
             $errors[] = 'Current password is incorrect.';
         } elseif (strlen($new) < 8) {
             $errors[] = 'New password must be at least 8 characters.';
@@ -230,7 +234,7 @@ function setSettingsSex(val) {
 .sex-toggle-settings { display:flex; gap:8px; height:38px; }
 .sex-btn-s {
     flex:1; border:1px solid var(--border); border-radius:var(--radius-md);
-    background:var(--bg-primary); color:var(--text-secondary);
+    background:var(--bg-elevated); color:var(--text-secondary);
     font-size:var(--text-sm); font-weight:var(--weight-medium); cursor:pointer;
     transition:background 0.15s,color 0.15s,border-color 0.15s;
 }

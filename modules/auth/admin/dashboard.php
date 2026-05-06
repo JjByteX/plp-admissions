@@ -304,10 +304,6 @@ ob_start();
 
     <!-- ── Header ───────────────────────────────────────────────── -->
     <div class="db-header">
-        <div>
-            <h1 class="db-heading">Admissions dashboard</h1>
-            <p class="db-sub">Pamantasan ng Lungsod ng Pasig &middot; SY <?= e($schoolYear) ?></p>
-        </div>
         <div class="db-controls">
 
             <div class="dp-wrap" id="dpWrap">

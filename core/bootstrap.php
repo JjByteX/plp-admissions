@@ -11,6 +11,7 @@ require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Router.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/interview_scheduler.php';
+require_once __DIR__ . '/automation.php';
 
 // -- Error display -----------------------------------------------
 if (APP_DEBUG) {

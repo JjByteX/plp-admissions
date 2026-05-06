@@ -106,16 +106,6 @@ $actionLabel = fn(string $a) => ucwords(str_replace('_', ' ', $a));
 ob_start();
 ?>
 
-<div class="page-header" style="margin-bottom:var(--space-6)">
-    <div>
-        <h1 class="page-title">Audit Log</h1>
-        <p class="page-subtitle">
-            <?= $isAdmin ? 'All system activity' : 'Your activity' ?> —
-            <?= number_format($total) ?> record<?= $total !== 1 ? 's' : '' ?>
-        </p>
-    </div>
-</div>
-
 <!-- Filters -->
 <div class="card" style="margin-bottom:var(--space-5);padding:var(--space-4)">
     <form method="GET" action="<?= url('/admin/audit-log') ?>" style="display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:flex-end">
@@ -164,7 +154,7 @@ ob_start();
         </div>
     <?php else: ?>
     <div style="overflow-x:auto">
-        <table class="data-table">
+        <table class="table">
             <thead>
                 <tr>
                     <th style="width:160px">Date & Time</th>
@@ -243,4 +233,5 @@ ob_start();
 $content   = ob_get_clean();
 $pageTitle = 'Audit Log';
 $activeNav = 'audit-log';
+$pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

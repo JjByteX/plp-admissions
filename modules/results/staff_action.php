@@ -42,6 +42,9 @@ $stmt->execute([$applicantId, $decision, $remarks ?: null, $staffId]);
 $db->prepare('UPDATE applicants SET overall_status="released" WHERE id=?')
    ->execute([$applicantId]);
 
+// Automation: notify student of result
+notify_stage_transition($applicantId, 'released', 'Result: ' . ucfirst($decision));
+
 audit_log('admission_result', "Set applicant {$applicantId} result to: {$decision}", 'applicant', $applicantId);
 
 if ($isAjax) {

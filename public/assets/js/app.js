@@ -260,6 +260,53 @@ function initExamTimer(totalSeconds, onExpire) {
 }
 
 // ============================================================
+// Notifications
+// ============================================================
+function markAllRead() {
+    const csrf = document.querySelector('input[name="_csrf"]')?.value || '';
+    fetch(window.__baseUrl + '/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: 'action=read&_csrf=' + encodeURIComponent(csrf)
+    }).then(() => {
+        const badge = document.getElementById('notif-badge');
+        if (badge) badge.remove();
+        document.querySelectorAll('#notif-list .dropdown-item').forEach(el => {
+            el.style.background = '';
+            const title = el.querySelector('div');
+            if (title) title.style.fontWeight = 'normal';
+        });
+    }).catch(() => {});
+}
+
+function pollNotifications() {
+    fetch(window.__baseUrl + '/api/notifications?action=count', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        const badge = document.getElementById('notif-badge');
+        if (data.unread > 0) {
+            if (badge) {
+                badge.textContent = data.unread > 9 ? '9+' : data.unread;
+            } else {
+                const btn = document.querySelector('#notif-dropdown [data-dropdown]');
+                if (btn) {
+                    const span = document.createElement('span');
+                    span.className = 'notif-badge';
+                    span.id = 'notif-badge';
+                    span.textContent = data.unread > 9 ? '9+' : data.unread;
+                    btn.appendChild(span);
+                }
+            }
+        } else if (badge) {
+            badge.remove();
+        }
+    })
+    .catch(() => {});
+}
+
+// ============================================================
 // Bootstrap
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -270,9 +317,15 @@ document.addEventListener('DOMContentLoaded', () => {
     initAlerts();
     initForms();
     initConfirm();
+
+    // Poll for new notifications every 30 seconds
+    if (document.getElementById('notif-dropdown')) {
+        setInterval(pollNotifications, 30000);
+    }
 });
 
 // Expose globals needed by inline scripts
 window.Theme       = Theme;
 window.initExamTimer = initExamTimer;
 window.setAccentColor = setAccentColor;
+window.markAllRead = markAllRead;

@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors['email']      = 'Enter a valid email address.';
     if (!in_array($old['applicant_type'], [TYPE_FRESHMAN, TYPE_TRANSFEREE, TYPE_FOREIGN], true))
         $errors['applicant_type'] = 'Select an applicant type.';
-    if (!in_array($old['course_applied'], PLP_COURSES, true))
+    if (!in_array($old['course_applied'], get_all_courses(), true))
         $errors['course_applied'] = 'Select a valid course.';
     elseif (!empty($old['course_applied'])) {
         // Check course cap at registration time
@@ -134,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($old['shs_strand'])) {
             $errors['shs_strand'] = 'Select your SHS strand.';
         } elseif (!empty($old['course_applied'])) {
-            $allowedStrands = COURSE_STRAND_MAP[$old['course_applied']] ?? null;
+            $allowedStrands = get_all_strand_map()[$old['course_applied']] ?? null;
             if ($allowedStrands !== null && !in_array($old['shs_strand'], $allowedStrands, true)) {
                 $errors['shs_strand'] = 'Your strand (' . $old['shs_strand'] . ') is not accepted for '
                     . $old['course_applied'] . '. Accepted: ' . implode(', ', $allowedStrands) . '.';
@@ -339,7 +339,7 @@ ob_start();
                 class="form-select <?= isset($errors['course_applied']) ? 'error' : '' ?>" required
                 onchange="onCourseChange(this.value)">
                 <option value="">Select…</option>
-                <?php foreach (PLP_COURSES as $course):
+                <?php foreach (get_all_courses() as $course):
                     $isFull = in_array($course, $fullCourses, true);
                 ?>
                     <option value="<?= e($course) ?>"
@@ -571,7 +571,7 @@ ob_start();
 </div>
 
 <script>
-const strandMap  = <?= json_encode(COURSE_STRAND_MAP) ?>;
+const strandMap  = <?= json_encode(get_all_strand_map()) ?>;
 const allStrands = <?= json_encode(SHS_STRANDS) ?>;
 
 function setSex(val) {
@@ -710,7 +710,7 @@ function togglePw(id, btn) {
     width: 48px;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    background: var(--bg-primary);
+    background: var(--bg-elevated);
     color: var(--text-secondary);
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
@@ -722,10 +722,10 @@ function togglePw(id, btn) {
     color: #fff;
     border-color: var(--accent);
 }
-.sex-toggle.error .sex-btn { border-color: var(--color-error, #e53e3e); }
+.sex-toggle.error .sex-btn { border-color: var(--error); }
 
 .qual-box {
-    background: var(--bg-secondary);
+    background: var(--bg-subtle);
     border: 1px solid var(--border);
     border-left: 3px solid var(--accent);
     border-radius: var(--radius-md);

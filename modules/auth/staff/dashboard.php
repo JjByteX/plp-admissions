@@ -9,34 +9,52 @@ Auth::requireRole(ROLE_STAFF);
 // ── Fetch summary counts ─────────────────────────────────────
 $stats = db()->query(
     "SELECT
-       COUNT(*)                                          AS total,
+       COUNT(*)                                                              AS total,
 
-       /* pipeline steps */
-       SUM(doc_status IN ('uploaded','under_review','approved'))  AS docs_submitted,
-       SUM(doc_status = 'approved')                              AS docs_approved,
-       SUM(exam_score IS NOT NULL)                               AS exam_taken,
-       SUM(interview_status IN ('scheduled','completed'))        AS interviewed,
-       SUM(result IN ('accepted','waitlisted','rejected'))       AS results_released,
+       /* pipeline steps — derived from overall_status + related tables */
+       SUM(a.overall_status IN ('submitted','exam','interview','released'))  AS docs_submitted,
+       SUM(a.overall_status IN ('exam','interview','released'))              AS docs_approved,
+       SUM(EXISTS (
+           SELECT 1 FROM exam_results er WHERE er.applicant_id = a.id
+       ))                                                                    AS exam_taken,
+       SUM(EXISTS (
+           SELECT 1 FROM interview_queue iq
+            WHERE iq.applicant_id = a.id
+              AND iq.interview_status IN ('pending','completed')
+       ))                                                                    AS interviewed,
+       SUM(EXISTS (
+           SELECT 1 FROM admission_results ar WHERE ar.applicant_id = a.id
+       ))                                                                    AS results_released,
 
        /* applicant types */
-       SUM(applicant_type = 'freshman')                          AS cnt_freshman,
-       SUM(applicant_type = 'transferee')                        AS cnt_transferee,
-       SUM(applicant_type = 'foreign')                           AS cnt_foreign,
+       SUM(a.applicant_type = 'freshman')                                    AS cnt_freshman,
+       SUM(a.applicant_type = 'transferee')                                  AS cnt_transferee,
+       SUM(a.applicant_type = 'foreign')                                     AS cnt_foreign,
 
-       /* result breakdown */
-       SUM(result = 'accepted')                                  AS cnt_accepted,
-       SUM(result = 'waitlisted')                                AS cnt_waitlisted,
-       SUM(result = 'rejected')                                  AS cnt_rejected
-     FROM applicants"
+       /* result breakdown from admission_results */
+       SUM((SELECT ar2.result FROM admission_results ar2
+             WHERE ar2.applicant_id = a.id LIMIT 1) = 'accepted')            AS cnt_accepted,
+       SUM((SELECT ar2.result FROM admission_results ar2
+             WHERE ar2.applicant_id = a.id LIMIT 1) = 'waitlisted')          AS cnt_waitlisted,
+       SUM((SELECT ar2.result FROM admission_results ar2
+             WHERE ar2.applicant_id = a.id LIMIT 1) = 'rejected')            AS cnt_rejected
+     FROM applicants a"
 )->fetch(PDO::FETCH_ASSOC);
 
-// Document-status breakdown (separate query for clarity)
-$docStats = db()->query(
-    "SELECT doc_status, COUNT(*) AS cnt
-     FROM   applicants
-     WHERE  doc_status IS NOT NULL
-     GROUP  BY doc_status"
-)->fetchAll(PDO::FETCH_KEY_PAIR);
+// Document-status breakdown — count document rows by status
+$docStatsRow = db()->query(
+    "SELECT
+        SUM(status = 'approved')     AS approved,
+        SUM(status = 'under_review') AS under_review,
+        SUM(status = 'rejected')     AS rejected
+     FROM documents"
+)->fetch(PDO::FETCH_ASSOC);
+
+$docStats = [
+    'approved'     => (int)($docStatsRow['approved']     ?? 0),
+    'under_review' => (int)($docStatsRow['under_review'] ?? 0),
+    'rejected'     => (int)($docStatsRow['rejected']     ?? 0),
+];
 
 // Convenience helper: percentage relative to total registrants
 function pct(int $part, int $total): int {
@@ -47,25 +65,30 @@ $total = (int) $stats['total'];
 
 // Build pipeline rows (label, count, colour)
 $pipeline = [
-    ['label' => 'Registered',        'count' => $total,                          'color' => '#378ADD'],
-    ['label' => 'Docs submitted',     'count' => (int) $stats['docs_submitted'],  'color' => '#1D9E75'],
-    ['label' => 'Docs approved',      'count' => (int) $stats['docs_approved'],   'color' => '#1D9E75'],
-    ['label' => 'Exam taken',         'count' => (int) $stats['exam_taken'],      'color' => '#BA7517'],
-    ['label' => 'Interviewed',        'count' => (int) $stats['interviewed'],     'color' => '#7F77DD'],
-    ['label' => 'Results released',   'count' => (int) $stats['results_released'],'color' => '#E24B4A'],
+    ['label' => 'Registered',        'count' => $total,                          'color' => 'var(--chart-blue)'],
+    ['label' => 'Docs submitted',     'count' => (int) $stats['docs_submitted'],  'color' => 'var(--chart-green)'],
+    ['label' => 'Docs approved',      'count' => (int) $stats['docs_approved'],   'color' => 'var(--chart-green)'],
+    ['label' => 'Exam taken',         'count' => (int) $stats['exam_taken'],      'color' => 'var(--chart-amber)'],
+    ['label' => 'Interviewed',        'count' => (int) $stats['interviewed'],     'color' => 'var(--chart-purple)'],
+    ['label' => 'Results released',   'count' => (int) $stats['results_released'],'color' => 'var(--chart-red)'],
 ];
 
 $docPipeline = [
-    ['label' => 'Approved',      'count' => (int) ($docStats['approved']     ?? 0), 'color' => '#639922'],
-    ['label' => 'Under review',  'count' => (int) ($docStats['under_review'] ?? 0), 'color' => '#BA7517'],
-    ['label' => 'Rejected',      'count' => (int) ($docStats['rejected']     ?? 0), 'color' => '#E24B4A'],
+    ['label' => 'Approved',      'count' => (int) ($docStats['approved']     ?? 0), 'color' => 'var(--chart-lime)'],
+    ['label' => 'Under review',  'count' => (int) ($docStats['under_review'] ?? 0), 'color' => 'var(--chart-amber)'],
+    ['label' => 'Rejected',      'count' => (int) ($docStats['rejected']     ?? 0), 'color' => 'var(--chart-red)'],
 ];
 
 $typePipeline = [
-    ['label' => 'Freshman',   'count' => (int) $stats['cnt_freshman'],   'color' => '#378ADD'],
-    ['label' => 'Transferee', 'count' => (int) $stats['cnt_transferee'], 'color' => '#7F77DD'],
-    ['label' => 'Foreign',    'count' => (int) $stats['cnt_foreign'],    'color' => '#D4537E'],
+    ['label' => 'Freshman',   'count' => (int) $stats['cnt_freshman'],   'color' => 'var(--chart-blue)'],
+    ['label' => 'Transferee', 'count' => (int) $stats['cnt_transferee'], 'color' => 'var(--chart-purple)'],
+    ['label' => 'Foreign',    'count' => (int) $stats['cnt_foreign'],    'color' => 'var(--chart-pink)'],
 ];
+
+// Idle applicant alerts
+$idleDays = (int) school_setting('idle_applicant_days', '7');
+$idleSummary = get_idle_summary($idleDays);
+$totalIdle = array_sum(array_column($idleSummary, 'count'));
 
 $activeNav = 'dashboard';
 $pageTitle = 'Dashboard';
@@ -99,6 +122,56 @@ include VIEWS_PATH . '/layouts/app.php';
         <div class="stat-label">Waitlisted</div>
         <div class="stat-value"><?= number_format((int) $stats['cnt_waitlisted']) ?></div>
         <div class="stat-badge badge-amber"><?= pct((int) $stats['cnt_waitlisted'], $total) ?>%</div>
+    </div>
+</div>
+
+<!-- ── Idle Applicant Alerts ─────────────────────────────── -->
+<?php if ($totalIdle > 0): ?>
+<div class="card" style="padding:var(--space-4);margin-bottom:var(--space-6)">
+    <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3)">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="#f97316" stroke-width="2" stroke-linecap="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <strong style="font-size:var(--text-sm)">Idle Applicants (<?= $totalIdle ?> waiting ><?= $idleDays ?> days)</strong>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:var(--space-3)">
+        <?php
+        $stageLabels = [
+            'pending' => 'Pending registration',
+            'documents' => 'Waiting for document review',
+            'submitted' => 'Docs submitted, awaiting review',
+            'exam' => 'Waiting for exam slot',
+            'interview' => 'Waiting for interview',
+        ];
+        foreach ($idleSummary as $idle):
+            $label = $stageLabels[$idle['stage']] ?? ucfirst($idle['stage']);
+        ?>
+        <div class="idle-alert">
+            <div class="idle-alert-count"><?= (int)$idle['count'] ?></div>
+            <div>
+                <div style="font-weight:var(--weight-medium)"><?= e($label) ?></div>
+                <div style="font-size:var(--text-xs);color:var(--text-tertiary)">Max <?= (int)$idle['max_days'] ?> days idle</div>
+            </div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- ── Quick Actions ────────────────────────────────────── -->
+<div class="card" style="padding:var(--space-4);margin-bottom:var(--space-6)">
+    <strong style="font-size:var(--text-sm);display:block;margin-bottom:var(--space-3)">Quick Actions</strong>
+    <div style="display:flex;flex-wrap:wrap;gap:var(--space-3)">
+        <form method="POST" action="<?= url('/staff/results/auto-release') ?>" style="margin:0">
+            <?= csrf_field() ?>
+            <button type="submit" class="btn btn-sm"
+                    onclick="return confirm('Auto-release results for all eligible applicants based on score thresholds?')">
+                <?= icon('ic_fluent_ribbon_star_24_regular', 14) ?>
+                Auto-Release Results
+            </button>
+        </form>
+        <a href="<?= url('/staff/interviews/batch') ?>" class="btn btn-sm">
+            <?= icon('ic_fluent_calendar_add_24_regular', 14) ?>
+            Batch Create Interviews
+        </a>
     </div>
 </div>
 
@@ -146,7 +219,7 @@ include VIEWS_PATH . '/layouts/app.php';
             <?php endforeach; ?>
         </div>
 
-        <h2 class="chart-title" style="margin-top:1.25rem">Applicant type</h2>
+        <h2 class="chart-title" style="margin-top:var(--space-6)">Applicant type</h2>
         <div class="bar-list">
             <?php foreach ($typePipeline as $row):
                 $pctVal = pct($row['count'], $total);
@@ -170,18 +243,18 @@ include VIEWS_PATH . '/layouts/app.php';
 <div class="step-strip">
     <?php
     $steps = [
-        ['label' => 'Registered', 'count' => $total,                          'color' => '#378ADD'],
-        ['label' => 'Documents',  'count' => (int) $stats['docs_submitted'],  'color' => '#1D9E75'],
-        ['label' => 'Exam',       'count' => (int) $stats['exam_taken'],      'color' => '#BA7517'],
-        ['label' => 'Interview',  'count' => (int) $stats['interviewed'],     'color' => '#7F77DD'],
-        ['label' => 'Results',    'count' => (int) $stats['results_released'],'color' => '#639922'],
+        ['label' => 'Registered', 'count' => $total,                          'color' => 'var(--chart-blue)'],
+        ['label' => 'Documents',  'count' => (int) $stats['docs_submitted'],  'color' => 'var(--chart-green)'],
+        ['label' => 'Exam',       'count' => (int) $stats['exam_taken'],      'color' => 'var(--chart-amber)'],
+        ['label' => 'Interview',  'count' => (int) $stats['interviewed'],     'color' => 'var(--chart-purple)'],
+        ['label' => 'Results',    'count' => (int) $stats['results_released'],'color' => 'var(--chart-lime)'],
     ];
     foreach ($steps as $step):
         $pctVal = pct($step['count'], $total);
     ?>
     <div class="step-card">
         <div class="step-count"><?= number_format($step['count']) ?></div>
-        <div class="step-label"><?= e($step['label']) ?></div>
+        <div class="step-card-label"><?= e($step['label']) ?></div>
         <div class="step-bar">
             <div class="step-bar-fill"
                  style="width:<?= $pctVal ?>%; background:<?= $step['color'] ?>"></div>

@@ -48,11 +48,12 @@ $stmt = $db->prepare(
             s.capacity,
             s.department AS slot_department,
             u.name       AS staff_name,
-            u.desk_label,
-            u.desk_notes
+            COALESCE(d.desk_label, u.desk_label) AS desk_label,
+            COALESCE(d.desk_notes, u.desk_notes) AS desk_notes
      FROM   interview_queue q
      JOIN   interview_slots s ON s.id = q.slot_id
      JOIN   users u           ON u.id = s.created_by
+     LEFT JOIN interview_desks d ON d.department = s.department
      WHERE  q.applicant_id = ?
      ORDER BY q.id DESC
      LIMIT 1'
@@ -116,10 +117,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'SELECT q.*,
                     s.slot_date, s.slot_time, s.end_time, s.capacity,
                     s.department AS slot_department,
-                    u.name AS staff_name, u.desk_label, u.desk_notes
+                    u.name AS staff_name,
+                    COALESCE(d.desk_label, u.desk_label) AS desk_label,
+                    COALESCE(d.desk_notes, u.desk_notes) AS desk_notes
              FROM   interview_queue q
              JOIN   interview_slots s ON s.id = q.slot_id
              JOIN   users u           ON u.id = s.created_by
+             LEFT JOIN interview_desks d ON d.department = s.department
              WHERE  q.applicant_id = ?
              ORDER BY q.id DESC
              LIMIT 1'
