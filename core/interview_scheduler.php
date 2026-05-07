@@ -232,15 +232,13 @@ function assign_interview_slot(int $applicantId, ?int $actorUserId = null, ?int 
 
         $slotId = (int)$candidate['id'];
 
-        // Generate memorable check-in code
-        ensure_checkin_code_column();
-        $checkinCode = generate_checkin_code();
-
+        // Check-in codes are no longer used — staff checks students in
+        // directly from the live queue UI (see staff_queue.php).
         $pdo->prepare(
             'INSERT INTO interview_queue
-                (slot_id, applicant_id, status, interview_status, checkin_code)
-             VALUES (?, ?, "scheduled", "pending", ?)'
-        )->execute([$slotId, $applicantId, $checkinCode]);
+                (slot_id, applicant_id, status, interview_status)
+             VALUES (?, ?, "scheduled", "pending")'
+        )->execute([$slotId, $applicantId]);
 
         $pdo->prepare(
             'UPDATE applicants SET overall_status = "interview" WHERE id = ?'

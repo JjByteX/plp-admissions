@@ -1,9 +1,9 @@
 <?php
-// _setup_desk_schedule.php — Schedule management for a specific desk
-// Variables: $desk, $slots, $byDate, $showPast, $today, $deskId, $errors, $isAdmin
-$deskOwner = (int)($desk['assigned_to'] ?: $desk['created_by']);
+// _setup_sessions.php — flat session list for one college.
+// Variables in scope: $college, $slots, $byDate, $staffList,
+// $isAdmin, $errors, $today, $showPast.
 
-function _slot_expired(string $date, ?string $endTime, string $today, string $nowTime): bool {
+function _session_expired(string $date, ?string $endTime, string $today, string $nowTime): bool {
     if ($date < $today) return true;
     if ($date === $today && $endTime !== null && $nowTime >= $endTime) return true;
     return false;
@@ -20,46 +20,28 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
     <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 
-<!-- Breadcrumb + desk info -->
+<!-- Header -->
 <div style="display:flex;align-items:center;margin-bottom:var(--space-4)">
-    <a href="<?= url('/staff/interviews/setup') ?>?college=<?= urlencode($desk['department']) ?>"
-       class="btn btn-ghost btn-sm">← Back to Desks</a>
-</div>
-
-<div class="card" style="padding:var(--space-5);margin-bottom:var(--space-5)">
-    <div style="display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap">
-        <div style="width:44px;height:44px;border-radius:var(--radius-md);
-                     background:var(--accent-muted);color:var(--accent);
-                     display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <?= icon('ic_fluent_library_24_regular', 22) ?>
-        </div>
-        <div style="flex:1;min-width:0">
-            <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">
-                <?= e($desk['desk_label']) ?>
-            </div>
-            <div style="font-size:var(--text-sm);color:var(--text-secondary)">
-                <?= icon('ic_fluent_people_24_regular', 13) ?>
-                <?= e($desk['interviewer_name'] ?? 'Unassigned') ?>
-                &nbsp;·&nbsp;
-                <?= e($desk['department']) ?>
-                <?php if ($desk['desk_notes']): ?>
-                    &nbsp;·&nbsp;
-                    <?= icon('ic_fluent_location_24_regular', 13) ?>
-                    <?= e($desk['desk_notes']) ?>
-                <?php endif; ?>
-            </div>
-        </div>
+    <?php if ($isAdmin): ?>
+        <a href="<?= url('/staff/interviews/setup') ?>" class="btn btn-ghost btn-sm">← Back</a>
+    <?php else: ?>
+        <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
+    <?php endif; ?>
+    <div style="flex:1;text-align:center">
+        <span style="font-weight:var(--weight-semibold);font-size:var(--text-base)"><?= e($college) ?></span>
+        <span style="color:var(--text-tertiary);font-size:var(--text-sm)"> — Interview Sessions</span>
     </div>
+    <div style="width:80px"></div>
 </div>
 
-<!-- Tab strip -->
-<div style="display:flex;align-items:center;margin-bottom:var(--space-5)">
+<!-- Tab strip + actions -->
+<div style="display:flex;align-items:center;margin-bottom:var(--space-5);gap:var(--space-3);flex-wrap:wrap">
     <div class="seg-control">
-        <a href="<?= url('/staff/interviews/setup') ?>?desk=<?= $deskId ?>"
+        <a href="<?= url('/staff/interviews/setup') ?>?college=<?= urlencode($college) ?>"
            class="seg-control-item <?= !$showPast ? 'active' : '' ?>">
             Upcoming
         </a>
-        <a href="<?= url('/staff/interviews/setup') ?>?desk=<?= $deskId ?>&past=1"
+        <a href="<?= url('/staff/interviews/setup') ?>?college=<?= urlencode($college) ?>&past=1"
            class="seg-control-item <?= $showPast ? 'active' : '' ?>">
             Past
         </a>
@@ -78,6 +60,31 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
         </button>
     </div>
 </div>
+
+<style>
+    .session-card {
+        padding:var(--space-4) var(--space-5);
+    }
+    .session-card .who {
+        display:flex;align-items:center;gap:var(--space-2);
+        font-weight:var(--weight-semibold);font-size:var(--text-sm);
+        color:var(--text-primary);
+    }
+    .session-card .where {
+        display:flex;align-items:center;gap:var(--space-1);
+        font-size:var(--text-xs);color:var(--text-secondary);margin-top:var(--space-1);
+    }
+    .session-card .notes {
+        font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1);
+    }
+    .session-card .time {
+        min-width:140px;font-size:var(--text-sm);
+        font-weight:var(--weight-medium);color:var(--text-secondary);
+    }
+    @media (max-width: 720px) {
+        .session-card .time { min-width:auto; }
+    }
+</style>
 
 <!-- Sessions list -->
 <?php if (empty($byDate)): ?>
@@ -108,14 +115,14 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
         </div>
 
         <?php foreach ($dateSlots as $slot):
-            $booked     = (int)$slot['booked'];
-            $capacity   = (int)$slot['capacity'];
-            $nowTime    = date('H:i:s');
-            $isExpired  = _slot_expired($date, $slot['end_time'] ?? null, $today, $nowTime);
-            $isClosed   = $slot['status'] === 'closed' || $isExpired;
-            $isFull     = $booked >= $capacity;
-            $canDelete  = $booked === 0;
-            $fillPct    = $capacity > 0 ? min(100, round(($booked / $capacity) * 100)) : 0;
+            $booked    = (int)$slot['booked'];
+            $capacity  = (int)$slot['capacity'];
+            $nowTime   = date('H:i:s');
+            $isExpired = _session_expired($date, $slot['end_time'] ?? null, $today, $nowTime);
+            $isClosed  = $slot['status'] === 'closed' || $isExpired;
+            $isFull    = $booked >= $capacity;
+            $canDelete = $booked === 0;
+            $fillPct   = $capacity > 0 ? min(100, round(($booked / $capacity) * 100)) : 0;
 
             $timeLabel = 'All day';
             if ($slot['slot_time']) {
@@ -123,13 +130,35 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
                 if ($slot['end_time']) $timeLabel .= ' – ' . format_time($slot['end_time']);
             }
         ?>
-            <div class="card" style="padding:var(--space-4) var(--space-5)">
-                <div style="display:flex;align-items:center;gap:var(--space-4)">
-                    <div style="min-width:<?= $slot['end_time'] ? '140px' : '64px' ?>;font-size:var(--text-sm);
-                                 font-weight:var(--weight-medium);color:var(--text-secondary)">
+            <div class="card session-card">
+                <div style="display:flex;align-items:flex-start;gap:var(--space-4);flex-wrap:wrap">
+
+                    <!-- Time block -->
+                    <div class="time">
                         <?= $timeLabel ?>
                     </div>
-                    <div style="flex:1;min-width:0">
+
+                    <!-- Person + location block (the centerpiece) -->
+                    <div style="flex:1;min-width:200px">
+                        <div class="who">
+                            <?= icon('ic_fluent_people_24_regular', 14) ?>
+                            <?= e($slot['interviewer_name'] ?? 'Unassigned') ?>
+                        </div>
+                        <?php if (!empty($slot['location_label'])): ?>
+                            <div class="where">
+                                <?= icon('ic_fluent_location_24_regular', 12) ?>
+                                <?= e($slot['location_label']) ?>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!empty($slot['location_notes'])): ?>
+                            <div class="notes">
+                                <?= e($slot['location_notes']) ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Booking progress -->
+                    <div style="flex:1;min-width:160px">
                         <div style="display:flex;align-items:baseline;gap:var(--space-2);margin-bottom:var(--space-2)">
                             <span style="font-weight:var(--weight-semibold);font-size:var(--text-sm)"><?= $booked ?></span>
                             <span style="color:var(--text-tertiary);font-size:var(--text-xs)">/ <?= $capacity ?> booked</span>
@@ -141,23 +170,37 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
                         </div>
                     </div>
 
-                    <?php if ($isExpired && $slot['status'] !== 'closed'): ?>
-                        <span class="badge badge-neutral">Ended</span>
-                    <?php elseif ($isClosed): ?>
-                        <span class="badge badge-neutral">Closed</span>
-                    <?php elseif ($isFull): ?>
-                        <span class="badge badge-review">Full</span>
-                    <?php else: ?>
-                        <span class="badge badge-approved">Open</span>
-                    <?php endif; ?>
+                    <!-- Status -->
+                    <div>
+                        <?php if ($isExpired && $slot['status'] !== 'closed'): ?>
+                            <span class="badge badge-neutral">Ended</span>
+                        <?php elseif ($isClosed): ?>
+                            <span class="badge badge-neutral">Closed</span>
+                        <?php elseif ($isFull): ?>
+                            <span class="badge badge-review">Full</span>
+                        <?php else: ?>
+                            <span class="badge badge-approved">Open</span>
+                        <?php endif; ?>
+                    </div>
 
-                    <div style="display:flex;align-items:center;gap:var(--space-1)">
+                    <!-- Actions -->
+                    <div style="display:flex;align-items:center;gap:var(--space-1);flex-wrap:wrap">
                         <a href="<?= url('/staff/interviews/' . $slot['id'] . '/roster') ?>"
                            class="btn btn-ghost btn-sm">Roster (<?= $booked ?>)</a>
 
                         <?php if (!$isExpired): ?>
-                            <button type="button" class="btn-icon" title="Edit session" style="padding:var(--space-1)"
-                                    onclick="openEditSession(<?= (int)$slot['id'] ?>, '<?= e($slot['slot_date']) ?>', '<?= e(substr($slot['slot_time'] ?? '',0,5)) ?>', '<?= e(substr($slot['end_time'] ?? '',0,5)) ?>', <?= $capacity ?>)">
+                            <button type="button" class="btn-icon" title="Edit session"
+                                    style="padding:var(--space-1)"
+                                    onclick='openEditSession(<?= json_encode([
+                                        "id"             => (int)$slot["id"],
+                                        "slot_date"      => $slot["slot_date"],
+                                        "slot_time"      => substr($slot["slot_time"] ?? "", 0, 5),
+                                        "end_time"       => substr($slot["end_time"] ?? "", 0, 5),
+                                        "capacity"       => (int)$slot["capacity"],
+                                        "assigned_to"    => (int)($slot["assigned_to"] ?? 0),
+                                        "location_label" => $slot["location_label"] ?? "",
+                                        "location_notes" => $slot["location_notes"] ?? "",
+                                    ], JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
                                 <?= icon('ic_fluent_edit_24_regular', 14) ?>
                             </button>
 
@@ -172,11 +215,13 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
                         <?php endif; ?>
 
                         <?php if ($canDelete): ?>
-                            <form method="POST" action="<?= url('/staff/interviews/' . $slot['id']) ?>"
+                            <form method="POST" action="<?= url('/staff/interviews/setup') ?>"
                                   onsubmit="return confirm('Remove this session?')">
                                 <?= csrf_field() ?>
-                                <input type="hidden" name="action" value="delete_slot">
-                                <button class="btn-icon" style="color:var(--error);padding:var(--space-1)">
+                                <input type="hidden" name="action"  value="delete_session">
+                                <input type="hidden" name="slot_id" value="<?= (int)$slot['id'] ?>">
+                                <button class="btn-icon" style="color:var(--error);padding:var(--space-1)"
+                                        title="Remove session">
                                     <?= icon('ic_fluent_delete_24_regular', 14) ?>
                                 </button>
                             </form>
@@ -191,7 +236,7 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
 
 <!-- ── Add Session Modal ─────────────────────────────────── -->
 <div id="add-session-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:460px">
+    <div class="modal" style="max-width:520px">
         <div class="modal-header">
             <div class="modal-title">Add Session</div>
             <button class="btn-icon" onclick="document.getElementById('add-session-modal').style.display='none'">
@@ -200,9 +245,31 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
         </div>
         <form method="POST" action="<?= url('/staff/interviews/setup') ?>">
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="create_slot">
-            <input type="hidden" name="desk_id" value="<?= $deskId ?>">
+            <input type="hidden" name="action" value="add_session">
+            <input type="hidden" name="department" value="<?= e($college) ?>">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div>
+                    <label class="form-label">Assigned Interviewer <span style="color:var(--error)">*</span></label>
+                    <select name="assigned_to" class="form-control" required>
+                        <option value="">— Select staff —</option>
+                        <?php foreach ($staffList as $s): ?>
+                            <option value="<?= (int)$s['id'] ?>"><?= e($s['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Location Label <span style="color:var(--error)">*</span></label>
+                    <input type="text" name="location_label" class="form-control" required
+                           placeholder="e.g. Room 201, Desk A">
+                </div>
+                <div>
+                    <label class="form-label">
+                        Directions / Notes
+                        <span style="color:var(--text-tertiary);font-weight:400"> — optional</span>
+                    </label>
+                    <input type="text" name="location_notes" class="form-control"
+                           placeholder="e.g. 2nd floor, turn left at the bulletin board">
+                </div>
                 <div>
                     <label class="form-label">Date <span style="color:var(--error)">*</span></label>
                     <input type="date" name="slot_date" class="form-control"
@@ -219,7 +286,8 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
                     </div>
                     <div>
                         <label class="form-label">Capacity <span style="color:var(--error)">*</span></label>
-                        <input type="number" name="capacity" class="form-control" value="30" min="1" max="500" required>
+                        <input type="number" name="capacity" class="form-control"
+                               value="30" min="1" max="500" required>
                     </div>
                 </div>
             </div>
@@ -234,7 +302,7 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
 
 <!-- ── Edit Session Modal ────────────────────────────────── -->
 <div id="edit-session-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:460px">
+    <div class="modal" style="max-width:520px">
         <div class="modal-header">
             <div class="modal-title">Edit Session</div>
             <button class="btn-icon" onclick="document.getElementById('edit-session-modal').style.display='none'">
@@ -243,10 +311,26 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
         </div>
         <form method="POST" action="<?= url('/staff/interviews/setup') ?>">
             <?= csrf_field() ?>
-            <input type="hidden" name="action"  value="edit_slot">
+            <input type="hidden" name="action"  value="edit_session">
             <input type="hidden" name="slot_id" id="edit-sess-id">
-            <input type="hidden" name="desk_id" value="<?= $deskId ?>">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div>
+                    <label class="form-label">Assigned Interviewer <span style="color:var(--error)">*</span></label>
+                    <select name="assigned_to" id="edit-sess-assigned" class="form-control" required>
+                        <option value="">— Select staff —</option>
+                        <?php foreach ($staffList as $s): ?>
+                            <option value="<?= (int)$s['id'] ?>"><?= e($s['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Location Label <span style="color:var(--error)">*</span></label>
+                    <input type="text" name="location_label" id="edit-sess-label" class="form-control" required>
+                </div>
+                <div>
+                    <label class="form-label">Directions / Notes</label>
+                    <input type="text" name="location_notes" id="edit-sess-notes" class="form-control">
+                </div>
                 <div>
                     <label class="form-label">Date <span style="color:var(--error)">*</span></label>
                     <input type="date" name="slot_date" id="edit-sess-date" class="form-control" required>
@@ -278,7 +362,7 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
 
 <!-- ── Batch Create Modal ────────────────────────────────── -->
 <div id="batch-create-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:520px">
+    <div class="modal" style="max-width:560px">
         <div class="modal-header">
             <div class="modal-title">Batch Create Sessions</div>
             <button class="btn-icon" onclick="document.getElementById('batch-create-modal').style.display='none'">
@@ -288,11 +372,31 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
         <form method="POST" action="<?= url('/staff/interviews/setup') ?>">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="batch_create">
-            <input type="hidden" name="desk_id" value="<?= $deskId ?>">
+            <input type="hidden" name="department" value="<?= e($college) ?>">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
                 <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
-                    Create one session per selected weekday within the date range for this desk.
+                    Create one session per selected weekday within the date range, all sharing the same
+                    interviewer, location, and capacity.
                 </p>
+                <div>
+                    <label class="form-label">Assigned Interviewer <span style="color:var(--error)">*</span></label>
+                    <select name="assigned_to" class="form-control" required>
+                        <option value="">— Select staff —</option>
+                        <?php foreach ($staffList as $s): ?>
+                            <option value="<?= (int)$s['id'] ?>"><?= e($s['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Location Label <span style="color:var(--error)">*</span></label>
+                    <input type="text" name="location_label" class="form-control" required
+                           placeholder="e.g. Room 201, Desk A">
+                </div>
+                <div>
+                    <label class="form-label">Directions / Notes</label>
+                    <input type="text" name="location_notes" class="form-control"
+                           placeholder="optional">
+                </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
                     <div>
                         <label class="form-label">Start Date <span style="color:var(--error)">*</span></label>
@@ -344,12 +448,16 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
 </div>
 
 <script>
-function openEditSession(id, date, time, endTime, cap) {
-    document.getElementById('edit-sess-id').value   = id;
-    document.getElementById('edit-sess-date').value = date;
-    document.getElementById('edit-sess-time').value = time;
-    document.getElementById('edit-sess-end').value  = endTime;
-    document.getElementById('edit-sess-cap').value  = cap;
+function openEditSession(data) {
+    document.getElementById('edit-sess-id').value       = data.id;
+    document.getElementById('edit-sess-date').value     = data.slot_date;
+    document.getElementById('edit-sess-time').value     = data.slot_time;
+    document.getElementById('edit-sess-end').value      = data.end_time;
+    document.getElementById('edit-sess-cap').value      = data.capacity;
+    document.getElementById('edit-sess-label').value    = data.location_label || '';
+    document.getElementById('edit-sess-notes').value    = data.location_notes || '';
+    var sel = document.getElementById('edit-sess-assigned');
+    if (sel) sel.value = data.assigned_to || '';
     document.getElementById('edit-session-modal').style.display = 'flex';
 }
 ['add-session-modal','edit-session-modal','batch-create-modal'].forEach(function(id){

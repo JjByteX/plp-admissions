@@ -245,13 +245,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
             }
 
-            // Send verification email
-            $verifyToken = generate_verify_token($userId);
-            send_verification_email($old['email'], $displayName, $verifyToken);
+            // Send verification email — both magic link and 6-digit code
+            $verifyCreds = generate_verify_credentials($userId);
+            send_verification_email($old['email'], $displayName, $verifyCreds['token'], $verifyCreds['code']);
 
-            // Don't auto-login — require email verification first
-            Session::flash('success', 'Account created! Please check your email and click the verification link to activate your account.');
-            redirect('/login');
+            // Don't auto-login — require email verification first.
+            // Stash the email so /verify-pending can pre-fill the form.
+            Session::set('verify_pending_email', $old['email']);
+            Session::flash('success', 'Account created! Check your email for a verification code.');
+            redirect('/verify-pending');
 
         } catch (Throwable $e) {
             $pdo->rollBack();

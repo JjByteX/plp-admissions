@@ -83,24 +83,10 @@ function notify_stage_transition(int $applicantId, string $newStatus, string $ex
 
     $userId = (int) $row['user_id'];
 
-    // Look up check-in code for interview notifications
-    $checkinNote = '';
-    if ($newStatus === 'interview') {
-        try {
-            ensure_checkin_code_column();
-            $codeStmt = $pdo->prepare('SELECT checkin_code FROM interview_queue WHERE applicant_id = ? ORDER BY id DESC LIMIT 1');
-            $codeStmt->execute([$applicantId]);
-            $codeRow = $codeStmt->fetch();
-            if ($codeRow && !empty($codeRow['checkin_code'])) {
-                $checkinNote = ' Your check-in code is: ' . $codeRow['checkin_code'] . '. Show this to staff if you cannot check in with your phone.';
-            }
-        } catch (\Throwable) {}
-    }
-
     $messages = [
         'submitted'            => ['Documents Submitted', 'Your application documents have been submitted for review.', '/student/documents'],
         'exam'                 => ['Documents Approved', 'All your documents have been approved. You are now eligible for the entrance exam.' . ($extra ? ' ' . $extra : ''), '/student/exam'],
-        'interview'            => ['Exam Passed', 'Congratulations! You passed the entrance exam. Your interview will be scheduled soon.' . $checkinNote, '/student/interview'],
+        'interview'            => ['Exam Passed', 'Congratulations! You passed the entrance exam. Your interview will be scheduled soon.', '/student/interview'],
         'released'             => ['Result Released', 'Your admission result has been released. Check your result now.' . ($extra ? ' ' . $extra : ''), '/student/result'],
         'withdrawn'            => ['Application Withdrawn', 'Your application has been withdrawn.', '/student/documents'],
         'enrollment_confirmed' => ['Enrollment Confirmed', 'You have confirmed your enrollment. Welcome to PLP!', '/student/result'],
@@ -658,16 +644,25 @@ function batch_create_interview_sessions(array $config, string $department, int 
     $endTime   = $config['end_time']   ?? '16:00';
     $capacity  = max(1, (int)($config['capacity'] ?? 30));
     $days      = $config['days'] ?? [1, 2, 3, 4, 5]; // Mon-Fri by default
-    $deskId    = isset($config['desk_id']) ? (int)$config['desk_id'] : null;
+
+    // After the desk/session merge, sessions carry interviewer + location
+    // directly. Callers can pass any of these in $config.
+    $assignedTo    = isset($config['assigned_to']) && (int)$config['assigned_to'] > 0
+        ? (int)$config['assigned_to']
+        : null;
+    $locationLabel = trim((string)($config['location_label'] ?? ''));
+    $locationNotes = isset($config['location_notes']) ? (string)$config['location_notes'] : null;
 
     $departments = $department ? [$department] : departments_list();
 
-    // Check if desk_id column exists
-    $hasDeskCol = false;
-    try {
-        $pdo->query("SELECT desk_id FROM interview_slots LIMIT 0");
-        $hasDeskCol = true;
-    } catch (\Throwable $e) {}
+    // Detect which optional columns exist on interview_slots so this works
+    // before *and* after the merge migration is run.
+    $hasAssignedTo = false;
+    $hasLocLabel   = false;
+    $hasLocNotes   = false;
+    try { $pdo->query("SELECT assigned_to    FROM interview_slots LIMIT 0"); $hasAssignedTo = true; } catch (\Throwable $e) {}
+    try { $pdo->query("SELECT location_label FROM interview_slots LIMIT 0"); $hasLocLabel   = true; } catch (\Throwable $e) {}
+    try { $pdo->query("SELECT location_notes FROM interview_slots LIMIT 0"); $hasLocNotes   = true; } catch (\Throwable $e) {}
 
     $current = clone $startDate;
     while ($current <= $endDate) {
@@ -677,35 +672,38 @@ function batch_create_interview_sessions(array $config, string $department, int 
             $dateStr = $current->format('Y-m-d');
 
             foreach ($departments as $dept) {
-                // Check if slot already exists for this date/dept/desk
-                if ($deskId && $hasDeskCol) {
-                    $stmt = $pdo->prepare(
-                        'SELECT id FROM interview_slots
-                         WHERE slot_date = ? AND department = ? AND desk_id = ?
-                         LIMIT 1'
-                    );
-                    $stmt->execute([$dateStr, $dept, $deskId]);
-                } else {
-                    $stmt = $pdo->prepare(
-                        'SELECT id FROM interview_slots
-                         WHERE slot_date = ? AND department = ?
-                         LIMIT 1'
-                    );
-                    $stmt->execute([$dateStr, $dept]);
-                }
+                // Skip if a session already exists for this date/department.
+                $stmt = $pdo->prepare(
+                    'SELECT id FROM interview_slots
+                     WHERE slot_date = ? AND department = ?
+                     LIMIT 1'
+                );
+                $stmt->execute([$dateStr, $dept]);
                 if ($stmt->fetch()) continue;
 
-                if ($deskId && $hasDeskCol) {
-                    $pdo->prepare(
-                        'INSERT INTO interview_slots (slot_date, slot_time, end_time, capacity, department, created_by, desk_id)
-                         VALUES (?, ?, ?, ?, ?, ?, ?)'
-                    )->execute([$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId, $deskId]);
-                } else {
-                    $pdo->prepare(
-                        'INSERT INTO interview_slots (slot_date, slot_time, end_time, capacity, department, created_by)
-                         VALUES (?, ?, ?, ?, ?, ?)'
-                    )->execute([$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId]);
+                // Build INSERT dynamically so we only reference columns that exist.
+                $cols   = ['slot_date', 'slot_time', 'end_time', 'capacity', 'department', 'created_by'];
+                $values = [$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId];
+
+                if ($hasAssignedTo) {
+                    $cols[]   = 'assigned_to';
+                    $values[] = $assignedTo;
                 }
+                if ($hasLocLabel) {
+                    $cols[]   = 'location_label';
+                    $values[] = $locationLabel;
+                }
+                if ($hasLocNotes) {
+                    $cols[]   = 'location_notes';
+                    $values[] = $locationNotes;
+                }
+
+                $placeholders = implode(', ', array_fill(0, count($cols), '?'));
+                $colsSql      = implode(', ', $cols);
+
+                $pdo->prepare(
+                    "INSERT INTO interview_slots ({$colsSql}) VALUES ({$placeholders})"
+                )->execute($values);
                 $created++;
 
                 // Auto-assign pending applicants to this new session

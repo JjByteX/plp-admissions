@@ -1,227 +1,121 @@
-# PLP Admissions System
+# Merge Desks Into Sessions
 
-A web-based admissions management system for **Pamantasan ng Lungsod ng Pasig (PLP)**, built with PHP and MySQL. It handles the end-to-end admissions workflow — from student registration and document submission, to entrance exams, interviews, and results release.
+This zip contains the file changes that consolidate the **Interview Desk** and
+**Interview Session** concepts into a single entity called **Session**.
 
----
+After applying these changes:
 
-## Tech Stack
-
-- **Backend:** PHP (vanilla, no framework)
-- **Database:** MySQL / MariaDB
-- **Frontend:** HTML, CSS, JavaScript
-- **Server:** Apache via XAMPP
-
----
-
-## Requirements
-
-- [XAMPP](https://www.apachefriends.org/) (Apache + MySQL)
-- PHP 8.0+
-- [ngrok](https://ngrok.com/download) (free account — for sharing the app publicly during demos)
-- A modern web browser
+- The `interview_desks` table is gone.
+- Each `interview_slots` row carries everything that used to live on a desk:
+  - `assigned_to`    — the interviewer running the session
+  - `location_label` — short label (e.g. `Rm 201`, `Desk A`)
+  - `location_notes` — optional location notes
+- The setup UI becomes a single flat list of sessions per college, with the
+  assigned interviewer shown front-and-center on each row.
+- The legacy `/staff/interviews/desks` URL keeps working — it now points to
+  the same Session setup page.
 
 ---
 
-## Local Setup
+## How to apply (drag & drop)
 
-### 1. Clone the Repository
+> **Back up your code and your database first.** A copy of `xampp/htdocs/plp-admissions/`
+> and a `mysqldump` of your DB are enough.
 
-```bash
-git clone https://github.com/JjByteX/plp-admissions.git
-```
+### 1. Replace the files
 
-Then copy the `plp-admissions` folder into your XAMPP web root:
-
-```
-C:\xampp\htdocs\plp-admissions\
-```
-
-Your directory should look like:
+This zip contains only the files that need to change, kept in their normal
+folder structure:
 
 ```
-C:\xampp\htdocs\plp-admissions\
-├── config\
-├── core\
-├── database\
-├── modules\
-├── public\
-└── views\
+core/automation.php
+database/schema.sql
+database/migration_merge_desks_into_sessions.sql
+modules/documents/student_upload.php
+modules/interview/_setup_colleges.php
+modules/interview/_setup_sessions.php          (new)
+modules/interview/staff_action.php
+modules/interview/staff_call_next.php
+modules/interview/staff_manage.php
+modules/interview/staff_manual_checkin.php
+modules/interview/staff_queue.php
+modules/interview/staff_setup.php
+modules/interview/staff_slot_view.php
+modules/interview/student_view.php
 ```
 
----
+Drag the `core/`, `database/`, and `modules/` folders from this zip onto your
+project root (e.g. `xampp/htdocs/plp-admissions/`) and let your OS overwrite
+the existing files.
 
-### 2. Start XAMPP
+### 2. Run the migration SQL
 
-Open the XAMPP Control Panel and start both:
-- **Apache**
-- **MySQL**
+Open phpMyAdmin (or `mysql -u root -p plp_admissions`) and run the entire
+contents of:
 
-Both should show green before continuing.
-
----
-
-### 3. Create the Database
-
-Open the XAMPP **Shell** and run:
-
-```bash
-mysql -u root -p
+```
+database/migration_merge_desks_into_sessions.sql
 ```
 
-Press **Enter** when prompted for a password (blank by default).
+The migration:
 
-Then run:
+1. Adds `assigned_to`, `location_label`, `location_notes` columns to
+   `interview_slots` (no-ops if you re-run it).
+2. Backfills those columns from `interview_desks` for existing rows.
+3. Drops the old `desk_id` foreign key + column.
+4. Drops the now-empty `interview_desks` table.
 
-```sql
-CREATE DATABASE plp_admissions CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE plp_admissions;
-source C:/xampp/htdocs/plp-admissions/database/schema.sql
+The script is idempotent — running it twice is safe.
+
+### 3. (Optional) Delete the legacy include files
+
+The new setup page no longer uses these two files. They are harmless dead
+code, but if you want a clean tree you can delete them manually:
+
 ```
-
-You should see several `Query OK` messages. The schema will also create a default admin account (`admin@plp.edu.ph`).
-
----
-
-### 4. Set the Admin Password
-
-> ⚠️ The schema seeds the admin account with a **placeholder password hash**. You must update it before logging in.
-
-Still inside the MariaDB shell, run:
-
-```sql
-UPDATE users
-SET password_hash = '$2y$12$57QF.xJzIm..jLPxlA2TO.QqENIdI1HKzNFYiMA.zkossK5YwvfQC'
-WHERE email = 'admin@plp.edu.ph';
-```
-
-Then exit:
-
-```sql
-exit
+modules/interview/_setup_desks.php
+modules/interview/_setup_desk_schedule.php
 ```
 
 ---
 
-### 5. Open the System
+## Smoke test after applying
 
-Go to:
-
-```
-http://localhost/plp-admissions/public/
-```
-
-Log in with the admin account:
-
-| Field    | Value              |
-|----------|--------------------|
-| Email    | admin@plp.edu.ph   |
-| Password | Admin@123          |
-
-> ⚠️ Change the admin password immediately after your first login.
-
----
-
-## Sharing with ngrok (Demo / Presentation)
-
-ngrok gives your local XAMPP server a public URL so anyone on the internet can access it — no cloud database or cloud file storage required.
-
-### 1. Install ngrok
-
-Download from [ngrok.com/download](https://ngrok.com/download) and sign up for a free account.
-
-### 2. Add your auth token
-
-```bash
-ngrok config add-authtoken <YOUR_AUTHTOKEN>
-```
-
-You can find your token at [dashboard.ngrok.com/get-started/your-authtoken](https://dashboard.ngrok.com/get-started/your-authtoken).
-
-### 3. Start the tunnel
-
-Make sure XAMPP (Apache + MySQL) is running, then open a terminal and run:
-
-```bash
-ngrok http 80
-```
-
-ngrok will display a public URL like:
-
-```
-Forwarding  https://xxxx-xxxx-xxxx.ngrok-free.app -> http://localhost:80
-```
-
-### 4. Share the URL
-
-Give your classmates / panel the ngrok URL. They can access the system at:
-
-```
-https://xxxx-xxxx-xxxx.ngrok-free.app/plp-admissions/public/
-```
-
-> **Note:** The free ngrok plan generates a new URL each time you restart the tunnel. You can set up a [static domain](https://dashboard.ngrok.com/domains) (one free static domain is included with the free plan) for a stable URL.
-
-### Tips
-
-- **File uploads** are stored locally in `public/uploads/documents/` — no external cloud storage needed.
-- **Database** runs on your local XAMPP MySQL — no external database service needed.
-- Keep the terminal running ngrok open for the entire demo session.
-- If the ngrok tunnel disconnects, just run `ngrok http 80` again (you'll get a new URL).
+1. Log in as a staff/admin user.
+2. **Staff → Interviews → Setup**
+   - You should see the list of colleges.
+   - Click into one — you should land directly on a flat list of sessions
+     for that college (no more Desk → Schedule extra click).
+   - Use **+ Add Session** to create a new one. The form asks for date,
+     start time, end time, capacity, **assigned interviewer**, location
+     label, and notes — all in one shot.
+3. **Staff → Interviews → Live Queue**
+   - Today's queue should still load. The location strip at the top should
+     show the location of today's session for the logged-in interviewer.
+4. **Student → Interview**
+   - The student's booked session card should still show the interviewer
+     name and the location label/notes.
 
 ---
 
-## Project Structure
+## Rolling back
 
-```
-plp-admissions/
-├── config/         # App and database configuration
-├── core/           # Router, Auth, Session, helpers
-├── database/       # schema.sql (tables + seed data)
-├── modules/        # Feature modules (auth, exam, interview, documents, results, settings)
-├── public/         # Entry point (index.php), assets, uploads
-└── views/          # Layouts and partials
-```
+If something goes wrong:
+
+1. Restore your project folder from your backup.
+2. Restore your database from your `mysqldump` backup.
+
+The migration drops `interview_desks` and the `desk_id` column, so a SQL
+roll-forward isn't possible — that's why the backup matters.
 
 ---
 
-## Roles
+## What hasn't changed
 
-| Role    | Description                                              |
-|---------|----------------------------------------------------------|
-| Admin   | Full system access — settings, users, exports, results   |
-| Staff   | Manages documents, exam slots, interviews, and results   |
-| Student | Registers, uploads requirements, takes exam, views results |
-
----
-
-## TODO
-
-### Huenda — Dashboard
-- [ ] Remove all placeholder/AI-generated elements (quick actions, filler widgets)
-- [ ] Redesign dashboard from scratch with focus on clarity and minimalism
-- [ ] Show only the most important metrics (e.g. exam passed/failed counts, applicant pipeline)
-- [ ] Draw a wireframe layout (hand-drawn or digital) before implementation
-- [ ] Include an export button for key reports
-- [ ] Reference modern dashboard designs from Dribbble for inspiration
-
-### Cabilles — Interviews
-- [ ] Add an **"I'm Here"** check-in button for students when their interview time is ready
-- [ ] Auto-assign a queue number upon check-in
-- [ ] Support multiple staff conducting interviews simultaneously, each managing their own queue
-- [ ] Display desk/location instructions so students know where to go
-- [ ] Allow interviewers to record evaluation notes or assessments per student within the system
-
-### Chavez — Applicants
-- [ ] Enhance filter option beside the search bar for sorting/refining results. Change filter status because it is redundant since the tabs already filters it. Instead, use filter by course, type, date applied etc.
-
-### Bassig — Exam Manager
-- [ ] Remove answer mode in each question as sections already describes it
-- [ ] Allow section deleting with confirmation
-- [ ] Show edit section only on empty sections
-
-
----
-
-## Contributing
-
-This is a capstone/academic project.
+- The applicant queue, evaluation, attendance, and notes flows behave
+  exactly as before.
+- The auto-assignment + auto-reschedule logic in `core/automation.php` and
+  `core/interview_scheduler.php` still works against `interview_slots`; it
+  just no longer cares about `desk_id`.
+- All `/staff/interviews/...` URLs still resolve. `/staff/interviews/desks`
+  is kept as an alias of `/staff/interviews/setup` for backward-compat.

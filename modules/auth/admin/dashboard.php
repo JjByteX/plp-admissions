@@ -446,7 +446,7 @@ ob_start();
 
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="<?= asset('js/chart.umd.js') ?>"></script>
 <script>
 (function () {
 
@@ -517,11 +517,6 @@ ob_start();
         var sl=document.getElementById('strandLegend');
         if(sl) sl.innerHTML='';
 
-        // Sex — donut
-        var fc=success, mc=info;
-        var df=document.getElementById('dotFemale'), dm=document.getElementById('dotMale');
-        if(df) df.style.background=fc;
-        if(dm) dm.style.background=mc;
     }
 
     buildCharts();

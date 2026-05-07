@@ -48,7 +48,6 @@ DROP TABLE IF EXISTS `exam_slot_schedule`;
 DROP TABLE IF EXISTS `exams`;
 DROP TABLE IF EXISTS `interview_queue`;
 DROP TABLE IF EXISTS `interview_slots`;
-DROP TABLE IF EXISTS `interview_desks`;
 DROP TABLE IF EXISTS `notifications`;
 DROP TABLE IF EXISTS `password_resets`;
 DROP TABLE IF EXISTS `questions`;
@@ -297,49 +296,35 @@ CREATE TABLE `applicant_exam_slots` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 5a. Interview desks (per-department locations)
--- ============================================================
-CREATE TABLE `interview_desks` (
-    `id`          INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-    `department`  VARCHAR(120)     NOT NULL DEFAULT '',
-    `assigned_to` INT(10) UNSIGNED DEFAULT NULL
-                  COMMENT 'Staff user assigned to this desk',
-    `desk_label`  VARCHAR(120)     NOT NULL DEFAULT '',
-    `desk_notes`  TEXT             DEFAULT NULL,
-    `is_active`   TINYINT(1)      NOT NULL DEFAULT 1,
-    `created_by`  INT(10) UNSIGNED NOT NULL,
-    `created_at`  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at`  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    KEY `idx_desk_department` (`department`),
-    CONSTRAINT `fk_desk_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================================
--- 5b. Interview slots, queue, reschedule history
+-- 5. Interview sessions (merged: time slot + assigned interviewer
+--    + location label/notes — replaces the old interview_desks table)
 -- ============================================================
 CREATE TABLE `interview_slots` (
-    `id`          INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-    `slot_date`   DATE             NOT NULL,
-    `slot_time`   TIME             DEFAULT NULL,
-    `end_time`    TIME             DEFAULT NULL,
-    `capacity`    SMALLINT(5)      NOT NULL DEFAULT 30,
-    `department`  VARCHAR(120)     NOT NULL DEFAULT ''
-                  COMMENT 'College this slot serves (see departments.name)',
-    `status`      ENUM('open','closed') NOT NULL DEFAULT 'open',
-    `created_by`  INT(10) UNSIGNED NOT NULL,
-    `desk_id`     INT(10) UNSIGNED DEFAULT NULL
-                  COMMENT 'FK to interview_desks',
-    `created_at`  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `id`             INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `slot_date`      DATE             NOT NULL,
+    `slot_time`      TIME             DEFAULT NULL,
+    `end_time`       TIME             DEFAULT NULL,
+    `capacity`       SMALLINT(5)      NOT NULL DEFAULT 30,
+    `department`     VARCHAR(120)     NOT NULL DEFAULT ''
+                     COMMENT 'College this session serves (see departments.name)',
+    `status`         ENUM('open','closed') NOT NULL DEFAULT 'open',
+    `created_by`     INT(10) UNSIGNED NOT NULL,
+    `assigned_to`    INT(10) UNSIGNED DEFAULT NULL
+                     COMMENT 'Staff member running this session',
+    `location_label` VARCHAR(120)     NOT NULL DEFAULT ''
+                     COMMENT 'Visible location/desk label, e.g. "Room 201"',
+    `location_notes` TEXT             DEFAULT NULL
+                     COMMENT 'Directions for the student, e.g. "2nd floor, turn left"',
+    `created_at`     DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    KEY `idx_slot_date`        (`slot_date`),
-    KEY `idx_created_by`       (`created_by`),
-    KEY `idx_slots_department` (`department`),
-    KEY `idx_slots_desk`       (`desk_id`),
+    KEY `idx_slot_date`         (`slot_date`),
+    KEY `idx_created_by`        (`created_by`),
+    KEY `idx_slots_assigned_to` (`assigned_to`),
+    KEY `idx_slots_department`  (`department`),
     CONSTRAINT `fk_slots_creator`
         FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
-    CONSTRAINT `fk_slots_desk`
-        FOREIGN KEY (`desk_id`) REFERENCES `interview_desks` (`id`) ON DELETE SET NULL
+    CONSTRAINT `fk_slots_assigned`
+        FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `interview_queue` (

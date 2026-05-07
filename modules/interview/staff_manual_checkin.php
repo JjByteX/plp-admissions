@@ -1,7 +1,11 @@
 <?php
 // ============================================================
 // modules/interview/staff_manual_checkin.php
-// Staff manually checks in a student by code or name lookup
+// Staff manually checks in a student by code or name lookup.
+//
+// After the desk/session merge, the queue scope is always the
+// logged-in interviewer (assigned_to with created_by fallback for
+// legacy rows). Any legacy ?desk_id form field is ignored.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -13,12 +17,18 @@ $staffId = Auth::id();
 $today   = date('Y-m-d');
 $search  = trim($_POST['checkin_search'] ?? '');
 
+$queueRedirect = '/staff/interviews/queue';
+
 if ($search === '') {
     Session::flash('error', 'Please enter a check-in code or student name.');
-    redirect('/staff/interviews/queue');
+    redirect($queueRedirect);
 }
 
 ensure_checkin_code_column();
+
+// Slot scope: today's sessions belonging to this interviewer.
+$slotScopeSql    = 'COALESCE(s.assigned_to, s.created_by) = ?';
+$slotScopeParams = [$staffId];
 
 // Try check-in code first (exact match)
 $stmt = $db->prepare(
@@ -29,11 +39,11 @@ $stmt = $db->prepare(
      JOIN   applicants a      ON a.id = q.applicant_id
      JOIN   users u           ON u.id = a.user_id
      WHERE  s.slot_date = ?
-       AND  s.created_by = ?
+       AND  ' . $slotScopeSql . '
        AND  q.checkin_code = ?
      LIMIT 1'
 );
-$stmt->execute([$today, $staffId, strtoupper($search)]);
+$stmt->execute(array_merge([$today], $slotScopeParams, [strtoupper($search)]));
 $match = $stmt->fetch();
 
 // If no code match, try name search
@@ -46,38 +56,40 @@ if (!$match) {
          JOIN   applicants a      ON a.id = q.applicant_id
          JOIN   users u           ON u.id = a.user_id
          WHERE  s.slot_date = ?
-           AND  s.created_by = ?
+           AND  ' . $slotScopeSql . '
            AND  (u.name LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)
            AND  q.status = "scheduled"
          ORDER BY u.name ASC
          LIMIT 1'
     );
     $like = '%' . $search . '%';
-    $stmt->execute([$today, $staffId, $like, $like, $like]);
+    $stmt->execute(array_merge([$today], $slotScopeParams, [$like, $like, $like]));
     $match = $stmt->fetch();
 }
 
 if (!$match) {
     Session::flash('error', 'No student found for "' . htmlspecialchars($search) . '" in today\'s queue.');
-    redirect('/staff/interviews/queue');
+    redirect($queueRedirect);
 }
 
 if ($match['status'] !== 'scheduled') {
     Session::flash('error', htmlspecialchars($match['student_name']) . ' is already checked in (status: ' . $match['status'] . ').');
-    redirect('/staff/interviews/queue');
+    redirect($queueRedirect);
 }
 
 // Perform check-in (same logic as student self-check-in)
 $db->beginTransaction();
 try {
+    // Compute next queue number scoped to today's sessions for THIS interviewer.
     $stmt = $db->prepare(
         'SELECT COALESCE(MAX(q.queue_number), 0) + 1
          FROM   interview_queue q
          JOIN   interview_slots s ON s.id = q.slot_id
-         WHERE  s.slot_date = ? AND s.created_by = ?
-         AND    q.queue_number IS NOT NULL'
+         WHERE  s.slot_date = ?
+           AND  ' . $slotScopeSql . '
+           AND  q.queue_number IS NOT NULL'
     );
-    $stmt->execute([$today, $staffId]);
+    $stmt->execute(array_merge([$today], $slotScopeParams));
     $nextNum = (int) $stmt->fetchColumn();
 
     $db->prepare(
@@ -106,4 +118,4 @@ try {
     Session::flash('error', 'Check-in failed. Please try again.');
 }
 
-redirect('/staff/interviews/queue');
+redirect($queueRedirect);

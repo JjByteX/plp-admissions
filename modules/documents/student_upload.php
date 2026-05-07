@@ -265,17 +265,18 @@ $openSessions    = [];
 $queuePosition   = null;
 
 if ($_examResult) {
-    // Load the student's booking with full slot details
+    // Load the student's booking with full slot details. After the
+    // desk/session merge, the interviewer + location both live on the slot.
     $stmt = $db->prepare(
         'SELECT q.*,
                 s.slot_date, s.slot_time, s.end_time, s.capacity,
-                u.name AS staff_name,
-                COALESCE(d.desk_label, u.desk_label) AS desk_label,
-                COALESCE(d.desk_notes, u.desk_notes) AS desk_notes
+                COALESCE(au.name, cu.name)                           AS staff_name,
+                COALESCE(NULLIF(s.location_label, ""), cu.desk_label) AS desk_label,
+                COALESCE(s.location_notes, cu.desk_notes)            AS desk_notes
          FROM   interview_queue q
          JOIN   interview_slots s ON s.id = q.slot_id
-         JOIN   users u           ON u.id = s.created_by
-         LEFT JOIN interview_desks d ON d.department = s.department
+         JOIN   users           cu ON cu.id = s.created_by
+         LEFT JOIN users        au ON au.id = s.assigned_to
          WHERE  q.applicant_id = ?
          LIMIT 1'
     );
@@ -324,12 +325,14 @@ if ($_examResult) {
         if ($iAction === 'checkin' && $myEntry && $myEntry['slot_date'] === date('Y-m-d') && $myEntry['status'] === 'scheduled') {
             $db->beginTransaction();
             try {
+                // After the desk/session merge, an interviewer is identified by
+                // assigned_to (with created_by fallback for legacy rows).
                 $stmt = $db->prepare(
                     'SELECT COALESCE(MAX(q.queue_number), 0) + 1
                      FROM   interview_queue q
                      JOIN   interview_slots s ON s.id = q.slot_id
-                     WHERE  s.slot_date = ? AND s.created_by = (
-                         SELECT created_by FROM interview_slots WHERE id = ?
+                     WHERE  s.slot_date = ? AND COALESCE(s.assigned_to, s.created_by) = (
+                         SELECT COALESCE(assigned_to, created_by) FROM interview_slots WHERE id = ?
                      ) AND q.queue_number IS NOT NULL'
                 );
                 $stmt->execute([date('Y-m-d'), $myEntry['slot_id']]);
@@ -349,13 +352,13 @@ if ($_examResult) {
             // Reload
             $stmt = $db->prepare(
                 'SELECT q.*, s.slot_date, s.slot_time, s.end_time, s.capacity,
-                        u.name AS staff_name,
-                        COALESCE(d.desk_label, u.desk_label) AS desk_label,
-                        COALESCE(d.desk_notes, u.desk_notes) AS desk_notes
+                        COALESCE(au.name, cu.name)                           AS staff_name,
+                        COALESCE(NULLIF(s.location_label, ""), cu.desk_label) AS desk_label,
+                        COALESCE(s.location_notes, cu.desk_notes)            AS desk_notes
                  FROM   interview_queue q
                  JOIN   interview_slots s ON s.id = q.slot_id
-                 JOIN   users u           ON u.id = s.created_by
-                 LEFT JOIN interview_desks d ON d.department = s.department
+                 JOIN   users           cu ON cu.id = s.created_by
+                 LEFT JOIN users        au ON au.id = s.assigned_to
                  WHERE  q.applicant_id = ? LIMIT 1'
             );
             $stmt->execute([$applicantId]);
@@ -363,17 +366,19 @@ if ($_examResult) {
         }
     }
 
-    // Load open sessions if not booked yet
+    // Load open sessions if not booked yet. After the desk/session merge,
+    // location info lives on each session row, so no JOIN to a desks table.
     if (!$myEntry) {
         $nowTime = date('H:i:s');
         $stmt = $db->prepare(
-            'SELECT s.*, u.name AS staff_name,
-                    COALESCE(d.desk_label, u.desk_label) AS desk_label,
-                    COALESCE(d.desk_notes, u.desk_notes) AS desk_notes,
+            'SELECT s.*,
+                    COALESCE(au.name, cu.name)                           AS staff_name,
+                    COALESCE(NULLIF(s.location_label, ""), cu.desk_label) AS desk_label,
+                    COALESCE(s.location_notes, cu.desk_notes)            AS desk_notes,
                     COUNT(q.id) AS booked
              FROM   interview_slots s
-             JOIN   users u ON u.id = s.created_by
-             LEFT JOIN interview_desks d ON d.department = s.department
+             JOIN   users           cu ON cu.id = s.created_by
+             LEFT JOIN users        au ON au.id = s.assigned_to
              LEFT JOIN interview_queue q ON q.slot_id = s.id
              WHERE  s.slot_date >= ? AND s.status = "open"
                AND  NOT (s.slot_date = ? AND s.end_time IS NOT NULL AND s.end_time <= ?)
@@ -384,13 +389,14 @@ if ($_examResult) {
         $openSessions = $stmt->fetchAll();
     }
 
-    // Queue position
+    // Queue position — scoped to this interviewer's queue for today, using
+    // assigned_to with created_by fallback for legacy rows.
     if ($myEntry && $myEntry['status'] === 'checked_in') {
         $stmt = $db->prepare(
             'SELECT COUNT(*) FROM interview_queue q
              JOIN   interview_slots s ON s.id = q.slot_id
-             WHERE  s.slot_date = ? AND s.created_by = (
-                 SELECT created_by FROM interview_slots WHERE id = ?
+             WHERE  s.slot_date = ? AND COALESCE(s.assigned_to, s.created_by) = (
+                 SELECT COALESCE(assigned_to, created_by) FROM interview_slots WHERE id = ?
              ) AND q.status = "checked_in" AND q.queue_number < ?'
         );
         $stmt->execute([date('Y-m-d'), $myEntry['slot_id'], $myEntry['queue_number']]);

@@ -21,6 +21,8 @@ $router->post('/forgot-password', 'auth/forgot_password');
 $router->get( '/reset-password',  'auth/reset_password');
 $router->post('/reset-password',  'auth/reset_password');
 $router->get( '/verify-email',    'auth/verify_email');
+$router->get( '/verify-pending',  'auth/verify_pending');
+$router->post('/verify-pending',  'auth/verify_pending');
 
 // -- Student -----------------------------------------------------
 $router->get('/student/documents',  'documents/student_upload');
@@ -71,6 +73,7 @@ $router->get( '/staff/exam',                'exam/staff_manage');
 $router->post('/staff/exam',                'exam/staff_manage');
 $router->get( '/staff/exam/slots',          'exam/staff_slots');
 $router->post('/staff/exam/slots',          'exam/staff_slots');
+$router->get( '/staff/exam/export-rooms',   'exam/staff_export_rooms');
 $router->get( '/staff/settings',            'settings/staff');
 $router->post('/staff/settings',            'settings/staff');
 

@@ -15,7 +15,7 @@
 
 <div style="display:flex;align-items:center;margin-bottom:var(--space-5)">
     <?php if ($isAdmin): ?>
-        <a href="<?= url('/staff/interviews/setup') ?>" class="btn btn-ghost btn-sm">← All Colleges</a>
+        <a href="<?= url('/staff/interviews/setup') ?>" class="btn btn-ghost btn-sm">← Back</a>
     <?php else: ?>
         <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
     <?php endif; ?>
@@ -35,12 +35,16 @@
         display:flex;flex-direction:column;
         padding:var(--space-6) var(--space-5);
         background:var(--bg-elevated);border:1.5px solid var(--border);
-        border-radius:var(--radius-lg);text-decoration:none;color:var(--text-primary);
-        transition:border-color .18s,box-shadow .18s,transform .15s;cursor:pointer;
-        position:relative;
+        border-radius:var(--radius-lg);color:var(--text-primary);
+        transition:border-color .18s,box-shadow .18s,transform .15s;
+        position:relative;cursor:pointer;
     }
     .desk-card:hover {
         border-color:var(--accent);box-shadow:0 6px 20px rgba(0,0,0,.07);transform:translateY(-3px);
+    }
+    .desk-card-link {
+        position:absolute;inset:0;z-index:1;
+        border-radius:inherit;text-decoration:none;
     }
     .desk-card-add {
         display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -54,6 +58,9 @@
     }
     .desk-card-label {
         font-size:var(--text-base);font-weight:var(--weight-semibold);margin-bottom:var(--space-1);
+        /* Reserve space for the absolutely-positioned edit/delete icons in
+           the top-right corner so long titles don't bleed underneath them. */
+        padding-right:56px;line-height:1.3;
     }
     .desk-card-interviewer {
         font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-2);
@@ -68,22 +75,23 @@
     }
     .desk-card-actions {
         position:absolute;top:var(--space-2);right:var(--space-2);
-        display:flex;gap:var(--space-1);opacity:0;transition:opacity .15s;
+        display:flex;gap:var(--space-1);z-index:2;
     }
-    .desk-card:hover .desk-card-actions { opacity:1; }
 </style>
 
 <div class="desk-grid">
     <?php foreach ($desks as $desk): ?>
-        <a href="<?= url('/staff/interviews/setup') ?>?desk=<?= (int)$desk['id'] ?>" class="desk-card">
+        <div class="desk-card">
+            <a class="desk-card-link"
+               href="<?= url('/staff/interviews/setup') ?>?desk=<?= (int)$desk['id'] ?>"
+               aria-label="Open schedule for <?= e($desk['desk_label']) ?>"></a>
             <div class="desk-card-actions">
                 <button type="button" class="btn-icon" style="padding:2px"
-                        onclick="event.preventDefault();event.stopPropagation();openEditDesk(<?= (int)$desk['id'] ?>, '<?= e(addslashes($desk['desk_label'])) ?>', '<?= e(addslashes($desk['desk_notes'] ?? '')) ?>', <?= (int)($desk['assigned_to'] ?? 0) ?>)"
+                        onclick="openEditDesk(<?= (int)$desk['id'] ?>, '<?= e(addslashes($desk['desk_label'])) ?>', '<?= e(addslashes($desk['desk_notes'] ?? '')) ?>', <?= (int)($desk['assigned_to'] ?? 0) ?>)"
                         title="Edit desk">
                     <?= icon('ic_fluent_edit_24_regular', 13) ?>
                 </button>
                 <form method="POST" style="margin:0"
-                      onclick="event.stopPropagation()"
                       onsubmit="event.preventDefault();if(confirm('Remove this desk and all its sessions?'))this.submit()">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="delete_desk">
@@ -109,7 +117,7 @@
                 <?= icon('ic_fluent_calendar_ltr_24_regular', 12) ?>
                 <?= (int)$desk['upcoming'] ?> upcoming session<?= (int)$desk['upcoming'] !== 1 ? 's' : '' ?>
             </div>
-        </a>
+        </div>
     <?php endforeach; ?>
 
     <!-- + Add Desk -->

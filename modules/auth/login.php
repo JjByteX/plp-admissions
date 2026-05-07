@@ -47,7 +47,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Check email verification for students
             ensure_email_verification_columns();
             if ($user['role'] === 'student' && empty($user['email_verified'])) {
-                $errors['general'] = 'Please verify your email first. Check your inbox for the verification link.';
+                // Don't lock the user out — send them to the verify page where they
+                // can enter a fresh code or request a resend.
+                clear_login_attempts($email);
+                Session::set('verify_pending_email', $user['email']);
+                Session::flash('error', 'Please verify your email first. Enter the code we sent you, or request a new one.');
+                redirect('/verify-pending');
             } else {
                 clear_login_attempts($email);
                 Auth::login($user);

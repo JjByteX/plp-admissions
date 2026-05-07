@@ -13,6 +13,11 @@ require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/interview_scheduler.php';
 require_once __DIR__ . '/automation.php';
 
+// -- Timezone ----------------------------------------------------
+// Match PHP's tz to the MySQL server's tz so strtotime($db_value) and
+// time() agree. Override via APP_TIMEZONE env var if needed.
+date_default_timezone_set(getenv('APP_TIMEZONE') ?: 'Asia/Manila');
+
 // -- Error display -----------------------------------------------
 if (APP_DEBUG) {
     ini_set('display_errors', 1);

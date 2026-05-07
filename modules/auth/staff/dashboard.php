@@ -161,15 +161,8 @@ $hasToday = (int)$hasTodayStmt->fetchColumn() > 0;
 
 $activeNav = 'dashboard';
 $pageTitle = 'Dashboard';
-include VIEWS_PATH . '/layouts/app.php';
+ob_start();
 ?>
-
-<?php if ($msg = Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
-<?php endif; ?>
-<?php if ($msg = Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
-<?php endif; ?>
 
 <div class="page-header">
     <h1 class="page-title">Dashboard</h1>
@@ -413,3 +406,7 @@ include VIEWS_PATH . '/layouts/app.php';
 })();
 </script>
 <?php endif; ?>
+
+<?php
+$content = ob_get_clean();
+include VIEWS_PATH . '/layouts/app.php';

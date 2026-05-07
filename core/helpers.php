@@ -341,6 +341,12 @@ function send_email(string $to, string $subject, string $htmlBody, string $toNam
         $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = SMTP_PORT;
 
+        // Force UTF-8 for both headers (subject, names) and body. PHPMailer's
+        // default is ISO-8859-1, which mangles em-dashes, accented characters,
+        // emoji, and non-ASCII names into "â€"" / "?" gibberish.
+        $mail->CharSet  = PHPMailer\PHPMailer\PHPMailer::CHARSET_UTF8;
+        $mail->Encoding = PHPMailer\PHPMailer\PHPMailer::ENCODING_BASE64;
+
         $mail->setFrom(SMTP_USER, SMTP_FROM_NAME);
         $mail->addAddress($to, $toName);
 
@@ -575,8 +581,11 @@ function exam_password_is_valid(array $exam): bool
 {
     if (empty($exam['access_password']))    return false;
     if (empty($exam['password_issued_at'])) return false;
-    $issuedAt = strtotime($exam['password_issued_at']);
-    return (time() - $issuedAt) <= EXAM_PASSWORD_EXPIRY_SECONDS;
+    // Compute age in MySQL so PHP/MySQL timezone differences don't skew the result.
+    $stmt = db()->prepare('SELECT TIMESTAMPDIFF(SECOND, ?, NOW())');
+    $stmt->execute([$exam['password_issued_at']]);
+    $age = (int) $stmt->fetchColumn();
+    return $age >= 0 && $age <= EXAM_PASSWORD_EXPIRY_SECONDS;
 }
 
 /**
@@ -586,9 +595,13 @@ function exam_password_is_valid(array $exam): bool
 function exam_password_seconds_remaining(array $exam): int
 {
     if (empty($exam['password_issued_at'])) return 0;
-    $issuedAt = strtotime($exam['password_issued_at']);
-    $remaining = EXAM_PASSWORD_EXPIRY_SECONDS - (time() - $issuedAt);
-    return max(0, (int) $remaining);
+    // Compute in MySQL so PHP/MySQL timezone differences don't skew the result.
+    $stmt = db()->prepare(
+        'SELECT GREATEST(0, ' . (int) EXAM_PASSWORD_EXPIRY_SECONDS
+        . ' - TIMESTAMPDIFF(SECOND, ?, NOW()))'
+    );
+    $stmt->execute([$exam['password_issued_at']]);
+    return (int) $stmt->fetchColumn();
 }
 
 /**

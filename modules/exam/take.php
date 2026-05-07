@@ -389,6 +389,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'UPDATE exam_results SET rank_score=?, passed=? WHERE applicant_id=? AND exam_id=?'
     )->execute([$rank, $passed ? 1 : 0, $applicantId, $examId]);
 
+    // Auto-assign an interview slot the moment they pass — student doesn't
+    // have to wait for staff to create new slots if open ones already exist.
+    // assign_interview_slot() returns null if no compatible slot is open;
+    // in that case the student stays in 'interview' status and gets picked
+    // up by bulk_assign_pending_applicants() the next time staff creates
+    // a slot in their college.
+    if ($passed) {
+        try {
+            assign_interview_slot($applicantId, Auth::id());
+        } catch (\Throwable $e) {
+            error_log('Auto-assign interview after exam pass failed: ' . $e->getMessage());
+        }
+    }
+
     // Build course suggestions if failed
     $altCourses = [];
     if (!$passed) {

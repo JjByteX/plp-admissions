@@ -118,11 +118,13 @@ switch ($action) {
     // Queue: mark no-show
     // ----------------------------------------------------------------
     case 'mark_no_show':
+        // After the desk/session merge, an interviewer is identified by
+        // assigned_to with created_by fallback for legacy rows.
         $db->prepare(
             'UPDATE interview_queue q
              JOIN   interview_slots s ON s.id = q.slot_id
              SET    q.status = "no_show"
-             WHERE  q.id = ? AND s.created_by = ?'
+             WHERE  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?'
         )->execute([$id, $staffId]);
         audit_log('interview_no_show', "Marked interview queue ID {$id} as no-show", 'interview_queue', $id);
 
@@ -148,6 +150,79 @@ switch ($action) {
         break;
 
     // ----------------------------------------------------------------
+    // Queue: staff manually checks a scheduled student into the queue.
+    // Replaces the legacy code-based check-in (no code required anymore).
+    // Atomically picks the next queue number for this staff today.
+    // ----------------------------------------------------------------
+    case 'staff_checkin':
+        $today = date('Y-m-d');
+        $db->beginTransaction();
+        try {
+            // Verify entry exists, owned by this staff today, and is scheduled
+            $stmt = $db->prepare(
+                'SELECT q.id, q.applicant_id, q.status,
+                        u.name AS student_name
+                 FROM   interview_queue q
+                 JOIN   interview_slots s ON s.id = q.slot_id
+                 JOIN   applicants a      ON a.id = q.applicant_id
+                 JOIN   users u           ON u.id = a.user_id
+                 WHERE  q.id = ?
+                   AND  s.slot_date = ?
+                   AND  COALESCE(s.assigned_to, s.created_by) = ?
+                 LIMIT 1'
+            );
+            $stmt->execute([$id, $today, $staffId]);
+            $entry = $stmt->fetch();
+
+            if (!$entry) {
+                $db->rollBack();
+                Session::flash('error', 'Applicant not found in today\'s queue.');
+                redirect('/staff/interviews/queue');
+            }
+            if ($entry['status'] !== 'scheduled') {
+                $db->rollBack();
+                Session::flash('error',
+                    htmlspecialchars($entry['student_name']) .
+                    ' is already ' . $entry['status'] . '.');
+                redirect('/staff/interviews/queue');
+            }
+
+            // Next queue number for this interviewer today (assigned_to with
+            // created_by fallback for legacy rows).
+            $nextStmt = $db->prepare(
+                'SELECT COALESCE(MAX(q.queue_number), 0) + 1
+                 FROM   interview_queue q
+                 JOIN   interview_slots s ON s.id = q.slot_id
+                 WHERE  s.slot_date = ? AND COALESCE(s.assigned_to, s.created_by) = ?
+                   AND  q.queue_number IS NOT NULL'
+            );
+            $nextStmt->execute([$today, $staffId]);
+            $nextNum = (int) $nextStmt->fetchColumn();
+
+            $db->prepare(
+                'UPDATE interview_queue
+                 SET    status        = "checked_in",
+                        queue_number  = ?,
+                        checked_in_at = NOW()
+                 WHERE  id = ? AND status = "scheduled"'
+            )->execute([$nextNum, $id]);
+
+            $db->commit();
+
+            audit_log('interview_staff_checkin',
+                "Staff #{$staffId} checked in {$entry['student_name']} as Q#{$nextNum}",
+                'interview_queue', $id);
+            Session::flash('success',
+                htmlspecialchars($entry['student_name']) . ' checked in (Queue #' . $nextNum . ').');
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            error_log('staff_checkin failed: ' . $e->getMessage());
+            Session::flash('error', 'Check-in failed. Please try again.');
+        }
+        redirect('/staff/interviews/queue');
+        break;
+
+    // ----------------------------------------------------------------
     // Queue: start interview (checked_in → in_progress)
     // ----------------------------------------------------------------
     case 'start_interview':
@@ -155,7 +230,8 @@ switch ($action) {
             'UPDATE interview_queue q
              JOIN   interview_slots s ON s.id = q.slot_id
              SET    q.status = "in_progress"
-             WHERE  q.id = ? AND q.status = "checked_in" AND s.created_by = ?'
+             WHERE  q.id = ? AND q.status = "checked_in"
+               AND  COALESCE(s.assigned_to, s.created_by) = ?'
         )->execute([$id, $staffId]);
         audit_log('interview_started', "Started interview for queue ID {$id}", 'interview_queue', $id);
         Session::flash('success', 'Interview started.');
@@ -171,7 +247,7 @@ switch ($action) {
             'UPDATE interview_queue q
              JOIN   interview_slots s ON s.id = q.slot_id
              SET    q.interview_notes = ?
-             WHERE  q.id = ? AND s.created_by = ?'
+             WHERE  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?'
         )->execute([$notes ?: null, $id, $staffId]);
         audit_log('interview_notes_saved', "Saved notes for interview queue ID {$id}", 'interview_queue', $id);
         Session::flash('success', 'Notes saved.');
@@ -190,8 +266,10 @@ switch ($action) {
             Session::flash('error', 'Cannot delete a session that already has bookings.');
             redirect('/staff/interviews');
         }
+        // Owner = the assigned interviewer (with created_by fallback for legacy rows)
         $db->prepare(
-            'DELETE FROM interview_slots WHERE id = ? AND created_by = ?'
+            'DELETE FROM interview_slots
+             WHERE id = ? AND COALESCE(assigned_to, created_by) = ?'
         )->execute([$id, $staffId]);
         audit_log('interview_slot_deleted', "Deleted interview slot ID {$id}", 'interview_slot', $id);
         Session::flash('success', 'Session deleted.');
@@ -203,7 +281,9 @@ switch ($action) {
     // ----------------------------------------------------------------
     case 'close_slot':
         // Verify ownership (or admin) before touching anything.
-        $own = $db->prepare('SELECT created_by FROM interview_slots WHERE id = ?');
+        // After the desk/session merge, the "owner" is the assigned interviewer
+        // (with created_by fallback for legacy rows).
+        $own = $db->prepare('SELECT COALESCE(assigned_to, created_by) FROM interview_slots WHERE id = ?');
         $own->execute([$id]);
         $ownerId = (int)($own->fetchColumn() ?: 0);
         $isAdmin = (Auth::user()['role'] ?? '') === ROLE_ADMIN;
@@ -235,7 +315,8 @@ switch ($action) {
     // ----------------------------------------------------------------
     case 'open_slot':
         $db->prepare(
-            'UPDATE interview_slots SET status="open" WHERE id=? AND created_by=?'
+            'UPDATE interview_slots SET status="open"
+             WHERE id=? AND COALESCE(assigned_to, created_by) = ?'
         )->execute([$id, $staffId]);
         audit_log('interview_slot_reopened', "Reopened interview slot ID {$id}", 'interview_slot', $id);
         Session::flash('success', 'Session reopened.');
@@ -243,9 +324,11 @@ switch ($action) {
         break;
 
     // ----------------------------------------------------------------
-    // Queue: reassign student to a different desk's slot
+    // Queue: reassign student to a different session
+    // (legacy action name 'reassign_desk' kept for backward-compat URLs)
     // ----------------------------------------------------------------
     case 'reassign_desk':
+    case 'reassign_session':
         $isAdmin = (Auth::user()['role'] ?? '') === ROLE_ADMIN;
         $targetSlotId = (int)($_POST['target_slot_id'] ?? 0);
 
@@ -294,7 +377,7 @@ switch ($action) {
         audit_log('interview_reassigned',
             "Reassigned queue #{$id} from slot #{$qEntry['slot_id']} to slot #{$targetSlotId}",
             'interview_queue', $id);
-        Session::flash('success', 'Student reassigned to new desk.');
+        Session::flash('success', 'Student reassigned to new session.');
         redirect('/staff/interviews/queue');
         break;
 

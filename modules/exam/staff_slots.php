@@ -318,8 +318,17 @@ $defaultDate = $activeExam && !empty($activeExam['scheduled_start'])
 ob_start();
 ?>
 
-<div style="display:flex;align-items:center;margin-bottom:var(--space-5)">
+<div style="display:flex;align-items:center;margin-bottom:var(--space-5);gap:var(--space-2)">
     <a href="<?= url('/staff/exam') ?>" class="btn btn-ghost btn-sm" style="margin-right:auto">← Back</a>
+    <a href="<?= url('/staff/exam/export-rooms') ?>"
+       class="btn btn-sm"
+       target="_blank"
+       rel="noopener"
+       title="Printable per-room sheets to post on the school board"
+       style="font-size:var(--text-xs)">
+        <?= icon('ic_fluent_document_24_regular', 14) ?>
+        Export Lists
+    </a>
     <button class="btn btn-sm"
             onclick="document.getElementById('batch-exam-modal').style.display='flex'"
             style="font-size:var(--text-xs)">

@@ -22,14 +22,18 @@ $slotId  = (int)($_GET['id'] ?? 0);
 if ($slotId <= 0) { redirect('/staff/interviews'); }
 
 // ----------------------------------------------------------------
-// Load slot + ownership check
+// Load slot + ownership check.
+// After the desk/session merge the interviewer + location both live on
+// the slot itself (assigned_to + location_label), so no JOIN to a
+// separate desks table is needed.
 // ----------------------------------------------------------------
 $stmt = $db->prepare(
-    'SELECT s.*, u.name AS staff_name,
-            COALESCE(d.desk_label, u.desk_label) AS desk_label
+    'SELECT s.*,
+            COALESCE(au.name, cu.name)                           AS staff_name,
+            COALESCE(NULLIF(s.location_label, ""), cu.desk_label) AS desk_label
        FROM interview_slots s
-       JOIN users u ON u.id = s.created_by
-       LEFT JOIN interview_desks d ON d.department = s.department
+       JOIN users           cu ON cu.id = s.created_by
+       LEFT JOIN users      au ON au.id = s.assigned_to
       WHERE s.id = ?
       LIMIT 1'
 );
@@ -40,8 +44,11 @@ if (!$slot) {
     redirect('/staff/interviews');
 }
 
-$isAdmin    = ($role === ROLE_ADMIN);
-$isOwner    = ((int)$slot['created_by'] === $staffId);
+$isAdmin = ($role === ROLE_ADMIN);
+// A staff member is the "owner" of a session if they're the assigned interviewer
+// or they originally created it (legacy rows have no assigned_to).
+$ownerId  = (int)($slot['assigned_to'] ?? 0) ?: (int)$slot['created_by'];
+$isOwner  = ($ownerId === $staffId);
 if (!$isOwner && !$isAdmin) {
     Session::flash('error', 'You can only view rosters for your own sessions.');
     redirect('/staff/interviews');

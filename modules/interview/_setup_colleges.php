@@ -45,7 +45,7 @@
 <?php else: ?>
     <div class="college-grid">
         <?php foreach ($departments as $dept):
-            $info = $collegeCounts[$dept] ?? ['desks' => 0, 'upcoming' => 0];
+            $info = $collegeCounts[$dept] ?? ['sessions' => 0, 'upcoming' => 0];
         ?>
             <a href="<?= url('/staff/interviews/setup') ?>?college=<?= urlencode($dept) ?>"
                class="college-card">
@@ -54,10 +54,12 @@
                 </div>
                 <div class="college-card-name"><?= e($dept) ?></div>
                 <div class="college-card-meta">
-                    <?= icon('ic_fluent_library_24_regular', 12) ?>
-                    <?= $info['desks'] ?> desk<?= $info['desks'] !== 1 ? 's' : '' ?>
-                    &nbsp;·&nbsp;
+                    <?= icon('ic_fluent_calendar_ltr_24_regular', 12) ?>
                     <?= $info['upcoming'] ?> upcoming
+                    <?php if ($info['sessions'] !== $info['upcoming']): ?>
+                        &nbsp;·&nbsp;
+                        <?= $info['sessions'] ?> total session<?= $info['sessions'] !== 1 ? 's' : '' ?>
+                    <?php endif; ?>
                 </div>
             </a>
         <?php endforeach; ?>

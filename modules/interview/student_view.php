@@ -37,26 +37,27 @@ $stmt = $db->prepare('SELECT * FROM admission_results WHERE applicant_id=? LIMIT
 $stmt->execute([$applicantId]);
 $_admissionResult = $stmt->fetch() ?: null;
 
-// Ensure checkin_code column exists
-ensure_checkin_code_column();
-
 // ----------------------------------------------------------------
 // Load student's current queue entry (if any)
 // ----------------------------------------------------------------
+// After the desk/session merge, location lives directly on each session row.
+// The interviewer is whoever the session is assigned_to (with created_by as
+// fallback for legacy rows).
 $stmt = $db->prepare(
     'SELECT q.*,
             s.slot_date,
             s.slot_time,
             s.end_time,
             s.capacity,
-            s.department AS slot_department,
-            u.name       AS staff_name,
-            COALESCE(d.desk_label, u.desk_label) AS desk_label,
-            COALESCE(d.desk_notes, u.desk_notes) AS desk_notes
+            s.department                              AS slot_department,
+            COALESCE(NULLIF(s.location_label, ""), u.desk_label) AS desk_label,
+            COALESCE(s.location_notes, u.desk_notes)            AS desk_notes,
+            COALESCE(au.name, cu.name)                AS staff_name
      FROM   interview_queue q
      JOIN   interview_slots s ON s.id = q.slot_id
-     JOIN   users u           ON u.id = s.created_by
-     LEFT JOIN interview_desks d ON d.department = s.department
+     JOIN   users           cu ON cu.id = s.created_by
+     LEFT JOIN users        au ON au.id = s.assigned_to
+     LEFT JOIN users        u  ON u.id  = COALESCE(s.assigned_to, s.created_by)
      WHERE  q.applicant_id = ?
      ORDER BY q.id DESC
      LIMIT 1'
@@ -86,13 +87,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $db->beginTransaction();
         try {
-            // Atomic: next queue number for this staff's slots today
+            // Atomic: next queue number for this interviewer's sessions today.
+            // After the desk/session merge an interviewer is identified by
+            // assigned_to (or created_by for legacy rows).
             $stmt = $db->prepare(
                 'SELECT COALESCE(MAX(q.queue_number), 0) + 1
                  FROM   interview_queue q
                  JOIN   interview_slots s ON s.id = q.slot_id
-                 WHERE  s.slot_date = ? AND s.created_by = (
-                     SELECT created_by FROM interview_slots WHERE id = ?
+                 WHERE  s.slot_date = ? AND COALESCE(s.assigned_to, s.created_by) = (
+                     SELECT COALESCE(assigned_to, created_by) FROM interview_slots WHERE id = ?
                  )
                  AND q.queue_number IS NOT NULL'
             );
@@ -119,14 +122,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $db->prepare(
             'SELECT q.*,
                     s.slot_date, s.slot_time, s.end_time, s.capacity,
-                    s.department AS slot_department,
-                    u.name AS staff_name,
-                    COALESCE(d.desk_label, u.desk_label) AS desk_label,
-                    COALESCE(d.desk_notes, u.desk_notes) AS desk_notes
+                    s.department                              AS slot_department,
+                    COALESCE(NULLIF(s.location_label, ""), u.desk_label) AS desk_label,
+                    COALESCE(s.location_notes, u.desk_notes)            AS desk_notes,
+                    COALESCE(au.name, cu.name)                AS staff_name
              FROM   interview_queue q
              JOIN   interview_slots s ON s.id = q.slot_id
-             JOIN   users u           ON u.id = s.created_by
-             LEFT JOIN interview_desks d ON d.department = s.department
+             JOIN   users           cu ON cu.id = s.created_by
+             LEFT JOIN users        au ON au.id = s.assigned_to
+             LEFT JOIN users        u  ON u.id  = COALESCE(s.assigned_to, s.created_by)
              WHERE  q.applicant_id = ?
              ORDER BY q.id DESC
              LIMIT 1'
@@ -142,14 +146,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $studentDept = user_department($userId)
     ?: course_to_department($applicant['course_applied']);
 
-// Queue position (how many checked_in ahead of this student)
+// Queue position (how many checked_in ahead of this student) — scoped to
+// this interviewer's queue for today, using assigned_to with created_by fallback.
 $queuePosition = null;
 if ($myEntry && $myEntry['status'] === 'checked_in') {
     $stmt = $db->prepare(
         'SELECT COUNT(*) FROM interview_queue q
          JOIN   interview_slots s ON s.id = q.slot_id
-         WHERE  s.slot_date = ? AND s.created_by = (
-             SELECT created_by FROM interview_slots WHERE id = ?
+         WHERE  s.slot_date = ? AND COALESCE(s.assigned_to, s.created_by) = (
+             SELECT COALESCE(assigned_to, created_by) FROM interview_slots WHERE id = ?
          )
          AND q.status = "checked_in"
          AND q.queue_number < ?'
@@ -322,20 +327,6 @@ ob_start();
                 <span class="badge badge-info" style="margin-left:auto">Scheduled</span>
             </div>
 
-            <?php if (!empty($myEntry['checkin_code'])): ?>
-            <!-- Check-in code -->
-            <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
-                         padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4);text-align:center">
-                <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
-                             color:var(--text-tertiary);margin-bottom:var(--space-2)">Your Check-in Code</div>
-                <div style="font-size:1.75rem;font-weight:var(--weight-semibold);letter-spacing:.08em;
-                             color:var(--accent);font-family:monospace"><?= e($myEntry['checkin_code']) ?></div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">
-                    Show this code to staff if you can't check in with your phone
-                </div>
-            </div>
-            <?php endif; ?>
-
             <!-- Desk location — visible BEFORE check-in -->
             <?php if ($myEntry['desk_label']): ?>
                 <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
@@ -392,20 +383,6 @@ ob_start();
                 <span class="badge badge-success" style="margin-left:auto">Confirmed</span>
             </div>
 
-            <?php if (!empty($myEntry['checkin_code'])): ?>
-            <!-- Check-in code -->
-            <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
-                         padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4);text-align:center">
-                <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
-                             color:var(--text-tertiary);margin-bottom:var(--space-2)">Your Check-in Code</div>
-                <div style="font-size:1.75rem;font-weight:var(--weight-semibold);letter-spacing:.08em;
-                             color:var(--accent);font-family:monospace"><?= e($myEntry['checkin_code']) ?></div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">
-                    Show this code to staff if you can't check in with your phone
-                </div>
-            </div>
-            <?php endif; ?>
-
             <!-- Desk location — show even before interview day -->
             <?php if ($myEntry['desk_label']): ?>
                 <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
@@ -421,15 +398,6 @@ ob_start();
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
-
-            <div class="alert alert-info">
-                <?= icon('ic_fluent_info_24_regular', 15) ?>
-                <span>
-                    Your interview slot was assigned by the admissions office.
-                    On the day of your interview, return to this page and tap
-                    <strong>"I'm Here"</strong> to join the queue.
-                </span>
-            </div>
 
             <!-- Reschedule request -->
             <details style="margin-top:var(--space-4)">

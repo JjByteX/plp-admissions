@@ -14,48 +14,34 @@ $staffId = Auth::id();
 $isAdmin = Auth::role() === ROLE_ADMIN;
 $today   = date('Y-m-d');
 
-// Auto-create interview_desks table if missing (graceful upgrade)
-try {
-    $db->query("SELECT id FROM interview_desks LIMIT 0");
-} catch (\Throwable $e) {
-    $db->exec("CREATE TABLE IF NOT EXISTS interview_desks (
-        id          INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-        department  VARCHAR(120)     NOT NULL DEFAULT '',
-        desk_label  VARCHAR(120)     NOT NULL DEFAULT '',
-        desk_notes  TEXT             DEFAULT NULL,
-        assigned_to INT(10) UNSIGNED DEFAULT NULL,
-        is_active   TINYINT(1)      NOT NULL DEFAULT 1,
-        created_by  INT(10) UNSIGNED NOT NULL,
-        created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-}
-
-// Ensure assigned_to column exists
-try {
-    $db->query("SELECT assigned_to FROM interview_desks LIMIT 0");
-} catch (\Throwable $e) {
-    $db->exec("ALTER TABLE interview_desks ADD COLUMN assigned_to INT(10) UNSIGNED DEFAULT NULL AFTER department");
-    $db->exec("UPDATE interview_desks SET assigned_to = created_by WHERE assigned_to IS NULL");
-}
-
-// Ensure desk_id column exists on interview_slots
-try {
-    $db->query("SELECT desk_id FROM interview_slots LIMIT 0");
-} catch (\Throwable $e) {
-    $db->exec("ALTER TABLE interview_slots ADD COLUMN desk_id INT(10) UNSIGNED DEFAULT NULL AFTER created_by");
+// Graceful schema upgrade: ensure new columns exist on interview_slots.
+// (Desks have been merged into sessions — assigned_to/location_label/location_notes
+// live directly on interview_slots now.)
+foreach ([
+    ['assigned_to',    'INT(10) UNSIGNED DEFAULT NULL AFTER created_by'],
+    ['location_label', 'VARCHAR(120) NOT NULL DEFAULT "" AFTER assigned_to'],
+    ['location_notes', 'TEXT DEFAULT NULL AFTER location_label'],
+] as $col) {
+    try { $db->query("SELECT {$col[0]} FROM interview_slots LIMIT 0"); }
+    catch (\Throwable $e) {
+        try { $db->exec("ALTER TABLE interview_slots ADD COLUMN {$col[0]} {$col[1]}"); }
+        catch (\Throwable $e2) {}
+    }
 }
 
 // Stats for landing cards
-$totalDesks = (int)$db->query('SELECT COUNT(*) FROM interview_desks WHERE is_active=1')->fetchColumn();
 $upcomingStmt = $db->prepare(
     'SELECT COUNT(*) FROM interview_slots WHERE slot_date >= ?'
 );
 $upcomingStmt->execute([$today]);
 $totalUpcoming = (int)$upcomingStmt->fetchColumn();
 
-// Queue stats for today (across all desks this staff owns)
+$totalSessionsStmt = $db->prepare('SELECT COUNT(*) FROM interview_slots');
+$totalSessionsStmt->execute();
+$totalSessions = (int)$totalSessionsStmt->fetchColumn();
+
+// Queue stats for today (across sessions this staff is the interviewer for,
+// falling back to created_by for legacy rows that have no assigned_to).
 $todayWaiting = 0;
 $todayInProgress = 0;
 $todayStmt = $db->prepare(
@@ -63,7 +49,8 @@ $todayStmt = $db->prepare(
             SUM(q.status = "in_progress") AS in_progress
      FROM   interview_queue q
      JOIN   interview_slots s ON s.id = q.slot_id
-     WHERE  s.slot_date = ? AND s.created_by = ?'
+     WHERE  s.slot_date = ?
+       AND  COALESCE(s.assigned_to, s.created_by) = ?'
 );
 $todayStmt->execute([$today, $staffId]);
 $todayRow = $todayStmt->fetch();
@@ -130,14 +117,15 @@ ob_start();
         </div>
         <div class="intv-landing-title">Interview Setup</div>
         <div class="intv-landing-desc">
-            Set up desks, assign interviewers, and schedule sessions.
+            Schedule sessions and assign interviewers per college.
         </div>
         <div class="intv-landing-meta">
-            <?= icon('ic_fluent_library_24_regular', 13) ?>
-            <?= $totalDesks ?> desk<?= $totalDesks !== 1 ? 's' : '' ?>
-            &nbsp;·&nbsp;
             <?= icon('ic_fluent_calendar_ltr_24_regular', 13) ?>
-            <?= $totalUpcoming ?> upcoming
+            <?= $totalUpcoming ?> upcoming session<?= $totalUpcoming !== 1 ? 's' : '' ?>
+            <?php if ($totalSessions !== $totalUpcoming): ?>
+                &nbsp;·&nbsp;
+                <?= $totalSessions ?> total
+            <?php endif; ?>
         </div>
     </a>
 

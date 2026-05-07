@@ -1,7 +1,8 @@
 <?php
 // ============================================================
 // modules/interview/staff_queue.php
-// Live interview queue — call students, evaluate inline
+// Live interview queue — single unified table with status-aware
+// inline action buttons. No more check-in code verification.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -13,35 +14,55 @@ $today   = date('Y-m-d');
 
 $myDept = user_department($staffId);
 
-// Load desk info for this interviewer
+// ----------------------------------------------------------------
+// Look up this interviewer's location (for the location strip).
+// After the desk/session merge, location lives directly on each session,
+// so we pull it from today's session for this interviewer.
+// ----------------------------------------------------------------
 $deskLabel = '';
 $deskNotes = '';
+
+// 1. Prefer today's session for this interviewer (or created_by fallback for legacy rows)
 try {
     $deskStmt = $db->prepare(
-        'SELECT desk_label, desk_notes FROM interview_desks
-         WHERE assigned_to = ? AND is_active = 1
-         ORDER BY id LIMIT 1'
+        'SELECT location_label, location_notes
+           FROM interview_slots
+          WHERE COALESCE(assigned_to, created_by) = ?
+            AND slot_date = ?
+            AND location_label != ""
+          ORDER BY slot_time ASC
+          LIMIT 1'
     );
-    $deskStmt->execute([$staffId]);
+    $deskStmt->execute([$staffId, $today]);
     $deskRow = $deskStmt->fetch();
     if ($deskRow) {
-        $deskLabel = $deskRow['desk_label'] ?? '';
-        $deskNotes = $deskRow['desk_notes'] ?? '';
+        $deskLabel = $deskRow['location_label'] ?? '';
+        $deskNotes = $deskRow['location_notes'] ?? '';
     }
 } catch (\Throwable $e) {}
 
-// Fallback: try department-based desk or user's own desk_label
-if (!$deskLabel && $myDept) {
+// 2. Fallback: any upcoming session for this interviewer
+if (!$deskLabel) {
     try {
-        $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM interview_desks WHERE department = ? LIMIT 1');
-        $deskStmt->execute([$myDept]);
+        $deskStmt = $db->prepare(
+            'SELECT location_label, location_notes
+               FROM interview_slots
+              WHERE COALESCE(assigned_to, created_by) = ?
+                AND slot_date >= ?
+                AND location_label != ""
+              ORDER BY slot_date ASC, slot_time ASC
+              LIMIT 1'
+        );
+        $deskStmt->execute([$staffId, $today]);
         $deskRow = $deskStmt->fetch();
         if ($deskRow) {
-            $deskLabel = $deskRow['desk_label'] ?? '';
-            $deskNotes = $deskRow['desk_notes'] ?? '';
+            $deskLabel = $deskRow['location_label'] ?? '';
+            $deskNotes = $deskRow['location_notes'] ?? '';
         }
     } catch (\Throwable $e) {}
 }
+
+// 3. Last-resort fallback: legacy users.desk_label column (older installs)
 if (!$deskLabel) {
     try {
         $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM users WHERE id=?');
@@ -52,10 +73,9 @@ if (!$deskLabel) {
     } catch (\Throwable $e) {}
 }
 
-// Ensure checkin_code column exists
-ensure_checkin_code_column();
-
-// Ensure evaluation_result column exists
+// ----------------------------------------------------------------
+// Schema upgrades — evaluation columns
+// ----------------------------------------------------------------
 try { $db->query("SELECT evaluation_result FROM interview_queue LIMIT 0"); }
 catch (\Throwable $e) {
     $db->exec("ALTER TABLE interview_queue ADD COLUMN evaluation_result VARCHAR(10) DEFAULT NULL AFTER interview_notes");
@@ -66,73 +86,194 @@ catch (\Throwable $e) {
 }
 
 // ----------------------------------------------------------------
-// Load today's queue
+// AUTO NO-SHOW SWEEP
+// Anyone whose slot time has passed and they're still 'scheduled'
+// (never checked in) gets auto-flipped to no_show.
+//
+// "Past their slot" = either:
+//   slot_date < today, OR
+//   slot_date = today AND now > end_time (or slot_time + 30 min if no end)
+// ----------------------------------------------------------------
+$autoNoShowCount = 0;
+try {
+    $stmt = $db->prepare(
+        'UPDATE interview_queue q
+         JOIN   interview_slots s ON s.id = q.slot_id
+         SET    q.status = "no_show",
+                q.attendance_status = "absent",
+                q.interview_status = "absent"
+         WHERE  q.status = "scheduled"
+           AND  COALESCE(s.assigned_to, s.created_by) = ?
+           AND  (
+                  s.slot_date < CURDATE()
+                  OR (
+                    s.slot_date = CURDATE()
+                    AND NOW() > TIMESTAMP(
+                        s.slot_date,
+                        COALESCE(s.end_time, ADDTIME(s.slot_time, "00:30:00"))
+                    )
+                  )
+                )'
+    );
+    $stmt->execute([$staffId]);
+    $autoNoShowCount = $stmt->rowCount();
+    if ($autoNoShowCount > 0) {
+        audit_log('interview_auto_noshow',
+            "Auto-marked {$autoNoShowCount} past-time scheduled applicants as no-show",
+            'interview_queue', null);
+    }
+} catch (\Throwable $e) {
+    // Non-fatal — UI still works without the sweep
+    error_log('Auto no-show sweep failed: ' . $e->getMessage());
+}
+
+// ----------------------------------------------------------------
+// Load today's queue (single ordered list)
 // ----------------------------------------------------------------
 $stmt = $db->prepare(
     'SELECT q.id          AS queue_id,
             q.queue_number,
             q.status,
-            q.checkin_code,
             q.checked_in_at,
             q.interview_notes,
             q.evaluation_result,
+            q.evaluated_at,
             a.id          AS app_id,
             a.course_applied,
             a.applicant_type,
             u.name        AS student_name,
+            u.first_name,
+            u.middle_name,
+            u.last_name,
+            u.suffix,
             u.email       AS student_email,
             s.id          AS slot_id,
-            s.slot_time
+            s.slot_time,
+            s.end_time
      FROM   interview_queue q
      JOIN   interview_slots s ON s.id = q.slot_id
      JOIN   applicants a      ON a.id = q.applicant_id
      JOIN   users u           ON u.id = a.user_id
-     WHERE  s.slot_date = ? AND s.created_by = ?
+     WHERE  s.slot_date = ?
+       AND  COALESCE(s.assigned_to, s.created_by) = ?
      ORDER BY
          FIELD(q.status, "in_progress", "checked_in", "scheduled", "completed", "no_show"),
+         s.slot_time ASC,
          q.queue_number ASC,
          q.created_at   ASC'
 );
 $stmt->execute([$today, $staffId]);
-$allEntries = $stmt->fetchAll();
+$rows = $stmt->fetchAll();
 
-$inProgress = [];
-$waiting    = [];
-$scheduled  = [];
-$done       = [];
+// Pre-compute counts per status for the stats row
+$counts = ['scheduled' => 0, 'checked_in' => 0, 'in_progress' => 0,
+           'completed' => 0, 'no_show'    => 0];
+foreach ($rows as $r) {
+    if (isset($counts[$r['status']])) $counts[$r['status']]++;
+}
 
-foreach ($allEntries as $entry) {
-    match ($entry['status']) {
-        'in_progress' => $inProgress[] = $entry,
-        'checked_in'  => $waiting[]    = $entry,
-        'scheduled'   => $scheduled[]  = $entry,
-        default       => $done[]       = $entry,
+// Format name as "SURNAME SUFFIX, FIRST MIDDLE" (matches export look)
+function queue_format_name(array $r): string {
+    $last   = trim($r['last_name']   ?? '');
+    $first  = trim($r['first_name']  ?? '');
+    $middle = trim($r['middle_name'] ?? '');
+    $suffix = trim($r['suffix']      ?? '');
+    if ($last === '' && $first === '') {
+        return trim((string) ($r['student_name'] ?? '—'));
+    }
+    $sur = trim($last . ($suffix !== '' ? ' ' . $suffix : ''));
+    $given = trim($first . ($middle !== '' ? ' ' . $middle[0] . '.' : ''));
+    return $sur . ($given !== '' ? ', ' . $given : '');
+}
+
+// Status badge mapping
+function queue_status_badge(string $status): array {
+    return match ($status) {
+        'scheduled'   => ['Scheduled',   'badge-info'],
+        'checked_in'  => ['Waiting',     'badge-pending'],
+        'in_progress' => ['In Progress', 'badge-approved'],
+        'completed'   => ['Done',        'badge-approved'],
+        'no_show'     => ['No-show',     'badge-rejected'],
+        default       => [ucfirst($status), 'badge-info'],
     };
 }
 
 ob_start();
 ?>
 
-<!-- ================================================================
+<style>
+@keyframes pulse-dot {
+    0%,100%{opacity:1;transform:scale(1)}
+    50%   {opacity:.5;transform:scale(1.3)}
+}
+.q-table { width:100%; border-collapse:separate; border-spacing:0; }
+.q-table th, .q-table td {
+    padding: var(--space-3) var(--space-3);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
+    vertical-align: middle;
+}
+.q-table th {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-tertiary);
+    background: var(--bg-elevated);
+    font-weight: var(--weight-medium);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 1;
+}
+.q-table tr.row-in-progress td { background: rgba(45,106,79,0.06); }
+.q-table tr.row-no-show td,
+.q-table tr.row-completed td { color: var(--text-tertiary); }
+.q-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 28px; height: 28px; padding: 0 6px;
+    border-radius: var(--radius-sm); background: var(--bg-subtle);
+    font-weight: var(--weight-semibold); font-size: var(--text-xs);
+}
+.q-num.in-progress { background: var(--accent); color: #fff; }
+.q-actions {
+    display: flex; gap: var(--space-1); flex-wrap: wrap; justify-content: flex-end;
+}
+.q-actions form { display: inline; margin: 0; }
+.notes-row td { padding: 0 var(--space-3) var(--space-3); border-bottom: 1px solid var(--border); }
+.notes-row.collapsed { display: none; }
+.notes-box {
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    white-space: pre-line;
+}
+.btn-pass { background: var(--success-bg, #d1fae5); color: var(--success, #15803d); border-color: var(--success, #15803d); }
+.btn-fail { background: var(--error-bg, #fee2e2);   color: var(--error, #b91c1c);     border-color: var(--error, #b91c1c); }
+.q-name-cell { display:flex; flex-direction:column; gap:2px; }
+.q-name-cell .name { font-weight: var(--weight-medium); }
+.q-name-cell .meta { font-size: var(--text-xs); color: var(--text-tertiary); }
+.q-toolbar { display:flex; align-items:center; gap:var(--space-2); margin-bottom:var(--space-4); flex-wrap:wrap; }
+.q-toolbar input[type=search] {
+    flex: 1; min-width: 200px; min-height: 36px;
+    padding: 6px 12px; border:1px solid var(--border);
+    border-radius: var(--radius-md); font-size: var(--text-sm);
+}
+</style>
+
+<!-- ============================================================
      BACK BUTTON
-================================================================ -->
+============================================================ -->
 <div style="margin-bottom:var(--space-5)">
     <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
 </div>
 
-<style>
-@keyframes pulse-dot {
-    0%,100%{opacity:1;transform:scale(1)}
-    50%{opacity:.5;transform:scale(1.3)}
-}
-</style>
-
-<!-- ================================================================
+<!-- ============================================================
      DESK INFO STRIP
-================================================================ -->
+============================================================ -->
 <?php if ($deskLabel): ?>
     <div style="display:flex;align-items:center;gap:var(--space-3);
-                 padding:var(--space-3) var(--space-4);margin-bottom:var(--space-5);
+                 padding:var(--space-3) var(--space-4);margin-bottom:var(--space-4);
                  background:var(--bg-elevated);border:1px solid var(--border);
                  border-radius:var(--radius-md);font-size:var(--text-sm)">
         <?= icon('ic_fluent_location_24_regular', 13, 'color:var(--text-tertiary);flex-shrink:0') ?>
@@ -146,7 +287,7 @@ ob_start();
         </a>
     </div>
 <?php else: ?>
-    <div class="alert alert-warning" style="margin-bottom:var(--space-5)">
+    <div class="alert alert-warning" style="margin-bottom:var(--space-4)">
         <?= icon('ic_fluent_warning_24_regular', 15) ?>
         <span>No desk location set.
             <a href="<?= url('/staff/interviews/setup') ?>">Set it up in Interview Setup</a>
@@ -155,23 +296,35 @@ ob_start();
     </div>
 <?php endif; ?>
 
-<!-- ================================================================
-     STATS ROW
-================================================================ -->
-<?php
-$completedCount = count(array_filter($done, fn($e) => $e['status'] === 'completed'));
-$stats = [
-    ['n' => count($waiting),    'label' => 'Waiting',     'color' => 'var(--info)'],
-    ['n' => count($inProgress), 'label' => 'In Progress', 'color' => 'var(--accent)'],
-    ['n' => $completedCount,    'label' => 'Done',        'color' => 'var(--success)'],
-    ['n' => count($scheduled),  'label' => 'Not yet in',  'color' => 'var(--text-tertiary)'],
-];
-?>
-<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-3);margin-bottom:var(--space-6)">
-    <?php foreach ($stats as $s): ?>
+<!-- ============================================================
+     AUTO NO-SHOW NOTICE
+============================================================ -->
+<?php if ($autoNoShowCount > 0): ?>
+    <div class="alert alert-warning" style="margin-bottom:var(--space-4);font-size:var(--text-sm)">
+        <?= icon('ic_fluent_clock_24_regular', 15) ?>
+        <span>
+            <?= $autoNoShowCount ?> applicant<?= $autoNoShowCount === 1 ? '' : 's' ?>
+            past their assigned time and not checked in — auto-marked as no-show.
+        </span>
+    </div>
+<?php endif; ?>
+
+<!-- ============================================================
+     STATS ROW (compact)
+============================================================ -->
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:var(--space-2);margin-bottom:var(--space-5)">
+    <?php
+    $stats = [
+        ['n' => $counts['scheduled'],   'label' => 'Scheduled',   'color' => 'var(--text-tertiary)'],
+        ['n' => $counts['checked_in'],  'label' => 'Waiting',     'color' => 'var(--info)'],
+        ['n' => $counts['in_progress'], 'label' => 'In Progress', 'color' => 'var(--accent)'],
+        ['n' => $counts['completed'],   'label' => 'Done',        'color' => 'var(--success)'],
+        ['n' => $counts['no_show'],     'label' => 'No-show',     'color' => 'var(--error)'],
+    ];
+    foreach ($stats as $s): ?>
         <div style="background:var(--bg-elevated);border:1px solid var(--border);
-                     border-radius:var(--radius-md);padding:var(--space-4);text-align:center">
-            <div style="font-size:1.625rem;font-weight:var(--weight-semibold);color:<?= $s['color'] ?>;line-height:1">
+                     border-radius:var(--radius-md);padding:var(--space-3);text-align:center">
+            <div style="font-size:1.375rem;font-weight:var(--weight-semibold);color:<?= $s['color'] ?>;line-height:1">
                 <?= $s['n'] ?>
             </div>
             <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
@@ -181,277 +334,284 @@ $stats = [
     <?php endforeach; ?>
 </div>
 
-<!-- ================================================================
-     MANUAL CHECK-IN (code or name)
-================================================================ -->
-<div class="card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-5)">
-    <form method="POST" action="<?= url('/staff/interviews/manual-checkin') ?>"
-          style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap">
-        <?= csrf_field() ?>
-        <div style="flex-shrink:0;display:flex;align-items:center;gap:var(--space-2)">
-            <?= icon('ic_fluent_person_24_regular', 16, 'color:var(--text-tertiary)') ?>
-            <span style="font-size:var(--text-sm);font-weight:var(--weight-medium);white-space:nowrap">Manual Check-in</span>
-        </div>
-        <input type="text" name="checkin_search" class="form-input"
-               placeholder="Enter check-in code (e.g. PLP-STAR-42) or student name"
-               style="flex:1;min-width:200px;min-height:36px;font-size:var(--text-sm)" required>
-        <button type="submit" class="btn btn-primary btn-sm">Check In</button>
-    </form>
+<!-- ============================================================
+     TOOLBAR
+============================================================ -->
+<div class="q-toolbar">
+    <input type="search" id="q-filter" placeholder="Filter by name or course…"
+           autocomplete="off">
+    <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
+        <?= count($rows) ?> applicant<?= count($rows) === 1 ? '' : 's' ?> today
+    </span>
 </div>
 
-<!-- ================================================================
-     NOW INTERVIEWING (with inline evaluation)
-================================================================ -->
-<?php if (!empty($inProgress)): ?>
-    <div style="margin-bottom:var(--space-5)">
-        <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
-                     color:var(--text-tertiary);font-weight:var(--weight-medium);margin-bottom:var(--space-3)">
-            Now Interviewing
+<!-- ============================================================
+     UNIFIED QUEUE TABLE
+============================================================ -->
+<?php if (empty($rows)): ?>
+    <div style="padding:var(--space-8) var(--space-4);background:var(--bg-subtle);
+                 border-radius:var(--radius-md);text-align:center;color:var(--text-tertiary)">
+        <?= icon('ic_fluent_calendar_24_regular', 32, 'color:var(--text-tertiary)') ?>
+        <div style="margin-top:var(--space-3);font-size:var(--text-sm)">
+            No interviews scheduled for today.
         </div>
-        <?php foreach ($inProgress as $entry): ?>
-            <div class="card" style="padding:var(--space-5);border-left:3px solid var(--accent)">
-
-                <div style="display:flex;align-items:flex-start;gap:var(--space-4);margin-bottom:var(--space-4)">
-                    <div style="background:var(--accent);color:#fff;border-radius:var(--radius-md);
-                                 width:48px;height:48px;display:flex;align-items:center;justify-content:center;
-                                 font-size:var(--text-xl);font-weight:var(--weight-semibold);flex-shrink:0">
-                        <?= e($entry['queue_number'] ?? '—') ?>
-                    </div>
-                    <div style="flex:1;min-width:0">
-                        <div style="font-weight:var(--weight-semibold)"><?= e($entry['student_name'] ?? '—') ?></div>
-                        <div style="font-size:var(--text-sm);color:var(--text-secondary)">
-                            <?= e(ucfirst($entry['applicant_type'] ?? '')) ?>
-                            <?php if ($entry['course_applied']): ?>
-                                · <?= e($entry['course_applied']) ?>
-                            <?php endif; ?>
-                        </div>
-                        <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                            <?= e($entry['student_email'] ?? '') ?>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Inline evaluation form -->
-                <form method="POST" action="<?= url('/staff/interviews/' . $entry['queue_id']) ?>">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="complete_with_evaluation">
-
-                    <!-- Pass / Fail -->
-                    <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-3)">
-                        <span style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-secondary);min-width:70px">
-                            Evaluation
-                        </span>
-                        <label style="display:inline-flex;align-items:center;gap:var(--space-1);cursor:pointer;
-                                       font-size:var(--text-sm)">
-                            <input type="radio" name="evaluation_result" value="pass"
-                                   <?= ($entry['evaluation_result'] ?? '') === 'pass' ? 'checked' : '' ?>>
-                            Pass
-                        </label>
-                        <label style="display:inline-flex;align-items:center;gap:var(--space-1);cursor:pointer;
-                                       font-size:var(--text-sm)">
-                            <input type="radio" name="evaluation_result" value="fail"
-                                   <?= ($entry['evaluation_result'] ?? '') === 'fail' ? 'checked' : '' ?>>
-                            Fail
-                        </label>
-                    </div>
-
-                    <!-- Notes -->
-                    <textarea name="interview_notes" rows="3"
-                              placeholder="Interview notes / evaluation remarks…"
-                              class="form-control"
-                              style="font-size:var(--text-sm);resize:vertical;margin-bottom:var(--space-3)"
-                              ><?= e($entry['interview_notes'] ?? '') ?></textarea>
-
-                    <div style="display:flex;align-items:center;gap:var(--space-2);justify-content:space-between">
-                        <button type="submit" class="btn btn-primary btn-sm"
-                                onclick="if(!document.querySelector('input[name=evaluation_result]:checked')){alert('Please select Pass or Fail');return false;}">
-                            <?= icon('ic_fluent_checkmark_24_regular', 14) ?>
-                            Complete Interview
-                        </button>
-                        <div style="display:flex;gap:var(--space-2)">
-                            <button type="button" class="btn btn-ghost btn-sm"
-                                    onclick="this.closest('form').querySelector('[name=action]').value='save_notes';this.closest('form').submit()">
-                                Save Notes
-                            </button>
-                            <form method="POST" action="<?= url('/staff/interviews/' . $entry['queue_id']) ?>"
-                                  style="margin:0">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="action" value="mark_no_show">
-                                <button class="btn btn-ghost btn-sm" style="color:var(--error)"
-                                        onclick="return confirm('Mark as no-show?')">No-show</button>
-                            </form>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        <?php endforeach; ?>
     </div>
-<?php endif; ?>
-
-<!-- ================================================================
-     WAITING
-================================================================ -->
-<div style="margin-bottom:var(--space-5)">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3)">
-        <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
-                     color:var(--text-tertiary);font-weight:var(--weight-medium)">
-            Waiting <?php if (!empty($waiting)): ?>(<?= count($waiting) ?>)<?php endif; ?>
-        </div>
-        <?php if (!empty($waiting) && empty($inProgress)): ?>
-            <form method="POST" action="<?= url('/staff/interviews/call-next') ?>">
-                <?= csrf_field() ?>
-                <button class="btn btn-primary btn-sm">Call Next →</button>
-            </form>
-        <?php endif; ?>
-    </div>
-
-    <?php if (empty($waiting)): ?>
-        <div style="padding:var(--space-6);background:var(--bg-subtle);border-radius:var(--radius-md);
-                     text-align:left;color:var(--text-tertiary);font-size:var(--text-sm)">
-            No one waiting right now.
-        </div>
-    <?php else: ?>
-        <div style="display:flex;flex-direction:column;gap:var(--space-2)">
-            <?php foreach ($waiting as $entry): ?>
-                <div class="card" style="padding:var(--space-4) var(--space-5)">
-                    <div style="display:flex;align-items:center;gap:var(--space-4)">
-
-                        <div style="background:var(--bg-subtle);border:2px solid var(--border);
-                                     border-radius:var(--radius-md);width:40px;height:40px;
-                                     display:flex;align-items:center;justify-content:center;
-                                     font-size:var(--text-base);font-weight:var(--weight-semibold);
-                                     color:var(--text-primary);flex-shrink:0">
-                            <?= e($entry['queue_number']) ?>
-                        </div>
-
-                        <div style="flex:1;min-width:0">
-                            <div style="font-size:var(--text-sm);font-weight:var(--weight-medium)">
-                                <?= e($entry['student_name'] ?? '—') ?>
-                            </div>
-                            <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                                <?= e(ucfirst($entry['applicant_type'] ?? '')) ?>
-                                <?php if ($entry['course_applied']): ?>
-                                    · <?= e($entry['course_applied']) ?>
+<?php else: ?>
+    <div class="card" style="overflow:hidden;padding:0">
+        <table class="q-table" id="queue-table">
+            <thead>
+                <tr>
+                    <th style="width:60px">Time</th>
+                    <th style="width:50px">#</th>
+                    <th>Applicant</th>
+                    <th style="width:120px">Status</th>
+                    <th style="width:auto;text-align:right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($rows as $r):
+                [$badgeText, $badgeClass] = queue_status_badge($r['status']);
+                $rowClass = 'row-' . str_replace('_', '-', $r['status']);
+                $name      = queue_format_name($r);
+                $course    = $r['course_applied'] ?? '';
+                $type      = $r['applicant_type'] ?? '';
+                $hasNotes  = !empty($r['interview_notes']);
+                $notesId   = 'notes-' . $r['queue_id'];
+                $isInProg  = $r['status'] === 'in_progress';
+            ?>
+                <tr class="<?= $rowClass ?>" data-name="<?= e(strtolower($name . ' ' . $course)) ?>">
+                    <td style="font-variant-numeric: tabular-nums; color:var(--text-secondary)">
+                        <?= $r['slot_time'] ? date('g:i A', strtotime($r['slot_time'])) : '—' ?>
+                    </td>
+                    <td>
+                        <?php if ($r['queue_number']): ?>
+                            <span class="q-num <?= $isInProg ? 'in-progress' : '' ?>">
+                                <?= e($r['queue_number']) ?>
+                            </span>
+                        <?php else: ?>
+                            <span style="color:var(--text-tertiary)">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <div class="q-name-cell">
+                            <span class="name"><?= e($name) ?></span>
+                            <span class="meta">
+                                <?= e(ucfirst($type)) ?>
+                                <?php if ($course): ?> · <?= e($course) ?><?php endif; ?>
+                                <?php if ($r['checked_in_at']): ?>
+                                    · in at <?= date('g:i A', strtotime($r['checked_in_at'])) ?>
                                 <?php endif; ?>
-                                · in at <?= $entry['checked_in_at']
-                                    ? date('g:i A', strtotime($entry['checked_in_at']))
-                                    : '—' ?>
-                            </div>
-                        </div>
-
-                        <div style="display:flex;gap:var(--space-2)">
-                            <form method="POST" action="<?= url('/staff/interviews/' . $entry['queue_id']) ?>">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="action" value="start_interview">
-                                <button class="btn btn-secondary btn-sm">Start</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        </div>
-    <?php endif; ?>
-</div>
-
-<!-- ================================================================
-     NOT YET CHECKED IN
-================================================================ -->
-<?php if (!empty($scheduled)): ?>
-    <div style="margin-bottom:var(--space-5)">
-        <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
-                     color:var(--text-tertiary);font-weight:var(--weight-medium);margin-bottom:var(--space-3)">
-            Not Yet Arrived (<?= count($scheduled) ?>)
-        </div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-1)">
-            <?php foreach ($scheduled as $entry): ?>
-                <div style="display:flex;align-items:center;gap:var(--space-4);
-                              padding:var(--space-3) var(--space-4);
-                              border:1px solid var(--border);border-radius:var(--radius-md);
-                              background:var(--bg-elevated);opacity:.7">
-                    <div style="flex:1;font-size:var(--text-sm)">
-                        <?= e($entry['student_name'] ?? 'Unknown') ?>
-                        <?php if ($entry['course_applied']): ?>
-                            <span style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                · <?= e($entry['course_applied']) ?>
+                                <?php if ($r['evaluation_result']): ?>
+                                    · <strong style="color:<?= $r['evaluation_result'] === 'pass' ? 'var(--success)' : 'var(--error)' ?>">
+                                        <?= ucfirst($r['evaluation_result']) ?>
+                                    </strong>
+                                <?php endif; ?>
                             </span>
-                        <?php endif; ?>
-                        <?php if (!empty($entry['checkin_code'])): ?>
-                            <span style="color:var(--accent);font-size:var(--text-xs);font-family:monospace;margin-left:var(--space-2)">
-                                <?= e($entry['checkin_code']) ?>
-                            </span>
-                        <?php endif; ?>
-                    </div>
-                    <form method="POST" action="<?= url('/staff/interviews/' . $entry['queue_id']) ?>"
-                          onsubmit="return confirm('Mark as no-show?')">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="action" value="mark_no_show">
-                        <button class="btn btn-ghost btn-sm" style="color:var(--error)">No-show</button>
-                    </form>
-                </div>
-            <?php endforeach; ?>
-        </div>
-    </div>
-<?php endif; ?>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge <?= $badgeClass ?>" style="font-size:var(--text-xs)">
+                            <?php if ($isInProg): ?>
+                                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
+                                             background:#fff;animation:pulse-dot 1.4s infinite;margin-right:4px"></span>
+                            <?php endif; ?>
+                            <?= e($badgeText) ?>
+                        </span>
+                    </td>
+                    <td>
+                        <div class="q-actions">
 
-<!-- ================================================================
-     DONE TODAY
-================================================================ -->
-<?php if (!empty($done)): ?>
-    <div>
-        <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
-                     color:var(--text-tertiary);font-weight:var(--weight-medium);margin-bottom:var(--space-3)">
-            Done (<?= count($done) ?>)
-        </div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-1)">
-            <?php foreach ($done as $entry): ?>
-                <div style="display:flex;align-items:center;gap:var(--space-4);
-                              padding:var(--space-3) var(--space-4);
-                              border:1px solid var(--border);border-radius:var(--radius-md);
-                              background:var(--bg-elevated)">
-                    <?php if ($entry['queue_number']): ?>
-                        <span style="font-size:var(--text-xs);color:var(--text-tertiary);
-                                      min-width:24px;text-align:center">
-                            #<?= e($entry['queue_number']) ?>
-                        </span>
-                    <?php endif; ?>
-                    <div style="flex:1;font-size:var(--text-sm)"><?= e($entry['student_name'] ?? '—') ?></div>
-                    <?php if ($entry['evaluation_result'] ?? ''): ?>
-                        <span class="badge <?= $entry['evaluation_result'] === 'pass' ? 'badge-approved' : 'badge-rejected' ?>">
-                            <?= ucfirst($entry['evaluation_result']) ?>
-                        </span>
-                    <?php endif; ?>
-                    <span class="badge <?= $entry['status'] === 'completed' ? 'badge-approved' : 'badge-rejected' ?>">
-                        <?= $entry['status'] === 'completed' ? 'Done' : 'No-show' ?>
-                    </span>
-                    <?php if ($entry['interview_notes']): ?>
-                        <button class="btn-icon" onclick="toggleNotes(<?= $entry['queue_id'] ?>)"
-                                style="color:var(--text-tertiary)" title="View notes">
-                            <?= icon('ic_fluent_edit_24_regular', 13) ?>
-                        </button>
-                    <?php endif; ?>
-                </div>
-                <?php if ($entry['interview_notes']): ?>
-                    <div id="notes-<?= $entry['queue_id'] ?>"
-                         style="display:none;margin:-2px 0 var(--space-1);
-                                padding:var(--space-3) var(--space-4);
-                                background:var(--bg-subtle);border-radius:0 0 var(--radius-md) var(--radius-md);
-                                font-size:var(--text-xs);color:var(--text-secondary);white-space:pre-line">
-                        <?= e($entry['interview_notes']) ?>
-                    </div>
+                            <?php /* ── SCHEDULED → Check-in OR No-show ───────── */ ?>
+                            <?php if ($r['status'] === 'scheduled'): ?>
+                                <form method="POST" action="<?= url('/staff/interviews/' . $r['queue_id']) ?>">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="staff_checkin">
+                                    <button class="btn btn-primary btn-sm">
+                                        <?= icon('ic_fluent_checkmark_24_regular', 13) ?> Check In
+                                    </button>
+                                </form>
+                                <form method="POST" action="<?= url('/staff/interviews/' . $r['queue_id']) ?>"
+                                      onsubmit="return confirm('Mark as no-show?')">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="mark_no_show">
+                                    <button class="btn btn-ghost btn-sm" style="color:var(--error)">No-show</button>
+                                </form>
+
+                            <?php /* ── CHECKED-IN → Start ─────────────────────── */ ?>
+                            <?php elseif ($r['status'] === 'checked_in'): ?>
+                                <form method="POST" action="<?= url('/staff/interviews/' . $r['queue_id']) ?>">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="start_interview">
+                                    <button class="btn btn-primary btn-sm">
+                                        Start →
+                                    </button>
+                                </form>
+                                <form method="POST" action="<?= url('/staff/interviews/' . $r['queue_id']) ?>"
+                                      onsubmit="return confirm('Mark as no-show?')">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="mark_no_show">
+                                    <button class="btn btn-ghost btn-sm" style="color:var(--error)">No-show</button>
+                                </form>
+
+                            <?php /* ── IN PROGRESS → Pass / Fail / Notes ───────── */ ?>
+                            <?php elseif ($r['status'] === 'in_progress'): ?>
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        onclick="toggleNotes('<?= $notesId ?>')">
+                                    <?= icon('ic_fluent_edit_24_regular', 13) ?> Notes
+                                </button>
+                                <form method="POST" action="<?= url('/staff/interviews/' . $r['queue_id']) ?>"
+                                      onsubmit="return prepareEval(this, 'pass')">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="complete_with_evaluation">
+                                    <input type="hidden" name="evaluation_result" value="pass">
+                                    <input type="hidden" name="interview_notes" value="">
+                                    <button class="btn btn-sm btn-pass">
+                                        <?= icon('ic_fluent_checkmark_24_regular', 13) ?> Pass
+                                    </button>
+                                </form>
+                                <form method="POST" action="<?= url('/staff/interviews/' . $r['queue_id']) ?>"
+                                      onsubmit="return prepareEval(this, 'fail')">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="complete_with_evaluation">
+                                    <input type="hidden" name="evaluation_result" value="fail">
+                                    <input type="hidden" name="interview_notes" value="">
+                                    <button class="btn btn-sm btn-fail">
+                                        <?= icon('ic_fluent_dismiss_24_regular', 13) ?> Fail
+                                    </button>
+                                </form>
+                                <form method="POST" action="<?= url('/staff/interviews/' . $r['queue_id']) ?>"
+                                      onsubmit="return confirm('Mark as no-show?')">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="mark_no_show">
+                                    <button class="btn btn-ghost btn-sm" style="color:var(--error)">No-show</button>
+                                </form>
+
+                            <?php /* ── COMPLETED / NO-SHOW → View notes ─────────── */ ?>
+                            <?php elseif ($r['status'] === 'completed'): ?>
+                                <?php if ($hasNotes): ?>
+                                    <button type="button" class="btn btn-ghost btn-sm"
+                                            onclick="toggleNotes('<?= $notesId ?>')">
+                                        <?= icon('ic_fluent_edit_24_regular', 13) ?> View Notes
+                                    </button>
+                                <?php else: ?>
+                                    <span style="color:var(--text-tertiary);font-size:var(--text-xs)">—</span>
+                                <?php endif; ?>
+
+                            <?php elseif ($r['status'] === 'no_show'): ?>
+                                <span style="color:var(--text-tertiary);font-size:var(--text-xs)">—</span>
+                            <?php endif; ?>
+
+                        </div>
+                    </td>
+                </tr>
+
+                <?php /* ── Inline notes / evaluation textarea ──────────────── */ ?>
+                <?php if ($r['status'] === 'in_progress' || ($hasNotes && $r['status'] === 'completed')): ?>
+                    <tr class="notes-row collapsed" id="<?= $notesId ?>">
+                        <td colspan="5">
+                            <?php if ($r['status'] === 'in_progress'): ?>
+                                <div style="padding-top:var(--space-2)">
+                                    <textarea id="<?= $notesId ?>-text"
+                                              rows="3"
+                                              class="form-control"
+                                              placeholder="Interview notes / evaluation remarks…"
+                                              style="font-size:var(--text-sm);resize:vertical;width:100%;
+                                                     border:1px solid var(--border);border-radius:var(--radius-md);
+                                                     padding:var(--space-2) var(--space-3);font-family:inherit"
+                                              ><?= e($r['interview_notes'] ?? '') ?></textarea>
+                                    <div style="display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-2)">
+                                        <form method="POST" action="<?= url('/staff/interviews/' . $r['queue_id']) ?>">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="action" value="save_notes">
+                                            <input type="hidden" name="interview_notes"
+                                                   id="<?= $notesId ?>-savefield" value="">
+                                            <button type="button" class="btn btn-ghost btn-sm"
+                                                    onclick="saveNotesOnly('<?= $notesId ?>', this.closest('form'))">
+                                                Save Notes
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            <?php elseif ($hasNotes): ?>
+                                <div class="notes-box"><?= e($r['interview_notes']) ?></div>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
                 <?php endif; ?>
             <?php endforeach; ?>
-        </div>
+            </tbody>
+        </table>
     </div>
 <?php endif; ?>
 
-<!-- Auto-refresh every 30s -->
+<!-- ============================================================
+     SCRIPT
+============================================================ -->
 <script>
-setTimeout(() => window.location.reload(), 30000);
+// Live filter
+document.getElementById('q-filter')?.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase().trim();
+    document.querySelectorAll('#queue-table tbody tr:not(.notes-row)').forEach(tr => {
+        const haystack = tr.dataset.name || '';
+        const show = !term || haystack.includes(term);
+        tr.style.display = show ? '' : 'none';
+        // Hide accompanying notes row too
+        const next = tr.nextElementSibling;
+        if (next && next.classList.contains('notes-row')) {
+            next.style.display = show ? (next.classList.contains('collapsed') ? 'none' : '') : 'none';
+        }
+    });
+});
 
+// Toggle inline notes box
 function toggleNotes(id) {
-    const el = document.getElementById('notes-' + id);
-    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    const el = document.getElementById(id);
+    if (!el) return;
+    const isOpen = !el.classList.contains('collapsed');
+    el.classList.toggle('collapsed');
+    if (!isOpen) {
+        const txt = document.getElementById(id + '-text');
+        if (txt) txt.focus();
+    }
 }
+
+// When clicking Pass / Fail, copy the notes textarea content into the form's
+// hidden interview_notes field so the eval saves any in-flight notes.
+function prepareEval(form, label) {
+    const tr = form.closest('tr');
+    if (!tr) return true;
+    const notesRow = tr.nextElementSibling;
+    if (notesRow && notesRow.classList.contains('notes-row')) {
+        const txt = notesRow.querySelector('textarea');
+        if (txt) {
+            form.querySelector('[name=interview_notes]').value = txt.value;
+        }
+    }
+    return confirm('Mark this interview as ' + (label === 'pass' ? 'PASS' : 'FAIL') + '?');
+}
+
+// Save notes only (no Pass/Fail)
+function saveNotesOnly(id, form) {
+    const txt = document.getElementById(id + '-text');
+    const field = document.getElementById(id + '-savefield');
+    if (txt && field) {
+        field.value = txt.value;
+        form.submit();
+    }
+}
+
+// Auto-refresh every 30s, but pause when a textarea is focused
+let lastFocusTime = 0;
+document.addEventListener('focusin', (e) => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+        lastFocusTime = Date.now();
+    }
+});
+setInterval(() => {
+    // If user typed within last 60s, skip the refresh
+    if (Date.now() - lastFocusTime < 60000) return;
+    window.location.reload();
+}, 30000);
 </script>
 
 <?php
