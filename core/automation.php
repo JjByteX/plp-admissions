@@ -788,6 +788,142 @@ function ensure_document_validations_table(): void
 }
 
 // ----------------------------------------------------------------
+// EMAIL VERIFICATION
+// ----------------------------------------------------------------
+
+function ensure_email_verification_columns(): void
+{
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+    try {
+        db()->query('SELECT email_verified FROM users LIMIT 0');
+    } catch (\Throwable) {
+        db()->exec("ALTER TABLE users ADD COLUMN `email_verified` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_active`");
+        db()->exec("ALTER TABLE users ADD COLUMN `email_verify_token` VARCHAR(64) DEFAULT NULL AFTER `email_verified`");
+        // Mark existing users as verified so they're not locked out
+        db()->exec("UPDATE users SET email_verified = 1 WHERE id > 0");
+    }
+}
+
+function generate_verify_token(int $userId): string
+{
+    ensure_email_verification_columns();
+    $token = bin2hex(random_bytes(16));
+    db()->prepare('UPDATE users SET email_verify_token = ? WHERE id = ?')->execute([$token, $userId]);
+    return $token;
+}
+
+function send_verification_email(string $email, string $name, string $token): void
+{
+    $verifyUrl = rtrim(BASE_URL, '/') . '/verify-email?token=' . $token;
+    $body = '<p>Hello, <strong>' . e($name) . '</strong>!</p>'
+        . '<p>Please verify your email address to activate your account.</p>'
+        . '<p style="margin-top:16px"><a href="' . e($verifyUrl) . '" '
+        . 'style="display:inline-block;padding:12px 32px;background:' . e(school_setting('accent_color', '#2d6a4f')) . ';color:#fff;'
+        . 'text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px">Verify Email</a></p>'
+        . '<p style="margin-top:16px;color:#6b7280;font-size:13px">If the button doesn\'t work, copy this link:<br>'
+        . '<a href="' . e($verifyUrl) . '" style="color:' . e(school_setting('accent_color', '#2d6a4f')) . '">' . e($verifyUrl) . '</a></p>';
+    send_email($email, 'Verify Your Email — ' . school_setting('school_name', 'PLP Admissions'), email_template('Verify Your Email', $body), $name);
+}
+
+// ----------------------------------------------------------------
+// LOGIN RATE LIMITING
+// ----------------------------------------------------------------
+
+function ensure_login_attempts_table(): void
+{
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+    try {
+        db()->query('SELECT 1 FROM login_attempts LIMIT 0');
+    } catch (\Throwable) {
+        db()->exec('CREATE TABLE IF NOT EXISTS `login_attempts` (
+            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `email` VARCHAR(180) NOT NULL,
+            `ip_address` VARCHAR(45) NOT NULL,
+            `attempted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_la_email` (`email`, `attempted_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    }
+}
+
+function record_failed_login(string $email): void
+{
+    ensure_login_attempts_table();
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
+    if (str_contains($ip, ',')) $ip = trim(explode(',', $ip)[0]);
+    db()->prepare('INSERT INTO login_attempts (email, ip_address) VALUES (?, ?)')->execute([$email, $ip]);
+}
+
+function clear_login_attempts(string $email): void
+{
+    ensure_login_attempts_table();
+    db()->prepare('DELETE FROM login_attempts WHERE email = ?')->execute([$email]);
+}
+
+function is_login_locked(string $email): bool
+{
+    ensure_login_attempts_table();
+    $stmt = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE email = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)');
+    $stmt->execute([$email]);
+    return (int) $stmt->fetchColumn() >= 5;
+}
+
+// ----------------------------------------------------------------
+// EXAM AUTO-SAVE
+// ----------------------------------------------------------------
+
+function ensure_exam_drafts_table(): void
+{
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+    try {
+        db()->query('SELECT 1 FROM exam_drafts LIMIT 0');
+    } catch (\Throwable) {
+        db()->exec('CREATE TABLE IF NOT EXISTS `exam_drafts` (
+            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `applicant_id` INT(10) UNSIGNED NOT NULL,
+            `exam_id` INT(10) UNSIGNED NOT NULL,
+            `answers` LONGTEXT NOT NULL,
+            `saved_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uq_draft` (`applicant_id`, `exam_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    }
+}
+
+// ----------------------------------------------------------------
+// INTERVIEW RESCHEDULE REQUESTS
+// ----------------------------------------------------------------
+
+function ensure_reschedule_requests_table(): void
+{
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+    try {
+        db()->query('SELECT 1 FROM reschedule_requests LIMIT 0');
+    } catch (\Throwable) {
+        db()->exec('CREATE TABLE IF NOT EXISTS `reschedule_requests` (
+            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `applicant_id` INT(10) UNSIGNED NOT NULL,
+            `queue_id` BIGINT(20) UNSIGNED NOT NULL,
+            `reason` TEXT NOT NULL,
+            `status` ENUM("pending","approved","denied") NOT NULL DEFAULT "pending",
+            `reviewed_by` INT(10) UNSIGNED DEFAULT NULL,
+            `reviewed_at` DATETIME DEFAULT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_rr_applicant` (`applicant_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    }
+}
+
+// ----------------------------------------------------------------
 // A3: STAFF NOTIFICATIONS
 // ----------------------------------------------------------------
 

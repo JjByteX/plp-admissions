@@ -678,6 +678,13 @@ a.step-dot:hover { opacity: 0.8; transform: scale(1.12); }
     -webkit-appearance: none;
 }
 
+/* Auto-uppercase text inputs (official forms style) */
+.form-input:not([type="email"]):not([type="password"]):not([type="date"]):not([type="number"]):not([type="hidden"]),
+.form-textarea,
+.form-control:not([type="email"]):not([type="password"]):not([type="date"]):not([type="number"]):not([type="hidden"]) {
+    text-transform: uppercase;
+}
+
 .form-input::placeholder,
 .form-textarea::placeholder,
 .form-control::placeholder {

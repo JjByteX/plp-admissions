@@ -149,7 +149,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($check->fetch()) $errors['email'] = 'An account with this email already exists.';
     }
 
+    // Duplicate applicant detection (same name + birthdate)
     if (empty($errors)) {
+        $dupCheck = db()->prepare(
+            'SELECT u.id FROM users u
+             WHERE UPPER(u.first_name) = UPPER(?) AND UPPER(u.last_name) = UPPER(?) AND u.birthdate = ?
+             LIMIT 1'
+        );
+        $dupCheck->execute([$old['first_name'], $old['last_name'], $old['birthdate']]);
+        if ($dupCheck->fetch()) {
+            $errors['general'] = 'An applicant with the same name and birthdate already exists. If this is you, please use your existing account or contact the admissions office.';
+        }
+    }
+
+    if (empty($errors)) {
+        // Force uppercase on name fields
+        $old['first_name']    = mb_strtoupper($old['first_name']);
+        $old['middle_name']   = mb_strtoupper($old['middle_name']);
+        $old['last_name']     = mb_strtoupper($old['last_name']);
+        $old['suffix']        = mb_strtoupper($old['suffix']);
+        $old['street_address']= mb_strtoupper($old['street_address']);
+
         $parts = array_filter([
             $old['first_name'],
             $old['middle_name'] ?: null,
@@ -225,15 +245,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
             }
 
-            $user = $pdo->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
-            $user->execute([$userId]);
-            Auth::login($user->fetch());
+            // Send verification email
+            $verifyToken = generate_verify_token($userId);
+            send_verification_email($old['email'], $displayName, $verifyToken);
 
-            // Send welcome email
-            send_registration_email($old['email'], $displayName);
-
-            Session::flash('success', 'Account created successfully. Please upload your documents to continue.');
-            redirect('/student/documents');
+            // Don't auto-login — require email verification first
+            Session::flash('success', 'Account created! Please check your email and click the verification link to activate your account.');
+            redirect('/login');
 
         } catch (Throwable $e) {
             $pdo->rollBack();

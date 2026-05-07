@@ -33,16 +33,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Rate limiting check
+    if (empty($errors) && is_login_locked($email)) {
+        $errors['general'] = 'Too many failed attempts. Please try again in 15 minutes.';
+    }
+
     if (empty($errors)) {
         $stmt = db()->prepare('SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password_hash'])) {
-            Auth::login($user);
-            audit_log('login', "Successful login: {$user['email']}", 'user', $user['id']);
-            header("Location: " . Auth::homeUrl()); exit;
+            // Check email verification for students
+            ensure_email_verification_columns();
+            if ($user['role'] === 'student' && empty($user['email_verified'])) {
+                $errors['general'] = 'Please verify your email first. Check your inbox for the verification link.';
+            } else {
+                clear_login_attempts($email);
+                Auth::login($user);
+                audit_log('login', "Successful login: {$user['email']}", 'user', $user['id']);
+                header("Location: " . Auth::homeUrl()); exit;
+            }
         } else {
+            record_failed_login($email);
             audit_log('login_failed', "Failed login attempt for: {$email}");
             $errors['general'] = 'Incorrect email or password.';
         }

@@ -399,6 +399,18 @@ ob_start();
                     <strong>"I'm Here"</strong> to join the queue.
                 </span>
             </div>
+
+            <!-- Reschedule request -->
+            <details style="margin-top:var(--space-4)">
+                <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
+                    Need to reschedule?
+                </summary>
+                <form method="POST" action="<?= url('/api/reschedule-request') ?>" style="margin-top:var(--space-3)">
+                    <?= csrf_field() ?>
+                    <textarea name="reschedule_reason" class="form-textarea" rows="3" placeholder="Please explain why you need to reschedule..." required style="margin-bottom:var(--space-3)"></textarea>
+                    <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
+                </form>
+            </details>
         </div>
     <?php endif; ?>
 

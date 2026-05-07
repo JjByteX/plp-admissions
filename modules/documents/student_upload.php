@@ -109,6 +109,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/student/documents');
     }
 
+    // ---- Change applicant type ----
+    if ($action === 'change_type') {
+        $newType = trim($_POST['applicant_type'] ?? '');
+        $allowedTypes = ['freshman', 'transferee', 'foreign'];
+        if (!in_array($newType, $allowedTypes, true)) {
+            $errors[] = 'Invalid applicant type.';
+        } elseif ($isSubmitted || !in_array($applicant['overall_status'], ['documents'], true)) {
+            $errors[] = 'You can only change your applicant type before submitting documents.';
+        } else {
+            $db->prepare('UPDATE applicants SET applicant_type = ? WHERE id = ?')
+                ->execute([$newType, $applicantId]);
+            $applicant['applicant_type'] = $newType;
+            $requiredDocs = docs_for_type($newType);
+            audit_log('type_changed', "Applicant {$applicantId} changed type to {$newType}", 'applicant', $applicantId);
+            Session::flash('success', 'Applicant type updated. Please review the updated document requirements.');
+        }
+        redirect('/student/documents');
+    }
+
     // ---- File upload ----
     $docSlug = trim($_POST['doc_slug'] ?? '');
 
@@ -447,6 +466,26 @@ ob_start();
 
 
 
+
+<?php if (!$isSubmitted && $applicant['overall_status'] === 'documents'): ?>
+<!-- Applicant type selector -->
+<div class="card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
+    <div>
+        <span style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary)">Applicant Type</span>
+        <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);text-transform:capitalize"><?= e($applicant['applicant_type']) ?></div>
+    </div>
+    <form method="POST" style="display:flex;align-items:center;gap:var(--space-2)">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="change_type">
+        <select name="applicant_type" class="form-select" style="width:auto;min-height:36px;font-size:var(--text-sm)">
+            <option value="freshman" <?= $applicant['applicant_type'] === 'freshman' ? 'selected' : '' ?>>Freshman</option>
+            <option value="transferee" <?= $applicant['applicant_type'] === 'transferee' ? 'selected' : '' ?>>Transferee</option>
+            <option value="foreign" <?= $applicant['applicant_type'] === 'foreign' ? 'selected' : '' ?>>Foreign</option>
+        </select>
+        <button type="submit" class="btn btn-ghost" style="min-height:36px;font-size:var(--text-sm)">Change</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <!-- Document list -->
 <div style="display:flex;flex-direction:column;gap:var(--space-3)">

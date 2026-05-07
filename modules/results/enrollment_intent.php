@@ -13,7 +13,34 @@ csrf_check();
 
 $db     = db();
 $userId = Auth::id();
-$action = $_POST['action'] ?? '';   // 'withdraw' | ''
+$action = $_POST['action'] ?? '';   // 'withdraw' | 'confirm_enrollment'
+
+// ─────────────────────────────────────────────────────────────
+// ENROLLMENT CONFIRMATION
+// ─────────────────────────────────────────────────────────────
+if ($action === 'confirm_enrollment') {
+    $stmt = $db->prepare(
+        'SELECT a.id, ar.id AS result_id, ar.result, ar.enrollment_intent
+         FROM applicants a
+         JOIN admission_results ar ON ar.applicant_id = a.id
+         WHERE a.user_id = ? ORDER BY a.id DESC LIMIT 1'
+    );
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+
+    if (!$row || $row['result'] !== 'accepted') {
+        Session::flash('error', 'Only accepted applicants can confirm enrollment.');
+    } elseif ($row['enrollment_intent'] === 'confirmed') {
+        Session::flash('error', 'Your enrollment is already confirmed.');
+    } else {
+        $db->prepare('UPDATE admission_results SET enrollment_intent = "confirmed" WHERE id = ?')
+            ->execute([$row['result_id']]);
+        audit_log('enrollment_confirmed', "Applicant {$row['id']} confirmed enrollment", 'applicant', $row['id']);
+        notify_stage_transition($row['id'], 'enrollment_confirmed');
+        Session::flash('success', 'Your enrollment has been confirmed! Welcome to PLP!');
+    }
+    redirect('/student/result');
+}
 
 // ─────────────────────────────────────────────────────────────
 // WITHDRAWAL

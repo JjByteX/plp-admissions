@@ -7,6 +7,12 @@ $schoolName  = school_setting('school_name', 'Pamantasan ng Lungsod ng Pasig');
 $accentColor = school_setting('accent_color', '#2d6a4f');
 $pageTitle   = $pageTitle ?? 'Welcome';
 ?>
+<?php
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; frame-src https://newassets.hcaptcha.com https://*.hcaptcha.com; connect-src 'self' https://*.hcaptcha.com;");
+header("X-Content-Type-Options: nosniff");
+header("X-Frame-Options: SAMEORIGIN");
+header("Referrer-Policy: strict-origin-when-cross-origin");
+?>
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>

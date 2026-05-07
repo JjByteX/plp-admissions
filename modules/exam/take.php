@@ -249,6 +249,20 @@ if ($needsPwGate && !$isUnlocked) {
 }
 // ── End password gate ────────────────────────────────────────────────────────
 
+// Load saved draft (if any)
+$savedDraft = [];
+try {
+    ensure_exam_drafts_table();
+    $draftStmt = $db->prepare('SELECT answers FROM exam_drafts WHERE applicant_id = ? AND exam_id = ? LIMIT 1');
+    $draftStmt->execute([$applicantId, $examId]);
+    $draftRow = $draftStmt->fetch();
+    if ($draftRow) {
+        $savedDraft = json_decode($draftRow['answers'], true) ?: [];
+    }
+} catch (\Throwable $e) {
+    // Ignore — draft loading is non-critical
+}
+
 // Fetch questions
 $stmt = $db->prepare('SELECT * FROM questions WHERE exam_id=? ORDER BY sort_order, id');
 $stmt->execute([$examId]);
@@ -1121,6 +1135,77 @@ window.addEventListener('beforeunload', e => {
         e.returnValue = '';
     }
 });
+
+// ── Restore saved draft ─────────────────────────────────────
+<?php if (!empty($savedDraft)): ?>
+(function() {
+    const draft = <?= json_encode($savedDraft) ?>;
+    const form = document.getElementById('exam-form');
+    Object.entries(draft).forEach(([key, val]) => {
+        const inputs = form.querySelectorAll(`[name="${key}"]`);
+        if (!inputs.length) return;
+        inputs.forEach(inp => {
+            if (inp.type === 'radio') {
+                if (inp.value == val) { inp.checked = true; markAnswered(inp.name.match(/\[(\d+)\]/)?.[1]); }
+            } else if (inp.type === 'checkbox') {
+                if (Array.isArray(val) && val.includes(inp.value)) { inp.checked = true; markAnswered(inp.name.match(/\[(\d+)\]/)?.[1]); }
+            } else {
+                inp.value = val; markAnswered(inp.name.match(/\[(\d+)\]/)?.[1]);
+            }
+        });
+    });
+})();
+<?php endif; ?>
+
+// ── Auto-save every 60 seconds ──────────────────────────────
+(function() {
+    const examId = <?= (int)$examId ?>;
+    const form = document.getElementById('exam-form');
+    const csrfToken = form.querySelector('input[name="csrf_token"]')?.value || '';
+    let saveIndicator = document.createElement('div');
+    saveIndicator.style.cssText = 'position:fixed;bottom:16px;right:16px;padding:6px 14px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--text-tertiary);z-index:999;opacity:0;transition:opacity .3s';
+    document.body.appendChild(saveIndicator);
+
+    function collectAnswers() {
+        const data = {};
+        form.querySelectorAll('[name^="answers["]').forEach(inp => {
+            const match = inp.name.match(/answers\[(\d+)\](\[\])?/);
+            if (!match) return;
+            const qid = match[0];
+            if (inp.type === 'radio' || inp.type === 'checkbox') {
+                if (inp.checked) {
+                    if (match[2]) {
+                        if (!data[qid]) data[qid] = [];
+                        data[qid].push(inp.value);
+                    } else {
+                        data[qid] = inp.value;
+                    }
+                }
+            } else {
+                data[qid] = inp.value;
+            }
+        });
+        return JSON.stringify(data);
+    }
+
+    setInterval(function() {
+        if (submitted) return;
+        const body = new FormData();
+        body.append('exam_id', examId);
+        body.append('answers', collectAnswers());
+        body.append('csrf_token', csrfToken);
+        fetch('<?= url('/api/exam-autosave') ?>', { method: 'POST', body: body })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    saveIndicator.textContent = 'Draft saved ' + d.saved_at;
+                    saveIndicator.style.opacity = '1';
+                    setTimeout(() => saveIndicator.style.opacity = '0', 3000);
+                }
+            })
+            .catch(() => {});
+    }, 60000);
+})();
 </script>
 
 <!-- Step navigation -->

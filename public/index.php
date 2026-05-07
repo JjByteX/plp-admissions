@@ -20,6 +20,7 @@ $router->get( '/forgot-password', 'auth/forgot_password');
 $router->post('/forgot-password', 'auth/forgot_password');
 $router->get( '/reset-password',  'auth/reset_password');
 $router->post('/reset-password',  'auth/reset_password');
+$router->get( '/verify-email',    'auth/verify_email');
 
 // -- Student -----------------------------------------------------
 $router->get('/student/documents',  'documents/student_upload');
@@ -38,6 +39,8 @@ $router->get( '/api/notifications',      'api/notifications');
 $router->post('/api/notifications',      'api/notifications');
 $router->post('/api/auto-validate',      'api/auto_validate');
 $router->get( '/api/auto-validate',      'api/auto_validate');
+$router->post('/api/exam-autosave',      'api/exam_autosave');
+$router->post('/api/reschedule-request', 'api/reschedule_request');
 
 // -- Staff -------------------------------------------------------
 $router->get( '/staff/dashboard',           'auth/staff/dashboard');
