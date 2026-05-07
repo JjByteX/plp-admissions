@@ -11,46 +11,74 @@ Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
 $db      = db();
 $staffId = Auth::id();
 $today   = date('Y-m-d');
-
-$myDept = user_department($staffId);
+$isAdmin = Auth::role() === ROLE_ADMIN;
 
 // ----------------------------------------------------------------
-// Look up this interviewer's location (for the location strip).
-// After the desk/session merge, location lives directly on each session,
-// so we pull it from today's session for this interviewer.
+// VIEW MODE
+// Admin can drill in: /queue → pick college → pick session → queue.
+// Staff land directly on their own queue (today's sessions for them).
+// Anyone with ?slot=ID jumps straight to that session's queue.
 // ----------------------------------------------------------------
-$deskLabel = '';
-$deskNotes = '';
+$slotId          = (int) ($_GET['slot'] ?? 0);
+$selectedCollege = trim($_GET['college'] ?? '');
 
-// 1. Prefer today's session for this interviewer (or created_by fallback for legacy rows)
-try {
-    $deskStmt = $db->prepare(
-        'SELECT location_label, location_notes
-           FROM interview_slots
-          WHERE COALESCE(assigned_to, created_by) = ?
-            AND slot_date = ?
-            AND location_label != ""
-          ORDER BY slot_time ASC
-          LIMIT 1'
-    );
-    $deskStmt->execute([$staffId, $today]);
-    $deskRow = $deskStmt->fetch();
-    if ($deskRow) {
-        $deskLabel = $deskRow['location_label'] ?? '';
-        $deskNotes = $deskRow['location_notes'] ?? '';
-    }
-} catch (\Throwable $e) {}
+$viewMode = 'queue';
+if ($slotId === 0 && $isAdmin) {
+    $viewMode = $selectedCollege === '' ? 'college_select' : 'session_select';
+}
 
-// 2. Fallback: any upcoming session for this interviewer
-if (!$deskLabel) {
+if ($viewMode === 'college_select') {
+    require __DIR__ . '/_queue_college_select.php';
+    return;
+}
+if ($viewMode === 'session_select') {
+    require __DIR__ . '/_queue_session_select.php';
+    return;
+}
+
+// ----------------------------------------------------------------
+// QUEUE MODE — load context (location + interviewer) for the strip.
+// If a slot is selected, scope to that slot. Otherwise (staff
+// default) scope to this interviewer's sessions.
+// ----------------------------------------------------------------
+$deskLabel       = '';
+$deskNotes       = '';
+$slotInterviewer = '';
+$slotDept        = '';
+
+if ($slotId > 0) {
+    try {
+        $stmt = $db->prepare(
+            'SELECT s.location_label, s.location_notes, s.department,
+                    s.slot_date, s.slot_time, s.end_time,
+                    u.name AS interviewer_name
+               FROM interview_slots s
+               LEFT JOIN users u ON u.id = s.assigned_to
+              WHERE s.id = ?
+              LIMIT 1'
+        );
+        $stmt->execute([$slotId]);
+        $slotRow = $stmt->fetch();
+        if (!$slotRow) {
+            // Bad slot id — bounce back to the picker
+            header('Location: ' . url('/staff/interviews/queue'));
+            return;
+        }
+        $deskLabel       = $slotRow['location_label']  ?? '';
+        $deskNotes       = $slotRow['location_notes']  ?? '';
+        $slotInterviewer = $slotRow['interviewer_name'] ?? '';
+        $slotDept        = $slotRow['department']      ?? '';
+    } catch (\Throwable $e) {}
+} else {
+    // Staff default — find this interviewer's location for the strip.
     try {
         $deskStmt = $db->prepare(
             'SELECT location_label, location_notes
                FROM interview_slots
               WHERE COALESCE(assigned_to, created_by) = ?
-                AND slot_date >= ?
+                AND slot_date = ?
                 AND location_label != ""
-              ORDER BY slot_date ASC, slot_time ASC
+              ORDER BY slot_time ASC
               LIMIT 1'
         );
         $deskStmt->execute([$staffId, $today]);
@@ -60,17 +88,36 @@ if (!$deskLabel) {
             $deskNotes = $deskRow['location_notes'] ?? '';
         }
     } catch (\Throwable $e) {}
-}
 
-// 3. Last-resort fallback: legacy users.desk_label column (older installs)
-if (!$deskLabel) {
-    try {
-        $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM users WHERE id=?');
-        $deskStmt->execute([$staffId]);
-        $deskRow   = $deskStmt->fetch();
-        $deskLabel = $deskRow['desk_label'] ?? '';
-        $deskNotes = $deskRow['desk_notes'] ?? '';
-    } catch (\Throwable $e) {}
+    if (!$deskLabel) {
+        try {
+            $deskStmt = $db->prepare(
+                'SELECT location_label, location_notes
+                   FROM interview_slots
+                  WHERE COALESCE(assigned_to, created_by) = ?
+                    AND slot_date >= ?
+                    AND location_label != ""
+                  ORDER BY slot_date ASC, slot_time ASC
+                  LIMIT 1'
+            );
+            $deskStmt->execute([$staffId, $today]);
+            $deskRow = $deskStmt->fetch();
+            if ($deskRow) {
+                $deskLabel = $deskRow['location_label'] ?? '';
+                $deskNotes = $deskRow['location_notes'] ?? '';
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    if (!$deskLabel) {
+        try {
+            $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM users WHERE id=?');
+            $deskStmt->execute([$staffId]);
+            $deskRow   = $deskStmt->fetch();
+            $deskLabel = $deskRow['desk_label'] ?? '';
+            $deskNotes = $deskRow['desk_notes'] ?? '';
+        } catch (\Throwable $e) {}
+    }
 }
 
 // ----------------------------------------------------------------
@@ -96,26 +143,49 @@ catch (\Throwable $e) {
 // ----------------------------------------------------------------
 $autoNoShowCount = 0;
 try {
-    $stmt = $db->prepare(
-        'UPDATE interview_queue q
-         JOIN   interview_slots s ON s.id = q.slot_id
-         SET    q.status = "no_show",
-                q.attendance_status = "absent",
-                q.interview_status = "absent"
-         WHERE  q.status = "scheduled"
-           AND  COALESCE(s.assigned_to, s.created_by) = ?
-           AND  (
-                  s.slot_date < CURDATE()
-                  OR (
-                    s.slot_date = CURDATE()
-                    AND NOW() > TIMESTAMP(
-                        s.slot_date,
-                        COALESCE(s.end_time, ADDTIME(s.slot_time, "00:30:00"))
-                    )
-                  )
-                )'
-    );
-    $stmt->execute([$staffId]);
+    if ($slotId > 0) {
+        $stmt = $db->prepare(
+            'UPDATE interview_queue q
+             JOIN   interview_slots s ON s.id = q.slot_id
+             SET    q.status = "no_show",
+                    q.attendance_status = "absent",
+                    q.interview_status = "absent"
+             WHERE  q.status = "scheduled"
+               AND  s.id = ?
+               AND  (
+                      s.slot_date < CURDATE()
+                      OR (
+                        s.slot_date = CURDATE()
+                        AND NOW() > TIMESTAMP(
+                            s.slot_date,
+                            COALESCE(s.end_time, ADDTIME(s.slot_time, "00:30:00"))
+                        )
+                      )
+                    )'
+        );
+        $stmt->execute([$slotId]);
+    } else {
+        $stmt = $db->prepare(
+            'UPDATE interview_queue q
+             JOIN   interview_slots s ON s.id = q.slot_id
+             SET    q.status = "no_show",
+                    q.attendance_status = "absent",
+                    q.interview_status = "absent"
+             WHERE  q.status = "scheduled"
+               AND  COALESCE(s.assigned_to, s.created_by) = ?
+               AND  (
+                      s.slot_date < CURDATE()
+                      OR (
+                        s.slot_date = CURDATE()
+                        AND NOW() > TIMESTAMP(
+                            s.slot_date,
+                            COALESCE(s.end_time, ADDTIME(s.slot_time, "00:30:00"))
+                        )
+                      )
+                    )'
+        );
+        $stmt->execute([$staffId]);
+    }
     $autoNoShowCount = $stmt->rowCount();
     if ($autoNoShowCount > 0) {
         audit_log('interview_auto_noshow',
@@ -128,9 +198,11 @@ try {
 }
 
 // ----------------------------------------------------------------
-// Load today's queue (single ordered list)
+// Load the queue rows.
+// - slot mode: every queue row in this session (regardless of date)
+// - staff mode: today's rows for sessions assigned to this user
 // ----------------------------------------------------------------
-$stmt = $db->prepare(
+$selectCols =
     'SELECT q.id          AS queue_id,
             q.queue_number,
             q.status,
@@ -153,16 +225,26 @@ $stmt = $db->prepare(
      FROM   interview_queue q
      JOIN   interview_slots s ON s.id = q.slot_id
      JOIN   applicants a      ON a.id = q.applicant_id
-     JOIN   users u           ON u.id = a.user_id
-     WHERE  s.slot_date = ?
-       AND  COALESCE(s.assigned_to, s.created_by) = ?
-     ORDER BY
+     JOIN   users u           ON u.id = a.user_id ';
+$orderTail =
+    ' ORDER BY
          FIELD(q.status, "in_progress", "checked_in", "scheduled", "completed", "no_show"),
          s.slot_time ASC,
          q.queue_number ASC,
-         q.created_at   ASC'
-);
-$stmt->execute([$today, $staffId]);
+         q.created_at   ASC';
+
+if ($slotId > 0) {
+    $stmt = $db->prepare($selectCols . ' WHERE s.id = ?' . $orderTail);
+    $stmt->execute([$slotId]);
+} else {
+    $stmt = $db->prepare(
+        $selectCols .
+        ' WHERE s.slot_date = ?
+            AND COALESCE(s.assigned_to, s.created_by) = ?' .
+        $orderTail
+    );
+    $stmt->execute([$today, $staffId]);
+}
 $rows = $stmt->fetchAll();
 
 // Pre-compute counts per status for the stats row
@@ -170,6 +252,16 @@ $counts = ['scheduled' => 0, 'checked_in' => 0, 'in_progress' => 0,
            'completed' => 0, 'no_show'    => 0];
 foreach ($rows as $r) {
     if (isset($counts[$r['status']])) $counts[$r['status']]++;
+}
+
+// Distinct session ids in today's queue (with their start times). The Roster /
+// batch-evaluation page lives off the queue (the operational control), so we
+// expose a quick link to it for each session here instead of from setup.
+$sessionsToday = [];
+foreach ($rows as $r) {
+    $sid = (int)$r['slot_id'];
+    if ($sid <= 0 || isset($sessionsToday[$sid])) continue;
+    $sessionsToday[$sid] = $r['slot_time'];
 }
 
 // Format name as "SURNAME SUFFIX, FIRST MIDDLE" (matches export look)
@@ -263,10 +355,50 @@ ob_start();
 
 <!-- ============================================================
      BACK BUTTON
+     - Admin viewing a slot → back to that college's session picker
+     - Admin (no slot, but somehow here) → back to college picker
+     - Staff → back to the interviews home
 ============================================================ -->
+<?php
+if ($slotId > 0 && $isAdmin && $slotDept !== '') {
+    $backHref = url('/staff/interviews/queue') . '?college=' . urlencode($slotDept);
+} elseif ($slotId > 0 && $isAdmin) {
+    $backHref = url('/staff/interviews/queue');
+} else {
+    $backHref = url('/staff/interviews');
+}
+?>
 <div style="margin-bottom:var(--space-5)">
-    <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
+    <a href="<?= e($backHref) ?>" class="btn btn-ghost btn-sm">← Back</a>
 </div>
+
+<?php if ($slotId > 0): /* Slot context strip — admin needs to know what they're looking at */ ?>
+    <div style="margin-bottom:var(--space-4)">
+        <h2 style="margin:0 0 var(--space-1) 0;font-size:var(--text-lg);font-weight:var(--weight-semibold)">
+            <?= e($slotInterviewer ?: 'Unassigned') ?>
+            <?php if ($slotDept): ?>
+                <span style="color:var(--text-tertiary);font-weight:var(--weight-regular)">
+                    · <?= e($slotDept) ?>
+                </span>
+            <?php endif; ?>
+        </h2>
+        <?php if (!empty($slotRow['slot_date']) || !empty($slotRow['slot_time'])): ?>
+            <p style="margin:0;color:var(--text-tertiary);font-size:var(--text-sm)">
+                <?php
+                if (!empty($slotRow['slot_date'])) {
+                    echo e(date('D, M j', strtotime($slotRow['slot_date'])));
+                }
+                if (!empty($slotRow['slot_time'])) {
+                    echo ' · ' . e(date('g:i A', strtotime($slotRow['slot_time'])));
+                    if (!empty($slotRow['end_time'])) {
+                        echo ' – ' . e(date('g:i A', strtotime($slotRow['end_time'])));
+                    }
+                }
+                ?>
+            </p>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
 
 <!-- ============================================================
      DESK INFO STRIP
@@ -293,6 +425,29 @@ ob_start();
             <a href="<?= url('/staff/interviews/setup') ?>">Set it up in Interview Setup</a>
             so students know where to go.
         </span>
+    </div>
+<?php endif; ?>
+
+<!-- ============================================================
+     ROSTER LINKS — quick way to reach the per-session batch
+     evaluation page from the queue (the operational control).
+============================================================ -->
+<?php if (!empty($sessionsToday)): ?>
+    <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;
+                margin-bottom:var(--space-4);font-size:var(--text-xs)">
+        <span style="color:var(--text-tertiary)">
+            <?= count($sessionsToday) === 1 ? 'Roster:' : 'Rosters:' ?>
+        </span>
+        <?php foreach ($sessionsToday as $sid => $sessionTime): ?>
+            <a href="<?= url('/staff/interviews/' . $sid . '/roster') ?>"
+               class="btn btn-ghost btn-sm"
+               style="font-size:var(--text-xs)">
+                <?= icon('ic_fluent_clipboard_text_24_regular', 13) ?>
+                View full roster<?php if (count($sessionsToday) > 1 && $sessionTime): ?>
+                    &nbsp;·&nbsp; <?= date('g:i A', strtotime($sessionTime)) ?>
+                <?php endif; ?>
+            </a>
+        <?php endforeach; ?>
     </div>
 <?php endif; ?>
 

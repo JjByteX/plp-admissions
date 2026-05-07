@@ -253,37 +253,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── VIEW: Sessions list for a college ────────────────────────
 if ($college !== '') {
-    $showPast = isset($_GET['past']);
-
-    if ($showPast) {
-        $slotsStmt = $db->prepare(
-            'SELECT s.*, u.name AS interviewer_name,
-                    COUNT(q.id) AS booked
-               FROM interview_slots s
-               LEFT JOIN users           u ON u.id = s.assigned_to
-               LEFT JOIN interview_queue q ON q.slot_id = s.id
-              WHERE s.department = ?
-                AND s.slot_date < ?
-              GROUP BY s.id
-              ORDER BY s.slot_date DESC, s.slot_time DESC
-              LIMIT 200'
-        );
-        $slotsStmt->execute([$college, $today]);
-    } else {
-        $slotsStmt = $db->prepare(
-            'SELECT s.*, u.name AS interviewer_name,
-                    COUNT(q.id) AS booked
-               FROM interview_slots s
-               LEFT JOIN users           u ON u.id = s.assigned_to
-               LEFT JOIN interview_queue q ON q.slot_id = s.id
-              WHERE s.department = ?
-                AND s.slot_date >= ?
-              GROUP BY s.id
-              ORDER BY s.slot_date ASC, s.slot_time ASC
-              LIMIT 400'
-        );
-        $slotsStmt->execute([$college, $today]);
-    }
+    // Setup is for setting up. We always show upcoming sessions —
+    // past sessions are history, not setup material.
+    $slotsStmt = $db->prepare(
+        'SELECT s.*, u.name AS interviewer_name,
+                COUNT(q.id) AS booked
+           FROM interview_slots s
+           LEFT JOIN users           u ON u.id = s.assigned_to
+           LEFT JOIN interview_queue q ON q.slot_id = s.id
+          WHERE s.department = ?
+            AND s.slot_date >= ?
+          GROUP BY s.id
+          ORDER BY s.slot_date ASC, s.slot_time ASC
+          LIMIT 400'
+    );
+    $slotsStmt->execute([$college, $today]);
 
     $slots  = $slotsStmt->fetchAll();
     $byDate = [];
