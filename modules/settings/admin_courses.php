@@ -221,12 +221,12 @@ ob_start();
             </div>
         </div>
     </div>
-    <div style="border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;font-size:var(--text-xs);margin-bottom:var(--space-6);background:var(--surface)">
+    <div style="border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;font-size:var(--text-sm);margin-bottom:var(--space-6);background:var(--bg-elevated);width:100%">
         <?php
-        $hStyle = 'padding:var(--space-2) var(--space-3);background:var(--bg-subtle);font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)';
+        $hStyle = 'padding:var(--space-3) var(--space-4);background:var(--bg-subtle);font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border)';
         $hStyleC = $hStyle . ';text-align:center';
         ?>
-        <div style="display:grid;grid-template-columns:1fr 120px 80px 80px 80px 80px 80px 48px">
+        <div style="display:grid;grid-template-columns:minmax(280px,1.6fr) minmax(160px,0.9fr) 90px 110px 90px 110px 110px 60px">
             <div style="<?= $hStyle ?>">Course</div>
             <div style="<?= $hStyle ?>">Strands</div>
             <div style="<?= $hStyleC ?>">High</div>
@@ -253,79 +253,79 @@ ob_start();
             $enc      = htmlspecialchars($course, ENT_QUOTES);
         ?>
         <!-- Read-only row -->
-        <div id="row-read-<?= $ci ?>" style="display:grid;grid-template-columns:1fr 120px 80px 80px 80px 80px 80px 48px;<?= $bb ?>">
-            <div style="padding:var(--space-2) var(--space-3)">
+        <div id="row-read-<?= $ci ?>" class="course-row" style="display:grid;grid-template-columns:minmax(280px,1.6fr) minmax(160px,0.9fr) 90px 110px 90px 110px 110px 60px;<?= $bb ?>;transition:background-color var(--transition-fast)">
+            <div style="padding:var(--space-3) var(--space-4)">
                 <?= e($course) ?>
                 <?php if ($isFull): ?>
                     <span style="font-size:10px;padding:1px 6px;background:#fee2e2;color:#b91c1c;border-radius:9999px;margin-left:4px">Full</span>
                 <?php endif; ?>
             </div>
-            <div style="padding:var(--space-2) var(--space-3)">
-                <div style="display:flex;gap:3px;flex-wrap:wrap">
+            <div style="padding:var(--space-3) var(--space-4)">
+                <div style="display:flex;gap:4px;flex-wrap:wrap">
                     <?php if ($strands): foreach ($strands as $s): ?>
-                        <span style="font-size:10px;padding:1px 6px;background:var(--bg-subtle);border-radius:9999px;color:var(--text-secondary);white-space:nowrap"><?= e($s) ?></span>
+                        <span style="font-size:11px;padding:2px 8px;background:var(--bg-subtle);border-radius:9999px;color:var(--text-secondary);white-space:nowrap"><?= e($s) ?></span>
                     <?php endforeach; else: ?>
                         <span style="font-size:var(--text-xs);color:var(--text-tertiary)">—</span>
                     <?php endif; ?>
                 </div>
             </div>
-            <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary)"><?= $highFrom ?>–10</div>
-            <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary)"><?= $avgFrom ?>–<?= $highFrom - 1 ?></div>
-            <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-secondary)">1–<?= max(0, $avgFrom - 1) ?></div>
-            <div style="padding:var(--space-2) var(--space-3);text-align:center"><strong><?= $accepted ?></strong></div>
-            <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-tertiary)"><?= $maxSlots !== null ? $maxSlots : '∞' ?></div>
-            <div style="padding:var(--space-2) var(--space-3);text-align:center">
+            <div style="padding:var(--space-3) var(--space-4);text-align:center;color:var(--text-secondary)"><?= $highFrom ?>–10</div>
+            <div style="padding:var(--space-3) var(--space-4);text-align:center;color:var(--text-secondary)"><?= $avgFrom ?>–<?= $highFrom - 1 ?></div>
+            <div style="padding:var(--space-3) var(--space-4);text-align:center;color:var(--text-secondary)">1–<?= max(0, $avgFrom - 1) ?></div>
+            <div style="padding:var(--space-3) var(--space-4);text-align:center"><strong><?= $accepted ?></strong></div>
+            <div style="padding:var(--space-3) var(--space-4);text-align:center;color:var(--text-tertiary)"><?= $maxSlots !== null ? $maxSlots : '∞' ?></div>
+            <div style="padding:var(--space-3) var(--space-4);text-align:center">
                 <button type="button" class="btn-icon" title="Edit" onclick="startRowEdit(<?= $ci ?>)" style="color:var(--text-tertiary)">
-                    <?= icon('ic_fluent_edit_24_regular', 13) ?>
+                    <?= icon('ic_fluent_edit_24_regular', 14) ?>
                 </button>
             </div>
         </div>
         <!-- Edit row -->
         <div id="row-edit-<?= $ci ?>" style="display:none;<?= $bb ?>;background:var(--bg-subtle)">
-            <form method="POST" class="row-edit-form" data-row="<?= $ci ?>" style="display:grid;grid-template-columns:1fr 120px 80px 80px 80px 80px 80px 48px;align-items:center">
+            <form method="POST" class="row-edit-form" data-row="<?= $ci ?>" style="display:grid;grid-template-columns:minmax(280px,1.6fr) minmax(160px,0.9fr) 90px 110px 90px 110px 110px 60px;align-items:center">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="update_tiers">
                 <input type="hidden" name="scores[<?= $enc ?>][course]" value="<?= $enc ?>">
-                <div style="padding:var(--space-2) var(--space-3);font-weight:var(--weight-medium)"><?= e($course) ?></div>
-                <div style="padding:var(--space-2) var(--space-3)">
-                    <div style="display:flex;gap:3px;flex-wrap:wrap">
+                <div style="padding:var(--space-3) var(--space-4);font-weight:var(--weight-medium)"><?= e($course) ?></div>
+                <div style="padding:var(--space-3) var(--space-4)">
+                    <div style="display:flex;gap:4px;flex-wrap:wrap">
                         <?php if ($strands): foreach ($strands as $s): ?>
-                            <span style="font-size:10px;padding:1px 6px;background:var(--bg-subtle);border-radius:9999px;color:var(--text-secondary);white-space:nowrap"><?= e($s) ?></span>
+                            <span style="font-size:11px;padding:2px 8px;background:var(--bg-subtle);border-radius:9999px;color:var(--text-secondary);white-space:nowrap"><?= e($s) ?></span>
                         <?php endforeach; else: ?>
                             <span style="color:var(--text-tertiary)">—</span>
                         <?php endif; ?>
                     </div>
                 </div>
-                <div style="padding:var(--space-2) var(--space-3)">
+                <div style="padding:var(--space-3) var(--space-4)">
                     <input type="number" name="scores[<?= $enc ?>][high]"
                            class="form-control tier-high" data-course="<?= $enc ?>" data-row="<?= $ci ?>"
                            value="<?= $highFrom ?>" min="2" max="10"
-                           style="font-size:var(--text-xs);padding:4px 6px;text-align:center;width:100%">
+                           style="font-size:var(--text-sm);padding:5px 8px;text-align:center;width:100%">
                 </div>
-                <div style="padding:var(--space-2) var(--space-3)">
+                <div style="padding:var(--space-3) var(--space-4)">
                     <input type="number" name="scores[<?= $enc ?>][avg]"
                            class="form-control tier-avg" data-course="<?= $enc ?>" data-row="<?= $ci ?>"
                            value="<?= $avgFrom ?>" min="1" max="9"
-                           style="font-size:var(--text-xs);padding:4px 6px;text-align:center;width:100%">
+                           style="font-size:var(--text-sm);padding:5px 8px;text-align:center;width:100%">
                 </div>
-                <div style="padding:var(--space-2) var(--space-3);text-align:center;color:var(--text-tertiary)" class="low-label" data-row="<?= $ci ?>">
+                <div style="padding:var(--space-3) var(--space-4);text-align:center;color:var(--text-tertiary)" class="low-label" data-row="<?= $ci ?>">
                     1–<?= max(0, $avgFrom - 1) ?>
                 </div>
-                <div style="padding:var(--space-2) var(--space-3);text-align:center"><strong><?= $accepted ?></strong></div>
-                <div style="padding:var(--space-2) var(--space-3)">
+                <div style="padding:var(--space-3) var(--space-4);text-align:center"><strong><?= $accepted ?></strong></div>
+                <div style="padding:var(--space-3) var(--space-4)">
                     <input type="number" name="caps[<?= $enc ?>]" class="form-control"
                            min="0" max="99999"
                            value="<?= $maxSlots !== null ? (int)$maxSlots : '' ?>"
                            placeholder="∞"
-                           style="font-size:var(--text-xs);padding:4px 6px;text-align:center;width:100%">
+                           style="font-size:var(--text-sm);padding:5px 8px;text-align:center;width:100%">
                 </div>
-                <div style="padding:var(--space-2) var(--space-3);text-align:center">
+                <div style="padding:var(--space-3) var(--space-4);text-align:center">
                     <button type="button" class="btn-icon" title="Cancel" onclick="cancelRowEdit(<?= $ci ?>)" style="color:var(--text-tertiary)">
-                        <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
+                        <?= icon('ic_fluent_dismiss_24_regular', 14) ?>
                     </button>
                 </div>
             </form>
-            <div style="display:flex;gap:var(--space-2);justify-content:flex-end;padding:var(--space-2) var(--space-3)">
+            <div style="display:flex;gap:var(--space-2);justify-content:flex-end;padding:var(--space-2) var(--space-4) var(--space-3)">
                 <button type="button" class="btn btn-primary btn-sm" onclick="saveRowEdit(<?= $ci ?>)">Save</button>
             </div>
         </div>
@@ -419,8 +419,8 @@ ob_start();
 <div id="add-course-modal"
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;
             align-items:center;justify-content:center;padding:var(--space-4)">
-    <div style="background:var(--surface);border-radius:var(--radius-lg);padding:var(--space-6);
-                max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-xl)">
+    <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-6);
+                max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
             <div style="font-weight:var(--weight-semibold);font-size:var(--text-lg)">Add Custom Course</div>
             <button type="button" class="btn-icon" onclick="document.getElementById('add-course-modal').style.display='none'">
@@ -476,8 +476,8 @@ ob_start();
 <div id="edit-course-modal"
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;
             align-items:center;justify-content:center;padding:var(--space-4)">
-    <div style="background:var(--surface);border-radius:var(--radius-lg);padding:var(--space-6);
-                max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-xl)">
+    <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-6);
+                max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
             <div style="font-weight:var(--weight-semibold);font-size:var(--text-lg)">Edit Course</div>
             <button type="button" class="btn-icon" onclick="document.getElementById('edit-course-modal').style.display='none'">
@@ -603,8 +603,12 @@ function saveRowEdit(i) {
     });
 });
 </script>
+<style>
+.course-row:hover { background: var(--bg-overlay); }
+</style>
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Courses & Strands';
 $activeNav = 'courses';
+$pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

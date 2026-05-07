@@ -84,29 +84,6 @@ function _session_expired(string $date, ?string $endTime, string $today, string 
     margin-top: auto; padding-top: var(--space-3);
     border-top: 1px solid var(--border);
 }
-
-/* Dashed "+ Add Session" card — same shape as the New Exam card. */
-.sess-dir-card--add {
-    align-items: center; justify-content: center; text-align: center;
-    border-style: dashed;
-    background: transparent;
-}
-.sess-dir-card--add:hover { background: var(--accent-muted); }
-.sess-dir-card--add .plus {
-    width: 48px; height: 48px; border-radius: 50%;
-    background: var(--accent-muted); color: var(--accent);
-    display: flex; align-items: center; justify-content: center;
-}
-.sess-dir-card--add .label {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-    color: var(--accent);
-    margin-top: var(--space-2);
-}
-.sess-dir-card--add .hint {
-    font-size: var(--text-xs); color: var(--text-tertiary);
-    margin-top: var(--space-1);
-}
 </style>
 
 <?php
@@ -120,20 +97,6 @@ foreach ($byDate as $date => $dateSlots) {
 ?>
 
 <div class="sess-dir-grid">
-
-    <?php /* ── Add Session card (always first; opens the modal) ─── */ ?>
-    <div class="sess-dir-card sess-dir-card--add"
-         onclick="document.getElementById('add-session-modal').style.display='flex'"
-         role="button" tabindex="0"
-         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
-        <div class="plus">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/>
-            </svg>
-        </div>
-        <div class="label">Add Session</div>
-        <div class="hint">Single or recurring · date · time · interviewer</div>
-    </div>
 
     <?php /* ── Existing sessions (upcoming only) ────────────────── */ ?>
     <?php foreach ($flatSlots as $slot):
@@ -227,6 +190,19 @@ foreach ($byDate as $date => $dateSlots) {
             </div>
         </div>
     <?php endforeach; ?>
+
+    <?php /* ── Add Session card (always last in grid; opens the modal) ─── */ ?>
+    <div class="sess-dir-card"
+         onclick="document.getElementById('add-session-modal').style.display='flex'"
+         role="button" tabindex="0"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
+         style="align-items:center;justify-content:center;min-height:200px;border-style:dashed;cursor:pointer">
+        <div style="width:48px;height:48px;border-radius:50%;background:var(--accent-muted);
+                    display:flex;align-items:center;justify-content:center;color:var(--accent)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--accent);margin-top:var(--space-2)">Add Session</div>
+    </div>
 
 </div>
 

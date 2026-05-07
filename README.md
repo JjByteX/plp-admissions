@@ -1,76 +1,54 @@
-# Merge Desks Into Sessions
+# PLP Admissions
 
-This zip contains the file changes that consolidate the **Interview Desk** and
-**Interview Session** concepts into a single entity called **Session**.
+Pamantasan ng Lungsod ng Pasig — student admissions, document review,
+entrance exam, and interview scheduling system.
 
-After applying these changes:
-
-- The `interview_desks` table is gone.
-- Each `interview_slots` row carries everything that used to live on a desk:
-  - `assigned_to`    — the interviewer running the session
-  - `location_label` — short label (e.g. `Rm 201`, `Desk A`)
-  - `location_notes` — optional location notes
-- The setup UI becomes a single flat list of sessions per college, with the
-  assigned interviewer shown front-and-center on each row.
-- The legacy `/staff/interviews/desks` URL keeps working — it now points to
-  the same Session setup page.
+The interview module uses a single **Session** entity (the legacy
+`interview_desks` table has been merged into `interview_slots`); each
+session row carries `assigned_to`, `location_label`, and `location_notes`.
 
 ---
 
-## How to apply (drag & drop)
+## Fresh install (new computer)
 
-> **Back up your code and your database first.** A copy of `xampp/htdocs/plp-admissions/`
-> and a `mysqldump` of your DB are enough.
+> **Back up your database first if one already exists** — `database/schema.sql`
+> drops every application table before recreating it.
 
-### 1. Replace the files
+### 1. Drop the project into XAMPP
 
-This zip contains only the files that need to change, kept in their normal
-folder structure:
+Place the project at `xampp/htdocs/plp-admissions/` (or your preferred web
+root).
 
-```
-core/automation.php
-database/schema.sql
-database/migration_merge_desks_into_sessions.sql
-modules/documents/student_upload.php
-modules/interview/_setup_colleges.php
-modules/interview/_setup_sessions.php          (new)
-modules/interview/staff_action.php
-modules/interview/staff_call_next.php
-modules/interview/staff_manage.php
-modules/interview/staff_manual_checkin.php
-modules/interview/staff_queue.php
-modules/interview/staff_setup.php
-modules/interview/staff_slot_view.php
-modules/interview/student_view.php
-```
+### 2. Load the database
 
-Drag the `core/`, `database/`, and `modules/` folders from this zip onto your
-project root (e.g. `xampp/htdocs/plp-admissions/`) and let your OS overwrite
-the existing files.
-
-### 2. Run the migration SQL
-
-Open phpMyAdmin (or `mysql -u root -p plp_admissions`) and run the entire
-contents of:
+Create the `plp_admissions` database, then run **one** file:
 
 ```
-database/migration_merge_desks_into_sessions.sql
+mysql -u root -p plp_admissions < database/schema.sql
 ```
 
-The migration:
+…or, in phpMyAdmin: select the database → Import → choose
+`database/schema.sql` → Import.
 
-1. Adds `assigned_to`, `location_label`, `location_notes` columns to
-   `interview_slots` (no-ops if you re-run it).
-2. Backfills those columns from `interview_desks` for existing rows.
-3. Drops the old `desk_id` foreign key + column.
-4. Drops the now-empty `interview_desks` table.
+That single file:
 
-The script is idempotent — running it twice is safe.
+- Drops every application table (clean reset).
+- Creates the full schema, including the merged `interview_slots`
+  (with `assigned_to`, `location_label`, `location_notes`) — no separate
+  desk-merge migration needed.
+- Seeds default school settings, departments, courses, passing scores, and
+  an admin account.
 
-### 3. (Optional) Delete the legacy include files
+### 3. (Optional) Seed staff accounts
 
-The new setup page no longer uses these two files. They are harmless dead
-code, but if you want a clean tree you can delete them manually:
+```
+mysql -u root -p plp_admissions < database/seed_users.sql
+```
+
+### 4. (Optional) Delete the legacy include files
+
+The setup page no longer uses these two files. They are harmless dead code,
+but if you want a clean tree you can delete them manually:
 
 ```
 modules/interview/_setup_desks.php
@@ -79,7 +57,7 @@ modules/interview/_setup_desk_schedule.php
 
 ---
 
-## Smoke test after applying
+## Smoke test
 
 1. Log in as a staff/admin user.
 2. **Staff → Interviews → Setup**
@@ -98,24 +76,10 @@ modules/interview/_setup_desk_schedule.php
 
 ---
 
-## Rolling back
+## Notes
 
-If something goes wrong:
-
-1. Restore your project folder from your backup.
-2. Restore your database from your `mysqldump` backup.
-
-The migration drops `interview_desks` and the `desk_id` column, so a SQL
-roll-forward isn't possible — that's why the backup matters.
-
----
-
-## What hasn't changed
-
-- The applicant queue, evaluation, attendance, and notes flows behave
-  exactly as before.
 - The auto-assignment + auto-reschedule logic in `core/automation.php` and
-  `core/interview_scheduler.php` still works against `interview_slots`; it
-  just no longer cares about `desk_id`.
-- All `/staff/interviews/...` URLs still resolve. `/staff/interviews/desks`
+  `core/interview_scheduler.php` works against `interview_slots`; it does
+  not use `desk_id`.
+- All `/staff/interviews/...` URLs resolve normally. `/staff/interviews/desks`
   is kept as an alias of `/staff/interviews/setup` for backward-compat.

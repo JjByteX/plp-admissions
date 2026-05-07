@@ -34,15 +34,6 @@ ob_start();
     <a href="<?= url('/staff/interviews/queue') ?>" class="btn btn-ghost btn-sm">&larr; Back</a>
 </div>
 
-<div style="margin-bottom:var(--space-5)">
-    <h2 style="margin:0 0 var(--space-1) 0;font-size:var(--text-xl);font-weight:var(--weight-semibold)">
-        Live Queue &middot; <?= e($selectedCollege) ?>
-    </h2>
-    <p style="margin:0;color:var(--text-tertiary);font-size:var(--text-sm)">
-        Today's sessions. Click one to open its queue controls.
-    </p>
-</div>
-
 <style>
 @keyframes q-pulse-dot {
     0%,100% { opacity: 1; transform: scale(1); }
