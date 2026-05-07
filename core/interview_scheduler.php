@@ -232,11 +232,15 @@ function assign_interview_slot(int $applicantId, ?int $actorUserId = null, ?int 
 
         $slotId = (int)$candidate['id'];
 
+        // Generate memorable check-in code
+        ensure_checkin_code_column();
+        $checkinCode = generate_checkin_code();
+
         $pdo->prepare(
             'INSERT INTO interview_queue
-                (slot_id, applicant_id, status, interview_status)
-             VALUES (?, ?, "scheduled", "pending")'
-        )->execute([$slotId, $applicantId]);
+                (slot_id, applicant_id, status, interview_status, checkin_code)
+             VALUES (?, ?, "scheduled", "pending", ?)'
+        )->execute([$slotId, $applicantId, $checkinCode]);
 
         $pdo->prepare(
             'UPDATE applicants SET overall_status = "interview" WHERE id = ?'

@@ -83,12 +83,27 @@ function notify_stage_transition(int $applicantId, string $newStatus, string $ex
 
     $userId = (int) $row['user_id'];
 
+    // Look up check-in code for interview notifications
+    $checkinNote = '';
+    if ($newStatus === 'interview') {
+        try {
+            ensure_checkin_code_column();
+            $codeStmt = $pdo->prepare('SELECT checkin_code FROM interview_queue WHERE applicant_id = ? ORDER BY id DESC LIMIT 1');
+            $codeStmt->execute([$applicantId]);
+            $codeRow = $codeStmt->fetch();
+            if ($codeRow && !empty($codeRow['checkin_code'])) {
+                $checkinNote = ' Your check-in code is: ' . $codeRow['checkin_code'] . '. Show this to staff if you cannot check in with your phone.';
+            }
+        } catch (\Throwable) {}
+    }
+
     $messages = [
-        'submitted'  => ['Documents Submitted', 'Your application documents have been submitted for review.', '/student/documents'],
-        'exam'       => ['Documents Approved', 'All your documents have been approved. You are now eligible for the entrance exam.' . ($extra ? ' ' . $extra : ''), '/student/exam'],
-        'interview'  => ['Exam Passed', 'Congratulations! You passed the entrance exam. Your interview will be scheduled soon.', '/student/interview'],
-        'released'   => ['Result Released', 'Your admission result has been released. Check your result now.' . ($extra ? ' ' . $extra : ''), '/student/result'],
-        'withdrawn'  => ['Application Withdrawn', 'Your application has been withdrawn.', '/student/documents'],
+        'submitted'            => ['Documents Submitted', 'Your application documents have been submitted for review.', '/student/documents'],
+        'exam'                 => ['Documents Approved', 'All your documents have been approved. You are now eligible for the entrance exam.' . ($extra ? ' ' . $extra : ''), '/student/exam'],
+        'interview'            => ['Exam Passed', 'Congratulations! You passed the entrance exam. Your interview will be scheduled soon.' . $checkinNote, '/student/interview'],
+        'released'             => ['Result Released', 'Your admission result has been released. Check your result now.' . ($extra ? ' ' . $extra : ''), '/student/result'],
+        'withdrawn'            => ['Application Withdrawn', 'Your application has been withdrawn.', '/student/documents'],
+        'enrollment_confirmed' => ['Enrollment Confirmed', 'You have confirmed your enrollment. Welcome to PLP!', '/student/result'],
     ];
 
     if (!isset($messages[$newStatus])) return;
@@ -894,6 +909,56 @@ function ensure_exam_drafts_table(): void
             UNIQUE KEY `uq_draft` (`applicant_id`, `exam_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     }
+}
+
+// ----------------------------------------------------------------
+// INTERVIEW CHECK-IN CODES
+// ----------------------------------------------------------------
+
+function ensure_checkin_code_column(): void
+{
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+    try {
+        db()->query('SELECT checkin_code FROM interview_queue LIMIT 0');
+    } catch (\Throwable) {
+        db()->exec("ALTER TABLE interview_queue ADD COLUMN `checkin_code` VARCHAR(20) DEFAULT NULL AFTER `status`");
+        db()->exec("ALTER TABLE interview_queue ADD UNIQUE KEY `uq_checkin_code` (`checkin_code`)");
+    }
+}
+
+/**
+ * Generate a memorable check-in code like PLP-STAR-42
+ */
+function generate_checkin_code(): string
+{
+    $words = [
+        'STAR','BLUE','HAWK','PINE','WAVE','BOLT','SAGE','PEAK',
+        'DAWN','FERN','GLOW','JADE','LAKE','MINT','ONYX','RUBY',
+        'VALE','WIND','ARCH','COVE','DOVE','ECHO','FLAX','HAZE',
+        'IRIS','KITE','LARK','MIST','NOVA','OPAL','PALM','REEF',
+        'SILK','TIDE','WREN','AURA','BIRCH','CLAY','DUSK','FAWN',
+        'GILT','HAZE','IVY','LUNA','MOSS','NOOK','OAK','PIER',
+        'RAIN','SKY','TEAL','VINE','WOLF','ZEST','REED','ROSE',
+        'SAGE','SNOW','SAND','LUSH','CREST','DRIFT','FLAME','GROVE'
+    ];
+
+    ensure_checkin_code_column();
+    $maxAttempts = 20;
+    for ($i = 0; $i < $maxAttempts; $i++) {
+        $word = $words[array_rand($words)];
+        $num  = rand(10, 99);
+        $code = "PLP-{$word}-{$num}";
+
+        $stmt = db()->prepare('SELECT id FROM interview_queue WHERE checkin_code = ? LIMIT 1');
+        $stmt->execute([$code]);
+        if (!$stmt->fetch()) {
+            return $code;
+        }
+    }
+    // Fallback: use timestamp-based code
+    return 'PLP-' . strtoupper(substr(base_convert(time(), 10, 36), -4)) . '-' . rand(10, 99);
 }
 
 // ----------------------------------------------------------------

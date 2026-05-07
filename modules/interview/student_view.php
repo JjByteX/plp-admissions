@@ -37,6 +37,9 @@ $stmt = $db->prepare('SELECT * FROM admission_results WHERE applicant_id=? LIMIT
 $stmt->execute([$applicantId]);
 $_admissionResult = $stmt->fetch() ?: null;
 
+// Ensure checkin_code column exists
+ensure_checkin_code_column();
+
 // ----------------------------------------------------------------
 // Load student's current queue entry (if any)
 // ----------------------------------------------------------------
@@ -319,6 +322,20 @@ ob_start();
                 <span class="badge badge-info" style="margin-left:auto">Scheduled</span>
             </div>
 
+            <?php if (!empty($myEntry['checkin_code'])): ?>
+            <!-- Check-in code -->
+            <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
+                         padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4);text-align:center">
+                <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
+                             color:var(--text-tertiary);margin-bottom:var(--space-2)">Your Check-in Code</div>
+                <div style="font-size:1.75rem;font-weight:var(--weight-semibold);letter-spacing:.08em;
+                             color:var(--accent);font-family:monospace"><?= e($myEntry['checkin_code']) ?></div>
+                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">
+                    Show this code to staff if you can't check in with your phone
+                </div>
+            </div>
+            <?php endif; ?>
+
             <!-- Desk location — visible BEFORE check-in -->
             <?php if ($myEntry['desk_label']): ?>
                 <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
@@ -374,6 +391,20 @@ ob_start();
                 </div>
                 <span class="badge badge-success" style="margin-left:auto">Confirmed</span>
             </div>
+
+            <?php if (!empty($myEntry['checkin_code'])): ?>
+            <!-- Check-in code -->
+            <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
+                         padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4);text-align:center">
+                <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
+                             color:var(--text-tertiary);margin-bottom:var(--space-2)">Your Check-in Code</div>
+                <div style="font-size:1.75rem;font-weight:var(--weight-semibold);letter-spacing:.08em;
+                             color:var(--accent);font-family:monospace"><?= e($myEntry['checkin_code']) ?></div>
+                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">
+                    Show this code to staff if you can't check in with your phone
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- Desk location — show even before interview day -->
             <?php if ($myEntry['desk_label']): ?>

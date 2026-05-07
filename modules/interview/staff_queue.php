@@ -52,6 +52,9 @@ if (!$deskLabel) {
     } catch (\Throwable $e) {}
 }
 
+// Ensure checkin_code column exists
+ensure_checkin_code_column();
+
 // Ensure evaluation_result column exists
 try { $db->query("SELECT evaluation_result FROM interview_queue LIMIT 0"); }
 catch (\Throwable $e) {
@@ -69,6 +72,7 @@ $stmt = $db->prepare(
     'SELECT q.id          AS queue_id,
             q.queue_number,
             q.status,
+            q.checkin_code,
             q.checked_in_at,
             q.interview_notes,
             q.evaluation_result,
@@ -175,6 +179,24 @@ $stats = [
             </div>
         </div>
     <?php endforeach; ?>
+</div>
+
+<!-- ================================================================
+     MANUAL CHECK-IN (code or name)
+================================================================ -->
+<div class="card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-5)">
+    <form method="POST" action="<?= url('/staff/interviews/manual-checkin') ?>"
+          style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap">
+        <?= csrf_field() ?>
+        <div style="flex-shrink:0;display:flex;align-items:center;gap:var(--space-2)">
+            <?= icon('ic_fluent_person_24_regular', 16, 'color:var(--text-tertiary)') ?>
+            <span style="font-size:var(--text-sm);font-weight:var(--weight-medium);white-space:nowrap">Manual Check-in</span>
+        </div>
+        <input type="text" name="checkin_search" class="form-input"
+               placeholder="Enter check-in code (e.g. PLP-STAR-42) or student name"
+               style="flex:1;min-width:200px;min-height:36px;font-size:var(--text-sm)" required>
+        <button type="submit" class="btn btn-primary btn-sm">Check In</button>
+    </form>
 </div>
 
 <!-- ================================================================
@@ -351,6 +373,11 @@ $stats = [
                         <?php if ($entry['course_applied']): ?>
                             <span style="color:var(--text-tertiary);font-size:var(--text-xs)">
                                 · <?= e($entry['course_applied']) ?>
+                            </span>
+                        <?php endif; ?>
+                        <?php if (!empty($entry['checkin_code'])): ?>
+                            <span style="color:var(--accent);font-size:var(--text-xs);font-family:monospace;margin-left:var(--space-2)">
+                                <?= e($entry['checkin_code']) ?>
                             </span>
                         <?php endif; ?>
                     </div>

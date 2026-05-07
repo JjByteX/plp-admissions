@@ -56,6 +56,7 @@ $router->get( '/staff/interviews/desks',        'interview/staff_setup');
 $router->post('/staff/interviews/desks',        'interview/staff_setup');
 $router->get( '/staff/interviews/queue',        'interview/staff_queue');
 $router->post('/staff/interviews/call-next',    'interview/staff_call_next');
+$router->post('/staff/interviews/manual-checkin', 'interview/staff_manual_checkin');
 $router->get( '/staff/interviews/absent',       'interview/staff_absent');
 $router->post('/staff/interviews/absent',       'interview/staff_absent');
 $router->get( '/staff/interviews/{id}/roster',  'interview/staff_slot_view');
