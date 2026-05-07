@@ -132,13 +132,14 @@ $stmt = $db->prepare(
             a.id           AS applicant_id,
             a.course_applied,
             u.name         AS student_name,
+            u.first_name, u.middle_name, u.last_name, u.suffix,
             u.email        AS student_email,
             u.department   AS student_department
        FROM interview_queue q
        JOIN applicants a ON a.id = q.applicant_id
        JOIN users u      ON u.id = a.user_id
       WHERE q.slot_id = ?
-      ORDER BY u.name ASC'
+      ORDER BY u.last_name ASC, u.first_name ASC, u.name ASC'
 );
 $stmt->execute([$slotId]);
 $roster = $stmt->fetchAll();
@@ -228,7 +229,7 @@ ob_start();
                 ?>
                     <tr data-queue-id="<?= (int)$row['queue_id'] ?>" style="border-top:1px solid var(--border);font-size:var(--text-sm)">
                         <td style="padding:var(--space-3) var(--space-4)">
-                            <div style="font-weight:var(--weight-medium)"><?= e($row['student_name']) ?></div>
+                            <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></div>
                             <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
                                 <?= e($row['student_email']) ?>
                             </div>

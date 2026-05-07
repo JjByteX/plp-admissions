@@ -204,9 +204,15 @@ ob_start();
     grid-template-rows: auto 1fr;
     gap: var(--space-4);
     align-items: stretch;
-    min-height: calc(100vh - 140px);
+    min-height: 0;
+    flex: 1;
 }
 .db-grid > .card { display: flex; flex-direction: column; }
+
+/* Make the dashboard fill the .page so the bottom gap matches the
+   left/right gap (var(--space-8) = 32px from .page padding). */
+.page:has(.dashboard-wrap) { display:flex; flex-direction:column; }
+.dashboard-wrap { display:flex; flex-direction:column; flex:1; min-height:0; }
 
 /* KPI cards — 4 equal squares, single accent color */
 .db-kpi-grid {
@@ -270,7 +276,7 @@ ob_start();
 /* Date picker */
 .dp-wrap { position:relative; }
 .dp-menu {
-    display:none; position:absolute; right:0; top:calc(100% + var(--space-1));
+    display:none; position:absolute; left:0; top:calc(100% + var(--space-1));
     min-width:176px; background:var(--bg-elevated); border:1px solid var(--border);
     border-radius:var(--radius-md); box-shadow:var(--shadow-md);
     padding:var(--space-1) 0; z-index:200;
@@ -300,15 +306,22 @@ ob_start();
 }
 </style>
 
-<div>
+<div class="dashboard-wrap">
 
     <!-- ── Header ───────────────────────────────────────────────── -->
     <div class="db-header">
         <div class="db-controls">
 
             <div class="dp-wrap" id="dpWrap">
-                <button class="btn btn-secondary btn-sm" onclick="dpToggle(event)" type="button">
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                <button class="db-pill-btn" onclick="dpToggle(event)" type="button" style="
+                    display:flex;align-items:center;gap:var(--space-2);
+                    height:32px;padding:0 var(--space-3);
+                    border:1px solid var(--border);border-radius:var(--radius-sm);
+                    background:var(--bg-elevated);color:var(--text-secondary);
+                    font-size:var(--text-sm);cursor:pointer;white-space:nowrap;
+                    transition:border-color var(--transition-fast),color var(--transition-fast);
+                ">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                         <rect x="1" y="2.5" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.3"/>
                         <path d="M5 1v3M11 1v3M1 7h14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
                     </svg>
@@ -339,8 +352,15 @@ ob_start();
                 </div>
             </div>
 
-            <a class="btn btn-secondary btn-sm" href="<?= $exportUrl ?>">
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+            <a class="db-pill-btn" href="<?= $exportUrl ?>" style="
+                display:flex;align-items:center;gap:var(--space-2);
+                height:32px;padding:0 var(--space-3);
+                border:1px solid var(--border);border-radius:var(--radius-sm);
+                background:var(--bg-elevated);color:var(--text-secondary);
+                font-size:var(--text-sm);cursor:pointer;white-space:nowrap;text-decoration:none;
+                transition:border-color var(--transition-fast),color var(--transition-fast);
+            ">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <path d="M3 12.5h10M8 1.5v8M5 6.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
                 Export CSV

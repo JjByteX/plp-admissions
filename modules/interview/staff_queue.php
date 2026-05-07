@@ -264,18 +264,9 @@ foreach ($rows as $r) {
     $sessionsToday[$sid] = $r['slot_time'];
 }
 
-// Format name as "SURNAME SUFFIX, FIRST MIDDLE" (matches export look)
+// Format name as "SURNAME SUFFIX, FIRST MIDDLE" (uses shared helper)
 function queue_format_name(array $r): string {
-    $last   = trim($r['last_name']   ?? '');
-    $first  = trim($r['first_name']  ?? '');
-    $middle = trim($r['middle_name'] ?? '');
-    $suffix = trim($r['suffix']      ?? '');
-    if ($last === '' && $first === '') {
-        return trim((string) ($r['student_name'] ?? '—'));
-    }
-    $sur = trim($last . ($suffix !== '' ? ' ' . $suffix : ''));
-    $given = trim($first . ($middle !== '' ? ' ' . $middle[0] . '.' : ''));
-    return $sur . ($given !== '' ? ', ' . $given : '');
+    return format_full_name($r);
 }
 
 // Status badge mapping

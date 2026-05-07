@@ -73,6 +73,7 @@ $result = paginate(
      LEFT JOIN admission_results ar ON ar.applicant_id = a.id
      WHERE $whereStr",
     "SELECT a.*, u.name AS student_name, u.email,
+            u.first_name, u.middle_name, u.last_name, u.suffix,
             ar.result AS admission_result, ar.remarks AS admission_remarks, ar.released_at,
 
             ar.promoted_from_waitlist,
@@ -122,21 +123,19 @@ ob_start();
     <div class="alert alert-info" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 
-<!-- ── Auto Actions ─────────────────────────────── -->
-<div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-4);gap:var(--space-3)">
-    <form method="POST" action="<?= url('/staff/results/auto-release') ?>" style="margin:0">
-        <?= csrf_field() ?>
-        <button type="submit" class="btn btn-sm"
-                onclick="return confirm('Auto-release results for all eligible applicants based on configured score thresholds?\n\nThis will accept, waitlist, or reject applicants who have completed both exam and interview.')">
-            <?= icon('ic_fluent_ribbon_star_24_regular', 14) ?>
-            Auto-Release Results
-        </button>
-    </form>
-</div>
-
 <!-- ============================================================
-     TOP BAR: Tabs (left) + Search (right)
+     TOP BAR: Search + Filter + Auto-Release (LEFT) · Tabs (RIGHT)
 ============================================================ -->
+<?php
+$tabs = [
+    ''           => ['label' => 'All',       'count' => (int)$countRows['total_count']],
+    'pending'    => ['label' => 'Pending',   'count' => (int)$countRows['pending_count']],
+    'accepted'   => ['label' => 'Accepted',  'count' => (int)$countRows['accepted_count']],
+    'waitlisted' => ['label' => 'Waitlisted','count' => (int)$countRows['waitlisted_count']],
+    'rejected'   => ['label' => 'Rejected',  'count' => (int)$countRows['rejected_count']],
+    'withdrawn'  => ['label' => 'Withdrawn', 'count' => (int)$countRows['withdrawn_count']],
+];
+?>
 <div style="
     display:flex;
     align-items:flex-end;
@@ -146,17 +145,112 @@ ob_start();
     border-bottom:1px solid var(--border);
     flex-wrap:wrap;
 ">
-    <!-- Result status tabs -->
+    <!-- LEFT: Search + Filter + Auto-Release -->
+    <div style="display:flex;align-items:center;gap:var(--space-2);padding-bottom:var(--space-1);flex-shrink:0">
+        <form method="GET" style="display:flex;align-items:center;gap:var(--space-2);margin:0">
+            <input type="hidden" name="result"   value="<?= e($filterRes) ?>">
+            <input type="hidden" name="sort_col" value="<?= e($sortCol) ?>">
+            <input type="hidden" name="sort_dir" value="<?= e($sortDir) ?>">
+
+            <!-- Search input -->
+            <div style="position:relative">
+                <?= icon('ic_fluent_search_24_filled', 14, 'position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);pointer-events:none') ?>
+                <input type="text" name="q" value="<?= e($search) ?>" class="form-control"
+                       style="padding:0 var(--space-3) 0 32px;height:32px;min-height:32px;font-size:var(--text-sm);width:220px;border-radius:var(--radius-sm)"
+                       placeholder="Search name, email, course…">
+            </div>
+
+            <!-- Filter dropdown -->
+            <div style="position:relative" id="results-filter-wrapper">
+                <button type="button" id="results-filter-btn" onclick="toggleResultsFilter()" style="
+                    display:flex;align-items:center;gap:var(--space-2);
+                    height:32px;padding:0 var(--space-3);
+                    border:1px solid var(--border);border-radius:var(--radius-sm);
+                    background:var(--bg-elevated);color:var(--text-secondary);
+                    font-size:var(--text-sm);cursor:pointer;white-space:nowrap;
+                    transition:border-color var(--transition-fast),color var(--transition-fast);
+                " aria-haspopup="true" aria-expanded="false">
+                    <?= icon('ic_fluent_filter_24_filled', 14) ?>
+                    Filter
+                    <?php if ($filterRes): ?>
+                        <span style="
+                            display:inline-flex;align-items:center;justify-content:center;
+                            width:16px;height:16px;border-radius:50%;
+                            background:var(--accent);color:var(--accent-text);
+                            font-size:10px;font-weight:var(--weight-semibold);
+                        ">1</span>
+                    <?php endif; ?>
+                </button>
+
+                <div id="results-filter-dropdown" style="
+                    display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:200;
+                    background:var(--bg-elevated);border:1px solid var(--border);
+                    border-radius:var(--radius-md);box-shadow:var(--shadow-md);
+                    min-width:220px;padding:var(--space-3);
+                ">
+                    <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2);padding:0 var(--space-1)">Result Status</div>
+                    <?php foreach ($tabs as $val => $tab):
+                        $isActive = ($filterRes === $val);
+                    ?>
+                    <a href="<?= filterUrl(['result' => $val]) ?>" style="
+                        display:flex;align-items:center;justify-content:space-between;
+                        padding:var(--space-2) var(--space-3);border-radius:var(--radius-sm);
+                        background:<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>;
+                        color:<?= $isActive ? 'var(--accent)' : 'var(--text-secondary)' ?>;
+                        font-size:var(--text-sm);
+                        font-weight:<?= $isActive ? 'var(--weight-semibold)' : 'var(--weight-regular)' ?>;
+                        text-decoration:none;
+                        transition:background var(--transition-fast);
+                    " onmouseover="if(!this.style.background.includes('accent-muted')) this.style.background='var(--bg-overlay)'"
+                       onmouseout="this.style.background='<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>'">
+                        <?= $tab['label'] ?>
+                        <span style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= $tab['count'] ?></span>
+                        <?php if ($isActive): ?>
+                            <?= icon('ic_fluent_checkmark_24_regular', 13) ?>
+                        <?php endif; ?>
+                    </a>
+                    <?php endforeach; ?>
+                    <?php if ($filterRes): ?>
+                        <div style="border-top:1px solid var(--border);margin-top:var(--space-2);padding-top:var(--space-2)">
+                            <a href="<?= filterUrl(['result' => '']) ?>" style="
+                                display:flex;align-items:center;gap:var(--space-2);
+                                padding:var(--space-2) var(--space-3);font-size:var(--text-sm);
+                                color:var(--text-tertiary);border-radius:var(--radius-sm);text-decoration:none;
+                                transition:background var(--transition-fast);
+                            " onmouseover="this.style.background='var(--bg-overlay)'" onmouseout="this.style.background='transparent'">
+                                <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
+                                Clear filter
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <button type="submit" style="display:none" aria-hidden="true"></button>
+        </form>
+
+        <!-- Auto-Release (right of Filter) -->
+        <form method="POST" action="<?= url('/staff/results/auto-release') ?>" style="margin:0">
+            <?= csrf_field() ?>
+            <button type="submit"
+                    onclick="return confirm('Auto-release results for all eligible applicants based on configured score thresholds?\n\nThis will accept, waitlist, or reject applicants who have completed both exam and interview.')"
+                    style="
+                        display:flex;align-items:center;gap:var(--space-2);
+                        height:32px;padding:0 var(--space-3);
+                        border:1px solid var(--border);border-radius:var(--radius-sm);
+                        background:var(--bg-elevated);color:var(--text-secondary);
+                        font-size:var(--text-sm);cursor:pointer;white-space:nowrap;
+                        transition:border-color var(--transition-fast),color var(--transition-fast);
+                    ">
+                <?= icon('ic_fluent_ribbon_star_24_regular', 14) ?>
+                Auto-Release Results
+            </button>
+        </form>
+    </div>
+
+    <!-- RIGHT: Result status tabs -->
     <div style="display:flex;gap:var(--space-1)">
         <?php
-        $tabs = [
-            ''           => ['label' => 'All',       'count' => (int)$countRows['total_count']],
-            'pending'    => ['label' => 'Pending',   'count' => (int)$countRows['pending_count']],
-            'accepted'   => ['label' => 'Accepted',  'count' => (int)$countRows['accepted_count']],
-            'waitlisted' => ['label' => 'Waitlisted','count' => (int)$countRows['waitlisted_count']],
-            'rejected'   => ['label' => 'Rejected',  'count' => (int)$countRows['rejected_count']],
-            'withdrawn'  => ['label' => 'Withdrawn', 'count' => (int)$countRows['withdrawn_count']],
-        ];
         foreach ($tabs as $val => $tab):
             $active = ($filterRes === $val);
         ?>
@@ -175,89 +269,6 @@ ob_start();
             </a>
         <?php endforeach; ?>
     </div>
-
-    <!-- Search + Filter (right) -->
-    <form method="GET" style="display:flex;align-items:center;gap:var(--space-2);padding-bottom:var(--space-1);flex-shrink:0">
-        <input type="hidden" name="result" value="<?= e($filterRes) ?>">
-        <input type="hidden" name="sort_col" value="<?= e($sortCol) ?>">
-        <input type="hidden" name="sort_dir" value="<?= e($sortDir) ?>">
-
-        <!-- Search input -->
-        <div style="position:relative">
-            <?= icon('ic_fluent_search_24_filled', 14, 'position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);pointer-events:none') ?>
-            <input type="text" name="q" value="<?= e($search) ?>" class="form-control"
-                   style="padding:0 var(--space-3) 0 32px;height:32px;min-height:32px;font-size:var(--text-sm);width:220px;border-radius:var(--radius-sm)"
-                   placeholder="Search name, email, course…">
-        </div>
-
-        <!-- Filter dropdown -->
-        <div style="position:relative" id="results-filter-wrapper">
-            <button type="button" id="results-filter-btn" onclick="toggleResultsFilter()" style="
-                display:flex;align-items:center;gap:var(--space-2);
-                height:32px;padding:0 var(--space-3);
-                border:1px solid var(--border);border-radius:var(--radius-sm);
-                background:var(--bg-elevated);color:var(--text-secondary);
-                font-size:var(--text-sm);cursor:pointer;white-space:nowrap;
-                transition:border-color var(--transition-fast),color var(--transition-fast);
-            " aria-haspopup="true" aria-expanded="false">
-                <?= icon('ic_fluent_filter_24_filled', 14) ?>
-                Filter
-                <?php if ($filterRes): ?>
-                    <span style="
-                        display:inline-flex;align-items:center;justify-content:center;
-                        width:16px;height:16px;border-radius:50%;
-                        background:var(--accent);color:var(--accent-text);
-                        font-size:10px;font-weight:var(--weight-semibold);
-                    ">1</span>
-                <?php endif; ?>
-            </button>
-
-            <div id="results-filter-dropdown" style="
-                display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:200;
-                background:var(--bg-elevated);border:1px solid var(--border);
-                border-radius:var(--radius-md);box-shadow:var(--shadow-md);
-                min-width:220px;padding:var(--space-3);
-            ">
-                <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2);padding:0 var(--space-1)">Result Status</div>
-                <?php foreach ($tabs as $val => $tab):
-                    $isActive = ($filterRes === $val);
-                ?>
-                <a href="<?= filterUrl(['result' => $val]) ?>" style="
-                    display:flex;align-items:center;justify-content:space-between;
-                    padding:var(--space-2) var(--space-3);border-radius:var(--radius-sm);
-                    background:<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>;
-                    color:<?= $isActive ? 'var(--accent)' : 'var(--text-secondary)' ?>;
-                    font-size:var(--text-sm);
-                    font-weight:<?= $isActive ? 'var(--weight-semibold)' : 'var(--weight-regular)' ?>;
-                    text-decoration:none;
-                    transition:background var(--transition-fast);
-                " onmouseover="if(!this.style.background.includes('accent-muted')) this.style.background='var(--bg-overlay)'"
-                   onmouseout="this.style.background='<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>'">
-                    <?= $tab['label'] ?>
-                    <span style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= $tab['count'] ?></span>
-                    <?php if ($isActive): ?>
-                        <?= icon('ic_fluent_checkmark_24_regular', 13) ?>
-                    <?php endif; ?>
-                </a>
-                <?php endforeach; ?>
-                <?php if ($filterRes): ?>
-                    <div style="border-top:1px solid var(--border);margin-top:var(--space-2);padding-top:var(--space-2)">
-                        <a href="<?= filterUrl(['result' => '']) ?>" style="
-                            display:flex;align-items:center;gap:var(--space-2);
-                            padding:var(--space-2) var(--space-3);font-size:var(--text-sm);
-                            color:var(--text-tertiary);border-radius:var(--radius-sm);text-decoration:none;
-                            transition:background var(--transition-fast);
-                        " onmouseover="this.style.background='var(--bg-overlay)'" onmouseout="this.style.background='transparent'">
-                            <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
-                            Clear filter
-                        </a>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <button type="submit" style="display:none" aria-hidden="true"></button>
-    </form>
 </div>
 
 <script>
@@ -285,8 +296,15 @@ ob_start();
 })();
 </script>
 
+<style>
+/* Make the table card stretch to fill the .page area so the gap below the
+   card matches the .page horizontal padding (var(--space-8) = 32px). */
+.page:has(.results-table-card) { display:flex; flex-direction:column; }
+.results-table-card { flex:1; min-height:300px; }
+</style>
+
 <!-- ── Results table ──────────────────────────────────────── -->
-<div class="card" style="padding:0;overflow:hidden">
+<div class="card results-table-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
     <table class="table" id="results-table">
         <thead>
             <tr>
@@ -300,13 +318,11 @@ ob_start();
                 <th>Interview</th>
                 <?= results_sortable_th('result',    'Result',      $sortCol, $sortDir, $search, $filterRes) ?>
                 <?= results_sortable_th('released',  'Released',    $sortCol, $sortDir, $search, $filterRes) ?>
-                <th style="width:100px"></th>
+                <th style="width:100px">Actions</th>
             </tr>
         </thead>
         <tbody>
-        <?php if (empty($result['data'])): ?>
-            <tr><td colspan="9" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No applicants found.</td></tr>
-        <?php else: ?>
+        <?php if (!empty($result['data'])): ?>
             <?php foreach ($result['data'] as $row):
                 $pct = null;
                 if ($row['exam_score'] !== null && (int)$row['exam_total'] > 0) {
@@ -323,7 +339,7 @@ ob_start();
                         <?php endif; ?>
                     </td>
                     <td>
-                        <div style="font-weight:var(--weight-medium)"><?= e($row['student_name']) ?></div>
+                        <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></div>
                         <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
                         <div style="margin-top:2px">
                             <span class="badge badge-<?= $row['overall_status'] ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span>
@@ -332,59 +348,12 @@ ob_start();
 
                     <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>
 
-                    <!-- Exam score -->
-                    <td>
+                    <!-- Exam score (just X/Y) -->
+                    <td style="font-size:var(--text-sm)">
                         <?php if ($row['exam_score'] !== null): ?>
-                            <?php
-                                $rank     = $row['exam_rank'] > 0 ? (int)$row['exam_rank']
-                                            : score_to_rank((int)$row['exam_score'], (int)($row['exam_total'] ?: 1));
-                                $tierInfo = rank_tier_info($rank);
-                                $passed   = $row['exam_passed'] !== null
-                                            ? (bool)$row['exam_passed']
-                                            : exam_passed((int)$row['exam_score'], (int)($row['exam_total'] ?: 1), $row['course_applied']);
-                            ?>
-                            <div style="display:flex;align-items:center;gap:var(--space-2)">
-                                <div style="width:32px;height:32px;border-radius:50%;
-                                            background:<?= $tierInfo['bg'] ?>;
-                                            border:2px solid <?= $tierInfo['color'] ?>;
-                                            display:flex;align-items:center;justify-content:center;
-                                            font-weight:var(--weight-semibold);font-size:var(--text-sm);
-                                            color:<?= $tierInfo['color'] ?>;flex-shrink:0">
-                                    <?= $rank ?>
-                                </div>
-                                <div>
-                                    <div style="font-size:var(--text-xs);font-weight:var(--weight-medium)">
-                                        <?= (int)$row['exam_score'] ?>/<?= (int)$row['exam_total'] ?>
-                                        <span style="color:var(--text-tertiary)">(<?= $pct ?>%)</span>
-                                    </div>
-                                    <div style="display:flex;align-items:center;gap:4px;margin-top:2px">
-                                        <span style="font-size:10px;font-weight:var(--weight-semibold);color:<?= $tierInfo['color'] ?>"><?= $tierInfo['label'] ?></span>
-                                        <span style="font-size:10px;color:var(--text-tertiary)">·</span>
-                                        <?php if ($passed): ?>
-                                            <span style="font-size:10px;color:var(--success);font-weight:var(--weight-semibold)"><?= icon('ic_fluent_checkmark_24_regular', 10) ?> Passed</span>
-                                        <?php else: ?>
-                                            <span style="font-size:10px;color:var(--error);font-weight:var(--weight-semibold)"><?= icon('ic_fluent_dismiss_24_regular', 10) ?> Failed</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                            <?php if (!$passed && $row['overall_status'] !== 'withdrawn'): ?>
-                                <?php $alts = suggest_alt_courses((int)$row['exam_score'], (int)($row['exam_total'] ?: 1), $row['course_applied']); ?>
-                                <?php if (!empty($alts)): ?>
-                                <button class="btn btn-ghost btn-sm" style="margin-top:var(--space-1);font-size:10px;padding:2px 8px;color:var(--warning)"
-                                        onclick="openSuggestModal(
-                                            <?= $row['id'] ?>,
-                                            <?= htmlspecialchars(json_encode($row['student_name']), ENT_QUOTES) ?>,
-                                            <?= htmlspecialchars(json_encode($alts), ENT_QUOTES) ?>,
-                                            <?= $rank ?>)">
-                                    💡 Suggest course
-                                </button>
-                                <?php else: ?>
-                                <div style="font-size:10px;color:var(--text-tertiary);margin-top:4px">No alt. courses available</div>
-                                <?php endif; ?>
-                            <?php endif; ?>
+                            <?= (int)$row['exam_score'] ?>/<?= (int)$row['exam_total'] ?>
                         <?php else: ?>
-                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">—</span>
+                            <span style="color:var(--text-tertiary)">—</span>
                         <?php endif; ?>
                     </td>
 
@@ -483,6 +452,17 @@ ob_start();
         <?php endif; ?>
         </tbody>
     </table>
+
+    <?php if (empty($result['data'])): ?>
+        <!-- Empty state — fills remaining card height, centered both axes, no hover -->
+        <div class="empty-state" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-3);color:var(--text-tertiary);padding:var(--space-8)">
+            <?= icon('ic_fluent_clipboard_24_regular', 32) ?>
+            <div>No applicants found.</div>
+        </div>
+    <?php else: ?>
+        <!-- Filler below the last row so the empty space inherits a top divider line -->
+        <div style="flex:1;border-top:1px solid var(--border)"></div>
+    <?php endif; ?>
 </div>
 
 <!-- Pagination -->

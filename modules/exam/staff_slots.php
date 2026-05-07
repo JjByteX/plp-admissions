@@ -278,12 +278,13 @@ if ($slots) {
     $in = implode(',', array_fill(0, count($slotIds), '?'));
     $stmt = $db->prepare(
         "SELECT aes.slot_id, aes.applicant_id, aes.assigned_at,
-                u.name AS student_name, a.course_applied, a.applicant_type
+                u.name AS student_name, a.course_applied, a.applicant_type,
+                u.first_name, u.middle_name, u.last_name, u.suffix
            FROM applicant_exam_slots aes
            JOIN applicants a ON a.id = aes.applicant_id
            JOIN users u      ON u.id = a.user_id
           WHERE aes.slot_id IN ({$in})
-          ORDER BY u.name ASC"
+          ORDER BY u.last_name ASC, u.first_name ASC, u.name ASC"
     );
     $stmt->execute($slotIds);
     foreach ($stmt->fetchAll() as $r) {
@@ -295,7 +296,8 @@ if ($slots) {
 // FCFS: order by documents_approved_at (oldest first), then by id
 $stmt = $db->prepare(
     "SELECT a.id, a.course_applied, a.applicant_type, a.documents_approved_at,
-            u.name AS student_name
+            u.name AS student_name,
+            u.first_name, u.middle_name, u.last_name, u.suffix
        FROM applicants a
        JOIN users u ON u.id = a.user_id
   LEFT JOIN applicant_exam_slots aes ON aes.applicant_id = a.id
@@ -440,7 +442,7 @@ ob_start();
                             <?php foreach ($roster as $r): ?>
                                 <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-1) 0;border-bottom:1px solid var(--border)">
                                     <div style="font-size:var(--text-sm)">
-                                        <strong><?= e($r['student_name']) ?></strong>
+                                        <strong><?= e(format_full_name($r)) ?></strong>
                                         <span style="color:var(--text-tertiary);margin-left:var(--space-2)"><?= e($r['course_applied']) ?></span>
                                     </div>
                                     <?php if (!$isPast): ?>
@@ -500,7 +502,7 @@ ob_start();
                 $applicantDept = course_to_department($u['course_applied']);
             ?>
                 <tr>
-                    <td><?= e($u['student_name']) ?></td>
+                    <td><?= e(format_full_name($u)) ?></td>
                     <td style="font-size:var(--text-sm)"><?= e($u['course_applied']) ?></td>
                     <td style="font-size:var(--text-xs)"><?= e($applicantDept ?: '—') ?></td>
                     <td><span class="badge badge-neutral"><?= e(ucfirst($u['applicant_type'])) ?></span></td>

@@ -231,6 +231,35 @@ function format_time(string $time): string
     return date('g:i A', strtotime($time));
 }
 
+/**
+ * Format a person's full name as "LAST_NAME SUFFIX, FIRST_NAME MIDDLE_NAME".
+ *
+ * Accepts a row that contains any combination of `first_name`, `middle_name`,
+ * `last_name`, `suffix`, plus optional fallbacks `name` / `student_name`.
+ * If the split-name fields are empty, falls back to the legacy combined name.
+ */
+function format_full_name(array $row, string $fallback = '—'): string
+{
+    $first  = trim((string) ($row['first_name']  ?? ''));
+    $middle = trim((string) ($row['middle_name'] ?? ''));
+    $last   = trim((string) ($row['last_name']   ?? ''));
+    $suffix = trim((string) ($row['suffix']      ?? ''));
+
+    // Fall back to the legacy combined name when split parts are missing.
+    if ($first === '' && $last === '') {
+        $legacy = trim((string) ($row['name'] ?? $row['student_name'] ?? ''));
+        return $legacy !== '' ? $legacy : $fallback;
+    }
+
+    $left  = trim($last  . ($suffix !== '' ? ' ' . $suffix : ''));
+    $right = trim($first . ($middle !== '' ? ' ' . $middle : ''));
+
+    if ($left === '')  return $right !== '' ? $right : $fallback;
+    if ($right === '') return $left;
+
+    return $left . ', ' . $right;
+}
+
 // -- Applicant progress -----------------------------------------
 // Returns which step is 'current' for a given applicant row
 function current_step(array $applicant, ?array $examResult, ?array $interviewSlot, ?array $admissionResult): string

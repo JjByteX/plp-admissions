@@ -80,6 +80,7 @@ $absent = $db->query(
             s.department     AS missed_department,
             a.course_applied,
             u.name           AS student_name,
+            u.first_name, u.middle_name, u.last_name, u.suffix,
             u.email          AS student_email,
             u.department     AS student_department
        FROM interview_queue q
@@ -188,7 +189,7 @@ ob_start();
                                    class="js-select-row">
                         </td>
                         <td style="padding:var(--space-3) var(--space-4)">
-                            <div style="font-weight:var(--weight-medium)"><?= e($row['student_name']) ?></div>
+                            <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></div>
                             <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
                                 <?= e($row['student_email']) ?>
                             </div>

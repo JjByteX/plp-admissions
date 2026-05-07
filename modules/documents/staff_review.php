@@ -132,7 +132,8 @@ $applicantId = (int)($_GET['id'] ?? 0);
 if ($applicantId) {
     // ---- Single applicant document review ----
     $stmt = $db->prepare(
-        'SELECT a.*, u.name AS student_name, u.email
+        'SELECT a.*, u.name AS student_name, u.email,
+                u.first_name, u.middle_name, u.last_name, u.suffix
          FROM applicants a JOIN users u ON u.id = a.user_id
          WHERE a.id = ?'
     );
@@ -1018,8 +1019,8 @@ async function startAiValidateAll() {
 
 <?php
     $content   = ob_get_clean();
-    $pageTitle = 'Review: ' . $applicant['student_name'];
-    $activeNav = 'applicants';
+    $pageTitle = 'Review: ' . format_full_name($applicant);
+    $activeNav = 'documents';
     include VIEWS_PATH . '/layouts/app.php';
     return;
 }
@@ -1027,9 +1028,11 @@ async function startAiValidateAll() {
 // ----------------------------------------------------------------
 // List all applicants with filters
 // ----------------------------------------------------------------
-// Default to 'pending' tab when no filter is set
-$statusFilter = $_GET['status'] ?? (empty($_GET) ? 'pending' : '');
+// Page is dedicated to document review — always filter to applicants whose
+// overall_status is 'documents'. (No tab bar; this is a single-purpose view.)
+$statusFilter = 'documents';
 $typeFilter   = $_GET['type']   ?? '';
+$courseFilter = $_GET['course'] ?? '';
 $search       = trim($_GET['q'] ?? '');
 $sortCol      = $_GET['sort_col'] ?? 'applied';
 $sortDir      = strtolower($_GET['sort_dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
@@ -1044,6 +1047,10 @@ if ($statusFilter) {
 if ($typeFilter) {
     $where[]         = 'a.applicant_type = :atype';
     $params[':atype'] = $typeFilter;
+}
+if ($courseFilter) {
+    $where[]           = 'a.course_applied = :course';
+    $params[':course'] = $courseFilter;
 }
 if ($search) {
     $where[]       = '(u.name LIKE :q OR u.email LIKE :q OR a.course_applied LIKE :q)';
@@ -1067,19 +1074,12 @@ $result = paginate(
     $db,
     "SELECT COUNT(*) FROM applicants a JOIN users u ON u.id=a.user_id WHERE $whereStr",
     "SELECT a.*, u.name AS student_name, u.email,
+            u.first_name, u.middle_name, u.last_name, u.suffix,
             (SELECT COUNT(*) FROM documents d WHERE d.applicant_id=a.id AND d.status='uploaded') as pending_review
      FROM applicants a JOIN users u ON u.id=a.user_id
      WHERE $whereStr ORDER BY $orderBy",
     $params, $page, 25
 );
-
-// Counts for filter tabs
-$counts = [];
-foreach (['pending','documents','exam','interview','released'] as $s) {
-    $c = $db->prepare('SELECT COUNT(*) FROM applicants WHERE overall_status=?');
-    $c->execute([$s]);
-    $counts[$s] = (int)$c->fetchColumn();
-}
 
 // Count applicants with docs pending review (for Approve All button)
 $pendingReviewCount = (int)$db->query(
@@ -1089,6 +1089,10 @@ $pendingReviewCount = (int)$db->query(
       WHERE d.status IN ("uploaded","under_review")
         AND a.overall_status IN ("submitted","documents")'
 )->fetchColumn();
+
+// Course list for the Course filter — merged PLP + admin custom courses.
+$courseList = get_all_courses();
+sort($courseList, SORT_NATURAL | SORT_FLAG_CASE);
 
 ob_start();
 ?>
@@ -1101,60 +1105,34 @@ ob_start();
 <?php endif; ?>
 
 <!-- ============================================================
-     TOP BAR: Tabs (left) + Search & Filter (right)
+     TOP BAR: Search + Filter (left)  ·  Approve All (right)
 ============================================================ -->
+<?php
+$docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $courseFilter, $search, $sortCol, $sortDir): string {
+    $base = [
+        'status'   => $statusFilter,
+        'type'     => $typeFilter,
+        'course'   => $courseFilter,
+        'q'        => $search,
+        'sort_col' => $sortCol,
+        'sort_dir' => $sortDir,
+    ];
+    return '?' . http_build_query(array_merge($base, $merge));
+};
+?>
 <div style="
     display:flex;
-    align-items:flex-end;
+    align-items:center;
     justify-content:space-between;
     gap:var(--space-4);
     margin-bottom:var(--space-5);
-    border-bottom:1px solid var(--border);
     flex-wrap:wrap;
 ">
-    <!-- Filter tabs -->
-    <div style="display:flex;gap:var(--space-1)">
-        <?php
-        $tabs = ['' => 'All'] + array_map('ucfirst', array_combine(
-            ['pending','documents','exam','interview','released'],
-            ['pending','documents','exam','interview','released']
-        ));
-        foreach ($tabs as $val => $lbl):
-            $active = ($statusFilter === $val);
-            $cnt    = $val ? ($counts[$val] ?? 0) : array_sum($counts);
-        ?>
-            <a href="?status=<?= urlencode($val) ?>&type=<?= urlencode($typeFilter) ?>&q=<?= urlencode($search) ?>&sort_col=<?= urlencode($sortCol) ?>&sort_dir=<?= urlencode($sortDir) ?>"
-               style="
-                   padding:var(--space-2) var(--space-4);
-                   border-bottom:2px solid <?= $active ? 'var(--accent)' : 'transparent' ?>;
-                   color:<?= $active ? 'var(--accent)' : 'var(--text-secondary)' ?>;
-                   font-size:var(--text-sm);
-                   font-weight:<?= $active ? 'var(--weight-semibold)' : 'var(--weight-regular)' ?>;
-                   white-space:nowrap;text-decoration:none;margin-bottom:-1px;
-                   transition:color var(--transition-fast);
-               ">
-                <?= e(ucfirst(str_replace('_',' ',$lbl))) ?>
-                <span style="margin-left:4px;font-size:var(--text-xs);color:var(--text-tertiary)"><?= $cnt ?></span>
-            </a>
-        <?php endforeach; ?>
-    </div>
-
-    <!-- Approve All + Search + Filter (right, vertically aligned with tabs) -->
-    <div style="display:flex;align-items:center;gap:var(--space-2);padding-bottom:var(--space-1);flex-shrink:0">
-    <?php if ($pendingReviewCount > 0): ?>
-        <form method="POST" style="margin:0"
-              onsubmit="return confirm('Approve all documents for <?= $pendingReviewCount ?> applicant(s) in review? This will advance them to the exam stage.')">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="approve_all_in_review">
-            <button type="submit" class="btn btn-success btn-sm" style="display:flex;align-items:center;gap:5px;white-space:nowrap">
-                <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
-                Approve All in Review (<?= $pendingReviewCount ?>)
-            </button>
-        </form>
-    <?php endif; ?>
+    <!-- Search + Filter (LEFT) -->
     <form method="GET" style="display:flex;align-items:center;gap:var(--space-2);flex-shrink:0">
-        <input type="hidden" name="status" value="<?= e($statusFilter) ?>">
-        <input type="hidden" name="type" value="<?= e($typeFilter) ?>">
+        <input type="hidden" name="status"   value="<?= e($statusFilter) ?>">
+        <input type="hidden" name="type"     value="<?= e($typeFilter) ?>">
+        <input type="hidden" name="course"   value="<?= e($courseFilter) ?>">
         <input type="hidden" name="sort_col" value="<?= e($sortCol) ?>">
         <input type="hidden" name="sort_dir" value="<?= e($sortDir) ?>">
 
@@ -1167,7 +1145,7 @@ ob_start();
         </div>
 
         <!-- Filter dropdown -->
-        <?php $activeFilterCount = ($typeFilter ? 1 : 0) + ($search ? 1 : 0); ?>
+        <?php $activeFilterCount = ($typeFilter ? 1 : 0) + ($courseFilter ? 1 : 0) + ($search ? 1 : 0); ?>
         <div style="position:relative" id="filter-dropdown-wrapper">
             <button type="button" id="filter-toggle-btn" onclick="toggleFilterDropdown()" style="
                 display:flex;align-items:center;gap:var(--space-2);
@@ -1190,10 +1168,10 @@ ob_start();
             </button>
 
             <div id="filter-dropdown" style="
-                display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:200;
+                display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:200;
                 background:var(--bg-elevated);border:1px solid var(--border);
                 border-radius:var(--radius-md);box-shadow:var(--shadow-md);
-                min-width:240px;padding:var(--space-3);
+                min-width:260px;max-height:480px;overflow-y:auto;padding:var(--space-3);
             ">
                 <!-- Applicant Type -->
                 <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2);padding:0 var(--space-1)">Applicant Type</div>
@@ -1207,7 +1185,7 @@ ob_start();
                 foreach ($typeOptions as $val => $label):
                     $isActive = ($typeFilter === $val);
                 ?>
-                <a href="?type=<?= urlencode($val) ?>&status=<?= urlencode($statusFilter) ?>&q=<?= urlencode($search) ?>&sort_col=<?= urlencode($sortCol) ?>&sort_dir=<?= urlencode($sortDir) ?>" style="
+                <a href="<?= e($docFilterUrl(['type' => $val, 'page' => 1])) ?>" style="
                     display:flex;align-items:center;justify-content:space-between;
                     width:100%;padding:var(--space-2) var(--space-3);
                     border-radius:var(--radius-sm);
@@ -1226,9 +1204,36 @@ ob_start();
                 </a>
                 <?php endforeach; ?>
 
-                <?php if ($typeFilter || $search): ?>
+                <!-- Course -->
+                <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin:var(--space-3) 0 var(--space-2);padding:0 var(--space-1)">Course</div>
+                <?php
+                $courseOpts = array_merge([''], $courseList);
+                foreach ($courseOpts as $val):
+                    $isActive = ($courseFilter === $val);
+                    $label    = $val === '' ? 'All Courses' : $val;
+                ?>
+                <a href="<?= e($docFilterUrl(['course' => $val, 'page' => 1])) ?>" style="
+                    display:flex;align-items:center;justify-content:space-between;
+                    width:100%;padding:var(--space-2) var(--space-3);
+                    border-radius:var(--radius-sm);
+                    background:<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>;
+                    color:<?= $isActive ? 'var(--accent)' : 'var(--text-secondary)' ?>;
+                    font-size:var(--text-sm);
+                    font-weight:<?= $isActive ? 'var(--weight-semibold)' : 'var(--weight-regular)' ?>;
+                    text-decoration:none;
+                    transition:background var(--transition-fast);
+                " onmouseover="this.style.background='var(--bg-overlay)'"
+                   onmouseout="this.style.background='<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>'">
+                    <?= e($label) ?>
+                    <?php if ($isActive): ?>
+                        <?= icon('ic_fluent_checkmark_24_regular', 13) ?>
+                    <?php endif; ?>
+                </a>
+                <?php endforeach; ?>
+
+                <?php if ($typeFilter || $courseFilter || $search): ?>
                     <div style="border-top:1px solid var(--border);margin-top:var(--space-2);padding-top:var(--space-2)">
-                        <a href="?status=<?= urlencode($statusFilter) ?>&sort_col=<?= urlencode($sortCol) ?>&sort_dir=<?= urlencode($sortDir) ?>" style="
+                        <a href="<?= e($docFilterUrl(['type' => '', 'course' => '', 'q' => '', 'page' => 1])) ?>" style="
                             display:flex;align-items:center;gap:var(--space-2);
                             padding:var(--space-2) var(--space-3);font-size:var(--text-sm);
                             color:var(--text-tertiary);border-radius:var(--radius-sm);text-decoration:none;
@@ -1244,6 +1249,20 @@ ob_start();
 
         <button type="submit" style="display:none" aria-hidden="true"></button>
     </form>
+
+    <!-- Approve All (RIGHT) -->
+    <div style="display:flex;align-items:center;gap:var(--space-2);flex-shrink:0">
+    <?php if ($pendingReviewCount > 0): ?>
+        <form method="POST" style="margin:0"
+              onsubmit="return confirm('Approve all documents for <?= $pendingReviewCount ?> applicant(s) in review? This will advance them to the exam stage.')">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="approve_all_in_review">
+            <button type="submit" class="btn btn-success btn-sm" style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+                <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
+                Approve All in Review (<?= $pendingReviewCount ?>)
+            </button>
+        </form>
+    <?php endif; ?>
     </div>
 </div>
 
@@ -1268,8 +1287,15 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
 }
 ?>
 
+<style>
+/* Make the table card stretch to fill the .page area so the gap below the
+   card matches the .page horizontal padding (var(--space-8) = 32px). */
+.page:has(.applicants-table-card) { display:flex; flex-direction:column; }
+.applicants-table-card { flex:1; min-height:300px; }
+</style>
+
 <!-- Table -->
-<div class="card" style="padding:0;overflow:hidden">
+<div class="card applicants-table-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
     <table class="table" id="applicants-table">
         <thead>
             <tr>
@@ -1283,13 +1309,11 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
                 <?= sortable_th('status',       'Status',       $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
                 <?= sortable_th('docs_pending', 'Docs Pending', $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
                 <?= sortable_th('applied',      'Applied',      $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
-                <th style="width:80px"></th>
+                <th style="width:80px">Actions</th>
             </tr>
         </thead>
         <tbody>
-        <?php if (empty($result['data'])): ?>
-            <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No applicants found.</td></tr>
-        <?php else: ?>
+        <?php if (!empty($result['data'])): ?>
             <?php foreach ($result['data'] as $row):
                 $hasPending = (int)$row['pending_review'] > 0;
             ?>
@@ -1300,7 +1324,7 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
                                style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
                     </td>
                     <td>
-                        <div style="font-weight:var(--weight-medium)"><?= e($row['student_name']) ?></div>
+                        <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></div>
                         <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
                     </td>
                     <td><span class="badge badge-neutral"><?= e(ucfirst($row['applicant_type'])) ?></span></td>
@@ -1322,6 +1346,17 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
         <?php endif; ?>
         </tbody>
     </table>
+
+    <?php if (empty($result['data'])): ?>
+        <!-- Empty state — fills remaining card height, centered both axes, no hover -->
+        <div class="empty-state" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-3);color:var(--text-tertiary);padding:var(--space-8)">
+            <?= icon('ic_fluent_people_24_regular', 32) ?>
+            <div>No applicants found.</div>
+        </div>
+    <?php else: ?>
+        <!-- Filler below the last row so the empty space inherits a top divider line -->
+        <div style="flex:1;border-top:1px solid var(--border)"></div>
+    <?php endif; ?>
 </div>
 
 <!-- Pagination -->
@@ -1573,7 +1608,7 @@ document.addEventListener('click', function(e) {
 
 <?php
 $content   = ob_get_clean();
-$pageTitle = 'Applicants';
-$activeNav = 'applicants';
+$pageTitle = 'Documents';
+$activeNav = 'documents';
 $pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

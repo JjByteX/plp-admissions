@@ -13,7 +13,7 @@ $_navIntReady  = (int)$_navDb->query("SELECT COUNT(*) FROM interview_slots WHERE
 
 $items = [
     ['href' => '/staff/dashboard',   'key' => 'dashboard',   'label' => 'Dashboard',      'icon' => 'ic_fluent_home_24_regular'],
-    ['href' => '/staff/applicants',  'key' => 'applicants',  'label' => 'Applicants',     'icon' => 'ic_fluent_people_24_regular'],
+    ['href' => '/staff/applicants',  'key' => 'documents',   'label' => 'Documents',      'icon' => 'ic_fluent_document_24_regular'],
     ['href' => '/staff/exam',        'key' => 'exam',        'label' => 'Exams',          'icon' => 'ic_fluent_edit_24_regular',      'alert' => !$_navExamReady],
     ['href' => '/staff/interviews',  'key' => 'interviews',  'label' => 'Interviews',     'icon' => 'ic_fluent_calendar_ltr_24_regular', 'alert' => !$_navIntReady],
     ['href' => '/staff/results',     'key' => 'results',     'label' => 'Results',        'icon' => 'ic_fluent_ribbon_star_24_regular'],
