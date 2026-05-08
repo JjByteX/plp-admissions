@@ -1,43 +1,18 @@
 <?php
 // ============================================================
 // modules/results/staff_auto_waitlist.php
-// M6 — Auto-waitlist all pending applicants with rank score < 4 (Low tier)
+// DEPRECATED — Waitlist tier was retired in the role redesign.
+// Results are now Accept-only or Reject-only; the auto-waitlist
+// button has been removed from the Results page UI.
+// This stub remains so any cached form posts to the old route
+// don't 404 — they just redirect with a friendly notice.
 // ============================================================
+
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 csrf_check();
 
-$db      = db();
-$staffId = Auth::id();
-
-$rows = $db->query(
-    "SELECT a.id
-     FROM applicants a
-     JOIN exam_results er ON er.applicant_id = a.id
-     LEFT JOIN admission_results ar ON ar.applicant_id = a.id
-     WHERE a.overall_status IN ('result','released','exam','interview')
-       AND ar.result IS NULL
-       AND (er.rank_score IS NULL OR er.rank_score < 4)"
-)->fetchAll(PDO::FETCH_COLUMN);
-
-if (empty($rows)) {
-    Session::flash('success', 'No pending low-scoring applicants found.');
-    redirect('/staff/results');
-}
-
-$upsert = $db->prepare(
-    "INSERT INTO admission_results (applicant_id, result, released_by, released_at)
-     VALUES (?, 'waitlisted', ?, NOW())
-     ON DUPLICATE KEY UPDATE result='waitlisted',
-                             released_by=VALUES(released_by), released_at=NOW()"
-);
-$upStatus = $db->prepare('UPDATE applicants SET overall_status="released" WHERE id=?');
-
-foreach ($rows as $aid) {
-    $upsert->execute([$aid, $staffId]);
-    $upStatus->execute([$aid]);
-    audit_log('admission_result', "Auto-waitlisted applicant {$aid} (rank score < 4 / Low tier)", 'applicant', $aid);
-}
-
-Session::flash('success', count($rows) . ' applicant(s) automatically set to Waitlisted.');
+Session::flash('info',
+    'Auto-Waitlist has been removed. Results are now Accept or Reject only — '
+    . 'use Auto-Release Results instead.');
 redirect('/staff/results');

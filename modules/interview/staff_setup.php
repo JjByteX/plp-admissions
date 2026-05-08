@@ -14,11 +14,17 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 
 $db      = db();
 $staffId = Auth::id();
-$isAdmin = Auth::role() === ROLE_ADMIN;
+$role    = Auth::role();
+$isAdmin = $role === ROLE_ADMIN;
+$isSSO   = $role === ROLE_SSO;
+// SSO and Admin both manage interview sessions across colleges; the
+// requireRole gate above only lets these two roles through, so they
+// should behave identically here.
+$canManage = $isAdmin || $isSSO;
 $errors  = [];
 
 // ── Graceful schema upgrade: ensure new columns exist on interview_slots ──
@@ -70,8 +76,10 @@ if ($legacyDesk > 0 && !$college) {
     } catch (\Throwable $e) {}
 }
 
-// Staff without admin role: skip college selector, go to their own college
-if (!$isAdmin && !$college) {
+// Users who can't manage across colleges (none reach this page today
+// thanks to requireRole, but keep the guard for forward-compat) are
+// dropped straight into their own college's session list.
+if (!$canManage && !$college) {
     $college = $staffDept;
 }
 
@@ -82,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ─── Add Session ──────────────────────────────────────
     if ($action === 'add_session' || $action === 'create_slot') {
-        $dept       = $isAdmin ? trim($_POST['department'] ?? $college) : $staffDept;
+        $dept       = $canManage ? trim($_POST['department'] ?? $college) : $staffDept;
         $assignedTo = (int)($_POST['assigned_to'] ?? 0);
         $label      = trim($_POST['location_label'] ?? '');
         $notes      = trim($_POST['location_notes'] ?? '');
@@ -208,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ─── Batch Create Sessions ────────────────────────────
     if ($action === 'batch_create') {
-        $dept       = $isAdmin ? trim($_POST['department'] ?? $college) : $staffDept;
+        $dept       = $canManage ? trim($_POST['department'] ?? $college) : $staffDept;
         $assignedTo = (int)($_POST['assigned_to']     ?? 0);
         $label      = trim($_POST['location_label']   ?? '');
         $notes      = trim($_POST['location_notes']   ?? '');

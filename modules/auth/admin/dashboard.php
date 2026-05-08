@@ -4,10 +4,15 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 $pdo        = db();
 $schoolYear = school_setting('current_school_year');
+
+// ── Dean dept scope ───────────────────────────────────────────────
+// Dean sees only applicants whose course maps to their own college.
+// Admin / SSO see everything (filter is empty string + empty params).
+[$deptFilter, $deptParams] = viewer_course_filter('a');
 
 // ── Date range ────────────────────────────────────────────────────
 $validRanges = ['today','yesterday','this-week','last-week','this-month','last-month','this-year','last-year','custom'];
@@ -61,10 +66,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         FROM applicants a
         JOIN  users u              ON u.id = a.user_id
         LEFT JOIN admission_results ar ON ar.applicant_id = a.id
-        WHERE a.school_year = ? $dateFilter
+        WHERE a.school_year = ? $dateFilter $deptFilter
         ORDER BY a.created_at DESC
     ");
-    $csvStmt->execute(array_merge([$schoolYear], $dateExtra));
+    $csvStmt->execute(array_merge([$schoolYear], $dateExtra, $deptParams));
     $rows = $csvStmt->fetchAll(PDO::FETCH_ASSOC);
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="plp-admissions-' . $schoolYear . '.csv"');
@@ -85,9 +90,9 @@ $statsStmt = $pdo->prepare("
         SUM(a.overall_status = 'released')    AS released
     FROM applicants a
     LEFT JOIN admission_results ar ON ar.applicant_id = a.id
-    WHERE a.school_year = ? $dateFilter
+    WHERE a.school_year = ? $dateFilter $deptFilter
 ");
-$statsStmt->execute(array_merge([$schoolYear], $dateExtra));
+$statsStmt->execute(array_merge([$schoolYear], $dateExtra, $deptParams));
 $t = $statsStmt->fetch(PDO::FETCH_ASSOC);
 
 $total         = (int)$t['total'];
@@ -104,10 +109,10 @@ $completionPct = $total > 0    ? round($released   / $total    * 100)    : 0;
 $pipelineStmt = $pdo->prepare("
     SELECT overall_status, COUNT(*) AS cnt
     FROM applicants a
-    WHERE a.school_year = ? $dateFilter
+    WHERE a.school_year = ? $dateFilter $deptFilter
     GROUP BY overall_status
 ");
-$pipelineStmt->execute(array_merge([$schoolYear], $dateExtra));
+$pipelineStmt->execute(array_merge([$schoolYear], $dateExtra, $deptParams));
 $pipelineMap    = array_column($pipelineStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'overall_status');
 $pipelineOrder  = ['pending','documents','exam','interview','released'];
 $pipelineLabels = ['Pending','Documents','Exam','Interview','Released'];
@@ -117,12 +122,16 @@ $pipelineData   = array_map(fn($s) => (int)($pipelineMap[$s] ?? 0), $pipelineOrd
 $courseCountsStmt = $pdo->prepare("
     SELECT a.course_applied AS label, COUNT(*) AS cnt
     FROM applicants a
-    WHERE a.school_year = ? $dateFilter
+    WHERE a.school_year = ? $dateFilter $deptFilter
     GROUP BY a.course_applied
 ");
-$courseCountsStmt->execute(array_merge([$schoolYear], $dateExtra));
+$courseCountsStmt->execute(array_merge([$schoolYear], $dateExtra, $deptParams));
 $courseCountsMap = array_column($courseCountsStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'label');
 
+// Show every PLP course on the chart's x-axis regardless of role —
+// Dean still gets dept-scoped counts (zeros for other colleges' courses)
+// from the dept-filtered query above, but the chart context stays
+// complete so they can see the full catalog at a glance.
 $courseLabels = PLP_COURSES;
 $courseData   = array_map(fn($c) => (int)($courseCountsMap[$c] ?? 0), $courseLabels);
 
@@ -130,11 +139,11 @@ $courseData   = array_map(fn($c) => (int)($courseCountsMap[$c] ?? 0), $courseLab
 $strandCountsStmt = $pdo->prepare("
     SELECT a.shs_strand AS label, COUNT(*) AS cnt
     FROM applicants a
-    WHERE a.school_year = ? $dateFilter
+    WHERE a.school_year = ? $dateFilter $deptFilter
       AND a.shs_strand IS NOT NULL AND a.shs_strand != ''
     GROUP BY a.shs_strand
 ");
-$strandCountsStmt->execute(array_merge([$schoolYear], $dateExtra));
+$strandCountsStmt->execute(array_merge([$schoolYear], $dateExtra, $deptParams));
 $strandCountsMap = array_column($strandCountsStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'label');
 
 // Use full labels from config; keys are the DB values
@@ -149,10 +158,10 @@ foreach (SHS_STRANDS as $key => $label) {
 $sexStmt = $pdo->prepare("
     SELECT u.sex, COUNT(*) AS cnt
     FROM applicants a JOIN users u ON u.id = a.user_id
-    WHERE a.school_year = ? $dateFilter AND u.sex IN ('M','F')
+    WHERE a.school_year = ? $dateFilter $deptFilter AND u.sex IN ('M','F')
     GROUP BY u.sex
 ");
-$sexStmt->execute(array_merge([$schoolYear], $dateExtra));
+$sexStmt->execute(array_merge([$schoolYear], $dateExtra, $deptParams));
 $sexMap    = array_column($sexStmt->fetchAll(PDO::FETCH_ASSOC), 'cnt', 'sex');
 $sexMale   = (int)($sexMap['M'] ?? 0);
 $sexFemale = (int)($sexMap['F'] ?? 0);

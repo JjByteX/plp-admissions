@@ -6,7 +6,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STUDENT, ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_STUDENT, ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 header('Content-Type: application/json');
 
@@ -49,7 +49,7 @@ if (Auth::role() === ROLE_STUDENT) {
 
 // ── action=ai_result — save result from client-side Puter AI ──
 if ($action === 'ai_result') {
-    Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+    Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
     csrf_check();
 
     $aiStatus   = $_POST['status']     ?? 'uncertain';

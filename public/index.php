@@ -58,11 +58,13 @@ $router->get( '/staff/interviews/desks',        'interview/staff_setup');
 $router->post('/staff/interviews/desks',        'interview/staff_setup');
 $router->get( '/staff/interviews/queue',        'interview/staff_queue');
 $router->post('/staff/interviews/call-next',    'interview/staff_call_next');
-$router->post('/staff/interviews/manual-checkin', 'interview/staff_manual_checkin');
+// /staff/interviews/manual-checkin route removed — students are now
+// auto-checked-in at slot assignment time (interview_scheduler.php).
 $router->get( '/staff/interviews/absent',       'interview/staff_absent');
 $router->post('/staff/interviews/absent',       'interview/staff_absent');
-$router->get( '/staff/interviews/{id}/roster',  'interview/staff_slot_view');
-$router->post('/staff/interviews/{id}/roster',  'interview/staff_slot_view');
+// Roster routes removed — the roster is now baked into the live queue
+// page itself (modules/interview/staff_queue.php), so a per-session
+// view is no longer needed.
 $router->post('/staff/interviews/{id}',         'interview/staff_action');
 $router->get( '/staff/results',                  'results/staff_manage');
 $router->post('/staff/results/bulk',             'results/staff_bulk');

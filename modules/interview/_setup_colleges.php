@@ -3,9 +3,15 @@
 // Variables: $departments, $collegeCounts
 ?>
 
-<div style="display:flex;align-items:center;margin-bottom:var(--space-5)">
+<div style="margin-bottom:var(--space-3)">
     <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
-    <div style="flex:1"></div>
+</div>
+
+<div class="page-header" style="text-align:center;margin-bottom:var(--space-6)">
+    <h1 class="page-title" style="margin:0 0 var(--space-1) 0">Interview Setup</h1>
+    <p class="page-subtitle" style="text-align:center">
+        Pick a college to manage its interview sessions.
+    </p>
 </div>
 
 <style>

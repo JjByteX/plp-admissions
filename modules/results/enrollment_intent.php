@@ -93,11 +93,9 @@ if ($action === 'withdraw') {
 
         $db->commit();
 
-        // Automation: notify and auto-promote waitlist if this was an accepted student
+        // Notify the student. Waitlist promotion was retired with the role
+        // redesign — a withdrawal no longer cascades to anyone else.
         notify_stage_transition($applicant['id'], 'withdrawn');
-        if ($ar && $ar['enrollment_intent'] !== 'confirmed') {
-            auto_promote_waitlist($applicant['id']);
-        }
 
         Session::flash('success', 'Your application has been successfully withdrawn.');
     } catch (\Throwable $e) {

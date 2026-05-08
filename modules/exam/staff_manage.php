@@ -7,7 +7,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 
 $db = db();
 $errors  = [];
@@ -50,26 +50,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($action) {
 
         // ── Exam CRUD ────────────────────────────────────────────
+        // Schedule and access code live on each room slot
+        // (exam_slot_schedule); the exam itself is content-only
+        // (description + shuffle flags). The title is auto-derived
+        // server-side from the active school year.
         case 'create_exam':
-            $title          = trim($_POST['title'] ?? '');
+            $description    = trim($_POST['description'] ?? '');
             $shuffleQ       = isset($_POST['shuffle_questions']) ? 1 : 0;
             $shuffleC       = isset($_POST['shuffle_choices'])   ? 1 : 0;
-            $schedStart     = trim($_POST['scheduled_start'] ?? '') ?: null;
-            $schedEndTime   = trim($_POST['scheduled_end_time'] ?? '') ?: null;
-            $schedEnd       = ($schedStart && $schedEndTime)
-                ? date('Y-m-d', strtotime($schedStart)) . ' ' . $schedEndTime . ':00'
-                : null;
-            $accessPassword = trim($_POST['access_password'] ?? '');
-            if (!$title)          { $errors[] = 'Exam title is required.'; break; }
-            if (!$schedStart)     { $errors[] = 'Open date and time is required.'; break; }
-            if (!$schedEndTime)   { $errors[] = 'Close time is required.'; break; }
-            if (!$accessPassword) { $errors[] = 'Access password is required. Use the Generate button or type one.'; break; }
+            $autoYear       = (string) school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
+            $title          = 'PLP Admissions Test (' . $autoYear . ')';
             $db->prepare('UPDATE exams SET is_active=0')->execute();
             $db->prepare(
-                'INSERT INTO exams (title, shuffle_questions, shuffle_choices, scheduled_start, scheduled_end,
-                 access_password, password_issued_at, is_active)
-                 VALUES (?,?,?,?,?,?,NOW(),1)'
-            )->execute([$title, $shuffleQ, $shuffleC, $schedStart, $schedEnd, $accessPassword]);
+                'INSERT INTO exams (title, description, shuffle_questions, shuffle_choices, is_active)
+                 VALUES (?,?,?,?,1)'
+            )->execute([$title, $description ?: null, $shuffleQ, $shuffleC]);
             $newExamId = (int)$db->lastInsertId();
             $success[] = 'Exam created and set as active.';
             audit_log('exam_created', "Created exam: {$title}", 'exam', $newExamId);
@@ -78,29 +73,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
 
         case 'edit_exam':
-            $examId         = (int)($_POST['exam_id'] ?? 0);
-            $title          = trim($_POST['title'] ?? '');
-            $shuffleQ       = isset($_POST['shuffle_questions']) ? 1 : 0;
-            $shuffleC       = isset($_POST['shuffle_choices'])   ? 1 : 0;
-            $schedStart     = trim($_POST['scheduled_start'] ?? '') ?: null;
-            $schedEndTime   = trim($_POST['scheduled_end_time'] ?? '') ?: null;
-            $schedEnd       = ($schedStart && $schedEndTime)
-                ? date('Y-m-d', strtotime($schedStart)) . ' ' . $schedEndTime . ':00'
-                : null;
-            $accessPassword = trim($_POST['access_password'] ?? '');
-            if (!$title)          { $errors[] = 'Exam title is required.'; break; }
-            if (!$accessPassword) { $errors[] = 'Access password is required. Use the Generate button or type one.'; break; }
-            // Fetch current password to detect if it changed
-            $curPwStmt = $db->prepare('SELECT access_password FROM exams WHERE id=?');
-            $curPwStmt->execute([$examId]);
-            $curPw = $curPwStmt->fetchColumn();
-            $pwChanged = ($accessPassword !== $curPw);
+            $examId      = (int)($_POST['exam_id'] ?? 0);
+            $description = trim($_POST['description'] ?? '');
+            $shuffleQ    = isset($_POST['shuffle_questions']) ? 1 : 0;
+            $shuffleC    = isset($_POST['shuffle_choices'])   ? 1 : 0;
+            // Auto-derived from the active school year.
+            $autoYear    = (string) school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
+            $title       = 'PLP Admissions Test (' . $autoYear . ')';
             $db->prepare(
-                'UPDATE exams SET title=?, shuffle_questions=?, shuffle_choices=?,
-                 scheduled_start=?, scheduled_end=?, access_password=?,
-                 password_issued_at = IF(? = 1, NOW(), password_issued_at) WHERE id=?'
-            )->execute([$title, $shuffleQ, $shuffleC, $schedStart, $schedEnd,
-                        $accessPassword, $pwChanged ? 1 : 0, $examId]);
+                'UPDATE exams SET title=?, description=?, shuffle_questions=?, shuffle_choices=? WHERE id=?'
+            )->execute([$title, $description ?: null, $shuffleQ, $shuffleC, $examId]);
             // Handle inline-edit AJAX
             if (is_ajax_request()) {
                 header('Content-Type: application/json');
@@ -271,76 +253,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['ok' => true]);
             exit;
 
-        // ── Generate / refresh exam access password ─────────────
-        case 'generate_exam_password':
-            // Discard any prior output (display_errors warnings, etc.)
-            // so the JSON response can never be corrupted by a stray notice.
-            while (ob_get_level()) ob_end_clean();
-            ob_start();
-            try {
-                $examId = (int)($_POST['exam_id'] ?? 0);
-                if (!$examId) {
-                    ob_end_clean();
-                    header('Content-Type: application/json');
-                    echo json_encode(['ok' => false, 'error' => 'Invalid exam.']);
-                    exit;
-                }
-                $newPwd = generate_exam_password();
-                $db->prepare(
-                    'UPDATE exams SET access_password=?, password_issued_at=NOW() WHERE id=?'
-                )->execute([$newPwd, $examId]);
-                audit_log('exam_password_generated', "Generated new access password for exam ID {$examId}", 'exam', $examId);
-                ob_end_clean();
-                header('Content-Type: application/json');
-                echo json_encode([
-                    'ok'       => true,
-                    'password' => $newPwd,
-                    'expires_in' => EXAM_PASSWORD_EXPIRY_SECONDS,
-                ]);
-            } catch (Throwable $e) {
-                ob_end_clean();
-                header('Content-Type: application/json');
-                echo json_encode(['ok' => false, 'error' => 'Server error: ' . $e->getMessage()]);
-            }
-            exit;
-
-        // ── Re-issue same password (reset 5-min timer) ──────────
-        case 'reissue_exam_password':
-            while (ob_get_level()) ob_end_clean();
-            ob_start();
-            try {
-                $examId = (int)($_POST['exam_id'] ?? 0);
-                if (!$examId) {
-                    ob_end_clean();
-                    header('Content-Type: application/json');
-                    echo json_encode(['ok' => false, 'error' => 'Invalid exam.']);
-                    exit;
-                }
-                // Only reissue if password already set
-                $curPwRow = $db->prepare('SELECT access_password FROM exams WHERE id=?');
-                $curPwRow->execute([$examId]);
-                $curPw = $curPwRow->fetchColumn();
-                if (!$curPw) {
-                    ob_end_clean();
-                    header('Content-Type: application/json');
-                    echo json_encode(['ok' => false, 'error' => 'No password set. Please set one first.']);
-                    exit;
-                }
-                $db->prepare('UPDATE exams SET password_issued_at=NOW() WHERE id=?')->execute([$examId]);
-                audit_log('exam_password_reissued', "Re-issued access password for exam ID {$examId}", 'exam', $examId);
-                ob_end_clean();
-                header('Content-Type: application/json');
-                echo json_encode([
-                    'ok'         => true,
-                    'password'   => $curPw,
-                    'expires_in' => EXAM_PASSWORD_EXPIRY_SECONDS,
-                ]);
-            } catch (Throwable $e) {
-                ob_end_clean();
-                header('Content-Type: application/json');
-                echo json_encode(['ok' => false, 'error' => 'Server error: ' . $e->getMessage()]);
-            }
-            exit;
+        // Per-room access code generation lives on the Exam Slots page now
+        // (modules/exam/staff_slots.php → action=generate_slot_code).
+        // Schedule lives on the slot too — see the slot's exam_date / slot_time.
 
         case 'inline_edit_question':
             // Quick inline text edit for a single question
@@ -601,7 +516,7 @@ ob_start();
     display: flex;
     flex-direction: column;
     align-items: center;
-    text-align: left;
+    text-align: center;
     gap: var(--space-4);
     padding: var(--space-10) var(--space-6);
     background: var(--bg-elevated);
@@ -840,21 +755,6 @@ elseif ($selectedExamId) $view = 'editor';
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
                         <?= $qCount ?> question<?= $qCount !== 1 ? 's' : '' ?>
                     </div>
-                    <?php if ($ex['scheduled_start']): ?>
-                        <div class="exam-dir-meta-row">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
-                            <?= e(fmtDateTime($ex['scheduled_start'])) ?>
-                            <?php if ($ex['scheduled_end']): ?>
-                                &rarr; <?= e(fmtDateTime($ex['scheduled_end'])) ?>
-                            <?php endif; ?>
-                        </div>
-                    <?php endif; ?>
-                    <?php if (!empty($ex['access_password'])): ?>
-                        <div class="exam-dir-meta-row">
-                            <?= icon('ic_fluent_lock_closed_24_regular', 12) ?>
-                            Password set
-                        </div>
-                    <?php endif; ?>
                 </div>
 
                 <!-- Footer -->
@@ -897,14 +797,7 @@ elseif ($selectedExamId) $view = 'editor';
 
 <?php if ($selectedExam): ?>
 
-        <!-- Exam header card (title/schedule editable in-place; password subsection folded in) -->
-        <?php
-            $pwValid    = exam_password_is_valid($selectedExam);
-            $pwSecsLeft = exam_password_seconds_remaining($selectedExam);
-            $hasPw      = !empty($selectedExam['access_password']);
-            $startVal   = $selectedExam['scheduled_start'] ? (new DateTime($selectedExam['scheduled_start']))->format('Y-m-d\TH:i') : '';
-            $endVal     = $selectedExam['scheduled_end']   ? substr($selectedExam['scheduled_end'], 11, 5) : '';
-        ?>
+        <!-- Exam header card: read-only auto-derived title + editable description and shuffle flags. -->
         <style>
             #exam-header-card[data-edit-state="read"] .exam-show-edit { display: none !important; }
             #exam-header-card[data-edit-state="edit"] .exam-show-read { display: none !important; }
@@ -931,37 +824,6 @@ elseif ($selectedExamId) $view = 'editor';
             .exam-inline--title { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
             .exam-inline--desc  { display: block; font-size: var(--text-sm); color: var(--text-secondary); margin-top: var(--space-2); }
             #exam-header-card[data-edit-state="read"] .exam-inline--desc:placeholder-shown { display: none; }
-
-            /* Password field — read-only badge in read mode, editable input in edit mode */
-            #pw-display {
-                font-family: monospace;
-                font-size: var(--text-sm);
-                font-weight: var(--weight-semibold);
-                letter-spacing: .1em;
-                padding: 1px 8px;
-                background: var(--bg-subtle);
-                border: 1px solid var(--border);
-                border-radius: var(--radius-sm);
-                color: var(--text-primary);
-                cursor: default;
-                user-select: all;
-                width: auto;
-                min-width: 60px;
-                max-width: 200px;
-                outline: none;
-                transition: border-color .15s, background .15s, border-radius .15s, padding .15s;
-            }
-            #pw-display[readonly]::placeholder { font-style: italic; font-weight: normal; letter-spacing: normal; color: var(--text-tertiary); }
-            #pw-display:not([readonly]) {
-                background: var(--bg-elevated);
-                border-color: var(--accent);
-                border-radius: var(--radius-md);
-                padding: 4px 10px;
-                cursor: text;
-                letter-spacing: .06em;
-                max-width: 240px;
-            }
-            #pw-display:not([readonly]):focus { box-shadow: 0 0 0 3px rgba(45,106,79,.12); }
         </style>
 
         <form method="POST" id="exam-edit-form">
@@ -974,10 +836,14 @@ elseif ($selectedExamId) $view = 'editor';
                 <div style="display:flex;align-items:flex-start;gap:var(--space-4)">
                     <div style="flex:1;min-width:0">
 
-                        <input class="exam-inline exam-inline--title" name="title"
-                               value="<?= e($selectedExam['title']) ?>"
-                               data-original="<?= e($selectedExam['title']) ?>"
-                               readonly required>
+                        <div class="exam-inline exam-inline--title"
+                             style="padding:var(--space-2) var(--space-3);border:1px solid transparent">
+                            <?= e($selectedExam['title']) ?>
+                        </div>
+                        <div class="exam-show-edit" style="font-size:var(--text-xs);color:var(--text-tertiary);margin:4px 0 var(--space-2)">
+                            Title is set automatically from the active school year. Change it on the
+                            <a href="<?= url('/admin/school-year') ?>">School Year</a> page.
+                        </div>
 
                         <textarea class="exam-inline exam-inline--desc" name="description" rows="1"
                                   placeholder="Add description (optional)"
@@ -997,75 +863,6 @@ elseif ($selectedExamId) $view = 'editor';
                             <?php endif; ?>
                         </div>
 
-                        <?php if ($selectedExam['scheduled_start'] || $selectedExam['scheduled_end']): ?>
-                            <div class="exam-show-read" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">
-                                <?php if ($selectedExam['scheduled_start']): ?>
-                                    Opens <strong style="color:var(--text-secondary);font-weight:var(--weight-medium)"><?= e(fmtDateTime($selectedExam['scheduled_start'])) ?></strong>
-                                <?php endif; ?>
-                                <?php if ($selectedExam['scheduled_start'] && $selectedExam['scheduled_end']): ?>
-                                    and
-                                <?php endif; ?>
-                                <?php if ($selectedExam['scheduled_end']): ?>
-                                    Closes <strong style="color:var(--text-secondary);font-weight:var(--weight-medium)"><?= e(fmtDateTime($selectedExam['scheduled_end'])) ?></strong>
-                                <?php endif; ?>
-                            </div>
-                        <?php endif; ?>
-
-                        <div id="pw-manager-card" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px;display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">
-                            <span style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0">
-                                <?= icon('ic_fluent_lock_closed_24_regular', 12) ?>
-                                Access Password
-                            </span>
-                            <!-- Single input: badge in read mode, editable in edit mode -->
-                            <input type="text" id="pw-display" name="access_password"
-                                   value="<?= e($selectedExam['access_password'] ?? '') ?>"
-                                   readonly
-                                   placeholder="none"
-                                   autocomplete="off"
-                                   title="<?= $hasPw ? 'Click Edit to change password' : 'Click Edit to set a password' ?>">
-                            <?php if ($hasPw): ?>
-                                <span aria-hidden="true" id="pw-dot">·</span>
-                                <span id="pw-timer-badge" style="color:var(--success)">
-                                    Expires in <span id="pw-timer"><?= $pwSecsLeft ?></span>s
-                                </span>
-                                <button type="button" class="btn btn-ghost btn-sm"
-                                        onclick="ajaxGeneratePassword(<?= $selectedExam['id'] ?>)"
-                                        style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
-                                    <?= icon('ic_fluent_arrow_sync_24_regular', 12) ?>
-                                    New
-                                </button>
-                                <button type="button" class="btn btn-ghost btn-sm"
-                                        onclick="ajaxReissuePassword(<?= $selectedExam['id'] ?>)"
-                                        id="pw-reissue-btn"
-                                        style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
-                                    <?= icon('ic_fluent_clock_24_regular', 12) ?>
-                                    Extend
-                                </button>
-                            <?php else: ?>
-                                <button type="button" class="btn btn-ghost btn-sm"
-                                        onclick="ajaxGeneratePassword(<?= $selectedExam['id'] ?>)"
-                                        id="pw-generate-btn"
-                                        style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;height:auto;min-height:0">
-                                    <?= icon('ic_fluent_arrow_sync_24_regular', 12) ?>
-                                    Generate
-                                </button>
-                            <?php endif; ?>
-                        </div>
-
-                        <div class="exam-show-edit" style="margin-top:var(--space-3);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
-                            <div>
-                                <label class="form-label" style="font-size:var(--text-xs);margin-bottom:4px">Opens</label>
-                                <input type="datetime-local" name="scheduled_start" class="form-control"
-                                       value="<?= $startVal ?>" data-original="<?= $startVal ?>"
-                                       style="min-height:32px;padding:0 var(--space-3);font-size:var(--text-sm)">
-                            </div>
-                            <div>
-                                <label class="form-label" style="font-size:var(--text-xs);margin-bottom:4px">Closes (time)</label>
-                                <input type="time" name="scheduled_end_time" class="form-control"
-                                       value="<?= $endVal ?>" data-original="<?= $endVal ?>"
-                                       style="min-height:32px;padding:0 var(--space-3);font-size:var(--text-sm)">
-                            </div>
-                        </div>
                         <div class="exam-show-edit" style="display:flex;gap:var(--space-4);flex-wrap:wrap;margin-top:var(--space-3)">
                             <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:var(--text-sm)">
                                 <input type="checkbox" name="shuffle_questions"
@@ -1147,9 +944,6 @@ elseif ($selectedExamId) $view = 'editor';
                                     <span class="type-pill">Optional</span>
                                 <?php endif; ?>
                             </div>
-                            <?php if ($q['description']): ?>
-                                <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:4px 0 0 calc(1.5em + var(--space-2))"><?= e($q['description']) ?></p>
-                            <?php endif; ?>
                             <div style="margin-top:var(--space-2);margin-left:calc(1.5em + var(--space-2))">
                             <?php if (in_array($q['question_type'], $CHOICE_TYPES) && !empty($choices)): ?>
                                 <div style="display:flex;flex-direction:column;gap:var(--space-1)">
@@ -1330,42 +1124,18 @@ elseif ($selectedExamId) $view = 'editor';
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="create_exam">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div>
-                    <label class="form-label">Year <span style="color:var(--error)">*</span></label>
-                    <input type="text" name="exam_year" id="create-exam-year" class="form-control" placeholder="e.g. 2025–2026" required>
-                    <input type="hidden" name="title" id="create-exam-title-hidden">
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Title will be: <strong>PLP Admissions Test (<span id="create-year-preview">Year</span>)</strong></p>
+                <div style="font-size:var(--text-sm);color:var(--text-secondary);background:var(--bg-subtle);
+                            padding:var(--space-3) var(--space-4);border-radius:var(--radius-md)">
+                    Title will be set automatically:
+                    <strong>PLP Admissions Test (<?= e($schoolYear) ?>)</strong>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
+                        Pulled from the active school year. Change it on the
+                        <a href="<?= url('/admin/school-year') ?>">School Year</a> page.
+                    </div>
                 </div>
                 <div>
                     <label class="form-label">Description</label>
                     <textarea name="description" class="form-control" rows="2" placeholder="Brief instructions shown to students…"></textarea>
-                </div>
-
-                <!-- Schedule -->
-                <div style="border-top:1px solid var(--border);padding-top:var(--space-4)">
-                    <div style="font-size:var(--text-sm);font-weight:var(--weight-semibold);margin-bottom:var(--space-3);display:flex;align-items:center;gap:6px">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
-                        Schedule
-                    </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
-                        <div>
-                            <label class="form-label">Opens <span style="color:var(--error)">*</span></label>
-                            <input type="datetime-local" name="scheduled_start" class="form-control" required id="create-exam-start">
-                        </div>
-                        <div>
-                            <label class="form-label">Closes <span style="color:var(--error)">*</span></label>
-                            <input type="time" name="scheduled_end_time" class="form-control" required id="create-exam-end">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Password -->
-                <div style="border-top:1px solid var(--border);padding-top:var(--space-4)">
-                    <div style="font-size:var(--text-sm);font-weight:var(--weight-semibold);margin-bottom:var(--space-3);display:flex;align-items:center;gap:6px">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                        Access Password
-                    </div>
-                    <input type="text" name="access_password" id="create-exam-password" class="form-control" placeholder="Enter or generate a password" required>
                 </div>
 
                 <div style="display:flex;flex-direction:column;gap:var(--space-2)">
@@ -1384,27 +1154,11 @@ elseif ($selectedExamId) $view = 'editor';
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-ghost" onclick="closeModal('create-exam-modal')">Cancel</button>
-                <button type="submit" class="btn btn-primary" id="create-exam-submit" disabled>Create Exam</button>
+                <button type="submit" class="btn btn-primary">Create Exam</button>
             </div>
         </form>
     </div>
 </div>
-<script>
-(function() {
-    const fields = ['create-exam-year', 'create-exam-start', 'create-exam-end', 'create-exam-password'];
-    const btn = document.getElementById('create-exam-submit');
-    function checkForm() {
-        btn.disabled = fields.some(id => !document.getElementById(id)?.value.trim());
-    }
-    fields.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('input', checkForm);
-    });
-    // Also watch the hidden title field driven by the year input
-    const yearEl = document.getElementById('create-exam-year');
-    if (yearEl) yearEl.addEventListener('input', checkForm);
-})();
-</script>
 
 <!-- ════════════════════════════════════════════════════════════
      EDIT EXAM MODAL
@@ -1422,44 +1176,18 @@ elseif ($selectedExamId) $view = 'editor';
             <input type="hidden" name="action" value="edit_exam">
             <input type="hidden" name="exam_id" id="edit-exam-id">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div>
-                    <label class="form-label">Year <span style="color:var(--error)">*</span></label>
-                    <input type="text" name="exam_year" id="edit-exam-year" class="form-control" required>
-                    <input type="hidden" name="title" id="edit-exam-title">
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Title will be: <strong>PLP Admissions Test (<span id="edit-year-preview">Year</span>)</strong></p>
+                <div style="font-size:var(--text-sm);color:var(--text-secondary);background:var(--bg-subtle);
+                            padding:var(--space-3) var(--space-4);border-radius:var(--radius-md)">
+                    Title is set automatically:
+                    <strong>PLP Admissions Test (<?= e($schoolYear) ?>)</strong>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
+                        Pulled from the active school year. Change it on the
+                        <a href="<?= url('/admin/school-year') ?>">School Year</a> page.
+                    </div>
                 </div>
                 <div>
                     <label class="form-label">Description</label>
                     <textarea name="description" id="edit-exam-desc" class="form-control" rows="2"></textarea>
-                </div>
-
-                <!-- Schedule -->
-                <div style="border-top:1px solid var(--border);padding-top:var(--space-4)">
-                    <div style="font-size:var(--text-sm);font-weight:var(--weight-semibold);margin-bottom:var(--space-3);display:flex;align-items:center;gap:6px">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
-                        Schedule
-                    </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
-                        <div>
-                            <label class="form-label">Opens</label>
-                            <input type="datetime-local" name="scheduled_start" id="edit-exam-start" class="form-control">
-                        </div>
-                        <div>
-                            <label class="form-label">Closes (time)</label>
-                            <input type="time" name="scheduled_end_time" id="edit-exam-end" class="form-control">
-                        </div>
-                    </div>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:6px">Leave blank to allow access at any time.</p>
-                </div>
-
-                <!-- Password -->
-                <div style="border-top:1px solid var(--border);padding-top:var(--space-4)">
-                    <div style="font-size:var(--text-sm);font-weight:var(--weight-semibold);margin-bottom:var(--space-3);display:flex;align-items:center;gap:6px">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                        Access Password
-                    </div>
-                    <input type="text" name="access_password" id="edit-exam-password" class="form-control" placeholder="Leave blank to remove password">
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:6px">Students must enter this password before starting the exam.</p>
                 </div>
 
                 <div style="display:flex;flex-direction:column;gap:var(--space-2)">
@@ -1545,135 +1273,22 @@ elseif ($selectedExamId) $view = 'editor';
 
 
 <script>
-// ── Password countdown engine ─────────────────────────────────
-let _pwCountdownTimer = null;
-
-function startPwCountdown(secsLeft) {
-    if (_pwCountdownTimer) clearInterval(_pwCountdownTimer);
-
-    const badge      = document.getElementById('pw-timer-badge');
-    const reissueBtn = document.getElementById('pw-reissue-btn');
-    const dot        = document.getElementById('pw-dot');
-
-    function render(s) {
-        if (!badge) return;
-        if (s > 0) {
-            const mins = Math.floor(s / 60);
-            const secs = s % 60;
-            const label = mins > 0
-                ? mins + 'm ' + String(secs).padStart(2, '0') + 's'
-                : secs + 's';
-            badge.style.color = s <= 30 ? '#d97706' : 'var(--success)';
-            badge.innerHTML = 'Expires in ' + label;
-            if (dot) dot.style.visibility = '';
-            // Extend button: always visible but styled differently when active
-            if (reissueBtn) {
-                reissueBtn.style.display = 'inline-flex';
-                reissueBtn.style.opacity = '0.6';
-                reissueBtn.title = 'Reset the 5-minute timer';
-            }
-        } else {
-            badge.style.color = 'var(--error)';
-            badge.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> Expired';
-            badge.style.display = 'inline-flex';
-            badge.style.alignItems = 'center';
-            badge.style.gap = '4px';
-            if (dot) dot.style.visibility = '';
-            if (reissueBtn) {
-                reissueBtn.style.display = 'inline-flex';
-                reissueBtn.style.opacity = '1';
-                reissueBtn.title = 'Extend the password for another 5 minutes';
-            }
-        }
-    }
-
-    render(secsLeft);
-
-    if (secsLeft > 0) {
-        _pwCountdownTimer = setInterval(() => {
-            secsLeft--;
-            render(secsLeft);
-            if (secsLeft <= 0) { clearInterval(_pwCountdownTimer); _pwCountdownTimer = null; }
-        }, 1000);
-    }
-}
-
-// Auto-start countdown on page load
-<?php if ($hasPw): ?>
-startPwCountdown(<?= (int)$pwSecsLeft ?>);
-<?php endif; ?>
-
-// ── AJAX password generation / reissue ───────────────────────
-async function ajaxGeneratePassword(examId) {
-    const csrfInput = document.querySelector('input[name^="_csrf"]');
-    const fd = new FormData();
-    fd.append('action', 'generate_exam_password');
-    fd.append('exam_id', examId);
-    fd.append(csrfInput.name, csrfInput.value);
-    try {
-        const resp = await fetch(location.href, { method: 'POST', body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-        const d = await resp.json();
-        if (d.ok) {
-            const pwInput = document.getElementById('pw-display');
-            if (pwInput) pwInput.value = d.password;
-            // Restart the 5-minute countdown
-            startPwCountdown(d.expires_in);
-            // First-time generation (no timer badge existed yet) — reload to show full UI
-            const generateBtn = document.getElementById('pw-generate-btn');
-            if (generateBtn) window.location.reload();
-        } else {
-            alert(d.error || 'Could not generate password.');
-        }
-    } catch (e) {
-        alert('Network error. Try again.');
-    }
-}
-
-async function ajaxReissuePassword(examId) {
-    const csrfInput = document.querySelector('input[name^="_csrf"]');
-    const fd = new FormData();
-    fd.append('action', 'reissue_exam_password');
-    fd.append('exam_id', examId);
-    fd.append(csrfInput.name, csrfInput.value);
-    try {
-        const resp = await fetch(location.href, { method: 'POST', body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-        const d = await resp.json();
-        if (d.ok) {
-            // Restart the 5-minute countdown from full
-            startPwCountdown(d.expires_in);
-        } else {
-            alert(d.error || 'Could not extend password.');
-        }
-    } catch (e) {
-        alert('Network error. Try again.');
-    }
-}
+// Per-room access codes are generated on the Exam Slots page — the
+// global Generate / Extend / countdown UI used to live here and has
+// been removed in Chunk 7.
 
 // ── Modal helpers ─────────────────────────────────────────────
 function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 // ── Edit exam modal ───────────────────────────────────────────
+// Title is auto-derived server-side from the active school year, so
+// the form only collects description + shuffle flags.
 function openEditExamModal(exam) {
     document.getElementById('edit-exam-id').value       = exam.id;
-    // Extract year from title like "PLP Admissions Test (2025-2026)"
-    var yearMatch = exam.title.match(/\(([^)]+)\)\s*$/);
-    var yearVal = yearMatch ? yearMatch[1] : exam.title;
-    document.getElementById('edit-exam-year').value = yearVal;
-    document.getElementById('edit-year-preview').textContent = yearVal;
-    document.getElementById('edit-exam-title').value = 'PLP Admissions Test (' + yearVal + ')';
     document.getElementById('edit-exam-desc').value     = exam.description || '';
-
     document.getElementById('edit-exam-shuffleQ').checked = exam.shuffle_questions == 1;
     document.getElementById('edit-exam-shuffleC').checked = exam.shuffle_choices == 1;
-    const toLocal = v => v ? v.replace(' ', 'T').substring(0,16) : '';
-    document.getElementById('edit-exam-start').value = toLocal(exam.scheduled_start);
-    // Populate close time only (HH:MM) from stored scheduled_end datetime
-    document.getElementById('edit-exam-end').value =
-        exam.scheduled_end ? exam.scheduled_end.substring(11, 16) : '';
-    document.getElementById('edit-exam-password').value = exam.access_password || '';
     openModal('edit-exam-modal');
 }
 
@@ -1713,31 +1328,9 @@ function openEditExamModal(exam) {
 // ── Exam header edit mode toggle ──────────────────────────────
 function enterExamEditMode() {
     document.getElementById('exam-header-card').dataset.editState = 'edit';
-    // Make password field editable
-    const pwInput = document.getElementById('pw-display');
-    if (pwInput) {
-        pwInput.removeAttribute('readonly');
-        pwInput.title = 'Type a new password or click New to generate one';
-    }
-    // Hide timer info (not relevant while editing)
-    ['pw-timer-badge','pw-dot'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.visibility = 'hidden';
-    });
 }
 function exitExamEditMode() {
     document.getElementById('exam-header-card').dataset.editState = 'read';
-    // Restore password field to read-only badge
-    const pwInput = document.getElementById('pw-display');
-    if (pwInput) {
-        pwInput.setAttribute('readonly', '');
-        pwInput.title = 'Click Edit to change password';
-    }
-    // Restore timer visibility
-    ['pw-timer-badge','pw-dot'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.visibility = '';
-    });
 }
 
 // ── Inline exam title edit ────────────────────────────────────
@@ -1919,10 +1512,6 @@ function buildQEditHTML(q) {
             <label class="form-label">Question <span style="color:var(--error)">*</span></label>
             <textarea id="qe-text-${qid}" class="form-control" rows="2">${escQT(q.question_text)}</textarea>
         </div>
-        <div>
-            <label class="form-label">Description <span style="font-size:var(--text-xs);font-weight:400;color:var(--text-tertiary)">(optional hint)</span></label>
-            <input type="text" id="qe-desc-${qid}" class="form-control" value="${escQA(q.description||'')}" placeholder="e.g. Choose the best answer">
-        </div>
         ${answerHTML}
         <div style="display:flex;gap:var(--space-4);align-items:flex-end">
             <div style="width:88px">
@@ -2005,7 +1594,6 @@ async function saveInlineQFullEdit(qid) {
     fd.append('question_id',qid); fd.append('section_id',q.section_id||'');
     fd.append(csrfInput.name,csrfInput.value);
     fd.append('question_text',qText);
-    fd.append('question_desc',document.getElementById(`qe-desc-${qid}`)?.value.trim()||'');
     fd.append('question_type',q.question_type);
     fd.append('points',document.getElementById(`qe-points-${qid}`)?.value||1);
     if (document.getElementById(`qe-required-${qid}`)?.checked) fd.append('is_required','1');
@@ -2117,10 +1705,6 @@ function renderInlineCreator(container, secId, secType) {
                 <label class="form-label">Question <span style="color:var(--error)">*</span></label>
                 <textarea id="iq-text-${secId}" class="form-control" rows="2" placeholder="Enter your question…"></textarea>
             </div>
-            <div>
-                <label class="form-label">Description <span style="font-size:var(--text-xs);font-weight:400;color:var(--text-tertiary)">(optional hint)</span></label>
-                <input type="text" id="iq-desc-${secId}" class="form-control" placeholder="e.g. Choose the best answer">
-            </div>
             ${choicesHtml}
             <div style="display:flex;gap:var(--space-4);align-items:flex-end">
                 <div style="width:88px">
@@ -2217,7 +1801,6 @@ async function saveInlineQuestion(secId, secType) {
     const choices = getCreatorChoices(secId);
     const points  = parseInt(document.getElementById(`iq-points-${secId}`)?.value || 1);
     const required = document.getElementById(`iq-required-${secId}`)?.checked ? 1 : 0;
-    const desc    = document.getElementById(`iq-desc-${secId}`)?.value.trim() || '';
     const examId  = <?= $selectedExam['id'] ?? 0 ?>;
     const csrfInput = document.querySelector('input[name^="_csrf"]');
 
@@ -2226,7 +1809,6 @@ async function saveInlineQuestion(secId, secType) {
     fd.append('exam_id', examId);
     fd.append('section_id', secId);
     fd.append('question_text', qText);
-    fd.append('question_desc', desc);
     fd.append('question_type', secType);
     fd.append('points', points);
     if (required) fd.append('is_required', '1');
@@ -2610,6 +2192,10 @@ async function startAiProcessing() {
     document.getElementById('ai-modal-footer').style.display = 'none';
 
     try {
+        // Pre-flight: empty file would only confuse the AI and waste a call.
+        if (!aiSelectedFile.size || aiSelectedFile.size === 0) {
+            throw new Error('The selected file is empty (0 bytes). Pick a different file and try again.');
+        }
         await loadPuter();
         const ext = aiSelectedFile.name.split('.').pop().toLowerCase();
         let content = null, isImage = false;
@@ -2632,8 +2218,21 @@ async function startAiProcessing() {
             content = await readFileAsText(aiSelectedFile);
         }
 
-        if (!content || (typeof content === 'string' && content.trim().length < 5))
-            throw new Error('Could not extract readable content from this file.');
+        // Stricter content guard. < 50 chars from a PDF/DOCX almost
+        // always means the file is image-based (scanned, no text layer)
+        // - sending that to the AI just produces a refusal response.
+        if (!content) {
+            throw new Error('Could not read this file. Try a different format.');
+        }
+        if (typeof content === 'string') {
+            const len = content.trim().length;
+            if (len < 5) {
+                throw new Error('Could not extract any readable text from this file. If it is a scanned PDF, save it as JPG/PNG instead and re-upload — the AI can read images.');
+            }
+            if (len < 50 && (ext === 'pdf' || ext === 'doc' || ext === 'docx')) {
+                throw new Error('Only ' + len + ' characters of text could be extracted from this ' + ext.toUpperCase() + '. It is most likely a scanned document with no selectable text. Save the pages as JPG/PNG images and upload one of those instead.');
+            }
+        }
 
         // Step 3 — Send to AI (→ 40%)
         setProgress(40, 'Sending to AI…', 'Uploading content to Puter AI');
@@ -2654,6 +2253,19 @@ async function startAiProcessing() {
         if (!sections || sections.length === 0) throw new Error('No sections or questions were detected.');
         const totalQ = sections.reduce((sum, s) => sum + s.questions.length, 0);
         if (totalQ === 0) throw new Error('No questions were detected.');
+
+        // Refusal detection: parseAiResp can succeed on AI apology JSON
+        // (e.g. one section titled "Error" with a single question whose
+        // text says "No exam content was provided…"). Surface those as a
+        // clear error instead of letting them render as a fake exam.
+        const refusal = _detectRefusal(sections);
+        if (refusal) {
+            throw new Error(
+                'The AI didn\u2019t see any actual exam in what was sent. It said:\n\n“' +
+                refusal + '”\n\n' +
+                'Most common cause: the file is a scanned/image-only PDF or a corrupt upload. Save the pages as JPG/PNG and upload one of those, or pick a different file.'
+            );
+        }
 
         aiGeneratedSections = sections;
         renderAiPreview(sections);
@@ -2702,8 +2314,7 @@ Structure:
         "correct_index": 1,
         "correct_indices": [],
         "correct_answer": null,
-        "points": 1,
-        "description": ""
+        "points": 1
       }
     ]
   }
@@ -2719,8 +2330,9 @@ IDENTIFYING CORRECT ANSWERS (critical — read carefully):
 - In Philippine printed exams, the correct answer is shown in BOLD, UNDERLINED, or ALL-CAPS in the answer choices
 - Look very carefully at each choice — whichever one appears visually emphasized (bold/underlined/caps) is the correct answer
 - correct_index = 0-based position of the correct choice (0=a, 1=b, 2=c, 3=d)
-- If no answer is marked, set correct_index to 0 and set description to "No answer key provided"
+- If no answer is marked, set correct_index to 0
 - For short_answer/identification: set correct_answer to the expected answer if shown (e.g. "QL", "QUALITATIVE", etc.)
+- Do NOT include any "description", hint, or "correct answer indicated as bold" text in the output — only the fields listed in the schema above
 
 CHOICE FORMATTING:
 - Strip letter/number prefixes from choices (e.g. "a. Paris" → "Paris", "A) Paris" → "Paris", "1. Paris" → "Paris")
@@ -2743,7 +2355,14 @@ GENERAL RULES:
 - Extract EVERY numbered question — do not skip any
 - section_description = copy any directions/instructions shown at the top of that section
 - Do NOT treat section headings or instructions as questions
-- Output ONLY the JSON array, nothing else`;
+- Output ONLY the JSON array, nothing else
+
+OUTPUT FORMAT (strict — failures here break the import):
+- The very first character of your response must be \`[\` and the very last must be \`]\`
+- Do NOT wrap the array in an object (no \`{"sections": [...]}\` — just the bare array)
+- Do NOT include a trailing comma after the last item
+- Do NOT include comments
+- Do NOT include any prose, summary, or markdown fences before/after the array`;
 
 async function callPuterWithText(text, pts) {
     const trunc=text.length>10000?text.slice(0,10000)+'…[truncated]':text;
@@ -2752,10 +2371,29 @@ async function callPuterWithText(text, pts) {
     return parseAiResp(extractPuterText(response), pts);
 }
 async function callPuterWithImage(file, pts) {
+    if (!file || !file.size) throw new Error('Image file is empty. Try a different image.');
     await ensurePuterAuth();
     const tmpName='exam_import_'+Date.now()+'.'+file.name.split('.').pop();
-    let puterFile; try { puterFile=await puter.fs.write(tmpName,file); } catch(e) { throw new Error('Could not upload image to Puter: '+e.message); }
-    let response; try { response=await puter.ai.chat([{role:'user',content:[{type:'file',puter_path:puterFile.path},{type:'text',text:AI_PROMPT}]}],{model:'claude-sonnet-4-6'}); } finally { try{await puter.fs.delete(puterFile.path);}catch(_){} }
+    let puterFile;
+    try { puterFile=await puter.fs.write(tmpName,file); }
+    catch(e) { throw new Error('Could not upload image to Puter: '+(e&&e.message||e)); }
+    if (!puterFile || !puterFile.path) {
+        throw new Error('Image upload to Puter returned no file path. Try again or use a different image.');
+    }
+    // If Puter reports the written file size, sanity-check it matches
+    // the source. Zero-byte writes are the usual cause of the AI
+    // responding with "no content was provided".
+    if (typeof puterFile.size === 'number' && puterFile.size === 0) {
+        try{await puter.fs.delete(puterFile.path);}catch(_){}
+        throw new Error('Image upload to Puter wrote 0 bytes. Try again or use a different image.');
+    }
+    let response;
+    try {
+        response=await puter.ai.chat(
+            [{role:'user',content:[{type:'file',puter_path:puterFile.path},{type:'text',text:AI_PROMPT}]}],
+            {model:'claude-sonnet-4-6'}
+        );
+    } finally { try{await puter.fs.delete(puterFile.path);}catch(_){} }
     return parseAiResp(extractPuterText(response), pts);
 }
 
@@ -2771,12 +2409,134 @@ function expandAnswer(ans) {
     return map[trimmed] || ans;
 }
 
+// ── JSON repair helpers ──────────────────────────────────────
+// LLM responses sometimes break the contract in known ways. These
+// helpers try, in order: (1) bare array slice, (2) object-wrapped
+// array unwrap, (3) truncation recovery — walk back to the last
+// complete `}` at array depth 0 and close with `]`.
+
+function _stripFences(s) {
+    return s.trim()
+        .replace(/^```(?:json|javascript|js|json5)?\s*/i, '')
+        .replace(/\s*```\s*$/i, '')
+        .replace(/^~~~(?:json)?\s*/i, '')
+        .replace(/\s*~~~\s*$/i, '')
+        .trim();
+}
+function _stripTrailingCommas(s) {
+    return s.replace(/,(\s*[}\]])/g, '$1');
+}
+function _tryParseArray(s) {
+    const start = s.indexOf('[');
+    const end   = s.lastIndexOf(']');
+    if (start === -1 || end === -1 || end <= start) return null;
+    const sliced = _stripTrailingCommas(s.slice(start, end + 1));
+    try { const a = JSON.parse(sliced); return Array.isArray(a) ? a : null; } catch (_) { return null; }
+}
+function _tryParseObjectWrapper(s) {
+    let obj;
+    try { obj = JSON.parse(_stripTrailingCommas(s)); } catch (_) { return null; }
+    if (!obj || typeof obj !== 'object') return null;
+    for (const k of ['sections','data','result','output','exam','items','questions']) {
+        if (Array.isArray(obj[k])) return obj[k];
+    }
+    // Single-section object → wrap it.
+    if (Array.isArray(obj.questions)) return [obj];
+    return null;
+}
+function _tryRepairTruncated(s) {
+    const start = s.indexOf('[');
+    if (start === -1) return null;
+    const work = s.slice(start);
+    // Walk forward, tracking string state and bracket depth, recording
+    // each position where a section object closes at array-depth 1.
+    let depth = 0, inStr = false, esc = false, lastSafe = -1;
+    for (let i = 0; i < work.length; i++) {
+        const c = work[i];
+        if (esc) { esc = false; continue; }
+        if (c === '\\') { esc = true; continue; }
+        if (c === '"') { inStr = !inStr; continue; }
+        if (inStr) continue;
+        if (c === '{' || c === '[') depth++;
+        else if (c === '}' || c === ']') {
+            depth--;
+            if (depth === 1 && c === '}') lastSafe = i; // a section closed
+        }
+    }
+    if (lastSafe === -1) return null;
+    let candidate = work.slice(0, lastSafe + 1) + ']';
+    candidate = _stripTrailingCommas(candidate);
+    try { const a = JSON.parse(candidate); return Array.isArray(a) ? a : null; } catch (_) { return null; }
+}
+
+// Detect AI "refusal" / apology responses that are technically valid
+// JSON but carry no actual exam content - e.g. one section titled
+// "Error" / "Apology" with a single short_answer question whose text
+// is the AI explaining it couldn't read the file.
+function _detectRefusal(sections) {
+    if (!Array.isArray(sections) || sections.length === 0) return null;
+    const PHRASES = [
+        'no exam content', 'no content was provided', 'no content provided',
+        'temporarily unavailable', 'file storage',
+        'i apologize', 'i cannot read', 'i can\u2019t read', "i can't read",
+        'i am unable', 'i\u2019m unable', "i'm unable",
+        'could not extract', 'couldn\u2019t read', "couldn't read",
+        'appears to be empty', 'no readable text',
+        'no file', 'blank image', 'image is blank',
+        'cannot access', 'unable to access',
+        'no questions were found', 'no questions found'
+    ];
+    const matches = (txt) => {
+        if (!txt) return false;
+        const low = String(txt).toLowerCase();
+        return PHRASES.some(p => low.indexOf(p) !== -1);
+    };
+    // Very strong signal: any section title hints at an error/apology.
+    for (const sec of sections) {
+        const title = String(sec.section_title || '').toLowerCase();
+        if (title === 'error' || title === 'apology' ||
+            title.startsWith('error') || title.startsWith('apology') ||
+            title.indexOf('cannot') !== -1 || title.indexOf('unable') !== -1) {
+            // Find a question text to surface in the error.
+            const q = (sec.questions || []).find(q => q && q.question_text);
+            return q ? String(q.question_text) : 'Error: ' + (sec.section_title || 'unknown');
+        }
+    }
+    // If there is exactly 1 question and its text matches a refusal
+    // phrase, that is also strong enough to surface.
+    const allQuestions = sections.flatMap(s => s.questions || []);
+    if (allQuestions.length === 1 && matches(allQuestions[0].question_text)) {
+        return String(allQuestions[0].question_text);
+    }
+    // Catch the case where every question matches a refusal phrase.
+    if (allQuestions.length > 0 && allQuestions.every(q => matches(q.question_text))) {
+        return String(allQuestions[0].question_text);
+    }
+    return null;
+}
+
 function parseAiResp(raw, dp) {
-    let s=raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/i,'').trim();
-    const start=s.indexOf('['), end=s.lastIndexOf(']');
-    if(start!==-1&&end!==-1&&end>start) s=s.slice(start,end+1);
-    let arr; try{arr=JSON.parse(s);}catch(e){throw new Error('AI response could not be parsed as JSON.');}
-    if(!Array.isArray(arr)) throw new Error('AI did not return a valid list.');
+    if (typeof raw !== 'string' || raw.trim().length === 0) {
+        throw new Error('AI returned an empty response. Try uploading the file again.');
+    }
+    const s = _stripFences(raw);
+
+    // Three repair strategies in order of fidelity.
+    let arr = _tryParseArray(s);
+    if (!arr) arr = _tryParseObjectWrapper(s);
+    if (!arr) arr = _tryRepairTruncated(s);
+
+    if (!arr) {
+        // All strategies failed — surface the first bit of the raw
+        // response so the user can see what the AI actually returned.
+        const snippet = raw.length > 240 ? raw.slice(0, 240) + '… (+' + (raw.length - 240) + ' more chars)' : raw;
+        throw new Error(
+            'AI response could not be parsed as JSON. The model may have returned prose, ' +
+            'or the response was cut off mid-answer. Try clicking Process again — if it ' +
+            'keeps failing, use a shorter or clearer file.\n\nFirst part of the response:\n' + snippet
+        );
+    }
+    if (!Array.isArray(arr)) throw new Error('AI did not return a list.');
 
     const VALID_TYPES=['multiple_choice','checkboxes','short_answer','paragraph'];
     return arr.map(sec=>({
@@ -2787,7 +2547,6 @@ function parseAiResp(raw, dp) {
             question_text:  q.question_text||'Untitled question',
             question_type:  VALID_TYPES.includes(q.question_type)?q.question_type:
                             (VALID_TYPES.includes(sec.section_type)?sec.section_type:'multiple_choice'),
-            description:    q.description||'',
             choices:        Array.isArray(q.choices)?q.choices:[],
             correct_index:  typeof q.correct_index==='number'?q.correct_index:0,
             correct_answer: expandAnswer(q.correct_answer)||null,
@@ -2879,7 +2638,7 @@ async function saveAiQuestions(){
         for(const q of sec.questions){
             const fd=new FormData();
             fd.append('action','add_question');fd.append('exam_id',examId);fd.append(csrfName,csrf);
-            fd.append('question_text',q.question_text);fd.append('question_desc',q.description||'');
+            fd.append('question_text',q.question_text);
             fd.append('question_type',q.question_type);fd.append('points',q.points);fd.append('is_required','1');
             fd.append('section_id',sectionId);
             if(CT.includes(q.question_type)&&q.choices.length){

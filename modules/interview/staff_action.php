@@ -11,7 +11,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_ADMIN);
 csrf_check();
 
 $db      = db();
@@ -42,21 +42,12 @@ switch ($action) {
         $db->prepare('UPDATE interview_queue SET status="completed" WHERE id=?')
            ->execute([$id]);
 
-        $db->prepare(
-            'UPDATE applicants SET overall_status="released"
-             WHERE id=? AND overall_status="interview"'
-        )->execute([$row['applicant_id']]);
-
-        // Auto-waitlist the applicant after interview completion
-        $db->prepare(
-            'INSERT INTO admission_results (applicant_id, result, released_by, released_at)
-             VALUES (?, "waitlisted", ?, NOW())
-             ON DUPLICATE KEY UPDATE result="waitlisted",
-                                     released_by=VALUES(released_by), released_at=NOW()'
-        )->execute([$row['applicant_id'], $staffId]);
-
-        audit_log('interview_completed', "Marked interview queue ID {$id} as completed — auto-waitlisted", 'interview_queue', $id);
-        Session::flash('success', 'Interview marked as completed. Applicant auto-waitlisted.');
+        // Interview completion no longer auto-creates an admission_results
+        // row — SSO releases manually from the Results page after seeing
+        // the Pass/Fail eval. We still leave the applicant in 'interview'
+        // so the Results page bucket logic picks it up correctly.
+        audit_log('interview_completed', "Marked interview queue ID {$id} as completed", 'interview_queue', $id);
+        Session::flash('success', 'Interview marked as completed.');
         redirect('/staff/interviews/queue');
         break;
 
@@ -93,24 +84,15 @@ switch ($action) {
              WHERE id = ?'
         )->execute([$evalNotes ?: null, $evalResult, $id]);
 
-        // Advance applicant to result stage
-        $db->prepare(
-            'UPDATE applicants SET overall_status = "released"
-             WHERE id = ? AND overall_status = "interview"'
-        )->execute([$row['applicant_id']]);
-
-        // Auto-waitlist the applicant after passing interview
-        $db->prepare(
-            'INSERT INTO admission_results (applicant_id, result, released_by, released_at)
-             VALUES (?, "waitlisted", ?, NOW())
-             ON DUPLICATE KEY UPDATE result="waitlisted",
-                                     released_by=VALUES(released_by), released_at=NOW()'
-        )->execute([$row['applicant_id'], $staffId]);
-
+        // Two-gate flow: the Pass/Fail evaluation here is Gate 1 (the
+        // Professor's call). The applicant stays in 'interview' status
+        // until SSO performs Gate 2 (Release) on the Results page — that
+        // is the action that actually creates an admission_results row
+        // and emails the applicant.
         audit_log('interview_completed_with_eval',
-            "Completed interview queue ID {$id}: {$evalResult} — auto-waitlisted",
+            "Completed interview queue ID {$id}: {$evalResult}",
             'interview_queue', $id);
-        Session::flash('success', 'Interview completed — ' . ucfirst($evalResult) . '. Applicant auto-waitlisted.');
+        Session::flash('success', 'Interview completed — ' . ucfirst($evalResult) . '.');
         redirect('/staff/interviews/queue');
         break;
 
@@ -150,77 +132,11 @@ switch ($action) {
         break;
 
     // ----------------------------------------------------------------
-    // Queue: staff manually checks a scheduled student into the queue.
-    // Replaces the legacy code-based check-in (no code required anymore).
-    // Atomically picks the next queue number for this staff today.
+    // (Legacy 'staff_checkin' action removed — students are now
+    // auto-checked-in at slot assignment time, see
+    // core/interview_scheduler.php :: assign_interview_slot(). The
+    // live queue UI no longer renders a Check In button.)
     // ----------------------------------------------------------------
-    case 'staff_checkin':
-        $today = date('Y-m-d');
-        $db->beginTransaction();
-        try {
-            // Verify entry exists, owned by this staff today, and is scheduled
-            $stmt = $db->prepare(
-                'SELECT q.id, q.applicant_id, q.status,
-                        u.name AS student_name
-                 FROM   interview_queue q
-                 JOIN   interview_slots s ON s.id = q.slot_id
-                 JOIN   applicants a      ON a.id = q.applicant_id
-                 JOIN   users u           ON u.id = a.user_id
-                 WHERE  q.id = ?
-                   AND  s.slot_date = ?
-                   AND  COALESCE(s.assigned_to, s.created_by) = ?
-                 LIMIT 1'
-            );
-            $stmt->execute([$id, $today, $staffId]);
-            $entry = $stmt->fetch();
-
-            if (!$entry) {
-                $db->rollBack();
-                Session::flash('error', 'Applicant not found in today\'s queue.');
-                redirect('/staff/interviews/queue');
-            }
-            if ($entry['status'] !== 'scheduled') {
-                $db->rollBack();
-                Session::flash('error',
-                    htmlspecialchars($entry['student_name']) .
-                    ' is already ' . $entry['status'] . '.');
-                redirect('/staff/interviews/queue');
-            }
-
-            // Next queue number for this interviewer today (assigned_to with
-            // created_by fallback for legacy rows).
-            $nextStmt = $db->prepare(
-                'SELECT COALESCE(MAX(q.queue_number), 0) + 1
-                 FROM   interview_queue q
-                 JOIN   interview_slots s ON s.id = q.slot_id
-                 WHERE  s.slot_date = ? AND COALESCE(s.assigned_to, s.created_by) = ?
-                   AND  q.queue_number IS NOT NULL'
-            );
-            $nextStmt->execute([$today, $staffId]);
-            $nextNum = (int) $nextStmt->fetchColumn();
-
-            $db->prepare(
-                'UPDATE interview_queue
-                 SET    status        = "checked_in",
-                        queue_number  = ?,
-                        checked_in_at = NOW()
-                 WHERE  id = ? AND status = "scheduled"'
-            )->execute([$nextNum, $id]);
-
-            $db->commit();
-
-            audit_log('interview_staff_checkin',
-                "Staff #{$staffId} checked in {$entry['student_name']} as Q#{$nextNum}",
-                'interview_queue', $id);
-            Session::flash('success',
-                htmlspecialchars($entry['student_name']) . ' checked in (Queue #' . $nextNum . ').');
-        } catch (\Throwable $e) {
-            if ($db->inTransaction()) $db->rollBack();
-            error_log('staff_checkin failed: ' . $e->getMessage());
-            Session::flash('error', 'Check-in failed. Please try again.');
-        }
-        redirect('/staff/interviews/queue');
-        break;
 
     // ----------------------------------------------------------------
     // Queue: start interview (checked_in → in_progress)

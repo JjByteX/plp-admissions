@@ -152,8 +152,9 @@ function _slot_expired(string $date, ?string $endTime, string $today, string $no
                     <?php endif; ?>
 
                     <div style="display:flex;align-items:center;gap:var(--space-1)">
-                        <a href="<?= url('/staff/interviews/' . $slot['id'] . '/roster') ?>"
-                           class="btn btn-ghost btn-sm">Roster (<?= $booked ?>)</a>
+                        <?php /* Per-session "Roster" button removed — the live queue
+                                 page is now the single source of truth for who's
+                                 been auto-assigned and serves as the roster too. */ ?>
 
                         <?php if (!$isExpired): ?>
                             <button type="button" class="btn-icon" title="Edit session" style="padding:var(--space-1)"

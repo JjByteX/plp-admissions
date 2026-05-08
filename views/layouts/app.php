@@ -19,7 +19,11 @@ $isStudent    = ($userRole === 'student');
 ?>
 <?php
 // CSP header
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com https://cdnjs.cloudflare.com https://js.puter.com; worker-src 'self' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; frame-src https://newassets.hcaptcha.com https://*.hcaptcha.com https://*.puter.com; connect-src 'self' https://*.hcaptcha.com https://*.puter.com https://api.puter.com https://cdnjs.cloudflare.com;");
+// CSP — `connect-src` is intentionally permissive (any HTTPS host) because
+// Puter's "AI Validate" feature uploads via signed PUT URLs that point at
+// object-storage hosts (S3 / R2 / *.puter.site / *.amazonaws.com) returned
+// at runtime. A strict allow-list breaks every time Puter changes infra.
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com https://cdnjs.cloudflare.com https://js.puter.com; worker-src 'self' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; frame-src https://newassets.hcaptcha.com https://*.hcaptcha.com https://*.puter.com; connect-src 'self' https: blob: data:;");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("Referrer-Policy: strict-origin-when-cross-origin");
@@ -131,13 +135,33 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
             <div class="dropdown-menu student-header-dropdown">
                 <div class="student-header-dropdown-info">
                     <div class="user-name"><?= e($authUser['name'] ?? '') ?></div>
-                    <div class="user-role"><?= ucfirst(e($userRole)) ?></div>
+                    <div class="user-role"><?= e(Auth::roleLabel($userRole)) ?></div>
                 </div>
                 <div class="dropdown-separator"></div>
                 <a href="<?= url('/student/settings') ?>" class="dropdown-item">
                     <?php include __DIR__ . '/../partials/icons/ic_fluent_settings_24_regular.svg'; ?>
                     Settings
                 </a>
+                <div class="dropdown-item theme-toggle-row" onclick="
+                    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+                    document.documentElement.dataset.theme = t;
+                    localStorage.setItem('plp_theme', t);
+                    document.querySelectorAll('.theme-pill').forEach(p => p.dataset.theme = t);" style="cursor:pointer;justify-content:space-between;">
+                    <span style="display:flex;align-items:center;gap:var(--space-2)">
+                        <?= icon('ic_fluent_weather_moon_24_regular', 15) ?>
+                        Dark Mode
+                    </span>
+                    <div class="theme-pill" data-theme="light" style="
+                        position:relative;width:32px;height:18px;border-radius:999px;
+                        background:var(--border);transition:background .2s;flex-shrink:0;pointer-events:none;">
+                        <div style="
+                            position:absolute;top:3px;left:3px;width:12px;height:12px;
+                            border-radius:50%;background:#fff;
+                            transition:transform .2s;
+                            transform:translateX(0);">
+                        </div>
+                    </div>
+                </div>
                 <?php
                 // Check if student has an active application that can be withdrawn
                 $_wdStmt = db()->prepare('SELECT id, overall_status FROM applicants WHERE user_id = ? ORDER BY id DESC LIMIT 1');
@@ -183,11 +207,14 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
             <span class="sidebar-school-name"><?= e($schoolName) ?></span>
         </div>
 
-        <!-- Navigation — rendered per role -->
+        <!-- Navigation — rendered per role.
+             Professor (staff) uses the trimmed nav_staff.php.
+             Admin / SSO / Dean share the management nav, which itself
+             filters individual items per role. -->
         <nav class="sidebar-nav" aria-label="Main navigation">
-            <?php if ($userRole === 'staff'): ?>
+            <?php if ($userRole === ROLE_STAFF): ?>
                 <?php include __DIR__ . '/../partials/nav_staff.php'; ?>
-            <?php elseif ($userRole === 'admin'): ?>
+            <?php elseif (in_array($userRole, [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN], true)): ?>
                 <?php include __DIR__ . '/../partials/nav_admin.php'; ?>
             <?php endif; ?>
         </nav>
@@ -199,12 +226,12 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                     <div class="user-avatar"><?= e($userInitials) ?></div>
                     <div class="user-info">
                         <div class="user-name truncate"><?= e($authUser['name'] ?? '') ?></div>
-                        <div class="user-role"><?= e($userRole) ?></div>
+                        <div class="user-role"><?= e(Auth::roleLabel($userRole)) ?></div>
                     </div>
                     <?= icon('ic_fluent_more_horizontal_24_filled', 20, 'flex-shrink:0;color:var(--text-tertiary)') ?>
                 </div>
                 <div class="dropdown-menu">
-                    <a href="<?= url($userRole === 'staff' ? '/staff/settings' : '/admin/settings') ?>" class="dropdown-item">
+                    <a href="<?= url($userRole === ROLE_STAFF ? '/staff/settings' : '/admin/settings') ?>" class="dropdown-item">
                         <?php include __DIR__ . '/../partials/icons/ic_fluent_settings_24_regular.svg'; ?>
                         Settings
                     </a>
@@ -380,6 +407,12 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
         window.location.href = '<?= url('/logout') ?>';
     }
 
+    // The buttons inside the modal use inline onclick="keepAlive()" /
+    // onclick="logOutNow()", so the IIFE-scoped functions need to be
+    // hoisted to the global scope or the clicks throw ReferenceError.
+    window.keepAlive = keepAlive;
+    window.logOutNow = logOutNow;
+
     // Expose so login page can trigger the "session expired" modal
     window.showTimeoutModal = function () {
         countdownEl.textContent = '0s';
@@ -425,10 +458,10 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                     </div>
                 </div>
                 <div>
-                    <label class="form-label">Type <strong>WITHDRAW</strong> to confirm</label>
+                    <label class="form-label">Type <strong>Withdraw</strong> to confirm</label>
                     <input type="text" id="withdraw-confirm-input" class="form-control"
-                           placeholder="WITHDRAW" autocomplete="off" style="max-width:220px"
-                           oninput="document.getElementById('withdraw-submit-btn').disabled = this.value !== 'WITHDRAW'">
+                           placeholder="Withdraw" autocomplete="off" style="max-width:220px"
+                           oninput="document.getElementById('withdraw-submit-btn').disabled = this.value.trim().toLowerCase() !== 'withdraw'">
                 </div>
                 <div>
                     <label class="form-label">Reason <span style="color:var(--text-tertiary);font-weight:var(--weight-regular)">(optional)</span></label>

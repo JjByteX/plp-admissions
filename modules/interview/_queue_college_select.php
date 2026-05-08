@@ -130,4 +130,5 @@ ob_start();
 $content   = ob_get_clean();
 $pageTitle = 'Live Queue';
 $activeNav = 'interviews';
+$pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

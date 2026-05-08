@@ -60,9 +60,19 @@ define('MAX_UPLOAD_BYTES', 5 * 1024 * 1024);
 define('ALLOWED_MIME_TYPES', ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 
 // -- Roles -------------------------------------------------------
-define('ROLE_STUDENT', 'student');
-define('ROLE_STAFF',   'staff');
-define('ROLE_ADMIN',   'admin');
+// DB enum values stored on users.role:
+//   'student' | 'staff' | 'sso' | 'dean' | 'admin'
+//
+// ROLE_STAFF and ROLE_PROFESSOR both refer to the 'staff' enum value —
+// "Professor" is just the user-facing label for legacy 'staff' rows
+// (faculty who proctor exams and conduct interviews). SSO and Dean are
+// new top-level roles introduced for the role-redesign rollout.
+define('ROLE_STUDENT',   'student');
+define('ROLE_STAFF',     'staff');
+define('ROLE_PROFESSOR', 'staff');     // alias — DB enum stays 'staff'
+define('ROLE_SSO',       'sso');
+define('ROLE_DEAN',      'dean');
+define('ROLE_ADMIN',     'admin');
 
 // -- Applicant types ---------------------------------------------
 define('TYPE_FRESHMAN',   'freshman');
@@ -204,10 +214,14 @@ define('DOC_STATUS_LABELS', [
 ]);
 
 // -- Admission result labels ------------------------------------
+// Waitlist tier was retired in the role redesign — the only outcomes
+// are Accepted or Rejected (a Professor's interview Fail blocks
+// acceptance entirely). Legacy 'waitlisted' rows in the DB still
+// render as "Waitlisted (legacy)" via the fallback in pages that
+// read this constant.
 define('RESULT_LABELS', [
-    'accepted'   => 'Accepted',
-    'waitlisted' => 'Waitlisted',
-    'rejected'   => 'Rejected',
+    'accepted' => 'Accepted',
+    'rejected' => 'Rejected',
 ]);
 
 // ----------------------------------------------------------------
@@ -263,6 +277,11 @@ define('SMTP_USER',       getenv('SMTP_USER')       ?: '');
 define('SMTP_PASS',       getenv('SMTP_PASS')       ?: '');
 define('SMTP_FROM_NAME',  getenv('SMTP_FROM_NAME')  ?: 'PLP Admissions');
 define('SMTP_ENABLED',    !empty(SMTP_USER) && !empty(SMTP_PASS));
+
+// -- Email verification ------------------------------------------
+define('VERIFY_RESEND_COOLDOWN_SECS', 60);   // wait between resend requests
+define('VERIFY_CODE_TTL_SECS',        15 * 60);  // 15-minute code lifetime
+define('VERIFY_MAX_CODE_ATTEMPTS',    5);    // bad-code attempts per credential
 
 // -- Progress steps (student tracker) ---------------------------
 define('PROGRESS_STEPS', [

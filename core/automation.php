@@ -465,69 +465,18 @@ function auto_assign_exam_slot(int $applicantId): ?int
 }
 
 // ----------------------------------------------------------------
-// AUTO-PROMOTE WAITLIST
+// AUTO-PROMOTE WAITLIST  (DEPRECATED)
 // ----------------------------------------------------------------
 
 /**
- * When an accepted student withdraws or declines, auto-promote the next
- * waitlisted applicant in the same course.
+ * DEPRECATED — Waitlist tier was retired in the role redesign. Results are
+ * now Accept-only or Reject-only, so there is nothing to promote from.
+ * Kept as a no-op stub so any older callers don't blow up; new code should
+ * not invoke this.
  */
 function auto_promote_waitlist(int $applicantId): ?int
 {
-    if (school_setting('auto_promote_waitlist', '1') !== '1') return null;
-
-    $pdo = db();
-
-    // Get the withdrawn/declined applicant's course
-    $stmt = $pdo->prepare('SELECT course_applied FROM applicants WHERE id = ?');
-    $stmt->execute([$applicantId]);
-    $course = $stmt->fetchColumn();
-    if (!$course) return null;
-
-    // Find the highest-ranked waitlisted applicant for the same course
-    $stmt = $pdo->prepare(
-        'SELECT a.id AS applicant_id, a.user_id, er.rank_score
-         FROM applicants a
-         JOIN admission_results ar ON ar.applicant_id = a.id
-         LEFT JOIN exam_results er ON er.applicant_id = a.id
-         WHERE a.course_applied = ?
-           AND ar.result = "waitlisted"
-           AND a.overall_status = "released"
-         ORDER BY er.rank_score DESC, a.documents_approved_at ASC
-         LIMIT 1'
-    );
-    $stmt->execute([$course]);
-    $next = $stmt->fetch();
-
-    if (!$next) return null;
-
-    $nextApplicantId = (int) $next['applicant_id'];
-    $nextUserId = (int) $next['user_id'];
-
-    // Promote: update result to accepted
-    $systemUserId = get_system_user_id();
-    $pdo->prepare(
-        'UPDATE admission_results
-         SET result = "accepted", promoted_from_waitlist = 1,
-             remarks = CONCAT(COALESCE(remarks, ""), "\nAuto-promoted from waitlist"),
-             released_by = ?, released_at = NOW()
-         WHERE applicant_id = ?'
-    )->execute([$systemUserId, $nextApplicantId]);
-
-    // Notify the promoted student
-    create_notification(
-        $nextUserId,
-        'waitlist_promoted',
-        'Congratulations! You have been accepted!',
-        'You have been promoted from the waitlist and are now accepted for ' . $course . '.',
-        '/student/result'
-    );
-
-    audit_log('waitlist_auto_promoted',
-        "Auto-promoted applicant {$nextApplicantId} from waitlist for {$course} (replacing applicant {$applicantId})",
-        'applicant', $nextApplicantId);
-
-    return $nextApplicantId;
+    return null;
 }
 
 /**
@@ -557,65 +506,68 @@ function get_system_user_id(): int
  */
 function auto_release_results(): array
 {
+    // Auto-release only runs when the school-year toggle is on.
     if (school_setting('auto_release_results', '0') !== '1') {
-        return ['accepted' => 0, 'waitlisted' => 0, 'rejected' => 0];
+        return ['accepted' => 0, 'rejected' => 0];
     }
 
-    $pdo = db();
+    $pdo          = db();
     $systemUserId = get_system_user_id();
-    $counts = ['accepted' => 0, 'waitlisted' => 0, 'rejected' => 0];
+    $counts       = ['accepted' => 0, 'rejected' => 0];
 
-    // Find applicants who have completed interview but don't have a result yet
+    // Same bucket rules used by modules/results/staff_manage.php and
+    // staff_action.php: exam_passed + interview Pass/Fail. Waitlist tier
+    // was retired in the role redesign, so the only outcomes are
+    // accepted or rejected.
+    //
+    // Pull every applicant who hasn't been released yet and has enough
+    // signal to make a decision (exam scored, interview evaluated, OR
+    // exam failed outright).
     $stmt = $pdo->query(
-        'SELECT a.id AS applicant_id, a.user_id, a.course_applied,
-                er.score, er.total_items, er.rank_score, er.passed AS exam_passed,
-                iq.interview_status, iq.evaluation_result
+        'SELECT a.id AS applicant_id,
+                er.passed AS exam_passed,
+                iq.evaluation_result
          FROM applicants a
-         JOIN exam_results er ON er.applicant_id = a.id
-         LEFT JOIN interview_queue iq ON iq.applicant_id = a.id
-         LEFT JOIN admission_results ar ON ar.applicant_id = a.id
-         WHERE a.overall_status IN ("interview", "released")
-           AND ar.id IS NULL
-           AND iq.interview_status = "completed"
-           AND iq.attendance_status = "present"'
+         LEFT JOIN exam_results       er ON er.applicant_id = a.id
+         LEFT JOIN interview_queue    iq ON iq.applicant_id = a.id
+         LEFT JOIN admission_results  ar ON ar.applicant_id = a.id
+         WHERE a.overall_status IN ("exam","interview","released")
+           AND ar.id IS NULL'
     );
     $applicants = $stmt->fetchAll();
 
     foreach ($applicants as $appl) {
-        $rank = (int) $appl['rank_score'];
-        $course = $appl['course_applied'];
-        $threshold = get_pass_threshold($course);
-        $interviewPassed = ($appl['evaluation_result'] ?? '') !== 'fail';
+        $examPassed   = isset($appl['exam_passed']) ? (int) $appl['exam_passed'] : -1;
+        $interviewRes = $appl['evaluation_result'];
 
-        if ($rank >= $threshold && $interviewPassed) {
-            $decision = 'accepted';
-        } elseif ($rank >= ($threshold - 1) && $interviewPassed) {
-            $decision = 'waitlisted';
-        } else {
+        if ($examPassed === 0 || $interviewRes === 'fail') {
             $decision = 'rejected';
+        } elseif ($examPassed === 1 && $interviewRes === 'pass') {
+            $decision = 'accepted';
+        } else {
+            // Still 'awaiting' — interview hasn't been evaluated yet.
+            continue;
         }
 
-        // Insert result
         $pdo->prepare(
             'INSERT INTO admission_results (applicant_id, result, remarks, released_by, released_at)
-             VALUES (?, ?, "Auto-released based on score threshold", ?, NOW())
-             ON DUPLICATE KEY UPDATE result=VALUES(result), remarks=VALUES(remarks),
-                                     released_by=VALUES(released_by), released_at=NOW()'
+             VALUES (?, ?, "Auto-released", ?, NOW())
+             ON DUPLICATE KEY UPDATE result      = VALUES(result),
+                                     remarks     = VALUES(remarks),
+                                     released_by = VALUES(released_by),
+                                     released_at = NOW()'
         )->execute([(int) $appl['applicant_id'], $decision, $systemUserId]);
 
-        // Update status
         $pdo->prepare('UPDATE applicants SET overall_status = "released" WHERE id = ?')
             ->execute([(int) $appl['applicant_id']]);
 
-        // Notify student
         notify_stage_transition((int) $appl['applicant_id'], 'released', 'Result: ' . ucfirst($decision));
-
         $counts[$decision]++;
     }
 
     if (array_sum($counts) > 0) {
         audit_log('auto_release_results',
-            "Auto-released results: {$counts['accepted']} accepted, {$counts['waitlisted']} waitlisted, {$counts['rejected']} rejected");
+            "Auto-released results: {$counts['accepted']} accepted, {$counts['rejected']} rejected");
     }
 
     return $counts;
@@ -809,13 +761,31 @@ function ensure_email_verification_columns(): void
     static $checked = false;
     if ($checked) return;
     $checked = true;
+
+    $pdo = db();
+
+    // Base columns (legacy installs may not have these yet).
     try {
-        db()->query('SELECT email_verified FROM users LIMIT 0');
+        $pdo->query('SELECT email_verified FROM users LIMIT 0');
     } catch (\Throwable) {
-        db()->exec("ALTER TABLE users ADD COLUMN `email_verified` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_active`");
-        db()->exec("ALTER TABLE users ADD COLUMN `email_verify_token` VARCHAR(64) DEFAULT NULL AFTER `email_verified`");
+        $pdo->exec("ALTER TABLE users ADD COLUMN `email_verified` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_active`");
+        $pdo->exec("ALTER TABLE users ADD COLUMN `email_verify_token` VARCHAR(64) DEFAULT NULL AFTER `email_verified`");
         // Mark existing users as verified so they're not locked out
-        db()->exec("UPDATE users SET email_verified = 1 WHERE id > 0");
+        $pdo->exec("UPDATE users SET email_verified = 1 WHERE id > 0");
+    }
+
+    // Newer columns used by the 6-digit code + cooldown flow.
+    foreach ([
+        ['email_verify_code',             "VARCHAR(8) DEFAULT NULL AFTER `email_verify_token`"],
+        ['email_verify_code_expires_at',  "DATETIME DEFAULT NULL AFTER `email_verify_code`"],
+        ['email_verify_attempts',         "TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER `email_verify_code_expires_at`"],
+        ['email_verify_last_sent_at',     "DATETIME DEFAULT NULL AFTER `email_verify_attempts`"],
+    ] as [$col, $def]) {
+        try { $pdo->query("SELECT `{$col}` FROM users LIMIT 0"); }
+        catch (\Throwable) {
+            try { $pdo->exec("ALTER TABLE users ADD COLUMN `{$col}` {$def}"); }
+            catch (\Throwable) {}
+        }
     }
 }
 
@@ -827,16 +797,146 @@ function generate_verify_token(int $userId): string
     return $token;
 }
 
-function send_verification_email(string $email, string $name, string $token): void
+/**
+ * Generate a fresh token + 6-digit code for the email-verification flow,
+ * persist them on the user row, and return both so the caller can email them.
+ */
+function generate_verify_credentials(int $userId): array
+{
+    ensure_email_verification_columns();
+    $token = bin2hex(random_bytes(16));
+    $code  = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+    db()->prepare(
+        'UPDATE users
+            SET email_verify_token            = ?,
+                email_verify_code             = ?,
+                email_verify_code_expires_at  = DATE_ADD(NOW(), INTERVAL ? SECOND),
+                email_verify_attempts         = 0,
+                email_verify_last_sent_at     = NOW()
+          WHERE id = ?'
+    )->execute([$token, $code, (int) VERIFY_CODE_TTL_SECS, $userId]);
+
+    return ['token' => $token, 'code' => $code];
+}
+
+/**
+ * Returns ['ok' => bool, 'retry_after' => int] — caller is allowed to send a
+ * fresh code only when ok=true. retry_after is the seconds remaining until the
+ * cooldown window closes.
+ */
+function can_resend_verification(int $userId): array
+{
+    ensure_email_verification_columns();
+    $stmt = db()->prepare(
+        'SELECT GREATEST(0, ? - TIMESTAMPDIFF(SECOND, email_verify_last_sent_at, NOW()))
+           FROM users
+          WHERE id = ?
+          LIMIT 1'
+    );
+    $stmt->execute([(int) VERIFY_RESEND_COOLDOWN_SECS, $userId]);
+    $remaining = (int) ($stmt->fetchColumn() ?: 0);
+    return ['ok' => $remaining <= 0, 'retry_after' => $remaining];
+}
+
+function find_user_by_verify_token(string $token): ?array
+{
+    if ($token === '') return null;
+    ensure_email_verification_columns();
+    $stmt = db()->prepare('SELECT * FROM users WHERE email_verify_token = ? AND is_active = 1 LIMIT 1');
+    $stmt->execute([$token]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function mark_user_email_verified(int $userId): void
+{
+    ensure_email_verification_columns();
+    db()->prepare(
+        'UPDATE users
+            SET email_verified                = 1,
+                email_verify_token            = NULL,
+                email_verify_code             = NULL,
+                email_verify_code_expires_at  = NULL,
+                email_verify_attempts         = 0
+          WHERE id = ?'
+    )->execute([$userId]);
+}
+
+/**
+ * Validate a 6-digit code submitted via /verify-pending. Returns:
+ *   ['ok' => true,  'user' => array, 'already' => bool]
+ *   ['ok' => false, 'error' => string, 'attempts_remaining' => int]
+ */
+function verify_user_by_code(string $email, string $code): array
+{
+    ensure_email_verification_columns();
+
+    $email = strtolower(trim($email));
+    $code  = preg_replace('/\D/', '', $code);
+    if ($email === '' || strlen($code) !== 6) {
+        return ['ok' => false, 'error' => 'Invalid or expired code.'];
+    }
+
+    $stmt = db()->prepare('SELECT * FROM users WHERE LOWER(email) = ? AND is_active = 1 LIMIT 1');
+    $stmt->execute([$email]);
+    $user = $stmt->fetch();
+    if (!$user) {
+        return ['ok' => false, 'error' => 'Invalid or expired code.'];
+    }
+
+    if (!empty($user['email_verified'])) {
+        return ['ok' => true, 'user' => $user, 'already' => true];
+    }
+
+    if (empty($user['email_verify_code']) || empty($user['email_verify_code_expires_at'])) {
+        return ['ok' => false, 'error' => 'Request a new code, then try again.'];
+    }
+
+    if (strtotime($user['email_verify_code_expires_at']) < time()) {
+        return ['ok' => false, 'error' => 'This code has expired. Request a new one.'];
+    }
+
+    $tries = (int) ($user['email_verify_attempts'] ?? 0);
+    if ($tries >= (int) VERIFY_MAX_CODE_ATTEMPTS) {
+        return ['ok' => false, 'error' => 'Too many incorrect attempts. Request a new code.'];
+    }
+
+    if (!hash_equals((string) $user['email_verify_code'], $code)) {
+        db()->prepare('UPDATE users SET email_verify_attempts = email_verify_attempts + 1 WHERE id = ?')
+            ->execute([$user['id']]);
+        return [
+            'ok'                 => false,
+            'error'              => 'Incorrect code.',
+            'attempts_remaining' => max(0, (int) VERIFY_MAX_CODE_ATTEMPTS - ($tries + 1)),
+        ];
+    }
+
+    mark_user_email_verified((int) $user['id']);
+    $user['email_verified'] = 1;
+    return ['ok' => true, 'user' => $user, 'already' => false];
+}
+
+function send_verification_email(string $email, string $name, string $token, ?string $code = null): void
 {
     $verifyUrl = rtrim(BASE_URL, '/') . '/verify-email?token=' . $token;
-    $body = '<p>Hello, <strong>' . e($name) . '</strong>!</p>'
-        . '<p>Please verify your email address to activate your account.</p>'
-        . '<p style="margin-top:16px"><a href="' . e($verifyUrl) . '" '
-        . 'style="display:inline-block;padding:12px 32px;background:' . e(school_setting('accent_color', '#2d6a4f')) . ';color:#fff;'
+    $accent    = e(school_setting('accent_color', '#2d6a4f'));
+
+    $body  = '<p>Hello, <strong>' . e($name) . '</strong>!</p>'
+        . '<p>Please verify your email address to activate your account.</p>';
+
+    if ($code !== null && $code !== '') {
+        $body .= '<p style="margin:16px 0 6px 0;color:#6b7280;font-size:13px">Verification code:</p>'
+            . '<p style="margin:0 0 16px 0;font-family:monospace;font-size:28px;font-weight:bold;'
+            . 'letter-spacing:.4em;color:' . $accent . '">' . e($code) . '</p>';
+    }
+
+    $body .= '<p style="margin-top:16px"><a href="' . e($verifyUrl) . '" '
+        . 'style="display:inline-block;padding:12px 32px;background:' . $accent . ';color:#fff;'
         . 'text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px">Verify Email</a></p>'
         . '<p style="margin-top:16px;color:#6b7280;font-size:13px">If the button doesn\'t work, copy this link:<br>'
-        . '<a href="' . e($verifyUrl) . '" style="color:' . e(school_setting('accent_color', '#2d6a4f')) . '">' . e($verifyUrl) . '</a></p>';
+        . '<a href="' . e($verifyUrl) . '" style="color:' . $accent . '">' . e($verifyUrl) . '</a></p>';
+
     send_email($email, 'Verify Your Email — ' . school_setting('school_name', 'PLP Admissions'), email_template('Verify Your Email', $body), $name);
 }
 
@@ -1181,9 +1281,15 @@ function batch_create_exam_slots(array $config, string $department, int $staffId
     $startDate = new DateTime($config['start_date']);
     $endDate   = new DateTime($config['end_date']);
     $time      = $config['slot_time']   ?? '08:00';
+    $endTime   = $config['end_time']    ?? '';
     $room      = $config['room_label']  ?? '';
     $capacity  = max(1, (int)($config['capacity'] ?? 35));
     $days      = $config['days'] ?? [1, 2, 3, 4, 5];
+
+    // Default close time = open + 90 min if caller didn't specify one.
+    if ($endTime === '') {
+        $endTime = date('H:i', strtotime($time . ' +90 minutes'));
+    }
 
     $schoolYear = school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
     $activeExam = $pdo->query('SELECT id FROM exams WHERE is_active=1 LIMIT 1')->fetch();
@@ -1206,9 +1312,9 @@ function batch_create_exam_slots(array $config, string $department, int $staffId
             if (!$stmt->fetch()) {
                 $pdo->prepare(
                     'INSERT INTO exam_slot_schedule
-                        (exam_id, exam_date, slot_time, room_label, department, capacity, school_year, created_by)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-                )->execute([$examId, $dateStr, $time . ':00', $room, $department, $capacity, $schoolYear, $staffId]);
+                        (exam_id, exam_date, slot_time, end_time, room_label, department, capacity, school_year, created_by)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                )->execute([$examId, $dateStr, $time . ':00', $endTime . ':00', $room, $department, $capacity, $schoolYear, $staffId]);
                 $created++;
             }
         }

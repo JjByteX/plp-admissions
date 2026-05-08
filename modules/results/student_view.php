@@ -115,8 +115,7 @@ ob_start();
 <?php else:
     $resultConfig = [
         'accepted'   => ['class' => 'success', 'title' => 'Congratulations!', 'sub' => 'You have been accepted.'],
-        'waitlisted' => ['class' => 'warning',  'title' => 'Waitlisted',       'sub' => 'You are on the waitlist.'],
-        'rejected'   => ['class' => 'error',    'title' => 'Not Accepted',     'sub' => 'Your application was not accepted this cycle.'],
+        'rejected'   => ['class' => 'error',   'title' => 'Not Accepted',     'sub' => 'Your application was not accepted this cycle.'],
     ];
     $cfg = $resultConfig[$result['result']] ?? $resultConfig['rejected'];
 ?>

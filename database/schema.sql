@@ -74,7 +74,7 @@ CREATE TABLE `users` (
     `phone`         VARCHAR(20)      NOT NULL DEFAULT '',
     `email`         VARCHAR(180)     NOT NULL,
     `password_hash` VARCHAR(255)     NOT NULL,
-    `role`          ENUM('student','staff','admin') NOT NULL DEFAULT 'student',
+    `role`          ENUM('student','staff','sso','dean','admin') NOT NULL DEFAULT 'student',
     `department`    VARCHAR(120)     NOT NULL DEFAULT ''
                     COMMENT 'College/department name (see departments.name)',
     `is_active`     TINYINT(1)       NOT NULL DEFAULT 1,
@@ -187,21 +187,19 @@ CREATE TABLE `documents` (
 -- ============================================================
 -- 4. Exams: definition, sections, questions, results, schedule
 -- ============================================================
+-- exams now describes only the *content* of the entrance exam:
+-- title, sections, questions, passing score. The schedule, duration,
+-- and access code all live on each room slot (exam_slot_schedule) —
+-- see the comment on that table below.
 CREATE TABLE `exams` (
     `id`                 INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
     `title`              VARCHAR(160)     NOT NULL,
     `description`        TEXT             DEFAULT NULL,
-    `duration_minutes`   SMALLINT(6)      NOT NULL DEFAULT 60,
     `passing_score`      SMALLINT(6)      DEFAULT NULL,
     `shuffle_questions`  TINYINT(1)       NOT NULL DEFAULT 0,
     `shuffle_choices`    TINYINT(1)       NOT NULL DEFAULT 0,
     `is_active`          TINYINT(1)       NOT NULL DEFAULT 0,
     `created_at`         DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `scheduled_start`    DATETIME         DEFAULT NULL,
-    `scheduled_end`      DATETIME         DEFAULT NULL,
-    `access_password`    VARCHAR(255)     DEFAULT NULL,
-    `password_issued_at` DATETIME         DEFAULT NULL
-        COMMENT 'When access_password was last set/generated; student access expires 5 min after this',
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -263,19 +261,34 @@ CREATE TABLE `exam_results` (
         FOREIGN KEY (`exam_id`)      REFERENCES `exams`      (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Exam-day room scheduling (auto-assigns 35 applicants per room per slot)
+-- Exam-day room scheduling (auto-assigns 35 applicants per room per slot).
+--
+-- Each row = one physical room running one session at a specific date/time.
+-- Owns its own open/close window so each room can run on its own clock,
+-- and its own access code so each room's proctor can generate / regenerate
+-- independently without affecting other rooms. The exam content table
+-- (`exams`) no longer carries duration — the slot's `slot_time` and
+-- `end_time` together define the exam window. Late cutoff is the global
+-- school-setting `exam_late_cutoff_minutes` (default 15).
 CREATE TABLE `exam_slot_schedule` (
-    `id`          INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-    `exam_id`     INT(10) UNSIGNED DEFAULT NULL COMMENT 'FK to exams; NULL = any active exam',
-    `exam_date`   DATE             NOT NULL,
-    `slot_time`   TIME             NOT NULL DEFAULT '08:00:00',
-    `room_label`  VARCHAR(80)      NOT NULL DEFAULT '',
-    `department`  VARCHAR(120)     NOT NULL DEFAULT '' COMMENT 'College/department this slot is for',
-    `capacity`    SMALLINT(5)      NOT NULL DEFAULT 35,
-    `filled`      SMALLINT(5)      NOT NULL DEFAULT 0,
-    `school_year` VARCHAR(9)       NOT NULL,
-    `created_by`  INT(10) UNSIGNED NOT NULL,
-    `created_at`  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `id`                 INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `exam_id`            INT(10) UNSIGNED DEFAULT NULL COMMENT 'FK to exams; NULL = any active exam',
+    `exam_date`          DATE             NOT NULL,
+    `slot_time`          TIME             NOT NULL DEFAULT '08:00:00'
+        COMMENT 'When this slot opens (room start time)',
+    `end_time`           TIME             NOT NULL DEFAULT '09:30:00'
+        COMMENT 'When this slot closes; duration = end_time - slot_time',
+    `room_label`         VARCHAR(80)      NOT NULL DEFAULT '',
+    `department`         VARCHAR(120)     NOT NULL DEFAULT '' COMMENT 'College/department this slot is for',
+    `capacity`           SMALLINT(5)      NOT NULL DEFAULT 35,
+    `filled`             SMALLINT(5)      NOT NULL DEFAULT 0,
+    `access_password`    VARCHAR(64)      DEFAULT NULL
+        COMMENT 'Per-room access code; valid 5 min after password_issued_at',
+    `password_issued_at` DATETIME         DEFAULT NULL
+        COMMENT 'When the room proctor last generated the code',
+    `school_year`        VARCHAR(9)       NOT NULL,
+    `created_by`         INT(10) UNSIGNED NOT NULL,
+    `created_at`         DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_ess_date` (`exam_date`),
     KEY `idx_ess_year` (`school_year`),
@@ -574,10 +587,11 @@ INSERT INTO `school_settings` (`setting_key`, `setting_value`) VALUES
     ('admissions_close',      '2026-03-31'),
     ('document_deadline',     ''),
 
-    ('system_version',        '1.0.0'),
-    ('exam_default_duration', '90'),
-    ('exam_room_capacity',    '35'),
-    ('exam_daily_cap',        '3000'),
+    ('system_version',          '1.0.0'),
+    ('exam_default_duration',   '90'),
+    ('exam_room_capacity',      '35'),
+    ('exam_daily_cap',          '3000'),
+    ('exam_late_cutoff_minutes','15'),
 
     ('auto_validate_documents', '1'),
     ('auto_assign_exam_slots',  '1'),

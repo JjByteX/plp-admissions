@@ -6,7 +6,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 
 $db      = db();
 $errors  = [];
@@ -47,8 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'new_cycle') {
         $confirm = trim($_POST['confirm_text'] ?? '');
-        if ($confirm !== 'START NEW CYCLE') {
-            $errors[] = 'Type START NEW CYCLE to confirm.';
+        if (strcasecmp($confirm, 'Start new cycle') !== 0) {
+            $errors[] = 'Type "Start new cycle" to confirm.';
         } else {
             $db->exec('UPDATE exams SET is_active=0');
             audit_log('new_cycle_started', 'Started new admission cycle — exam deactivated.');
@@ -211,9 +211,9 @@ ob_start();
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="new_cycle">
             <div>
-                <label class="form-label">Type <strong>START NEW CYCLE</strong> to confirm</label>
+                <label class="form-label">Type <strong>Start new cycle</strong> to confirm</label>
                 <input type="text" name="confirm_text" class="form-input"
-                       placeholder="START NEW CYCLE" autocomplete="off" style="max-width:280px">
+                       placeholder="Start new cycle" autocomplete="off" style="max-width:280px">
             </div>
             <div style="margin-top:var(--space-5)">
                 <button type="submit" class="btn btn-danger">Start New Cycle</button>

@@ -4,7 +4,7 @@
 // Staff dashboard — pipeline bars with visible left-side labels
 // ============================================================
 require_once ROOT_PATH . '/core/Auth.php';
-Auth::requireRole(ROLE_STAFF);
+Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 // ── A4: Dashboard POST handlers ──────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -70,8 +70,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// ── Dean / Professor dept scope ──────────────────────────────
+// Dean and Professor see only stats for applicants whose course maps
+// to their own college. Admin / SSO see everything.
+[$deptFilter, $deptParams] = viewer_course_filter('a');
+$deptWhere = $deptFilter !== '' ? ('WHERE 1 ' . $deptFilter) : '';
+
 // ── Fetch summary counts ─────────────────────────────────────
-$stats = db()->query(
+$statsStmt = db()->prepare(
     "SELECT
        COUNT(*)                                                              AS total,
 
@@ -102,17 +108,25 @@ $stats = db()->query(
              WHERE ar2.applicant_id = a.id LIMIT 1) = 'waitlisted')          AS cnt_waitlisted,
        SUM((SELECT ar2.result FROM admission_results ar2
              WHERE ar2.applicant_id = a.id LIMIT 1) = 'rejected')            AS cnt_rejected
-     FROM applicants a"
-)->fetch(PDO::FETCH_ASSOC);
+     FROM applicants a $deptWhere"
+);
+$statsStmt->execute($deptParams);
+$stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
 
-// Document-status breakdown — count document rows by status
-$docStatsRow = db()->query(
+// Document-status breakdown — count document rows by status.
+// Joined onto applicants so the same Dean / Professor dept filter
+// applied to the pipeline numbers also narrows this side card.
+$docStmt = db()->prepare(
     "SELECT
-        SUM(status = 'approved')     AS approved,
-        SUM(status = 'under_review') AS under_review,
-        SUM(status = 'rejected')     AS rejected
-     FROM documents"
-)->fetch(PDO::FETCH_ASSOC);
+        SUM(d.status = 'approved')     AS approved,
+        SUM(d.status = 'under_review') AS under_review,
+        SUM(d.status = 'rejected')     AS rejected
+     FROM documents d
+     JOIN applicants a ON a.id = d.applicant_id
+     $deptWhere"
+);
+$docStmt->execute($deptParams);
+$docStatsRow = $docStmt->fetch(PDO::FETCH_ASSOC);
 
 $docStats = [
     'approved'     => (int)($docStatsRow['approved']     ?? 0),
@@ -149,10 +163,24 @@ $typePipeline = [
     ['label' => 'Foreign',    'count' => (int) $stats['cnt_foreign'],    'color' => 'var(--chart-pink)'],
 ];
 
-// Idle applicant alerts
+// Idle applicant alerts — dept-scoped for Dean / Professor.
+// Re-implements get_idle_summary() inline so the same viewer_course_filter()
+// used elsewhere on this page narrows the alert counts too.
 $idleDays = (int) school_setting('idle_applicant_days', '7');
-$idleSummary = get_idle_summary($idleDays);
-$totalIdle = array_sum(array_column($idleSummary, 'count'));
+$idleStmt = db()->prepare(
+    "SELECT a.overall_status AS stage,
+            COUNT(*) AS count,
+            MAX(DATEDIFF(NOW(), a.updated_at)) AS max_days
+     FROM applicants a
+     WHERE a.overall_status NOT IN ('released','withdrawn')
+       AND DATEDIFF(NOW(), a.updated_at) >= ?
+       $deptFilter
+     GROUP BY a.overall_status
+     ORDER BY count DESC"
+);
+$idleStmt->execute(array_merge([$idleDays], $deptParams));
+$idleSummary = $idleStmt->fetchAll(PDO::FETCH_ASSOC);
+$totalIdle   = array_sum(array_column($idleSummary, 'count'));
 
 // B6: Check if there are interview sessions today
 $hasTodayStmt = db()->prepare('SELECT COUNT(*) FROM interview_slots WHERE slot_date = ? AND status = "open"');
@@ -225,7 +253,8 @@ ob_start();
 </div>
 <?php endif; ?>
 
-<!-- ── Quick Actions ────────────────────────────────────── -->
+<!-- ── Quick Actions (SSO/Admin only — Dean & Professor are read-only here) ─ -->
+<?php if (Auth::isAdmin() || Auth::isSSO()): ?>
 <div class="card" style="padding:var(--space-4);margin-bottom:var(--space-6)">
     <strong style="font-size:var(--text-sm);display:block;margin-bottom:var(--space-3)">Quick Actions</strong>
     <div style="display:flex;flex-wrap:wrap;gap:var(--space-3)">
@@ -283,6 +312,7 @@ ob_start();
         </form>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- ── Pipeline charts ────────────────────────────────── -->
 <div class="dashboard-grid">

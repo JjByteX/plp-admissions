@@ -1,57 +1,129 @@
 <?php
 // ============================================================
 // modules/results/staff_manage.php
-// M6 — Staff: release admission results
+// Results — release admission decisions (SSO / Dean / Admin)
+//
+// Two-gate flow:
+//   Gate 1 (Professor) — Pass/Fail at interview. A Fail is blocking;
+//                        the applicant can never be released as Accepted.
+//   Gate 2 (SSO/Admin) — Release. Final confirmation that flips the
+//                        result from internal-only to applicant-visible.
+//
+// Buckets shown on this page:
+//   awaiting     — exam done, interview not yet evaluated
+//   ready_accept — exam passed AND Professor marked Pass
+//   ready_reject — exam failed OR Professor marked Fail
+//   released     — admission_results row exists (final, applicant-visible)
+//   withdrawn    — applicant pulled out of the cycle
+//
+// Per-row actions:
+//   • Awaiting interview → no actions, status text only
+//   • Ready: Accept       → "Release as Accept" (SSO/Admin)
+//   • Ready: Reject       → "Release as Reject" (SSO/Admin)
+//   • Released            → "Edit" override button (Admin only, audited)
+//   • Withdrawn           → status text only
+//   Dean is read-only — never sees release/edit buttons.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 $db      = db();
 $staffId = Auth::id();
+$role    = Auth::role();
+
+$canRelease  = ($role === ROLE_SSO   || $role === ROLE_ADMIN);
+$canOverride = ($role === ROLE_ADMIN);
+
+// Dean is dept-scoped — only see applicants whose course maps to their
+// own college. Admin and SSO see every applicant across all colleges.
+$scopedDept    = ($role === ROLE_DEAN) ? (string) user_department($staffId) : '';
+$scopedCourses = ($scopedDept !== '') ? courses_in_department($scopedDept) : [];
 
 $search    = trim($_GET['q']      ?? '');
-$filterRes = $_GET['result']      ?? '';  // accepted|waitlisted|rejected|pending|withdrawn|''
+$filterRes = $_GET['result']      ?? '';  // ''|awaiting|ready_accept|ready_reject|released|withdrawn
 $sortCol   = $_GET['sort_col']    ?? 'updated';
 $sortDir   = strtolower($_GET['sort_dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
 $page      = max(1, (int)($_GET['page'] ?? 1));
 
+// ── Bucket SQL ────────────────────────────────────────────────
+// One CASE expression we reuse in both the listing query and the
+// per-bucket count query so the table and the tab badges always agree.
+$bucketCase = "CASE
+    WHEN a.overall_status = 'withdrawn' THEN 'withdrawn'
+    WHEN ar.result IS NOT NULL THEN 'released'
+    WHEN er.passed = 0 OR iq.evaluation_result = 'fail' THEN 'ready_reject'
+    WHEN er.passed = 1 AND iq.evaluation_result = 'pass' THEN 'ready_accept'
+    ELSE 'awaiting'
+  END";
+
 // ── WHERE builder ─────────────────────────────────────────────
 $where  = ["a.overall_status IN ('released','exam','interview','withdrawn')"];
 $params = [];
+
+// Dean dept scope — limit to applicants whose course maps to dean's college.
+if ($role === ROLE_DEAN) {
+    if (empty($scopedCourses)) {
+        // Dean has no department on file (or no courses mapped) — show nothing.
+        $where[] = '1 = 0';
+    } else {
+        $names = [];
+        foreach ($scopedCourses as $i => $c) {
+            $key          = ':dc' . $i;
+            $names[]      = $key;
+            $params[$key] = $c;
+        }
+        $where[] = 'a.course_applied IN (' . implode(',', $names) . ')';
+    }
+}
 
 if ($search) {
     $where[]      = '(u.name LIKE :q OR u.email LIKE :q OR a.course_applied LIKE :q)';
     $params[':q'] = '%' . $search . '%';
 }
 
-if ($filterRes === 'withdrawn') {
-    $where[] = "a.overall_status = 'withdrawn'";
-} elseif ($filterRes === 'pending') {
-    $where[] = 'ar.result IS NULL';
-    $where[] = "a.overall_status != 'withdrawn'";
-} elseif ($filterRes) {
-    $where[]           = 'ar.result = :result';
-    $params[':result'] = $filterRes;
-    $where[]           = "a.overall_status != 'withdrawn'";
+$validBuckets = ['awaiting', 'ready_accept', 'ready_reject', 'released', 'withdrawn'];
+if (in_array($filterRes, $validBuckets, true)) {
+    $where[]            = "$bucketCase = :bucket";
+    $params[':bucket']  = $filterRes;
 }
 
 $whereStr = implode(' AND ', $where);
 
 // ── Counts for filter tabs ────────────────────────────────────
-$countRows = $db->query(
+// Same Dean dept scope applied so the tab badges match the table.
+$countWhere  = "a.overall_status IN ('released','exam','interview','withdrawn')";
+$countParams = [];
+if ($role === ROLE_DEAN) {
+    if (empty($scopedCourses)) {
+        $countWhere .= ' AND 1 = 0';
+    } else {
+        $names = [];
+        foreach ($scopedCourses as $i => $c) {
+            $key               = ':cdc' . $i;
+            $names[]           = $key;
+            $countParams[$key] = $c;
+        }
+        $countWhere .= ' AND a.course_applied IN (' . implode(',', $names) . ')';
+    }
+}
+$countStmt = $db->prepare(
     "SELECT
-       SUM(CASE WHEN a.overall_status = 'withdrawn' THEN 1 ELSE 0 END)                         AS withdrawn_count,
-       SUM(CASE WHEN a.overall_status != 'withdrawn' AND ar.result IS NULL THEN 1 ELSE 0 END)  AS pending_count,
-       SUM(CASE WHEN ar.result = 'accepted'   AND a.overall_status != 'withdrawn' THEN 1 ELSE 0 END) AS accepted_count,
-       SUM(CASE WHEN ar.result = 'waitlisted' AND a.overall_status != 'withdrawn' THEN 1 ELSE 0 END) AS waitlisted_count,
-       SUM(CASE WHEN ar.result = 'rejected'   AND a.overall_status != 'withdrawn' THEN 1 ELSE 0 END) AS rejected_count,
+       SUM(CASE WHEN $bucketCase = 'awaiting'     THEN 1 ELSE 0 END) AS awaiting_count,
+       SUM(CASE WHEN $bucketCase = 'ready_accept' THEN 1 ELSE 0 END) AS ready_accept_count,
+       SUM(CASE WHEN $bucketCase = 'ready_reject' THEN 1 ELSE 0 END) AS ready_reject_count,
+       SUM(CASE WHEN $bucketCase = 'released'     THEN 1 ELSE 0 END) AS released_count,
+       SUM(CASE WHEN $bucketCase = 'withdrawn'    THEN 1 ELSE 0 END) AS withdrawn_count,
        COUNT(*) AS total_count
      FROM applicants a
      JOIN users u ON u.id = a.user_id
      LEFT JOIN admission_results ar ON ar.applicant_id = a.id
-     WHERE a.overall_status IN ('released','exam','interview','withdrawn')"
-)->fetch(PDO::FETCH_ASSOC);
+     LEFT JOIN exam_results       er ON er.applicant_id = a.id
+     LEFT JOIN interview_queue    iq ON iq.applicant_id = a.id
+     WHERE $countWhere"
+);
+$countStmt->execute($countParams);
+$countRows = $countStmt->fetch(PDO::FETCH_ASSOC);
 
 // ── Sort column map ───────────────────────────────────────────
 $colMap   = [
@@ -71,15 +143,17 @@ $result = paginate(
      FROM applicants a
      JOIN users u ON u.id = a.user_id
      LEFT JOIN admission_results ar ON ar.applicant_id = a.id
+     LEFT JOIN exam_results       er ON er.applicant_id = a.id
+     LEFT JOIN interview_queue    iq ON iq.applicant_id = a.id
      WHERE $whereStr",
     "SELECT a.*, u.name AS student_name, u.email,
             u.first_name, u.middle_name, u.last_name, u.suffix,
             ar.result AS admission_result, ar.remarks AS admission_remarks, ar.released_at,
-
-            ar.promoted_from_waitlist,
             er.score  AS exam_score, er.total_items AS exam_total,
             er.rank_score AS exam_rank, er.passed AS exam_passed,
-            iq.status AS interview_status, iq.interview_notes
+            iq.status AS interview_status, iq.interview_notes,
+            iq.evaluation_result,
+            $bucketCase AS bucket
      FROM applicants a
      JOIN users u ON u.id = a.user_id
      LEFT JOIN admission_results ar ON ar.applicant_id = a.id
@@ -89,6 +163,18 @@ $result = paginate(
      ORDER BY $orderCol $orderDir",
     $params, $page, 25
 );
+
+// ── Default tab ───────────────────────────────────────────────
+// "All" and "Awaiting interview" are no longer tabs. If somebody
+// lands here without a selection, drop them on Ready: Accept (the
+// SSO worklist) instead of an unfiltered list.
+if ($filterRes === '' || $filterRes === 'awaiting') {
+    $filterRes = 'ready_accept';
+    // Re-apply the bucket filter we just defaulted to.
+    $where[]            = "$bucketCase = :bucket";
+    $params[':bucket']  = $filterRes;
+    $whereStr           = implode(' AND ', $where);
+}
 
 // ── Filter URL helper ─────────────────────────────────────────
 function filterUrl(array $merge = []): string {
@@ -124,28 +210,41 @@ ob_start();
 <?php endif; ?>
 
 <!-- ============================================================
-     TOP BAR: Search + Filter + Auto-Release (LEFT) · Tabs (RIGHT)
+     TOP BAR: Search + Auto-Release (LEFT) · Tabs (RIGHT)
+
+     Tab cleanup (vs Chunk 4):
+       • "All" tab dropped — no useful filter, just clutter.
+       • "Awaiting interview" tab dropped — SSO can't act on it
+         here. Rendered instead as a small grey chip below this
+         bar that links into the Interviews queue (where the
+         action actually lives).
+       • "Filter" dropdown dropped — was a duplicate of these
+         tabs. Search + Auto-Release stay on the left.
+       • "Withdrawn" kept but de-emphasized (muted style).
 ============================================================ -->
 <?php
-$tabs = [
-    ''           => ['label' => 'All',       'count' => (int)$countRows['total_count']],
-    'pending'    => ['label' => 'Pending',   'count' => (int)$countRows['pending_count']],
-    'accepted'   => ['label' => 'Accepted',  'count' => (int)$countRows['accepted_count']],
-    'waitlisted' => ['label' => 'Waitlisted','count' => (int)$countRows['waitlisted_count']],
-    'rejected'   => ['label' => 'Rejected',  'count' => (int)$countRows['rejected_count']],
-    'withdrawn'  => ['label' => 'Withdrawn', 'count' => (int)$countRows['withdrawn_count']],
+// Primary tabs — SSO's worklist + audit view.
+$primaryTabs = [
+    'ready_accept' => ['label' => 'Ready: Accept', 'count' => (int)$countRows['ready_accept_count']],
+    'ready_reject' => ['label' => 'Ready: Reject', 'count' => (int)$countRows['ready_reject_count']],
+    'released'     => ['label' => 'Released',     'count' => (int)$countRows['released_count']],
 ];
+// Secondary tab — archive-style, rendered muted at the end.
+$secondaryTabs = [
+    'withdrawn'    => ['label' => 'Withdrawn',    'count' => (int)$countRows['withdrawn_count']],
+];
+$awaitingCount = (int)$countRows['awaiting_count'];
 ?>
 <div style="
     display:flex;
     align-items:flex-end;
     justify-content:space-between;
     gap:var(--space-4);
-    margin-bottom:var(--space-5);
+    margin-bottom:var(--space-3);
     border-bottom:1px solid var(--border);
     flex-wrap:wrap;
 ">
-    <!-- LEFT: Search + Filter + Auto-Release -->
+    <!-- LEFT: Search + Auto-Release -->
     <div style="display:flex;align-items:center;gap:var(--space-2);padding-bottom:var(--space-1);flex-shrink:0">
         <form method="GET" style="display:flex;align-items:center;gap:var(--space-2);margin:0">
             <input type="hidden" name="result"   value="<?= e($filterRes) ?>">
@@ -160,80 +259,15 @@ $tabs = [
                        placeholder="Search name, email, course…">
             </div>
 
-            <!-- Filter dropdown -->
-            <div style="position:relative" id="results-filter-wrapper">
-                <button type="button" id="results-filter-btn" onclick="toggleResultsFilter()" style="
-                    display:flex;align-items:center;gap:var(--space-2);
-                    height:32px;padding:0 var(--space-3);
-                    border:1px solid var(--border);border-radius:var(--radius-sm);
-                    background:var(--bg-elevated);color:var(--text-secondary);
-                    font-size:var(--text-sm);cursor:pointer;white-space:nowrap;
-                    transition:border-color var(--transition-fast),color var(--transition-fast);
-                " aria-haspopup="true" aria-expanded="false">
-                    <?= icon('ic_fluent_filter_24_filled', 14) ?>
-                    Filter
-                    <?php if ($filterRes): ?>
-                        <span style="
-                            display:inline-flex;align-items:center;justify-content:center;
-                            width:16px;height:16px;border-radius:50%;
-                            background:var(--accent);color:var(--accent-text);
-                            font-size:10px;font-weight:var(--weight-semibold);
-                        ">1</span>
-                    <?php endif; ?>
-                </button>
-
-                <div id="results-filter-dropdown" style="
-                    display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:200;
-                    background:var(--bg-elevated);border:1px solid var(--border);
-                    border-radius:var(--radius-md);box-shadow:var(--shadow-md);
-                    min-width:220px;padding:var(--space-3);
-                ">
-                    <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2);padding:0 var(--space-1)">Result Status</div>
-                    <?php foreach ($tabs as $val => $tab):
-                        $isActive = ($filterRes === $val);
-                    ?>
-                    <a href="<?= filterUrl(['result' => $val]) ?>" style="
-                        display:flex;align-items:center;justify-content:space-between;
-                        padding:var(--space-2) var(--space-3);border-radius:var(--radius-sm);
-                        background:<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>;
-                        color:<?= $isActive ? 'var(--accent)' : 'var(--text-secondary)' ?>;
-                        font-size:var(--text-sm);
-                        font-weight:<?= $isActive ? 'var(--weight-semibold)' : 'var(--weight-regular)' ?>;
-                        text-decoration:none;
-                        transition:background var(--transition-fast);
-                    " onmouseover="if(!this.style.background.includes('accent-muted')) this.style.background='var(--bg-overlay)'"
-                       onmouseout="this.style.background='<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>'">
-                        <?= $tab['label'] ?>
-                        <span style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= $tab['count'] ?></span>
-                        <?php if ($isActive): ?>
-                            <?= icon('ic_fluent_checkmark_24_regular', 13) ?>
-                        <?php endif; ?>
-                    </a>
-                    <?php endforeach; ?>
-                    <?php if ($filterRes): ?>
-                        <div style="border-top:1px solid var(--border);margin-top:var(--space-2);padding-top:var(--space-2)">
-                            <a href="<?= filterUrl(['result' => '']) ?>" style="
-                                display:flex;align-items:center;gap:var(--space-2);
-                                padding:var(--space-2) var(--space-3);font-size:var(--text-sm);
-                                color:var(--text-tertiary);border-radius:var(--radius-sm);text-decoration:none;
-                                transition:background var(--transition-fast);
-                            " onmouseover="this.style.background='var(--bg-overlay)'" onmouseout="this.style.background='transparent'">
-                                <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
-                                Clear filter
-                            </a>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-
             <button type="submit" style="display:none" aria-hidden="true"></button>
         </form>
 
-        <!-- Auto-Release (right of Filter) -->
+        <?php if ($canRelease): ?>
+        <!-- Auto-Release -->
         <form method="POST" action="<?= url('/staff/results/auto-release') ?>" style="margin:0">
             <?= csrf_field() ?>
             <button type="submit"
-                    onclick="return confirm('Auto-release results for all eligible applicants based on configured score thresholds?\n\nThis will accept, waitlist, or reject applicants who have completed both exam and interview.')"
+                    onclick="return confirm('Auto-release results for every applicant in Ready: Accept and Ready: Reject?\n\nApplicants whose interview has not been evaluated yet will be skipped.')"
                     style="
                         display:flex;align-items:center;gap:var(--space-2);
                         height:32px;padding:0 var(--space-3);
@@ -246,12 +280,12 @@ $tabs = [
                 Auto-Release Results
             </button>
         </form>
+        <?php endif; ?>
     </div>
 
-    <!-- RIGHT: Result status tabs -->
-    <div style="display:flex;gap:var(--space-1)">
-        <?php
-        foreach ($tabs as $val => $tab):
+    <!-- RIGHT: Bucket tabs (primary + de-emphasized Withdrawn) -->
+    <div style="display:flex;gap:var(--space-1);flex-wrap:wrap;align-items:flex-end">
+        <?php foreach ($primaryTabs as $val => $tab):
             $active = ($filterRes === $val);
         ?>
             <a href="<?= filterUrl(['result' => $val]) ?>"
@@ -268,33 +302,60 @@ $tabs = [
                 <span style="margin-left:4px;font-size:var(--text-xs);color:var(--text-tertiary)"><?= $tab['count'] ?></span>
             </a>
         <?php endforeach; ?>
+
+        <?php // Subtle separator before the de-emphasized archive tab. ?>
+        <span aria-hidden="true" style="
+            align-self:center;width:1px;height:14px;background:var(--border);
+            margin:0 var(--space-2) calc(var(--space-1) + 2px)">
+        </span>
+
+        <?php foreach ($secondaryTabs as $val => $tab):
+            $active = ($filterRes === $val);
+        ?>
+            <a href="<?= filterUrl(['result' => $val]) ?>"
+               style="
+                   padding:var(--space-2) var(--space-3);
+                   border-bottom:2px solid <?= $active ? 'var(--text-tertiary)' : 'transparent' ?>;
+                   color:<?= $active ? 'var(--text-secondary)' : 'var(--text-tertiary)' ?>;
+                   font-size:var(--text-xs);
+                   font-weight:<?= $active ? 'var(--weight-medium)' : 'var(--weight-regular)' ?>;
+                   white-space:nowrap;text-decoration:none;margin-bottom:-1px;
+                   opacity:<?= $active ? '1' : '.75' ?>;
+                   transition:color var(--transition-fast),opacity var(--transition-fast);
+               "
+               onmouseover="this.style.opacity='1'"
+               onmouseout="this.style.opacity='<?= $active ? '1' : '.75' ?>'">
+                <?= $tab['label'] ?>
+                <span style="margin-left:4px;font-size:var(--text-xs);color:var(--text-tertiary)"><?= $tab['count'] ?></span>
+            </a>
+        <?php endforeach; ?>
     </div>
 </div>
 
-<script>
-(function(){
-    window.toggleResultsFilter = function() {
-        var dd   = document.getElementById('results-filter-dropdown');
-        var btn  = document.getElementById('results-filter-btn');
-        var chev = document.getElementById('results-filter-chevron');
-        var open = dd.style.display === 'block';
-        dd.style.display = open ? 'none' : 'block';
-        btn.setAttribute('aria-expanded', String(!open));
-        chev.style.transform = open ? '' : 'rotate(180deg)';
-    };
-    document.addEventListener('click', function(e) {
-        var w = document.getElementById('results-filter-wrapper');
-        if (w && !w.contains(e.target)) {
-            var dd   = document.getElementById('results-filter-dropdown');
-            var btn  = document.getElementById('results-filter-btn');
-            var chev = document.getElementById('results-filter-chevron');
-            if (dd)   dd.style.display = 'none';
-            if (btn)  btn.setAttribute('aria-expanded','false');
-            if (chev) chev.style.transform = '';
-        }
-    });
-})();
-</script>
+<?php if ($awaitingCount > 0): ?>
+<!-- Awaiting-interview nudge — replaces the old "Awaiting interview" tab.
+     SSO can't release these here (Professor hasn't evaluated yet), so
+     surface them as a quiet pointer to the Interviews page where the
+     action actually lives. -->
+<div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-4)">
+    <a href="<?= url('/staff/interviews/queue') ?>"
+       style="
+           display:inline-flex;align-items:center;gap:var(--space-2);
+           padding:4px var(--space-3);border-radius:var(--radius-full);
+           background:var(--bg-secondary);border:1px solid var(--border);
+           font-size:var(--text-xs);color:var(--text-tertiary);text-decoration:none;
+           transition:background var(--transition-fast),color var(--transition-fast);
+       "
+       onmouseover="this.style.background='var(--bg-overlay)';this.style.color='var(--text-secondary)'"
+       onmouseout="this.style.background='var(--bg-secondary)';this.style.color='var(--text-tertiary)'"
+       title="Open the Interviews queue to record Pass/Fail">
+        <?= icon('ic_fluent_clock_24_regular', 12) ?>
+        <span><strong style="color:var(--text-secondary);font-weight:var(--weight-medium)"><?= $awaitingCount ?></strong>
+            applicant<?= $awaitingCount === 1 ? '' : 's' ?> awaiting Professor evaluation</span>
+        <?= icon('ic_fluent_chevron_right_24_regular', 12) ?>
+    </a>
+</div>
+<?php endif; ?>
 
 <style>
 /* Make the table card stretch to fill the .page area so the gap below the
@@ -308,38 +369,42 @@ $tabs = [
     <table class="table" id="results-table">
         <thead>
             <tr>
+                <?php if ($canRelease): ?>
                 <th style="width:40px;padding-left:var(--space-3)">
                     <input type="checkbox" id="res-select-all" onchange="resToggleAll(this)"
                            style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
                 </th>
+                <?php endif; ?>
                 <?= results_sortable_th('applicant', 'Applicant',   $sortCol, $sortDir, $search, $filterRes) ?>
                 <?= results_sortable_th('course',    'Course',      $sortCol, $sortDir, $search, $filterRes) ?>
                 <th>Exam Score</th>
                 <th>Interview</th>
                 <?= results_sortable_th('result',    'Result',      $sortCol, $sortDir, $search, $filterRes) ?>
                 <?= results_sortable_th('released',  'Released',    $sortCol, $sortDir, $search, $filterRes) ?>
-                <th style="width:100px">Actions</th>
+                <th style="width:160px">Actions</th>
             </tr>
         </thead>
         <tbody>
         <?php if (!empty($result['data'])): ?>
             <?php foreach ($result['data'] as $row):
-                $pct = null;
-                if ($row['exam_score'] !== null && (int)$row['exam_total'] > 0) {
-                    $pct = round(($row['exam_score'] / $row['exam_total']) * 100);
-                }
-                $isWithdrawn = ($row['overall_status'] === 'withdrawn');
+                $bucket     = $row['bucket'] ?? 'awaiting';
+                $isReady    = ($bucket === 'ready_accept' || $bucket === 'ready_reject');
+                $selectable = $canRelease && $isReady;
+                $fullName   = format_full_name($row);
             ?>
-                <tr class="res-bulk-row" data-id="<?= (int)$row['id'] ?>">
+                <tr class="res-bulk-row" data-id="<?= (int)$row['id'] ?>" data-bucket="<?= e($bucket) ?>">
+                    <?php if ($canRelease): ?>
                     <td style="padding-left:var(--space-3)">
-                        <?php if (!$isWithdrawn): ?>
+                        <?php if ($selectable): ?>
                         <input type="checkbox" class="res-check" value="<?= (int)$row['id'] ?>"
                                onchange="resUpdateSelection()"
                                style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
                         <?php endif; ?>
                     </td>
+                    <?php endif; ?>
+
                     <td>
-                        <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></div>
+                        <div style="font-weight:var(--weight-medium)"><?= e($fullName) ?></div>
                         <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
                         <div style="margin-top:2px">
                             <span class="badge badge-<?= $row['overall_status'] ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span>
@@ -348,29 +413,39 @@ $tabs = [
 
                     <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>
 
-                    <!-- Exam score (just X/Y) -->
+                    <!-- Exam score -->
                     <td style="font-size:var(--text-sm)">
                         <?php if ($row['exam_score'] !== null): ?>
                             <?= (int)$row['exam_score'] ?>/<?= (int)$row['exam_total'] ?>
+                            <?php if ((int)$row['exam_passed'] === 1): ?>
+                                <div style="font-size:var(--text-xs);color:var(--success);margin-top:1px">Passed</div>
+                            <?php elseif ((int)$row['exam_passed'] === 0): ?>
+                                <div style="font-size:var(--text-xs);color:var(--error);margin-top:1px">Failed</div>
+                            <?php endif; ?>
                         <?php else: ?>
                             <span style="color:var(--text-tertiary)">—</span>
                         <?php endif; ?>
                     </td>
 
-                    <!-- Interview status -->
+                    <!-- Interview status + Pass/Fail -->
                     <td>
                         <?php if ($row['interview_status']): ?>
                             <?php
                                 $iMap = [
-                                    'scheduled'   => ['badge-uploaded',    'Scheduled'],
-                                    'checked_in'  => ['badge-uploaded',    'Checked In'],
-                                    'in_progress' => ['badge-review',  'In Progress'],
-                                    'completed'   => ['badge-approved','Completed'],
-                                    'no_show'     => ['badge-rejected','No-show'],
+                                    'scheduled'   => ['badge-uploaded', 'Scheduled'],
+                                    'checked_in'  => ['badge-uploaded', 'Checked In'],
+                                    'in_progress' => ['badge-review',   'In Progress'],
+                                    'completed'   => ['badge-approved', 'Completed'],
+                                    'no_show'     => ['badge-rejected', 'No-show'],
                                 ];
                                 [$ibadge, $ilabel] = $iMap[$row['interview_status']] ?? ['badge-pending', ucfirst($row['interview_status'])];
                             ?>
                             <span class="badge <?= $ibadge ?>"><?= $ilabel ?></span>
+                            <?php if ($row['evaluation_result'] === 'pass'): ?>
+                                <div style="font-size:var(--text-xs);color:var(--success);margin-top:2px;font-weight:var(--weight-medium)">Pass</div>
+                            <?php elseif ($row['evaluation_result'] === 'fail'): ?>
+                                <div style="font-size:var(--text-xs);color:var(--error);margin-top:2px;font-weight:var(--weight-medium)">Fail</div>
+                            <?php endif; ?>
                             <?php if ($row['interview_notes']): ?>
                                 <div style="font-size:var(--text-xs);color:var(--text-tertiary);
                                              margin-top:var(--space-1);max-width:180px;
@@ -384,22 +459,19 @@ $tabs = [
                         <?php endif; ?>
                     </td>
 
-                    <!-- Admission result -->
+                    <!-- Result column -->
                     <td>
-                        <?php if ($row['overall_status'] === 'withdrawn'): ?>
+                        <?php if ($bucket === 'withdrawn'): ?>
                             <span class="badge" style="color:#6b7280;background:#f3f4f6">Withdrawn</span>
                             <?php if (!empty($row['withdrawn_at'])): ?>
                                 <div style="font-size:10px;color:var(--text-tertiary);margin-top:2px">
                                     <?= format_date($row['withdrawn_at'], 'M j, Y') ?>
                                 </div>
                             <?php endif; ?>
-                        <?php elseif ($row['admission_result']): ?>
+                        <?php elseif ($bucket === 'released'): ?>
                             <span class="badge badge-<?= $row['admission_result'] ?>">
-                                <?= e(RESULT_LABELS[$row['admission_result']]) ?>
+                                <?= e(RESULT_LABELS[$row['admission_result']] ?? ucfirst($row['admission_result'])) ?>
                             </span>
-                            <?php if ($row['promoted_from_waitlist']): ?>
-                                <div style="font-size:10px;color:var(--accent);margin-top:2px">↑ Promoted from waitlist</div>
-                            <?php endif; ?>
                             <?php if ($row['admission_remarks']): ?>
                                 <div style="font-size:var(--text-xs);color:var(--text-tertiary);
                                              margin-top:var(--space-1);max-width:160px;
@@ -408,43 +480,68 @@ $tabs = [
                                     <?= e($row['admission_remarks']) ?>
                                 </div>
                             <?php endif; ?>
-                        <?php else: ?>
-                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">Pending</span>
+                        <?php elseif ($bucket === 'ready_accept'): ?>
+                            <span class="badge badge-approved">Ready: Accept</span>
+                        <?php elseif ($bucket === 'ready_reject'): ?>
+                            <span class="badge badge-rejected">Ready: Reject</span>
+                        <?php else: /* awaiting */ ?>
+                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">Awaiting interview</span>
                         <?php endif; ?>
                     </td>
 
+                    <!-- Released-on date -->
                     <td style="font-size:var(--text-sm);color:var(--text-tertiary)">
                         <?= $row['released_at'] ? format_date($row['released_at'], 'M j, Y') : '—' ?>
                     </td>
 
+                    <!-- Actions -->
                     <td>
-                        <?php if ($row['overall_status'] === 'withdrawn'): ?>
+                        <?php if ($bucket === 'withdrawn'): ?>
                             <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Withdrawn</span>
-                        <?php elseif ($row['admission_result'] === 'accepted'): ?>
-                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Accepted</span>
-                        <?php elseif ($row['admission_result'] === 'rejected'): ?>
-                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Rejected</span>
-                        <?php else: ?>
-                            <div style="display:flex;gap:var(--space-2)">
-                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="result" value="accepted">
-                                    <button type="submit" class="btn btn-sm"
-                                            style="background:var(--success);color:#fff;border-color:var(--success);font-size:var(--text-xs)"
-                                            onclick="return confirm('Approve <?= e(addslashes($row['student_name'])) ?>?')">
-                                        Approve
-                                    </button>
-                                </form>
-                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="result" value="rejected">
-                                    <button type="submit" class="btn btn-danger btn-sm"
-                                            style="font-size:var(--text-xs)"
-                                            onclick="return confirm('Reject <?= e(addslashes($row['student_name'])) ?>?')">
-                                        Reject
-                                    </button>
-                                </form>
-                            </div>
+
+                        <?php elseif ($bucket === 'released'): ?>
+                            <?php if ($canOverride): ?>
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        style="font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px"
+                                        onclick="openOverrideModal(<?= (int)$row['id'] ?>, <?= htmlspecialchars(json_encode($fullName), ENT_QUOTES) ?>, '<?= e($row['admission_result']) ?>', <?= htmlspecialchars(json_encode((string)($row['admission_remarks'] ?? '')), ENT_QUOTES) ?>)">
+                                    <?= icon('ic_fluent_edit_24_regular', 13) ?>
+                                    Edit
+                                </button>
+                            <?php else: ?>
+                                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Released</span>
+                            <?php endif; ?>
+
+                        <?php elseif (($bucket === 'ready_accept' || $bucket === 'ready_reject') && $canRelease): ?>
+                            <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="release">
+                                <?php
+                                    $isAccept = ($bucket === 'ready_accept');
+                                    $btnLabel = $isAccept ? 'Release as Accept' : 'Release as Reject';
+                                    $btnStyle = $isAccept
+                                        ? 'background:var(--success);color:#fff;border-color:var(--success);font-size:var(--text-xs)'
+                                        : 'background:var(--error);color:#fff;border-color:var(--error);font-size:var(--text-xs)';
+                                    $confirm  = $isAccept
+                                        ? "Release {$fullName} as Accepted? The applicant will be notified by email."
+                                        : "Release {$fullName} as Rejected? The applicant will be notified by email.";
+                                ?>
+                                <button type="submit" class="btn btn-sm" style="<?= $btnStyle ?>"
+                                        onclick="return confirm(<?= htmlspecialchars(json_encode($confirm), ENT_QUOTES) ?>)">
+                                    <?= $isAccept
+                                        ? icon('ic_fluent_checkmark_circle_24_regular', 13)
+                                        : icon('ic_fluent_dismiss_circle_24_regular', 13) ?>
+                                    <?= $btnLabel ?>
+                                </button>
+                            </form>
+
+                        <?php elseif ($bucket === 'ready_accept'): ?>
+                            <span style="font-size:var(--text-xs);color:var(--success);font-weight:var(--weight-medium)">Ready: Accept</span>
+
+                        <?php elseif ($bucket === 'ready_reject'): ?>
+                            <span style="font-size:var(--text-xs);color:var(--error);font-weight:var(--weight-medium)">Ready: Reject</span>
+
+                        <?php else: /* awaiting */ ?>
+                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Awaiting interview</span>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -476,7 +573,51 @@ $tabs = [
     </div>
 <?php endif; ?>
 
-<!-- ── Suggest course modal ────────────────────────────────── -->
+<?php if ($canOverride): ?>
+<!-- ── Admin override modal ────────────────────────────────── -->
+<div id="override-modal" class="modal-backdrop" style="display:none">
+    <div class="modal" style="max-width:460px">
+        <div class="modal-header">
+            <div class="modal-title">Edit Released Result</div>
+            <button class="btn-icon" onclick="document.getElementById('override-modal').style.display='none'">
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
+            </button>
+        </div>
+        <form method="POST" id="override-form" action="">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="override">
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div style="background:var(--warning-bg,rgba(245,158,11,.08));border:1px solid var(--warning);
+                            border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);
+                            font-size:var(--text-xs);color:var(--text-secondary)">
+                    <strong style="color:var(--warning)">Admin override.</strong>
+                    Changing a released result is audited. Use only when correcting a clerical error or
+                    handling an exceptional case (e.g. flagged for review).
+                </div>
+                <p id="override-name" style="font-weight:var(--weight-medium);margin:0"></p>
+                <div>
+                    <label class="form-label">Result <span style="color:var(--error)">*</span></label>
+                    <select name="result" class="form-control" id="override-result" required>
+                        <option value="accepted">Accepted</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Reason / remarks <span style="color:var(--error)">*</span></label>
+                    <textarea name="remarks" class="form-control" rows="3" id="override-remarks" required
+                              placeholder="Why is this result being changed?"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('override-modal').style.display='none'">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Override</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- ── Suggest course modal (kept) ─────────────────────────── -->
 <div id="suggest-modal" class="modal-backdrop" style="display:none">
     <div class="modal" style="max-width:460px">
         <div class="modal-header">
@@ -513,54 +654,22 @@ $tabs = [
     </div>
 </div>
 
-<!-- ── Release / Edit modal ─────────────────────────────────── -->
-<div id="release-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:420px">
-        <div class="modal-header">
-            <div class="modal-title">Release Result</div>
-            <button class="btn-icon" onclick="document.getElementById('release-modal').style.display='none'">
-                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
-            </button>
-        </div>
-        <form method="POST" id="release-form" action="">
-            <?= csrf_field() ?>
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <p id="release-name" style="font-weight:var(--weight-medium)"></p>
-                <div>
-                    <label class="form-label">Decision <span style="color:var(--error)">*</span></label>
-                    <select name="result" class="form-control" id="release-result" required>
-                        <option value="">Select…</option>
-                        <?php foreach (RESULT_LABELS as $val => $lbl): ?>
-                            <option value="<?= $val ?>"><?= $lbl ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div>
-                    <label class="form-label">Remarks (optional)</label>
-                    <textarea name="remarks" class="form-control" rows="3" id="release-remarks"
-                              placeholder="Additional notes for the applicant…"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-ghost" onclick="document.getElementById('release-modal').style.display='none'">Cancel</button>
-                <button type="submit" class="btn btn-primary">Save Result</button>
-            </div>
-        </form>
-    </div>
-</div>
-
 <script>
-function openReleaseModal(appId, name, currentResult, currentRemarks) {
-    document.getElementById('release-form').action = '<?= url('/staff/results/') ?>' + appId;
-    document.getElementById('release-name').textContent = name;
-    document.getElementById('release-result').value = currentResult || '';
-    document.getElementById('release-remarks').value = currentRemarks || '';
-    document.getElementById('release-modal').style.display = 'flex';
+<?php if ($canOverride): ?>
+function openOverrideModal(appId, name, currentResult, currentRemarks) {
+    document.getElementById('override-form').action = '<?= url('/staff/results/') ?>' + appId;
+    document.getElementById('override-name').textContent = name;
+    var resSel = document.getElementById('override-result');
+    // Migrate any legacy 'waitlisted' record to a sensible default — admin must
+    // re-pick Accept or Reject to save (the dropdown only offers those two).
+    resSel.value = (currentResult === 'accepted' || currentResult === 'rejected') ? currentResult : 'accepted';
+    document.getElementById('override-remarks').value = currentRemarks || '';
+    document.getElementById('override-modal').style.display = 'flex';
 }
-document.getElementById('release-modal').addEventListener('click', function(e){
+document.getElementById('override-modal').addEventListener('click', function(e){
     if(e.target===this) this.style.display='none';
 });
+<?php endif; ?>
 
 // ── Course suggestion modal ────────────────────────────────────
 function openSuggestModal(appId, name, alts, rank) {
@@ -586,8 +695,11 @@ document.getElementById('suggest-modal').addEventListener('click', function(e){
 });
 </script>
 
+<?php if ($canRelease): ?>
 <!-- ============================================================
      BULK ACTION TOOLBAR (floating, appears on selection)
+     Single action: Release Selected. Server picks accepted vs rejected
+     per row based on the applicant's bucket.
 ============================================================ -->
 <div id="res-bulk-toolbar" style="
     display:none;
@@ -611,20 +723,10 @@ document.getElementById('suggest-modal').addEventListener('click', function(e){
 
     <div style="width:1px;height:24px;background:var(--border)"></div>
 
-    <button type="button" class="btn btn-sm" onclick="resBulkAction('accepted')"
-            style="display:flex;align-items:center;gap:5px;white-space:nowrap;background:var(--success);color:#fff;border-color:var(--success)">
-        <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
-        Accept
-    </button>
-    <button type="button" class="btn btn-sm" onclick="resBulkAction('waitlisted')"
-            style="display:flex;align-items:center;gap:5px;white-space:nowrap;background:var(--warning);color:#fff;border-color:var(--warning)">
-        <?= icon('ic_fluent_clock_24_regular', 14) ?>
-        Waitlist
-    </button>
-    <button type="button" class="btn btn-danger btn-sm" onclick="resBulkAction('rejected')"
+    <button type="button" class="btn btn-primary btn-sm" onclick="resBulkRelease()"
             style="display:flex;align-items:center;gap:5px;white-space:nowrap">
-        <?= icon('ic_fluent_dismiss_circle_24_regular', 14) ?>
-        Reject
+        <?= icon('ic_fluent_ribbon_star_24_regular', 14) ?>
+        Release Selected
     </button>
 
     <div style="width:1px;height:24px;background:var(--border)"></div>
@@ -635,10 +737,10 @@ document.getElementById('suggest-modal').addEventListener('click', function(e){
     </button>
 </div>
 
-<!-- Hidden form for bulk result actions -->
+<!-- Hidden form for bulk release -->
 <form id="res-bulk-form" method="POST" action="<?= url('/staff/results/bulk') ?>" style="display:none">
     <?= csrf_field() ?>
-    <input type="hidden" name="action" id="res-bulk-action" value="">
+    <input type="hidden" name="action" value="release_selected">
 </form>
 
 <style>
@@ -666,8 +768,10 @@ function resUpdateSelection() {
 
     badge.textContent     = count;
     toolbar.style.display = count > 0 ? 'flex' : 'none';
-    allCb.checked         = count > 0 && count === total;
-    allCb.indeterminate   = count > 0 && count < total;
+    if (allCb) {
+        allCb.checked       = count > 0 && count === total;
+        allCb.indeterminate = count > 0 && count < total;
+    }
 
     document.querySelectorAll('.res-bulk-row').forEach(function(tr) {
         var cb = tr.querySelector('.res-check');
@@ -684,22 +788,33 @@ function resToggleAll(masterCb) {
 }
 
 function resClearSelection() {
-    document.getElementById('res-select-all').checked = false;
+    var allCb = document.getElementById('res-select-all');
+    if (allCb) allCb.checked = false;
     document.querySelectorAll('.res-check').forEach(function(cb) { cb.checked = false; });
     resUpdateSelection();
 }
 
-function resBulkAction(action) {
+function resBulkRelease() {
     var ids = resGetSelectedIds();
     if (ids.length === 0) return;
 
-    var labels = { accepted: 'Accept', waitlisted: 'Waitlist', rejected: 'Reject' };
-    var label = labels[action] || action;
+    // Tally accept vs reject from the bucket data attribute on the row.
+    var accept = 0, reject = 0;
+    ids.forEach(function(id) {
+        var tr = document.querySelector('tr.res-bulk-row[data-id="' + id + '"]');
+        if (!tr) return;
+        if (tr.getAttribute('data-bucket') === 'ready_accept') accept++;
+        else if (tr.getAttribute('data-bucket') === 'ready_reject') reject++;
+    });
 
-    if (!confirm(label + ' ' + ids.length + ' selected applicant(s)?\n\nThis will release their admission result immediately.')) return;
+    var msg = 'Release ' + ids.length + ' selected applicant(s)?\n\n'
+            + '\u2022 ' + accept + ' will be released as Accepted\n'
+            + '\u2022 ' + reject + ' will be released as Rejected\n\n'
+            + 'The applicants will be notified by email.';
+
+    if (!confirm(msg)) return;
 
     var form = document.getElementById('res-bulk-form');
-    document.getElementById('res-bulk-action').value = action;
     form.querySelectorAll('input[name="ids[]"]').forEach(function(el) { el.remove(); });
     ids.forEach(function(id) {
         var input = document.createElement('input');
@@ -711,6 +826,7 @@ function resBulkAction(action) {
     form.submit();
 }
 </script>
+<?php endif; ?>
 
 <?php
 $content   = ob_get_clean();

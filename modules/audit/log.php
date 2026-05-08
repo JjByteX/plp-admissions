@@ -5,7 +5,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_ADMIN);
 
 $db      = db();
 $isAdmin = Auth::isAdmin();
@@ -176,8 +176,20 @@ ob_start();
                     <?php if ($isAdmin): ?>
                     <td>
                         <div style="font-size:var(--text-sm);font-weight:var(--weight-medium)"><?= e($log['user_name']) ?></div>
-                        <span class="badge badge-<?= $log['user_role'] === 'admin' ? 'error' : ($log['user_role'] === 'staff' ? 'info' : 'secondary') ?>" style="font-size:10px">
-                            <?= e(ucfirst($log['user_role'] ?: 'system')) ?>
+                        <?php
+                            $roleBadge = match ($log['user_role']) {
+                                ROLE_ADMIN   => 'error',
+                                ROLE_DEAN    => 'warning',
+                                ROLE_SSO     => 'success',
+                                ROLE_STAFF   => 'info',
+                                default      => 'secondary',
+                            };
+                            $roleLabel = $log['user_role']
+                                ? Auth::roleLabel($log['user_role'])
+                                : 'System';
+                        ?>
+                        <span class="badge badge-<?= $roleBadge ?>" style="font-size:10px">
+                            <?= e($roleLabel) ?>
                         </span>
                     </td>
                     <?php endif; ?>

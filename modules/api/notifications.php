@@ -5,7 +5,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STUDENT, ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_STUDENT, ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 header('Content-Type: application/json');
 

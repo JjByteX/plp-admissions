@@ -25,13 +25,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pass  = $_POST['password'] ?? '';
             $dept  = trim($_POST['department'] ?? '');
 
-            if (!$name || !$email || !in_array($role, ['staff', 'admin'], true) || strlen($pass) < 8) {
+            $allowedRoles = [ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN];
+            if (!$name || !$email || !in_array($role, $allowedRoles, true) || strlen($pass) < 8) {
                 $errors[] = 'All fields are required. Password must be at least 8 characters.';
                 break;
             }
 
             if ($dept !== '' && !in_array($dept, departments_list(), true)) {
                 $errors[] = 'Invalid department selected.';
+                break;
+            }
+
+            // Dean accounts must be scoped to a department.
+            if ($role === ROLE_DEAN && $dept === '') {
+                $errors[] = 'Dean accounts must be assigned to a department.';
                 break;
             }
 
@@ -105,7 +112,7 @@ if ($filterDept !== '' && !in_array($filterDept, $availableDepts, true)) {
     $filterDept = '';
 }
 
-$sql     = 'SELECT * FROM users WHERE role IN ("staff","admin")';
+$sql     = 'SELECT * FROM users WHERE role IN ("staff","sso","dean","admin")';
 $params  = [];
 if ($filterDept !== '') {
     $sql    .= ' AND department = ?';
@@ -173,7 +180,18 @@ ob_start();
                 <tr>
                     <td style="font-weight:var(--weight-medium)"><?= e($u['name']) ?></td>
                     <td style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($u['email']) ?></td>
-                    <td><span class="badge badge-<?= $u['role'] === 'admin' ? 'error' : 'info' ?>"><?= ucfirst($u['role']) ?></span></td>
+                    <td>
+                        <?php
+                            $roleBadge = match ($u['role']) {
+                                ROLE_ADMIN => 'error',
+                                ROLE_DEAN  => 'warning',
+                                ROLE_SSO   => 'success',
+                                ROLE_STAFF => 'info',
+                                default    => 'neutral',
+                            };
+                        ?>
+                        <span class="badge badge-<?= e($roleBadge) ?>"><?= e(Auth::roleLabel($u['role'])) ?></span>
+                    </td>
                     <td style="font-size:var(--text-sm)">
                         <form method="POST" style="display:inline-flex;align-items:center;gap:var(--space-1)">
                             <?= csrf_field() ?>
@@ -256,18 +274,20 @@ ob_start();
                 </div>
                 <div>
                     <label class="form-label">Role <span style="color:var(--error)">*</span></label>
-                    <select name="role" class="form-control" required>
+                    <select name="role" id="role-select" class="form-control" required>
                         <option value="">Select role…</option>
-                        <option value="staff">Staff</option>
-                        <option value="admin">Admin</option>
+                        <option value="<?= ROLE_STAFF ?>">Professor (proctor exams &amp; conduct interviews)</option>
+                        <option value="<?= ROLE_SSO ?>">SSO (documents, scheduling, exam content, results release)</option>
+                        <option value="<?= ROLE_DEAN ?>">Dean (per-college oversight, courses &amp; tier thresholds)</option>
+                        <option value="<?= ROLE_ADMIN ?>">Admin (full access)</option>
                     </select>
                 </div>
                 <div>
-                    <label class="form-label">
+                    <label class="form-label" id="dept-label">
                         Department
-                        <span style="color:var(--text-tertiary);font-weight:400"> — optional for admins</span>
+                        <span id="dept-hint" style="color:var(--text-tertiary);font-weight:400"> — optional for SSO and Admin</span>
                     </label>
-                    <select name="department" class="form-control">
+                    <select name="department" id="dept-select" class="form-control">
                         <option value="">— none —</option>
                         <?php foreach ($availableDepts as $deptName): ?>
                             <option value="<?= e($deptName) ?>"><?= e($deptName) ?></option>
@@ -323,6 +343,25 @@ function openResetModal(uid, name) {
 [document.getElementById('create-user-modal'), document.getElementById('reset-pw-modal')].forEach(m => {
     m.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
 });
+
+// Make department required when role is Dean, optional otherwise.
+(function(){
+    var roleSel = document.getElementById('role-select');
+    var deptSel = document.getElementById('dept-select');
+    var deptHint = document.getElementById('dept-hint');
+    if (!roleSel || !deptSel) return;
+    function sync() {
+        var isDean = roleSel.value === '<?= ROLE_DEAN ?>';
+        deptSel.required = isDean;
+        if (deptHint) {
+            deptHint.textContent = isDean
+                ? ' — required for Dean'
+                : ' — optional for SSO and Admin';
+        }
+    }
+    roleSel.addEventListener('change', sync);
+    sync();
+})();
 </script>
 
 <?php

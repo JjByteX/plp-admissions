@@ -6,7 +6,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 csrf_check();
 
 $db     = db();
@@ -126,37 +126,9 @@ switch ($action) {
         redirect('/staff/applicants/' . $applicantId);
         break;
 
-    case 'reject':
-        $remarks = trim($_POST['remarks'] ?? '');
-        if (!$remarks) {
-            Session::flash('error', 'Provide a rejection reason.');
-            $stmt = $db->prepare('SELECT applicant_id FROM documents WHERE id=?');
-            $stmt->execute([$id]);
-            $row = $stmt->fetch();
-            redirect('/staff/applicants/' . ($row['applicant_id'] ?? 0));
-        }
-        $stmt = $db->prepare(
-            'UPDATE documents SET status="rejected", staff_remarks=?, reviewed_by=? WHERE id=?'
-        );
-        $stmt->execute([$remarks, $staffId, $id]);
-
-        // Reset applicant back to documents stage so the student can
-        // replace the rejected file and re-submit (instead of being
-        // stuck showing "Withdraw application").
-        $stmt = $db->prepare('SELECT applicant_id FROM documents WHERE id=?');
-        $stmt->execute([$id]);
-        $row = $stmt->fetch();
-        $applicantId = $row['applicant_id'] ?? 0;
-
-        $db->prepare(
-            'UPDATE applicants SET overall_status = "documents"
-              WHERE id = ? AND overall_status = "submitted"'
-        )->execute([$applicantId]);
-
-        Session::flash('success', 'Document rejected.');
-        audit_log('document_rejected', "Rejected document ID {$id} — {$remarks}", 'document', $id);
-        redirect('/staff/applicants/' . $applicantId);
-        break;
+    // 'reject' action removed — see 'request_resubmission' below. Both did
+    // the same thing functionally (reset applicant to 'documents', let them
+    // re-upload), so we kept the one that actually notifies the student.
 
     case 'advance_to_exam':
         // Guard: all documents must exist and be approved before advancing
@@ -198,8 +170,12 @@ switch ($action) {
             $row = $stmt->fetch();
             redirect('/staff/applicants/' . ($row['applicant_id'] ?? 0));
         }
+        // status is set to 'rejected' (the only valid "send back for re-upload"
+        // value in the documents.status ENUM — 'resubmission_required' was a
+        // latent bug, not a real ENUM member). The notify_* call below is what
+        // distinguishes this from a silent rejection.
         $stmt = $db->prepare(
-            'UPDATE documents SET status="resubmission_required", staff_remarks=?, reviewed_by=? WHERE id=?'
+            'UPDATE documents SET status="rejected", staff_remarks=?, reviewed_by=? WHERE id=?'
         );
         $stmt->execute([$remarks, $staffId, $id]);
 

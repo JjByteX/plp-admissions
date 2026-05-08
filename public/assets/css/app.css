@@ -695,6 +695,23 @@ a.step-dot:hover { opacity: 0.8; transform: scale(1.12); }
 .form-control::placeholder {
     color: var(--text-placeholder);
     font-size: var(--text-sm);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+/* Belt-and-suspenders: kill uppercase on every placeholder, even on
+   inputs that don't carry .form-control / .form-input (e.g. search
+   filters, ad-hoc <input type="search"> elements). */
+input::placeholder,
+input::-webkit-input-placeholder,
+input::-moz-placeholder,
+input:-ms-input-placeholder,
+textarea::placeholder,
+textarea::-webkit-input-placeholder,
+textarea::-moz-placeholder,
+textarea:-ms-input-placeholder {
+    text-transform: none !important;
+    letter-spacing: normal !important;
 }
 
 /* Hover — subtle fill lift */

@@ -52,12 +52,53 @@ class Auth
         ];
     }
 
-    public static function isStudent(): bool { return self::role() === ROLE_STUDENT; }
-    public static function isStaff():   bool { return self::role() === ROLE_STAFF;   }
-    public static function isAdmin():   bool { return self::role() === ROLE_ADMIN;   }
+    public static function isStudent():   bool { return self::role() === ROLE_STUDENT; }
+    public static function isStaff():     bool { return self::role() === ROLE_STAFF;   }
+    public static function isProfessor(): bool { return self::role() === ROLE_STAFF;   } // alias
+    public static function isSSO():       bool { return self::role() === ROLE_SSO;     }
+    public static function isDean():      bool { return self::role() === ROLE_DEAN;    }
+    public static function isAdmin():     bool { return self::role() === ROLE_ADMIN;   }
+
+    /**
+     * Any non-student authenticated user (Professor / SSO / Dean / Admin).
+     * Use for pages that everyone with admin-side access can view (e.g.
+     * shared dashboards, the interview queue, user-profile settings).
+     */
+    public static function isStaffPlus(): bool
+    {
+        return in_array(self::role(), [ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN], true);
+    }
+
+    /**
+     * SSO / Dean / Admin — the "oversight" tier.
+     * Use for pages that read across applicants but where Professors
+     * have no business (results review, courses & strands, dashboards).
+     */
+    public static function isOversight(): bool
+    {
+        return in_array(self::role(), [ROLE_SSO, ROLE_DEAN, ROLE_ADMIN], true);
+    }
+
+    /** Legacy helper kept for back-compat (Staff OR Admin only). */
     public static function isStaffOrAdmin(): bool
     {
         return in_array(self::role(), [ROLE_STAFF, ROLE_ADMIN], true);
+    }
+
+    // -- Role labels --------------------------------------------
+    // Map a DB enum value to its UI label. The DB enum keeps 'staff'
+    // for back-compat, but everywhere the UI shows it we want
+    // "Professor" — call this helper instead of `ucfirst($u['role'])`.
+    public static function roleLabel(?string $role): string
+    {
+        return match ($role) {
+            ROLE_STUDENT => 'Student',
+            ROLE_STAFF   => 'Professor',
+            ROLE_SSO     => 'SSO',
+            ROLE_DEAN    => 'Dean',
+            ROLE_ADMIN   => 'Admin',
+            default      => ucfirst((string)$role),
+        };
     }
 
     // -- Guards --------------------------------------------------
@@ -81,12 +122,26 @@ class Auth
         }
     }
 
+    /** Convenience: any non-student authenticated user. */
+    public static function requireStaffPlus(): void
+    {
+        self::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+    }
+
+    /** Convenience: SSO / Dean / Admin (oversight tier). */
+    public static function requireOversight(): void
+    {
+        self::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+    }
+
     // -- Default redirect after login by role --------------------
     public static function homeUrl(): string
     {
         return match (self::role()) {
-            ROLE_ADMIN => url("/admin/dashboard"),
-            ROLE_STAFF => url("/staff/dashboard"),
+            ROLE_ADMIN => url('/admin/dashboard'),
+            ROLE_SSO   => url('/admin/dashboard'),
+            ROLE_DEAN  => url('/admin/dashboard'),
+            ROLE_STAFF => url('/staff/dashboard'),
             default    => url('/student/documents'),
         };
     }

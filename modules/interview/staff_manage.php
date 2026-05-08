@@ -7,7 +7,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 $db      = db();
 $staffId = Auth::id();
@@ -77,7 +77,7 @@ ob_start();
         max-width:640px;width:100%;
     }
     .intv-landing-card {
-        display:flex;flex-direction:column;align-items:center;text-align:left;
+        display:flex;flex-direction:column;align-items:center;text-align:center;
         gap:var(--space-4);padding:var(--space-10) var(--space-6);
         background:var(--bg-elevated);border:1.5px solid var(--border);
         border-radius:var(--radius-lg);text-decoration:none;color:var(--text-primary);

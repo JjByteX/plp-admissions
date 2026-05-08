@@ -1,7 +1,7 @@
 <?php
 // _setup_sessions.php — card-grid session list for one college.
 // Variables in scope: $college, $slots, $byDate, $staffList,
-// $isAdmin, $errors, $today.
+// $isAdmin, $canManage, $errors, $today.
 //
 // Layout matches the exam directory style 1:1: a responsive grid
 // of cards (one per session) with a dashed "+ Add Session" card as
@@ -26,17 +26,17 @@ function _session_expired(string $date, ?string $endTime, string $today, string 
 <?php endif; ?>
 
 <!-- Header -->
-<div style="display:flex;align-items:center;margin-bottom:var(--space-5)">
-    <?php if ($isAdmin): ?>
+<div style="margin-bottom:var(--space-3)">
+    <?php if ($canManage): ?>
         <a href="<?= url('/staff/interviews/setup') ?>" class="btn btn-ghost btn-sm">← Back</a>
     <?php else: ?>
         <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
     <?php endif; ?>
-    <div style="flex:1;text-align:center">
-        <span style="font-weight:var(--weight-semibold);font-size:var(--text-base)"><?= e($college) ?></span>
-        <span style="color:var(--text-tertiary);font-size:var(--text-sm)"> — Interview Sessions</span>
-    </div>
-    <div style="width:80px"></div>
+</div>
+
+<div class="page-header" style="text-align:center;margin-bottom:var(--space-6)">
+    <h1 class="page-title" style="margin:0 0 var(--space-1) 0"><?= e($college) ?></h1>
+    <p class="page-subtitle" style="text-align:center">Interview Sessions</p>
 </div>
 
 <style>

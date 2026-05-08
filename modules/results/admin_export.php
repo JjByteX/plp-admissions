@@ -5,7 +5,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 
 $db = db();
 
@@ -102,13 +102,6 @@ ob_start();
             <?= $totalReleased ? round((($resultCounts['accepted'] ?? 0) / $totalReleased) * 100) : 0 ?>%
         </div>
     </div>
-    <div class="metric-card metric-card--warning">
-        <div class="metric-label">Waitlisted</div>
-        <div class="metric-value"><?= number_format($resultCounts['waitlisted'] ?? 0) ?></div>
-        <div class="metric-sub">
-            <?= $totalReleased ? round((($resultCounts['waitlisted'] ?? 0) / $totalReleased) * 100) : 0 ?>%
-        </div>
-    </div>
     <div class="metric-card metric-card--error">
         <div class="metric-label">Not Accepted</div>
         <div class="metric-value"><?= number_format($resultCounts['rejected'] ?? 0) ?></div>
@@ -122,7 +115,7 @@ ob_start();
 <?php if ($totalReleased > 0): ?>
 <div class="card" style="padding:var(--space-6)">
     <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-5)">Result Breakdown</div>
-    <?php foreach (['accepted' => ['Accepted','var(--success)'], 'waitlisted' => ['Waitlisted','var(--warning)'], 'rejected' => ['Not Accepted','var(--error)']] as $key => [$label, $color]):
+    <?php foreach (['accepted' => ['Accepted','var(--success)'], 'rejected' => ['Not Accepted','var(--error)']] as $key => [$label, $color]):
         $cnt = $resultCounts[$key] ?? 0;
         $pct = $totalReleased > 0 ? round(($cnt / $totalReleased) * 100) : 0;
     ?>

@@ -256,7 +256,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('/verify-pending');
 
         } catch (Throwable $e) {
-            $pdo->rollBack();
+            // The transaction may already be committed (e.g. a failure in the
+            // post-commit verification email step). Only roll back if there's
+            // still an active transaction.
+            if ($pdo->inTransaction()) {
+                try { $pdo->rollBack(); } catch (\Throwable) { /* ignore */ }
+            }
             error_log('Registration error: ' . $e->getMessage());
             $errors['general'] = 'Something went wrong. Please try again.';
         }

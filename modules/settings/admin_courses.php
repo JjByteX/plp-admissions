@@ -10,17 +10,32 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
-$db      = db();
-$errors  = [];
-$success = [];
-$adminId = Auth::id();
+$db       = db();
+$errors   = [];
+$success  = [];
+$adminId  = Auth::id();
+$role     = Auth::role();
+
+// Admin and SSO can add/edit/delete courses, set enrollment caps, and
+// edit tier thresholds school-wide. Dean is restricted to tier thresholds
+// for the courses in their own college (oversight + standards-setting).
+$canManageCourses = ($role === ROLE_ADMIN || $role === ROLE_SSO);
+$scopedDept       = ($role === ROLE_DEAN) ? (string) user_department($adminId) : '';
+$scopedCourses    = ($scopedDept !== '') ? courses_in_department($scopedDept) : [];
 
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
+
+    // Dean is read-only on everything except tier thresholds. Drop any
+    // other write action up front so the if-blocks below short-circuit.
+    if (!$canManageCourses && $action !== 'update_tiers') {
+        $errors[] = 'Read-only access — only SSO and Admin can manage courses and enrollment caps.';
+        $action   = '';
+    }
 
     // ── Add new custom course ──────────────────────────────────
     if ($action === 'add_course') {
@@ -134,9 +149,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'update_tiers') {
         $scores    = $_POST['scores'] ?? [];
         $allCourses = function_exists('get_all_courses') ? get_all_courses() : PLP_COURSES;
+        // Dean can only edit thresholds for courses in their own college.
+        $writableCourses = $canManageCourses
+            ? $allCourses
+            : array_values(array_intersect($allCourses, $scopedCourses));
         $written   = 0;
         foreach ($scores as $courseName => $vals) {
-            if (!in_array($courseName, $allCourses, true)) continue;
+            if (!in_array($courseName, $writableCourses, true)) continue;
             $highFrom = max(2, min(10, (int)($vals['high'] ?? 7)));
             $avgFrom  = max(1, min($highFrom - 1, (int)($vals['avg'] ?? 4)));
             $passFrom = $avgFrom; // Passing = Average tier and above
@@ -179,6 +198,16 @@ try {
 } catch (\Throwable $e) { /* table may not exist yet */ }
 
 $allCoursesList = function_exists('get_all_courses') ? get_all_courses() : PLP_COURSES;
+
+// Dean dept scope — only show courses that belong to their own college.
+if (!$canManageCourses && $scopedDept !== '') {
+    $deanSet        = array_flip($scopedCourses);
+    $allCoursesList = array_values(array_filter($allCoursesList, fn($c) => isset($deanSet[$c])));
+    $customCourses  = array_values(array_filter(
+        $customCourses,
+        fn($cc) => isset($deanSet[$cc['course_name']])
+    ));
+}
 
 // Course enrollment caps (per current school year)
 $schoolYear     = school_setting('current_school_year', date('Y').'-'.(date('Y')+1));
@@ -313,11 +342,17 @@ ob_start();
                 </div>
                 <div style="padding:var(--space-3) var(--space-4);text-align:center"><strong><?= $accepted ?></strong></div>
                 <div style="padding:var(--space-3) var(--space-4)">
-                    <input type="number" name="caps[<?= $enc ?>]" class="form-control"
-                           min="0" max="99999"
-                           value="<?= $maxSlots !== null ? (int)$maxSlots : '' ?>"
-                           placeholder="∞"
-                           style="font-size:var(--text-sm);padding:5px 8px;text-align:center;width:100%">
+                    <?php if ($canManageCourses): ?>
+                        <input type="number" name="caps[<?= $enc ?>]" class="form-control"
+                               min="0" max="99999"
+                               value="<?= $maxSlots !== null ? (int)$maxSlots : '' ?>"
+                               placeholder="∞"
+                               style="font-size:var(--text-sm);padding:5px 8px;text-align:center;width:100%">
+                    <?php else: ?>
+                        <div style="text-align:center;color:var(--text-tertiary);font-size:var(--text-sm)">
+                            <?= $maxSlots !== null ? (int)$maxSlots : '∞' ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
                 <div style="padding:var(--space-3) var(--space-4);text-align:center">
                     <button type="button" class="btn-icon" title="Cancel" onclick="cancelRowEdit(<?= $ci ?>)" style="color:var(--text-tertiary)">
@@ -340,10 +375,12 @@ ob_start();
                 Additional programs you've added. They appear in dropdowns and strand-match suggestions.
             </div>
         </div>
-        <button class="btn btn-primary btn-sm"
-                onclick="document.getElementById('add-course-modal').style.display='flex'">
-            + Add Course
-        </button>
+        <?php if ($canManageCourses): ?>
+            <button class="btn btn-primary btn-sm"
+                    onclick="document.getElementById('add-course-modal').style.display='flex'">
+                + Add Course
+            </button>
+        <?php endif; ?>
     </div>
     <div class="card" style="padding:var(--space-5);margin-bottom:var(--space-6)">
 
@@ -376,24 +413,26 @@ ob_start();
                     <?php endif; ?>
                 </div>
             </div>
-            <div style="display:flex;gap:var(--space-2);align-items:center">
-                <button class="btn-icon" title="Edit"
-                        onclick="openEditModal(<?= $cc['id'] ?>, <?= e(json_encode($cc['course_name'])) ?>,
-                                 <?= e(json_encode($ccStrands)) ?>, <?= $cc['is_active'] ?>)"
-                        style="color:var(--text-tertiary)">
-                    <?= icon('ic_fluent_edit_24_regular', 14) ?>
-                </button>
-                <form method="POST" style="display:inline"
-                      onsubmit="return confirm('Delete this course? This cannot be undone.')">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="delete_course">
-                    <input type="hidden" name="course_id" value="<?= $cc['id'] ?>">
-                    <button type="submit" class="btn-icon" title="Delete"
-                            style="color:var(--error)">
-                        <?= icon('ic_fluent_delete_24_regular', 14) ?>
+            <?php if ($canManageCourses): ?>
+                <div style="display:flex;gap:var(--space-2);align-items:center">
+                    <button class="btn-icon" title="Edit"
+                            onclick="openEditModal(<?= $cc['id'] ?>, <?= e(json_encode($cc['course_name'])) ?>,
+                                     <?= e(json_encode($ccStrands)) ?>, <?= $cc['is_active'] ?>)"
+                            style="color:var(--text-tertiary)">
+                        <?= icon('ic_fluent_edit_24_regular', 14) ?>
                     </button>
-                </form>
-            </div>
+                    <form method="POST" style="display:inline"
+                          onsubmit="return confirm('Delete this course? This cannot be undone.')">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="delete_course">
+                        <input type="hidden" name="course_id" value="<?= $cc['id'] ?>">
+                        <button type="submit" class="btn-icon" title="Delete"
+                                style="color:var(--error)">
+                            <?= icon('ic_fluent_delete_24_regular', 14) ?>
+                        </button>
+                    </form>
+                </div>
+            <?php endif; ?>
         </div>
         <?php endforeach; ?>
         </div>

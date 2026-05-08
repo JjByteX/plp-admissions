@@ -12,7 +12,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 $db      = db();
 $staffId = Auth::id();
@@ -44,13 +44,26 @@ if (!$slot) {
     redirect('/staff/interviews');
 }
 
-$isAdmin = ($role === ROLE_ADMIN);
-// A staff member is the "owner" of a session if they're the assigned interviewer
-// or they originally created it (legacy rows have no assigned_to).
-$ownerId  = (int)($slot['assigned_to'] ?? 0) ?: (int)$slot['created_by'];
-$isOwner  = ($ownerId === $staffId);
-if (!$isOwner && !$isAdmin) {
-    Session::flash('error', 'You can only view rosters for your own sessions.');
+$isAdmin   = ($role === ROLE_ADMIN);
+$isSSO     = ($role === ROLE_SSO);
+$isDean    = ($role === ROLE_DEAN);
+// Admin and SSO can open any roster. Dean can open any roster whose
+// slot belongs to their own department. Professor must be the
+// session owner.
+$ownerId   = (int)($slot['assigned_to'] ?? 0) ?: (int)$slot['created_by'];
+$isOwner   = ($ownerId === $staffId);
+$slotDept  = (string)($slot['department'] ?? '');
+$staffDept = (string) user_department($staffId);
+$canView   = $isAdmin
+           || $isSSO
+           || ($isDean && $staffDept !== '' && $slotDept === $staffDept)
+           || $isOwner;
+// Only the session owner (Professor) and Admin can save evaluations.
+// SSO and Dean view rosters in read-only mode.
+$canEvaluate = $isAdmin || ($isOwner && !$isSSO && !$isDean);
+
+if (!$canView) {
+    Session::flash('error', 'You can only view rosters for sessions in your scope.');
     redirect('/staff/interviews');
 }
 
@@ -63,6 +76,11 @@ $success = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
+
+    if (!$canEvaluate) {
+        Session::flash('error', 'Read-only access — only the session interviewer can record evaluations.');
+        redirect('/staff/interviews/' . $slotId . '/roster');
+    }
 
     if ($action === 'save_evaluations') {
         $rows = $_POST['rows'] ?? [];
@@ -296,7 +314,13 @@ ob_start();
 
         <div style="display:flex;justify-content:flex-end;margin-top:var(--space-4);gap:var(--space-2)">
             <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost">Cancel</a>
-            <button type="submit" class="btn btn-primary">Save evaluations</button>
+            <?php if ($canEvaluate): ?>
+                <button type="submit" class="btn btn-primary">Save evaluations</button>
+            <?php else: ?>
+                <span class="badge badge-neutral" style="font-size:var(--text-xs);align-self:center">
+                    Read-only — only the session interviewer can record evaluations
+                </span>
+            <?php endif; ?>
         </div>
     </form>
 

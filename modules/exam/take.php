@@ -47,8 +47,13 @@ $examId = $exam['id'];
 // Look up the applicant's assigned exam slot. If they don't have one, they
 // see a "waiting" screen. If their slot is in the future, they see a slot
 // card. Only on their actual slot date do they reach the password gate.
+//
+// As of Chunk 7, the access password lives on the slot row (per-room),
+// so we pull access_password and password_issued_at along with the
+// scheduling fields.
 $slotStmt = $db->prepare(
-    'SELECT s.id, s.exam_date, s.slot_time, s.room_label
+    'SELECT s.id, s.exam_date, s.slot_time, s.room_label,
+            s.access_password, s.password_issued_at
        FROM applicant_exam_slots aes
        JOIN exam_slot_schedule  s ON s.id = aes.slot_id
       WHERE aes.applicant_id = ?
@@ -140,22 +145,36 @@ if ($isSlotPast) {
 
 // ── Password gate: required on exam day ─────────────────────────────────────
 // Students must enter the current (non-expired) access password before seeing
-// exam questions. The password is valid for 5 minutes from when staff issued it.
-$pwGateKey   = 'exam_pw_unlocked_' . $examId;          // session key
-$needsPwGate = !empty($exam['access_password']) && $isSlotToday;
-$isUnlocked  = isset($_SESSION[$pwGateKey]);
+// exam questions. The password is per-room (lives on the slot row, per Chunk 7)
+// and is valid for 5 minutes from when the proctor issued it.
+//
+// We also enforce a global late-cutoff: applicants who try to enter their
+// code more than `exam_late_cutoff_minutes` after the slot's start time are
+// locked out for the day so latecomers can't disrupt an in-progress room.
+$pwGateKey    = 'exam_pw_unlocked_' . $examId . '_slot_' . (int)$mySlot['id']; // session key (per-slot)
+$needsPwGate  = !empty($mySlot['access_password']) && $isSlotToday;
+$isUnlocked   = isset($_SESSION[$pwGateKey]);
+
+// Global late-cutoff (school setting). Once now > slot_opens + cutoff,
+// applicants in this room can no longer enter their code for the day.
+$slotOpensTs   = strtotime($mySlot['exam_date'] . ' ' . $mySlot['slot_time']);
+$lateCutoffMin = exam_late_cutoff_minutes();
+$lateCutoffTs  = $slotOpensTs + ($lateCutoffMin * 60);
+$isLateLockout = $isSlotToday && time() > $lateCutoffTs;
 
 if ($needsPwGate && !$isUnlocked) {
-    $pwValid    = exam_password_is_valid($exam);
-    $pwSecsLeft = exam_password_seconds_remaining($exam);
+    $pwValid    = exam_password_is_valid($mySlot);
+    $pwSecsLeft = exam_password_seconds_remaining($mySlot);
 
     // Handle password submission
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['exam_access_password'])) {
         csrf_check();
         $submitted = strtoupper(trim($_POST['exam_access_password'] ?? ''));
-        $correct   = strtoupper(trim($exam['access_password']));
+        $correct   = strtoupper(trim($mySlot['access_password']));
 
-        if (!$pwValid) {
+        if ($isLateLockout) {
+            $pwError = 'You are past the late-entry cutoff for this slot. Please contact the admissions office to request a reschedule.';
+        } elseif (!$pwValid) {
             $pwError = 'The access code has expired. Please ask your proctor to generate a new one.';
         } elseif ($submitted !== $correct) {
             $pwError = 'Incorrect access code. Please check with your proctor and try again.';
@@ -192,11 +211,20 @@ if ($needsPwGate && !$isUnlocked) {
                 <div class="alert alert-error" style="margin-bottom:var(--space-4);text-align:left"><?= e($pwError) ?></div>
             <?php endif; ?>
 
-            <?php if (!$pwValid): ?>
+            <?php if ($isLateLockout): ?>
+                <div class="alert alert-error" style="margin-bottom:var(--space-4);text-align:left">
+                    <strong>Late-entry cutoff passed.</strong>
+                    Your slot opened at <?= e(date('g:i A', $slotOpensTs)) ?> in
+                    <?= e($mySlot['room_label']) ?>. The <?= (int)$lateCutoffMin ?>-minute
+                    late-entry window has closed for the day. Please contact the admissions
+                    office to request a reschedule.
+                </div>
+            <?php elseif (!$pwValid): ?>
                 <div class="alert alert-warning" style="margin-bottom:var(--space-4);text-align:left">
                     <strong>No active code right now.</strong>
                     The access code has not been issued yet or has expired.
-                    Please wait for your proctor to provide one — they can generate a fresh code from the Exams page.
+                    Please wait for your proctor to provide one — they will generate a fresh
+                    code from this room's slot in the Exam Slots page.
                 </div>
             <?php endif; ?>
 
@@ -209,19 +237,19 @@ if ($needsPwGate && !$isUnlocked) {
                        autocomplete="off" autocorrect="off" spellcheck="false"
                        style="font-family:monospace;font-size:var(--text-2xl);letter-spacing:.4em;
                               text-align:center;text-transform:uppercase;margin-bottom:var(--space-4)"
-                       placeholder="ACCESS CODE" <?= !$pwValid ? 'disabled' : '' ?>
+                       placeholder="Access code" <?= (!$pwValid || $isLateLockout) ? 'disabled' : '' ?>
                        oninput="this.value=this.value.toUpperCase()" autofocus>
-                <?php if ($pwValid): ?>
+                <?php if ($pwValid && !$isLateLockout): ?>
                     <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-4)">
                         Code expires in <strong id="gate-timer"><?= $pwSecsLeft ?></strong> seconds.
                     </p>
                 <?php endif; ?>
-                <button type="submit" class="btn btn-primary" style="width:100%" <?= !$pwValid ? 'disabled' : '' ?>>
+                <button type="submit" class="btn btn-primary" style="width:100%" <?= (!$pwValid || $isLateLockout) ? 'disabled' : '' ?>>
                     Enter Exam
                 </button>
             </form>
         </div>
-        <?php if ($pwValid): ?>
+        <?php if ($pwValid && !$isLateLockout): ?>
         <script>
         (function() {
             let s = <?= $pwSecsLeft ?>;
@@ -497,8 +525,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path stroke="#22c55e" stroke-width="2" stroke-linecap="round" d="M8 12l3 3 5-5"/></svg>
             </div>
             <div style="flex:1">
-                <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">Next: Schedule your Interview</div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">You'll be contacted with your interview schedule.</div>
+                <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">Next: Interview</div>
+                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">The admissions office will automatically assign you an interview slot. No action required.</div>
             </div>
             <a href="<?= url('/student/interview') ?>" class="btn btn-primary btn-sm">Continue →</a>
         </div>
@@ -836,11 +864,9 @@ ob_start();
     <?= icon('ic_fluent_warning_24_regular', 16) ?>
     <span>You can only submit <strong>once</strong>. Do not close this page until you click <strong>Submit Exam</strong>.</span>
     <?php
-        if (!empty($exam['scheduled_end'])) {
-            $dispRemaining = max(0, strtotime($exam['scheduled_end']) - time());
-        } else {
-            $dispRemaining = 0;
-        }
+        // The exam closes at the slot's explicit end_time.
+        $slotWindow    = slot_window($mySlot);
+        $dispRemaining = max(0, $slotWindow['closes']->getTimestamp() - time());
         if ($dispRemaining > 0):
         $dispM = str_pad(floor($dispRemaining / 60), 2, '0', STR_PAD_LEFT);
         $dispS = str_pad($dispRemaining % 60, 2, '0', STR_PAD_LEFT);
@@ -900,9 +926,6 @@ ob_start();
                 <?php endif; ?>
             </div>
             <div class="q-text"><?= e($q['question_text']) ?></div>
-            <?php if ($q['description'] && $q['description'] !== 'No answer key provided'): ?>
-                <div class="q-desc"><?= e($q['description']) ?></div>
-            <?php endif; ?>
 
             <!-- ── MULTIPLE CHOICE ── -->
             <?php if ($qType === 'multiple_choice'): ?>
@@ -1117,11 +1140,9 @@ function confirmSubmit() {
 
 // ── Countdown timer ──────────────────────────────────────────
 <?php
-    if (!empty($exam['scheduled_end'])) {
-        $secondsRemaining = max(0, strtotime($exam['scheduled_end']) - time());
-    } else {
-        $secondsRemaining = 0;
-    }
+    // Closes at the slot's explicit end_time (per-room window).
+    $slotWindow       = slot_window($mySlot);
+    $secondsRemaining = max(0, $slotWindow['closes']->getTimestamp() - time());
     if ($secondsRemaining > 0):
 ?>
 let seconds = <?= $secondsRemaining ?>;

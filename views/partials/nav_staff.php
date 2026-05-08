@@ -1,26 +1,32 @@
 <?php
 // views/partials/nav_staff.php
+// Professor sidebar — only the pages a Professor can actually open.
+// (Admin / SSO / Dean use nav_admin.php with their own per-role filter.)
+//
+// Per the role redesign:
+//   Documents       → SSO / Admin (Professor cannot review)
+//   Exam Builder    → SSO / Admin (Professor has no exam content access)
+//   Exam Slots      → Professor in read-only (room sheet visibility)
+//   Interview Queue → Professor (their own desk's queue)
+//   Results / Audit → out of scope for Professor
+
 $nav = $activeNav ?? '';
 
-// Readiness checks for red-dot indicators
-$_navDb = db();
-$_navSY = school_setting('current_school_year', date('Y').'-'.(date('Y')+1));
-$_navExamReady = (int)$_navDb->query('SELECT COUNT(*) FROM exams WHERE is_active=1')->fetchColumn() > 0;
-$_navSlotStmt  = $_navDb->prepare('SELECT COUNT(*) FROM exam_slot_schedule WHERE school_year=?');
-$_navSlotStmt->execute([$_navSY]);
-$_navExamReady = $_navExamReady && (int)$_navSlotStmt->fetchColumn() > 0;
-$_navIntReady  = (int)$_navDb->query("SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURDATE()")->fetchColumn() > 0;
+// Light readiness check — interview slot existence drives the red-dot
+// indicator next to "Interview Queue" so the Professor knows when
+// nothing is scheduled yet.
+$_navDb       = db();
+$_navIntReady = (int)$_navDb->query(
+    "SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURDATE()"
+)->fetchColumn() > 0;
 
+// Flat list — only 3 items, no section label needed.
 $items = [
-    ['href' => '/staff/dashboard',   'key' => 'dashboard',   'label' => 'Dashboard',      'icon' => 'ic_fluent_home_24_regular'],
-    ['href' => '/staff/applicants',  'key' => 'documents',   'label' => 'Documents',      'icon' => 'ic_fluent_document_24_regular'],
-    ['href' => '/staff/exam',        'key' => 'exam',        'label' => 'Exams',          'icon' => 'ic_fluent_edit_24_regular',      'alert' => !$_navExamReady],
-    ['href' => '/staff/interviews',  'key' => 'interviews',  'label' => 'Interviews',     'icon' => 'ic_fluent_calendar_ltr_24_regular', 'alert' => !$_navIntReady],
-    ['href' => '/staff/results',     'key' => 'results',     'label' => 'Results',        'icon' => 'ic_fluent_ribbon_star_24_regular'],
-    ['href' => '/staff/audit-log',   'key' => 'audit-log',   'label' => 'Audit Log',      'icon' => 'ic_fluent_eye_show_24_regular'],
+    ['href' => '/staff/dashboard',         'key' => 'dashboard',  'label' => 'Dashboard',       'icon' => 'ic_fluent_home_24_regular'],
+    ['href' => '/staff/interviews/queue',  'key' => 'interviews', 'label' => 'Interview Queue', 'icon' => 'ic_fluent_people_24_regular',     'alert' => !$_navIntReady],
+    ['href' => '/staff/exam/slots',        'key' => 'exam',       'label' => 'Exam Slots',      'icon' => 'ic_fluent_calendar_ltr_24_regular'],
 ];
 ?>
-<div class="nav-section-label">Management</div>
 <?php foreach ($items as $item): ?>
     <a href="<?= url($item['href']) ?>"
        class="nav-item <?= $nav === $item['key'] ? 'active' : '' ?>"

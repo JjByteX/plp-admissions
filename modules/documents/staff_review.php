@@ -5,7 +5,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 
 $db = db();
 
@@ -50,36 +50,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
 }
 
 // ----------------------------------------------------------------
-// Bulk reject SELECTED applicants' documents
+// (Bulk reject handler removed — staff use "Request Resubmission"
+// per-document instead, which lets the student re-upload AND notifies
+// them. A blanket "reject" was redundant since it had the same end
+// state as resubmission but skipped the notification.)
 // ----------------------------------------------------------------
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_reject_selected') {
-    csrf_check();
-    $staffId = Auth::id();
-    $ids = array_values(array_unique(array_filter(array_map('intval', $_POST['applicant_ids'] ?? []))));
-    $reason = trim($_POST['remarks'] ?? '');
-
-    if (empty($ids)) {
-        Session::flash('error', 'No applicants selected.');
-        redirect('/staff/applicants');
-    }
-    if ($reason === '') {
-        Session::flash('error', 'A reason is required when rejecting documents.');
-        redirect('/staff/applicants');
-    }
-
-    $rejected = 0;
-    foreach ($ids as $aid) {
-        $db->prepare(
-            'UPDATE documents SET status="rejected", staff_remarks=?, reviewed_by=?
-              WHERE applicant_id=? AND status IN ("uploaded","under_review")'
-        )->execute([$reason, $staffId, $aid]);
-        $cnt = (int)($db->query('SELECT ROW_COUNT()')->fetchColumn() ?: 0);
-        if ($cnt > 0) $rejected++;
-    }
-    audit_log('bulk_reject_selected', "Bulk-rejected docs for {$rejected} applicant(s): {$reason}");
-    Session::flash('success', "Rejected documents for {$rejected} applicant(s).");
-    redirect('/staff/applicants');
-}
 
 // ----------------------------------------------------------------
 // Bulk approve all applicants with pending documents
@@ -284,8 +259,6 @@ if ($applicantId) {
                         <input type="hidden" name="action" value="approve">
                         <button class="btn btn-success btn-sm">Approve</button>
                     </form>
-                    <button class="btn btn-danger btn-sm"
-                            onclick="openRejectModal(<?= $doc['id'] ?>)">Reject</button>
                     <button class="btn btn-warning btn-sm"
                             onclick="openResubmitModal(<?= $doc['id'] ?>)">Resubmit</button>
                 </div>
@@ -319,31 +292,6 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
         </form>
     </div>
 <?php endif; ?>
-
-<!-- Reject modal -->
-<div id="reject-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
-    <div class="modal" style="max-width:400px">
-        <div class="modal-header">
-            <div class="modal-title">Reject Document</div>
-            <button class="btn-icon" onclick="closeRejectModal()">
-                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
-            </button>
-        </div>
-        <form method="POST" id="reject-form" action="">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="reject">
-            <div class="modal-body">
-                <label class="form-label">Reason for rejection <span style="color:var(--error)">*</span></label>
-                <textarea name="remarks" class="form-control" rows="3"
-                          placeholder="e.g. Document is blurry or unreadable" required></textarea>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-ghost" onclick="closeRejectModal()">Cancel</button>
-                <button type="submit" class="btn btn-danger">Reject</button>
-            </div>
-        </form>
-    </div>
-</div>
 
 <!-- A7: Request Resubmission modal -->
 <div id="resubmit-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
@@ -629,20 +577,10 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 </script>
 
 <script>
-function openRejectModal(docId) {
-    document.getElementById('reject-form').action = '<?= url('/staff/documents/') ?>' + docId;
-    document.getElementById('reject-modal').style.display = 'flex';
-}
 function openResubmitModal(docId) {
     document.getElementById('resubmit-form').action = '<?= url('/staff/documents/') ?>' + docId;
     document.getElementById('resubmit-modal').style.display = 'flex';
 }
-function closeRejectModal() {
-    document.getElementById('reject-modal').style.display = 'none';
-}
-document.getElementById('reject-modal').addEventListener('click', function(e){
-    if(e.target===this) closeRejectModal();
-});
 </script>
 
 <!-- ════════════════════════════════════════════════════════════
@@ -1028,9 +966,13 @@ async function startAiValidateAll() {
 // ----------------------------------------------------------------
 // List all applicants with filters
 // ----------------------------------------------------------------
-// Page is dedicated to document review — always filter to applicants whose
-// overall_status is 'documents'. (No tab bar; this is a single-purpose view.)
-$statusFilter = 'documents';
+// Page is dedicated to document review — show every applicant whose docs
+// are reviewable. That includes both `overall_status = 'submitted'`
+// (just submitted, docs not yet adjudicated) and `'documents'` (already
+// in the doc-review stage). The Approve-All count uses the same set, so
+// the two stay consistent.
+$statusFilter = 'documents';                 // kept for filter-link URL backward-compat
+$reviewableStatuses = ['submitted', 'documents'];
 $typeFilter   = $_GET['type']   ?? '';
 $courseFilter = $_GET['course'] ?? '';
 $search       = trim($_GET['q'] ?? '');
@@ -1040,10 +982,9 @@ $page         = max(1, (int)($_GET['page'] ?? 1));
 
 $where   = ['1=1'];
 $params  = [];
-if ($statusFilter) {
-    $where[]           = 'a.overall_status = :status';
-    $params[':status'] = $statusFilter;
-}
+$where[]            = 'a.overall_status IN (:status_submitted, :status_documents)';
+$params[':status_submitted'] = 'submitted';
+$params[':status_documents'] = 'documents';
 if ($typeFilter) {
     $where[]         = 'a.applicant_type = :atype';
     $params[':atype'] = $typeFilter;
@@ -1400,11 +1341,6 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
         <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
         Approve Docs
     </button>
-    <button type="button" class="btn btn-danger btn-sm" onclick="openBulkRejectModal()"
-            style="display:flex;align-items:center;gap:5px;white-space:nowrap">
-        <?= icon('ic_fluent_dismiss_circle_24_regular', 14) ?>
-        Reject Docs
-    </button>
     <button type="button" class="btn btn-secondary btn-sm" onclick="bulkExportCsv()"
             style="display:flex;align-items:center;gap:5px;white-space:nowrap">
         <?= icon('ic_fluent_arrow_download_24_regular', 14) ?>
@@ -1424,34 +1360,6 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="bulk_approve_selected">
 </form>
-
-<!-- Bulk reject modal -->
-<div id="bulk-reject-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
-    <div class="modal" style="max-width:440px">
-        <div class="modal-header">
-            <div class="modal-title">Reject Documents</div>
-            <button class="btn-icon" onclick="closeBulkRejectModal()">
-                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
-            </button>
-        </div>
-        <form id="bulk-reject-form" method="POST">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="bulk_reject_selected">
-            <div class="modal-body">
-                <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">
-                    Rejecting documents for <strong id="bulk-reject-count">0</strong> applicant(s).
-                </p>
-                <label class="form-label">Reason for rejection <span style="color:var(--error)">*</span></label>
-                <textarea name="remarks" class="form-control" rows="3"
-                          placeholder="e.g. Document is blurry, expired, or does not match requirements" required></textarea>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-ghost" onclick="closeBulkRejectModal()">Cancel</button>
-                <button type="submit" class="btn btn-danger">Reject Selected</button>
-            </div>
-        </form>
-    </div>
-</div>
 
 <style>
 @keyframes bulkToolbarSlideUp {
@@ -1519,30 +1427,6 @@ function bulkApproveSelected() {
     form.submit();
 }
 
-function openBulkRejectModal() {
-    var ids = getSelectedIds();
-    if (ids.length === 0) return;
-    document.getElementById('bulk-reject-count').textContent = ids.length;
-
-    var form = document.getElementById('bulk-reject-form');
-    form.querySelectorAll('input[name="applicant_ids[]"]').forEach(function(el) { el.remove(); });
-    ids.forEach(function(id) {
-        var input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'applicant_ids[]';
-        input.value = id;
-        form.appendChild(input);
-    });
-
-    document.getElementById('bulk-reject-modal').style.display = 'flex';
-    document.getElementById('bulk-reject-modal').setAttribute('aria-hidden', 'false');
-}
-
-function closeBulkRejectModal() {
-    document.getElementById('bulk-reject-modal').style.display = 'none';
-    document.getElementById('bulk-reject-modal').setAttribute('aria-hidden', 'true');
-}
-
 function bulkExportCsv() {
     var ids = getSelectedIds();
     if (ids.length === 0) return;
@@ -1568,19 +1452,6 @@ function bulkExportCsv() {
     a.click();
 }
 
-/* Close bulk reject modal on backdrop click */
-document.getElementById('bulk-reject-modal')?.addEventListener('click', function(e) {
-    if (e.target === this) closeBulkRejectModal();
-});
-
-/* Keyboard: Escape closes modal */
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        if (document.getElementById('bulk-reject-modal')?.style.display === 'flex') {
-            closeBulkRejectModal();
-        }
-    }
-});
 </script>
 
 <script>

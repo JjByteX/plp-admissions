@@ -70,6 +70,82 @@ function user_department(int $userId): string
 }
 
 /**
+ * Return all course names that belong to a given department.
+ *
+ * Combines the canonical course list (built-ins via PLP_COURSES +
+ * any custom courses added via admin_courses) with course_to_department()
+ * so the same course→department mapping that drives interview/exam
+ * routing also drives Dean dept scoping.
+ *
+ * Returns an empty array when $dept is empty or no courses match.
+ */
+function courses_in_department(string $dept): array
+{
+    $dept = trim($dept);
+    if ($dept === '') return [];
+
+    $all = function_exists('get_all_courses')
+        ? get_all_courses()
+        : (defined('PLP_COURSES') ? PLP_COURSES : []);
+
+    $out = [];
+    foreach ($all as $course) {
+        if (course_to_department((string)$course) === $dept) {
+            $out[] = (string)$course;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Return the department to scope queries to for the *currently logged-in*
+ * viewer. Admin and SSO see everything (returns ''), Dean and Professor
+ * are scoped to their own users.department (returns the dept name).
+ *
+ * Modules can call this once near the top and use the return value to
+ * decide whether to add a department filter to their data queries.
+ */
+function viewer_scoped_department(): string
+{
+    if (!Auth::check()) return '';
+    $role = Auth::role();
+    if ($role === ROLE_ADMIN || $role === ROLE_SSO) return '';
+    if ($role === ROLE_DEAN || $role === ROLE_STAFF) {
+        return user_department(Auth::id());
+    }
+    return '';
+}
+
+/**
+ * Build a SQL fragment + parameter list that scopes a query on the
+ * `applicants` table to the currently logged-in viewer's department.
+ *
+ * Returns ['', []] for Admin / SSO / Student (no scoping).
+ * Returns [' AND <alias>.course_applied IN (?, ?, …)', [course1, course2, …]]
+ * for Dean / Professor.
+ *
+ * Edge case — Dean has a department on file but no courses are mapped
+ * to it: returns [' AND 1 = 0', []] so the query returns zero rows
+ * (safer than silently leaking other colleges' data).
+ *
+ * Usage:
+ *   [$f, $p] = viewer_course_filter('a');
+ *   $sql = "SELECT … FROM applicants a WHERE a.school_year = ? $f";
+ *   $stmt->execute(array_merge([$schoolYear], $p));
+ */
+function viewer_course_filter(string $alias = 'a'): array
+{
+    $dept = viewer_scoped_department();
+    if ($dept === '') return ['', []];
+
+    $courses = courses_in_department($dept);
+    if (empty($courses)) return [' AND 1 = 0', []];
+
+    $marks = implode(',', array_fill(0, count($courses), '?'));
+    return [" AND {$alias}.course_applied IN ({$marks})", array_values($courses)];
+}
+
+/**
  * Return the full list of department names (canonical order).
  * DB-first so admin-added departments show up; config fallback.
  */
@@ -232,13 +308,33 @@ function assign_interview_slot(int $applicantId, ?int $actorUserId = null, ?int 
 
         $slotId = (int)$candidate['id'];
 
-        // Check-in codes are no longer used — staff checks students in
-        // directly from the live queue UI (see staff_queue.php).
+        // Check-in is no longer a manual step — neither students ("I'm Here")
+        // nor staff ("Check In") need to do anything. The applicant is
+        // assigned a queue number and marked checked_in immediately so they
+        // appear in the live queue as soon as the slot's day arrives.
+        // The queue number is the next sequential number for this
+        // interviewer (assigned_to with created_by fallback) on the slot's
+        // date — so ordering still reflects assignment order, not arrival.
+        $nextNumStmt = $pdo->prepare(
+            'SELECT COALESCE(MAX(q.queue_number), 0) + 1
+               FROM interview_queue q
+               JOIN interview_slots s2 ON s2.id = q.slot_id
+              WHERE s2.slot_date = (SELECT slot_date FROM interview_slots WHERE id = ?)
+                AND COALESCE(s2.assigned_to, s2.created_by) = (
+                    SELECT COALESCE(assigned_to, created_by)
+                      FROM interview_slots WHERE id = ?
+                )
+                AND q.queue_number IS NOT NULL'
+        );
+        $nextNumStmt->execute([$slotId, $slotId]);
+        $nextNum = (int)$nextNumStmt->fetchColumn();
+
         $pdo->prepare(
             'INSERT INTO interview_queue
-                (slot_id, applicant_id, status, interview_status)
-             VALUES (?, ?, "scheduled", "pending")'
-        )->execute([$slotId, $applicantId]);
+                (slot_id, applicant_id, status, interview_status,
+                 queue_number, checked_in_at)
+             VALUES (?, ?, "checked_in", "pending", ?, NOW())'
+        )->execute([$slotId, $applicantId, $nextNum]);
 
         $pdo->prepare(
             'UPDATE applicants SET overall_status = "interview" WHERE id = ?'

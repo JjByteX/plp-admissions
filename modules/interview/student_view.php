@@ -2,11 +2,11 @@
 // ============================================================
 // modules/interview/student_view.php
 //
-// Students NO LONGER pick their own slot.  After passing the exam
+// Students NO LONGER pick their own slot. After passing the exam
 // the applicant waits for staff to auto-assign them an interview
 // slot (triggered whenever staff creates a new slot for their
-// department).  The only POST action left on this page is the
-// "I'm Here" check-in on the interview day.
+// department). The slot assignment also auto-checks them in, so
+// there is no "I'm Here" button anymore — the page is read-only.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -70,75 +70,9 @@ $stepperCurrent = current_step($applicant, $_examResult, $myEntry, $_admissionRe
 $errors = [];
 $today  = date('Y-m-d');
 
-// ----------------------------------------------------------------
-// POST — only "I'm Here" check-in is allowed on this page now.
-// ----------------------------------------------------------------
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
-
-    if ($action === 'checkin') {
-        if (!$myEntry
-            || $myEntry['slot_date'] !== $today
-            || $myEntry['status'] !== 'scheduled'
-            || ($myEntry['interview_status'] ?? 'pending') !== 'pending') {
-            redirect('/student/interview');
-        }
-
-        $db->beginTransaction();
-        try {
-            // Atomic: next queue number for this interviewer's sessions today.
-            // After the desk/session merge an interviewer is identified by
-            // assigned_to (or created_by for legacy rows).
-            $stmt = $db->prepare(
-                'SELECT COALESCE(MAX(q.queue_number), 0) + 1
-                 FROM   interview_queue q
-                 JOIN   interview_slots s ON s.id = q.slot_id
-                 WHERE  s.slot_date = ? AND COALESCE(s.assigned_to, s.created_by) = (
-                     SELECT COALESCE(assigned_to, created_by) FROM interview_slots WHERE id = ?
-                 )
-                 AND q.queue_number IS NOT NULL'
-            );
-            $stmt->execute([$today, $myEntry['slot_id']]);
-            $nextNum = (int)$stmt->fetchColumn();
-
-            $db->prepare(
-                'UPDATE interview_queue
-                 SET    status        = "checked_in",
-                        queue_number  = ?,
-                        checked_in_at = NOW()
-                 WHERE  id = ? AND status = "scheduled"'
-            )->execute([$nextNum, $myEntry['id']]);
-
-            $db->commit();
-            Session::flash('success', 'You are now in the queue!');
-        } catch (Throwable $e) {
-            $db->rollBack();
-            error_log('student check-in failed: ' . $e->getMessage());
-            $errors[] = 'Check-in failed. Please try again.';
-        }
-
-        // Reload entry
-        $stmt = $db->prepare(
-            'SELECT q.*,
-                    s.slot_date, s.slot_time, s.end_time, s.capacity,
-                    s.department                              AS slot_department,
-                    COALESCE(NULLIF(s.location_label, ""), u.desk_label) AS desk_label,
-                    COALESCE(s.location_notes, u.desk_notes)            AS desk_notes,
-                    COALESCE(au.name, cu.name)                AS staff_name
-             FROM   interview_queue q
-             JOIN   interview_slots s ON s.id = q.slot_id
-             JOIN   users           cu ON cu.id = s.created_by
-             LEFT JOIN users        au ON au.id = s.assigned_to
-             LEFT JOIN users        u  ON u.id  = COALESCE(s.assigned_to, s.created_by)
-             WHERE  q.applicant_id = ?
-             ORDER BY q.id DESC
-             LIMIT 1'
-        );
-        $stmt->execute([$applicantId]);
-        $myEntry = $stmt->fetch() ?: null;
-    }
-}
+// This page no longer accepts POST. The previous "I'm Here" check-in is
+// now performed automatically at slot assignment time — see
+// core/interview_scheduler.php :: assign_interview_slot().
 
 // ----------------------------------------------------------------
 // Student department — used for the waiting message.
@@ -236,9 +170,11 @@ ob_start();
             </div>
         </div>
 
-    <?php elseif (in_array($myEntry['status'], ['checked_in', 'in_progress'], true)): ?>
+    <?php elseif (in_array($myEntry['status'], ['checked_in', 'in_progress'], true) && $slotIsToday): ?>
         <!-- ============================================================
              CHECKED IN STATE — queue number + desk instructions
+             (auto-checked-in at assignment time; only show queue UI on
+             the actual interview day)
         ============================================================ -->
         <div class="card" style="padding:var(--space-6);text-align:center;margin-bottom:var(--space-4)">
 
@@ -304,62 +240,6 @@ ob_start();
         </div>
 
         <script>setTimeout(function(){ window.location.reload(); }, 30000);</script>
-
-    <?php elseif ($slotIsToday && $myEntry['status'] === 'scheduled'): ?>
-        <!-- ============================================================
-             TODAY — "I'm here" check-in
-        ============================================================ -->
-        <div class="card" style="padding:var(--space-6)">
-            <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5)">
-                <div style="width:48px;height:48px;border-radius:var(--radius-lg);
-                             background:var(--success-bg);display:flex;align-items:center;justify-content:center">
-                    <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?>
-                </div>
-                <div>
-                    <div style="font-weight:var(--weight-semibold)">Today is your Interview Day</div>
-                    <div style="font-size:var(--text-sm);color:var(--text-tertiary)">
-                        <?php if ($myEntry['slot_time']): ?>
-                            <?= format_time($myEntry['slot_time']) ?><?= $myEntry['end_time'] ? ' – ' . format_time($myEntry['end_time']) : '' ?> &nbsp;·&nbsp;
-                        <?php endif; ?>
-                        <?= format_date($myEntry['slot_date']) ?>
-                    </div>
-                </div>
-                <span class="badge badge-info" style="margin-left:auto">Scheduled</span>
-            </div>
-
-            <!-- Desk location — visible BEFORE check-in -->
-            <?php if ($myEntry['desk_label']): ?>
-                <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
-                             padding:var(--space-4) var(--space-5);margin-bottom:var(--space-5)">
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
-                                 color:var(--text-tertiary);margin-bottom:var(--space-1)">
-                        After check-in, proceed to
-                    </div>
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">
-                        <?= e($myEntry['desk_label']) ?>
-                    </div>
-                    <?php if ($myEntry['desk_notes']): ?>
-                        <div style="font-size:var(--text-sm);color:var(--text-secondary);
-                                     margin-top:var(--space-1);white-space:pre-line">
-                            <?= e($myEntry['desk_notes']) ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            <?php endif; ?>
-
-            <form method="POST">
-                <?= csrf_field() ?>
-                <input type="hidden" name="action" value="checkin">
-                <button type="submit" class="btn btn-primary"
-                        style="width:100%;padding:var(--space-4);font-size:var(--text-lg)">
-                    I'm Here
-                </button>
-            </form>
-
-            <p style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:center;margin-top:var(--space-3)">
-                Tap this button when you arrive at the admissions area to receive your queue number.
-            </p>
-        </div>
 
     <?php else: ?>
         <!-- ============================================================
@@ -440,8 +320,23 @@ ob_start();
 <!-- Step navigation -->
 <div class="step-nav">
     <a href="<?= url('/student/documents') ?>" class="btn btn-ghost">← Documents</a>
-    <?php if ($myEntry && ($myEntry['interview_status'] ?? 'pending') === 'completed'): ?>
+    <?php
+        // Only expose a real "My Result" link once the admissions office has
+        // actually released a decision. Before that, show the same button in a
+        // disabled state so the student sees what's coming next without
+        // landing on an empty / "result not yet released" page.
+        $resultReleased = !empty($_admissionResult);
+        $interviewDone  = $myEntry && ($myEntry['interview_status'] ?? 'pending') === 'completed';
+    ?>
+    <?php if ($interviewDone && $resultReleased): ?>
         <a href="<?= url('/student/result') ?>" class="btn btn-primary">My Result →</a>
+    <?php elseif ($interviewDone): ?>
+        <button type="button" class="btn btn-primary" disabled
+                title="Your result has not been released yet. You'll be notified when it is."
+                aria-disabled="true"
+                style="opacity:.55;cursor:not-allowed">
+            Result not released yet
+        </button>
     <?php else: ?>
         <span></span>
     <?php endif; ?>
