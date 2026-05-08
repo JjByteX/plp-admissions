@@ -21,10 +21,11 @@ $_navIntReady = (int)$_navDb->query(
 )->fetchColumn() > 0;
 
 // Flat list — only 3 items, no section label needed.
+// Order: Dashboard → Exam Slots → Interview Queue.
 $items = [
     ['href' => '/staff/dashboard',         'key' => 'dashboard',  'label' => 'Dashboard',       'icon' => 'ic_fluent_home_24_regular'],
-    ['href' => '/staff/interviews/queue',  'key' => 'interviews', 'label' => 'Interview Queue', 'icon' => 'ic_fluent_people_24_regular',     'alert' => !$_navIntReady],
     ['href' => '/staff/exam/slots',        'key' => 'exam',       'label' => 'Exam Slots',      'icon' => 'ic_fluent_calendar_ltr_24_regular'],
+    ['href' => '/staff/interviews/queue',  'key' => 'interviews', 'label' => 'Interview Queue', 'icon' => 'ic_fluent_people_24_regular',     'alert' => !$_navIntReady],
 ];
 ?>
 <?php foreach ($items as $item): ?>

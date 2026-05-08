@@ -231,7 +231,16 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                     <?= icon('ic_fluent_more_horizontal_24_filled', 20, 'flex-shrink:0;color:var(--text-tertiary)') ?>
                 </div>
                 <div class="dropdown-menu">
-                    <a href="<?= url($userRole === ROLE_STAFF ? '/staff/settings' : '/admin/settings') ?>" class="dropdown-item">
+                    <?php
+                        // Only ROLE_ADMIN may visit /admin/settings (school
+                        // branding + admin password). Everyone else (Staff /
+                        // SSO / Dean) lands on /staff/settings, which is now
+                        // a personal-only page (theme, password, help).
+                        $settingsHref = ($userRole === ROLE_ADMIN)
+                            ? '/admin/settings'
+                            : '/staff/settings';
+                    ?>
+                    <a href="<?= url($settingsHref) ?>" class="dropdown-item">
                         <?php include __DIR__ . '/../partials/icons/ic_fluent_settings_24_regular.svg'; ?>
                         Settings
                     </a>

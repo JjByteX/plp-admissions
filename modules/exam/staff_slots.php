@@ -342,6 +342,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // ── Bulk delete slots (from select-mode bar) ────────────────
+    if ($action === 'delete_slots_bulk') {
+        $rawIds = trim($_POST['ids'] ?? '');
+        $ids    = array_values(array_filter(array_map('intval', explode(',', $rawIds)), fn($v) => $v > 0));
+        if (empty($ids)) {
+            Session::flash('error', 'No slots selected.');
+            _slots_redirect_back($ctxCollege);
+        }
+
+        $ph     = implode(',', array_fill(0, count($ids), '?'));
+        // Skip slots that have at least one applicant assigned — same rule
+        // the single-row delete enforces. Only the empty ones are removed.
+        $bkStmt = $db->prepare(
+            "SELECT s.id, COUNT(aes.id) AS filled
+               FROM exam_slot_schedule s
+               LEFT JOIN applicant_exam_slots aes ON aes.slot_id = s.id
+              WHERE s.id IN ({$ph})
+              GROUP BY s.id"
+        );
+        $bkStmt->execute($ids);
+        $deletable = [];
+        $skipped   = 0;
+        foreach ($bkStmt->fetchAll() as $row) {
+            if ((int)$row['filled'] > 0) { $skipped++; continue; }
+            $deletable[] = (int)$row['id'];
+        }
+
+        $deletedCount = 0;
+        if (!empty($deletable)) {
+            $delPh = implode(',', array_fill(0, count($deletable), '?'));
+            $del   = $db->prepare("DELETE FROM exam_slot_schedule WHERE id IN ({$delPh})");
+            $del->execute($deletable);
+            $deletedCount = $del->rowCount();
+            audit_log('exam_slots_bulk_deleted',
+                "Bulk-deleted {$deletedCount} slot(s): " . implode(',', $deletable));
+        }
+
+        if ($deletedCount > 0 && $skipped > 0) {
+            Session::flash('success', "{$deletedCount} slot(s) removed; {$skipped} skipped (have applicants).");
+        } elseif ($deletedCount > 0) {
+            Session::flash('success', "{$deletedCount} slot(s) removed.");
+        } elseif ($skipped > 0) {
+            Session::flash('error', "Nothing removed — all {$skipped} selected slot(s) have applicants.");
+        }
+        _slots_redirect_back($ctxCollege);
+    }
+
     // ── Assign applicant to slot ────────────────────────────────
     if ($action === 'assign') {
         $applicantId = (int)($_POST['applicant_id'] ?? 0);
@@ -548,6 +595,46 @@ if ($mode === 'roster') {
         redirect('/staff/exam/slots');
     }
 
+    // ── Auto-issue access code at the slot's start time ──────────
+    //
+    // The proctor for this room shouldn't have to click "Generate" —
+    // the moment the slot's scheduled start time arrives (and the slot
+    // hasn't already ended) the system issues a fresh code and starts
+    // the 5-minute window. Manual control is preserved through the
+    // New / Extend buttons rendered below.
+    //
+    // Window: slot_opens ≤ now ≤ slot_closes. Earlier than slot_opens
+    // and the panel sits at "No active code" so a proctor previewing
+    // the page during the morning doesn't burn a code at midnight.
+    $slotOpensTs      = strtotime($slotDetail['exam_date'] . ' ' . $slotDetail['slot_time']);
+    $slotClosesTs     = !empty($slotDetail['end_time'])
+        ? strtotime($slotDetail['exam_date'] . ' ' . $slotDetail['end_time'])
+        : ($slotOpensTs + 5400); // legacy fallback: 90-minute window
+    if ($slotClosesTs <= $slotOpensTs) $slotClosesTs += 86400; // wrap past midnight
+    $nowTs            = time();
+    $slotIsLive       = ($nowTs >= $slotOpensTs && $nowTs <= $slotClosesTs);
+
+    $hasValidCode     = !empty($slotDetail['access_password'])
+                          && (int)($slotDetail['pw_secs_left'] ?? 0) > 0;
+    $canIssueForRoom  = $canGenerateCodeFor((string) $slotDetail['department']);
+
+    if ($slotIsLive && $canIssueForRoom && !$hasValidCode) {
+        $autoPwd = generate_exam_password();
+        $db->prepare(
+            'UPDATE exam_slot_schedule
+                SET access_password = ?, password_issued_at = NOW()
+              WHERE id = ?'
+        )->execute([$autoPwd, (int) $slotDetail['id']]);
+        audit_log('exam_slot_code_auto_generated',
+            "Auto-issued access code for slot {$slotDetail['id']} ({$slotDetail['room_label']})");
+
+        // Reflect the freshly-issued code in the in-memory row so the
+        // panel below renders with a full 5-minute countdown immediately.
+        $slotDetail['access_password']    = $autoPwd;
+        $slotDetail['password_issued_at'] = date('Y-m-d H:i:s');
+        $slotDetail['pw_secs_left']       = EXAM_PASSWORD_EXPIRY_SECONDS;
+    }
+
     $stmt = $db->prepare(
         "SELECT aes.applicant_id, aes.assigned_at,
                 u.name AS student_name, a.course_applied, a.applicant_type,
@@ -626,6 +713,11 @@ ob_start();
     border-color: var(--accent);
     box-shadow: 0 6px 20px rgba(0,0,0,.07);
     transform: translateY(-2px);
+}
+/* Red dot top-right on a college card with no upcoming exam slots. */
+.es-college-card-dot {
+    position:absolute;top:var(--space-3);right:var(--space-3);
+    width:8px;height:8px;border-radius:50%;background:var(--error);
 }
 .es-slot-card.is-today  { border-color: var(--accent); background: var(--accent-muted); }
 .es-slot-card.is-past   { opacity: .55; }
@@ -719,6 +811,30 @@ ob_start();
 }
 .es-card-edit-btn:hover { border-color: var(--border); color: var(--accent); }
 
+/* ── Bulk-select mode for slot cards ────────────────────────── */
+.es-select-checkbox {
+    position:absolute;top:var(--space-3);left:var(--space-3);
+    width:18px;height:18px;accent-color:var(--accent);
+    cursor:pointer;z-index:2;display:none;
+}
+.es-slot-grid.is-selecting .es-select-checkbox { display:inline-block; }
+.es-slot-grid.is-selecting .es-slot-card.is-selected {
+    border-color:var(--accent);background:var(--accent-muted);
+}
+.es-slot-grid.is-selecting .es-slot-card.is-undeletable { opacity:.55; }
+/* Hide the per-card edit pencil while selecting so the click is unambiguous. */
+.es-slot-grid.is-selecting .es-card-edit-btn { display:none !important; }
+
+.es-bulk-bar {
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
+    background:var(--bg-elevated);border:1px solid var(--border);
+    border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);
+    padding:var(--space-3) var(--space-4);
+    display:none;align-items:center;gap:var(--space-3);z-index:50;
+    font-size:var(--text-sm);
+}
+.es-bulk-bar.is-visible { display:flex; }
+
 /* Add Slot dashed card (matches interview Add Session card) */
 .es-add-card {
     display: flex; flex-direction: column;
@@ -784,9 +900,13 @@ ob_start();
                     'total_slots' => 0, 'upcoming_slots' => 0,
                     'total_seats' => 0, 'filled_seats' => 0,
                 ];
+                $deptNeedsSetup = ((int)$info['upcoming_slots']) === 0;
             ?>
                 <a href="<?= e(url('/staff/exam/slots') . '?college=' . urlencode($dept)) ?>"
                    class="es-college-card" style="align-items:center;text-align:center">
+                    <?php if ($deptNeedsSetup): ?>
+                        <span class="es-college-card-dot" title="No upcoming slots — needs setup"></span>
+                    <?php endif; ?>
                     <div class="es-card-icon"><?= icon('ic_fluent_building_bank_24_regular', 22) ?></div>
                     <div class="es-card-title" style="padding-right:0;text-align:center">
                         <?= e($dept) ?>
@@ -814,8 +934,6 @@ ob_start();
     <div style="display:flex;align-items:center;margin-bottom:var(--space-3);gap:var(--space-2);flex-wrap:wrap">
         <?php if ($canManage): ?>
             <a href="<?= e(url('/staff/exam/slots')) ?>" class="btn btn-ghost btn-sm" style="margin-right:auto">← Back</a>
-        <?php else: ?>
-            <a href="<?= e(url('/staff/exam')) ?>" class="btn btn-ghost btn-sm" style="margin-right:auto">← Back</a>
         <?php endif; ?>
 
         <?php if ($canManage): ?>
@@ -847,9 +965,17 @@ ob_start();
     $totalCap   = array_sum(array_column($slotsForCollege, 'capacity'));
     $totalFil   = array_sum(array_column($slotsForCollege, 'filled'));
     ?>
-    <div style="text-align:center;color:var(--text-tertiary);font-size:var(--text-xs);margin-bottom:var(--space-3)">
-        <?= count($slotsForCollege) ?> slot<?= count($slotsForCollege) === 1 ? '' : 's' ?>
-        &nbsp;·&nbsp; <?= $totalFil ?> / <?= $totalCap ?> seats filled
+    <div style="display:flex;align-items:center;justify-content:center;gap:var(--space-3);
+                color:var(--text-tertiary);font-size:var(--text-xs);margin-bottom:var(--space-3);flex-wrap:wrap">
+        <span>
+            <?= count($slotsForCollege) ?> slot<?= count($slotsForCollege) === 1 ? '' : 's' ?>
+            &nbsp;·&nbsp; <?= $totalFil ?> / <?= $totalCap ?> seats filled
+        </span>
+        <?php if ($canManage && !empty($slotsForCollege)): ?>
+            <button type="button" id="es-select-toggle"
+                    class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:var(--text-xs)"
+                    onclick="toggleEsSelectMode()">Select</button>
+        <?php endif; ?>
     </div>
 
     <div class="es-slot-grid">
@@ -876,9 +1002,21 @@ ob_start();
                 'capacity'   => $cap,
                 'filled'     => $filled,
             ], JSON_HEX_APOS | JSON_HEX_QUOT);
+            // Slots with applicants assigned can't be deleted in bulk either —
+            // mirrors the single-row delete rule.
+            $esUndeletable = $filled > 0;
+            if ($esUndeletable) $cardClass .= ' is-undeletable';
         ?>
             <a href="<?= e(url('/staff/exam/slots') . '?slot=' . $sid) ?>"
-               class="<?= $cardClass ?>">
+               class="<?= $cardClass ?>"
+               data-slot-id="<?= $sid ?>"
+               onclick="return onEsCardClick(event, this)">
+                <?php if ($canManage): ?>
+                    <input type="checkbox" class="es-select-checkbox"
+                           value="<?= $sid ?>"
+                           <?= $esUndeletable ? 'disabled title="Has applicants — cannot remove"' : '' ?>
+                           onclick="event.stopPropagation();onEsCheckboxChange(this)">
+                <?php endif; ?>
 
                 <!-- Edit pencil — stops navigation to the roster -->
                 <?php if ($canManage && !$isPast): ?>
@@ -973,6 +1111,27 @@ ob_start();
             </div>
         <?php endif; ?>
     </div>
+
+    <?php if ($canManage && !empty($slotsForCollege)): ?>
+    <!-- Floating bar for bulk delete (visible while in select mode). -->
+    <div id="es-bulk-bar" class="es-bulk-bar">
+        <span id="es-bulk-count" style="font-weight:var(--weight-medium)">0 selected</span>
+        <form method="POST" id="es-bulk-form"
+              style="display:flex;gap:var(--space-2);align-items:center;margin:0">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action"      value="delete_slots_bulk">
+            <input type="hidden" name="ctx_college" value="<?= e($collegeParam) ?>">
+            <input type="hidden" name="ids"         id="es-bulk-ids" value="">
+            <button type="button" class="btn btn-ghost btn-sm"
+                    onclick="cancelEsSelectMode()">Cancel</button>
+            <button type="submit" class="btn btn-sm" id="es-bulk-delete-btn"
+                    style="background:var(--error);color:#fff;border-color:var(--error)"
+                    onclick="return confirmEsBulkDelete()">
+                Delete Selected
+            </button>
+        </form>
+    </div>
+    <?php endif; ?>
 
     <!-- ── Awaiting-slot list, filtered to this college ─────────── -->
     <?php if ($unassignedApplicants): ?>
@@ -1133,7 +1292,6 @@ ob_start();
         $rosterCanGenerate = $canGenerateCodeFor((string) $slotDetail['department']);
         $rosterSecsLeft    = (int)($slotDetail['pw_secs_left'] ?? 0);
         $rosterCodeActive  = !empty($slotDetail['access_password']) && $rosterSecsLeft > 0;
-        $lateCutoffMins    = exam_late_cutoff_minutes();
     ?>
 
     <!-- ============================================================
@@ -1170,9 +1328,8 @@ ob_start();
                 <button type="button" id="slot-code-generate-btn"
                         class="btn btn-primary btn-sm"
                         onclick="generateSlotCode()"
-                        style="font-size:var(--text-xs)">
-                    <?= icon('ic_fluent_arrow_sync_24_regular', 12) ?>
-                    <?= $rosterCodeActive ? 'New Code' : 'Generate Code' ?>
+                        style="<?= $rosterCodeActive ? '' : 'display:none' ?>;font-size:var(--text-xs)">
+                    <?= icon('ic_fluent_arrow_sync_24_regular', 12) ?> New
                 </button>
             </div>
         <?php else: ?>
@@ -1182,8 +1339,17 @@ ob_start();
         <?php endif; ?>
     </div>
     <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin:-2px 0 var(--space-4) 2px">
-        Codes are valid for 5 minutes. Applicants in this room must enter the code
-        within <?= (int)$lateCutoffMins ?> minutes of the slot's start time.
+        <?php if ($rosterCodeActive): ?>
+            Codes are valid for 5 minutes. Use <strong>Extend</strong> to give late
+            but legitimate applicants another 5 minutes from now, or <strong>New</strong>
+            to issue a fresh password and invalidate the current one.
+        <?php elseif ($rosterCanGenerate): ?>
+            A fresh access code is issued automatically the moment you open this
+            page on the slot's exam date. After that, use <strong>New</strong> or
+            <strong>Extend</strong> to manage the 5-minute window.
+        <?php else: ?>
+            Codes are valid for 5 minutes and are issued by this room's proctor.
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 
@@ -1543,6 +1709,68 @@ ob_start();
     if (m) m.addEventListener('click', function (e) { if (e.target === this) this.style.display = 'none'; });
 });
 
+// ── Bulk select mode for exam slot cards ─────────────────────
+function _esGrid()  { return document.querySelector('.es-slot-grid'); }
+function _esBar()   { return document.getElementById('es-bulk-bar'); }
+function _esTBtn()  { return document.getElementById('es-select-toggle'); }
+
+function toggleEsSelectMode() {
+    var grid = _esGrid(); if (!grid) return;
+    if (grid.classList.contains('is-selecting')) {
+        cancelEsSelectMode();
+    } else {
+        grid.classList.add('is-selecting');
+        var btn = _esTBtn();  if (btn) btn.textContent = 'Done';
+        var bar = _esBar();   if (bar) bar.classList.add('is-visible');
+        updateEsBulkCount();
+    }
+}
+function cancelEsSelectMode() {
+    var grid = _esGrid(); if (!grid) return;
+    grid.classList.remove('is-selecting');
+    grid.querySelectorAll('.es-select-checkbox').forEach(function(cb){ cb.checked = false; });
+    grid.querySelectorAll('.es-slot-card').forEach(function(c){ c.classList.remove('is-selected'); });
+    var btn = _esTBtn(); if (btn) btn.textContent = 'Select';
+    var bar = _esBar();  if (bar) bar.classList.remove('is-visible');
+}
+function onEsCheckboxChange(cb) {
+    var card = cb.closest('.es-slot-card');
+    if (card) card.classList.toggle('is-selected', cb.checked);
+    updateEsBulkCount();
+}
+function updateEsBulkCount() {
+    var grid = _esGrid(); if (!grid) return;
+    var n = grid.querySelectorAll('.es-select-checkbox:checked').length;
+    var c = document.getElementById('es-bulk-count');
+    if (c) c.textContent = n + ' selected';
+    var btn = document.getElementById('es-bulk-delete-btn');
+    if (btn) btn.disabled = (n === 0);
+}
+function onEsCardClick(event, link) {
+    var grid = _esGrid();
+    if (grid && grid.classList.contains('is-selecting')) {
+        // While selecting, the card toggles its checkbox instead of navigating
+        // to the roster. Disabled (filled) cards do nothing.
+        event.preventDefault();
+        var cb = link.querySelector('.es-select-checkbox');
+        if (cb && !cb.disabled) {
+            cb.checked = !cb.checked;
+            onEsCheckboxChange(cb);
+        }
+        return false;
+    }
+    return true;
+}
+function confirmEsBulkDelete() {
+    var grid = _esGrid(); if (!grid) return false;
+    var ids = Array.from(grid.querySelectorAll('.es-select-checkbox:checked'))
+                  .map(function(cb){ return cb.value; });
+    if (ids.length === 0) return false;
+    if (!confirm('Remove ' + ids.length + ' slot(s)? This cannot be undone.')) return false;
+    document.getElementById('es-bulk-ids').value = ids.join(',');
+    return true;
+}
+
 // When the user changes the open time, auto-bump the close time to
 // open + 90 minutes — but only if they haven't manually moved the
 // close field yet (so we don't overwrite an explicit close on edit).
@@ -1684,17 +1912,17 @@ function startSlotCodeCountdown(secsLeft) {
             timerEl.textContent = 'Expires in ' + _formatMMSS(s);
             if (s <= 60) timerEl.classList.add('is-warn');
             if (extendBtn) extendBtn.style.display = 'inline-flex';
-            if (genBtn)    genBtn.lastChild.textContent = ' New Code';
+            if (genBtn)    genBtn.style.display    = 'inline-flex';
         } else {
             timerEl.style.display = '';
-            timerEl.textContent = 'Expired';
+            timerEl.textContent = 'Expired — reissuing…';
             timerEl.classList.add('is-expired');
             if (displayEl) {
                 displayEl.classList.add('is-empty');
                 displayEl.textContent = 'No active code';
             }
             if (extendBtn) extendBtn.style.display = 'none';
-            if (genBtn)    genBtn.lastChild.textContent = ' Generate Code';
+            if (genBtn)    genBtn.style.display    = 'none';
         }
     }
     render(secsLeft);
@@ -1702,7 +1930,13 @@ function startSlotCodeCountdown(secsLeft) {
         _slotCodeTimer = setInterval(function () {
             secsLeft--;
             render(secsLeft);
-            if (secsLeft <= 0) { clearInterval(_slotCodeTimer); _slotCodeTimer = null; }
+            if (secsLeft <= 0) {
+                clearInterval(_slotCodeTimer); _slotCodeTimer = null;
+                // Auto-refresh so the server-side auto-issue logic on
+                // staff_slots.php picks up where we left off and rolls
+                // a fresh 5-minute code without proctor intervention.
+                setTimeout(function () { location.reload(); }, 800);
+            }
         }, 1000);
     }
 }

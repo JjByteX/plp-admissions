@@ -17,16 +17,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'set_admissions_window') {
-        $open     = trim($_POST['admissions_open']  ?? '');
-        $close    = trim($_POST['admissions_close'] ?? '');
-        $docDeadline = trim($_POST['document_deadline'] ?? '');
+        $open        = trim($_POST['admissions_open']    ?? '');
+        $close       = trim($_POST['admissions_close']   ?? '');
+        $docDeadline = trim($_POST['document_deadline']  ?? '');
 
-        if (!$open || !$close) {
-            $errors[] = 'Set both open and close dates.';
+        if (!$open || !$close || !$docDeadline) {
+            $errors[] = 'Admissions opens, closes, and document deadline are all required.';
         } elseif ($close <= $open) {
-            $errors[] = 'Close date must be after open date.';
-        } elseif ($docDeadline && $docDeadline <= $open) {
+            $errors[] = 'Admissions close date must be after the open date.';
+        } elseif ($docDeadline <= $open) {
             $errors[] = 'Document deadline must be after the admissions open date.';
+        } elseif ($docDeadline > $close) {
+            $errors[] = 'Document deadline must be on or before the admissions close date.';
         } else {
             $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
                        ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)';
@@ -119,13 +121,7 @@ ob_start();
                              background:<?= $examReady ? 'var(--success)' : 'var(--error)' ?>"></span>
                 <span style="color:var(--text-secondary)">Exams</span>
                 <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                    <?php if (!$hasActiveExam && !$hasExamSlots): ?>
-                        — No active exam or room slots
-                    <?php elseif (!$hasActiveExam): ?>
-                        — No active exam
-                    <?php elseif (!$hasExamSlots): ?>
-                        — No room slots configured
-                    <?php else: ?>
+                    <?php if ($examReady): ?>
                         — Ready
                     <?php endif; ?>
                 </span>
@@ -135,33 +131,82 @@ ob_start();
                              background:<?= $interviewReady ? 'var(--success)' : 'var(--error)' ?>"></span>
                 <span style="color:var(--text-secondary)">Interviews</span>
                 <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                    <?= $interviewReady ? '— Ready' : '— No upcoming interview sessions' ?>
+                    <?php if ($interviewReady): ?>— Ready<?php endif; ?>
                 </span>
             </div>
         </div>
 
-        <form method="POST">
+        <form method="POST" id="apw-form">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="set_admissions_window">
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-5)">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-3)">
                 <div>
-                    <label class="form-label">Admissions Opens</label>
-                    <input type="date" name="admissions_open" class="form-input"
-                           value="<?= e($admissionsOpen) ?>">
+                    <label class="form-label" for="apw-open">Admissions Opens</label>
+                    <input type="date" id="apw-open" name="admissions_open" class="form-input"
+                           value="<?= e($admissionsOpen) ?>" required>
                 </div>
                 <div>
-                    <label class="form-label">Admissions Closes</label>
-                    <input type="date" name="admissions_close" class="form-input"
-                           value="<?= e($admissionsClose) ?>">
+                    <label class="form-label" for="apw-close">Admissions Closes</label>
+                    <input type="date" id="apw-close" name="admissions_close" class="form-input"
+                           value="<?= e($admissionsClose) ?>" required>
                 </div>
                 <div>
-                    <label class="form-label">Document Deadline</label>
-                    <input type="date" name="document_deadline" class="form-input"
-                           value="<?= e($docDeadline) ?>">
+                    <label class="form-label" for="apw-deadline">Document Deadline</label>
+                    <input type="date" id="apw-deadline" name="document_deadline" class="form-input"
+                           value="<?= e($docDeadline) ?>" required>
                 </div>
             </div>
-            <button type="submit" class="btn btn-primary">Save Window</button>
+            <div id="apw-hint" style="display:none;font-size:var(--text-sm);color:var(--error);margin-bottom:var(--space-3)"></div>
+            <button type="submit" id="apw-save" class="btn btn-primary" disabled>Save Window</button>
         </form>
+        <script>
+        (function(){
+            var form     = document.getElementById('apw-form');
+            if (!form) return;
+            var openEl   = document.getElementById('apw-open');
+            var closeEl  = document.getElementById('apw-close');
+            var deadEl   = document.getElementById('apw-deadline');
+            var saveBtn  = document.getElementById('apw-save');
+            var hintEl   = document.getElementById('apw-hint');
+
+            function evaluate(){
+                var o = openEl.value, c = closeEl.value, d = deadEl.value;
+
+                // Bind deadline range to the chosen open/close so the
+                // native date picker greys out invalid days.
+                deadEl.min = o || '';
+                deadEl.max = c || '';
+
+                var msg = '';
+                if (!o || !c || !d) {
+                    msg = 'Fill in all three dates to save.';
+                } else if (c <= o) {
+                    msg = 'Admissions close date must be after the open date.';
+                } else if (d <= o) {
+                    msg = 'Document deadline must be after the admissions open date.';
+                } else if (d > c) {
+                    msg = 'Document deadline must be on or before the admissions close date.';
+                }
+
+                if (msg) {
+                    saveBtn.disabled = true;
+                    hintEl.textContent = msg;
+                    hintEl.style.display = '';
+                } else {
+                    saveBtn.disabled = false;
+                    hintEl.textContent = '';
+                    hintEl.style.display = 'none';
+                }
+            }
+
+            ['input','change','blur'].forEach(function(evt){
+                openEl .addEventListener(evt, evaluate);
+                closeEl.addEventListener(evt, evaluate);
+                deadEl .addEventListener(evt, evaluate);
+            });
+            evaluate();
+        })();
+        </script>
     </div>
 
     <!-- Historical summary -->

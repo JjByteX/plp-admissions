@@ -9,6 +9,14 @@
 require_once CORE_PATH . '/bootstrap.php';
 Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
+// SSO is setup-only — they have no need for the two-card Setup vs Queue
+// landing, and they have no access to the queue at all. Send them
+// straight into Interview Setup so the sidebar item lands one click
+// closer to where they actually work.
+if (Auth::role() === ROLE_SSO) {
+    redirect('/staff/interviews/setup');
+}
+
 $db      = db();
 $staffId = Auth::id();
 $isAdmin = Auth::role() === ROLE_ADMIN;
@@ -86,6 +94,17 @@ ob_start();
     .intv-landing-card:hover {
         border-color:var(--accent);box-shadow:0 8px 24px rgba(0,0,0,.08);transform:translateY(-4px);
     }
+    /* Disabled queue card — when no interview setup exists yet, the
+       Queue card has nothing to call from. We dim it, kill the hover
+       lift, and swap the cursor to "not-allowed" so the click obviously
+       goes nowhere. */
+    .intv-landing-card.is-disabled {
+        opacity:.55;cursor:not-allowed;
+        background:var(--bg-subtle);
+    }
+    .intv-landing-card.is-disabled:hover {
+        border-color:var(--border);box-shadow:none;transform:none;
+    }
     .intv-landing-icon {
         width:60px;height:60px;border-radius:var(--radius-lg);
         background:var(--accent-muted);color:var(--accent);
@@ -130,9 +149,24 @@ ob_start();
     </a>
 
     <!-- Interview Queue (right) -->
-    <a href="<?= url('/staff/interviews/queue') ?>" class="intv-landing-card">
+    <?php
+        // No interview sessions at all means setup hasn't happened yet,
+        // and the Queue page has literally nothing to drive — disable
+        // the card and route the click into Setup so the user is led
+        // through the only useful next step.
+        $queueDisabled = ($totalSessions === 0);
+        $queueHref     = $queueDisabled
+            ? url('/staff/interviews/setup')
+            : url('/staff/interviews/queue');
+        $queueClasses  = 'intv-landing-card' . ($queueDisabled ? ' is-disabled' : '');
+        $queueTitle    = $queueDisabled
+            ? 'Set up interview sessions before opening the queue.'
+            : '';
+    ?>
+    <a href="<?= e($queueHref) ?>" class="<?= e($queueClasses) ?>"
+       <?php if ($queueDisabled): ?>aria-disabled="true" title="<?= e($queueTitle) ?>"<?php endif; ?>>
         <div class="intv-landing-icon">
-            <?php if ($todayActive > 0): ?>
+            <?php if ($todayActive > 0 && !$queueDisabled): ?>
                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
                               background:var(--accent);animation:pulse-dot 1.8s ease-in-out infinite;
                               position:absolute;top:12px;right:12px"></span>
@@ -141,10 +175,17 @@ ob_start();
         </div>
         <div class="intv-landing-title">Interview Queue</div>
         <div class="intv-landing-desc">
-            Call students and record evaluations.
+            <?php if ($queueDisabled): ?>
+                Set up sessions first to start calling students.
+            <?php else: ?>
+                Call students and record evaluations.
+            <?php endif; ?>
         </div>
         <div class="intv-landing-meta">
-            <?php if ($todayActive > 0): ?>
+            <?php if ($queueDisabled): ?>
+                <?= icon('ic_fluent_lock_closed_24_regular', 13) ?>
+                Setup required
+            <?php elseif ($todayActive > 0): ?>
                 <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
                               background:var(--accent);animation:pulse-dot 1.8s ease-in-out infinite"></span>
                 <?= $todayWaiting ?> waiting · <?= $todayInProgress ?> in progress

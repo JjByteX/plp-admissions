@@ -583,8 +583,8 @@ INSERT INTO `school_settings` (`setting_key`, `setting_value`) VALUES
     ('school_logo',           ''),
     ('accent_color',          '#2d6a4f'),
     ('current_school_year',   '2026-2027'),
-    ('admissions_open',       '2026-01-06'),
-    ('admissions_close',      '2026-03-31'),
+    ('admissions_open',       ''),
+    ('admissions_close',      ''),
     ('document_deadline',     ''),
 
     ('system_version',          '1.0.0'),

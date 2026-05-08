@@ -20,6 +20,14 @@
 require_once CORE_PATH . '/bootstrap.php';
 Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
+// SSO is a setup-only role — they create sessions and assign interviewers
+// but they don't conduct interviews themselves, so they have no business
+// on the live queue. Bounce them straight to Interview Setup if they end
+// up here (typed URL, stale bookmark, etc.).
+if (Auth::role() === ROLE_SSO) {
+    redirect('/staff/interviews/setup');
+}
+
 $db        = db();
 $staffId   = Auth::id();
 $today     = date('Y-m-d');
@@ -339,32 +347,21 @@ ob_start();
 
 <!-- ============================================================
      DESK INFO STRIP (Professor only)
+     Only shown when a desk location has been set for this professor
+     by SSO / Admin during interview setup. If empty, render nothing
+     — setup is not the professor's responsibility.
 ============================================================ -->
-<?php if (!$isAdmin && !$isSSO && !$isDean): ?>
-    <?php if ($deskLabel): ?>
-        <div style="display:flex;align-items:center;gap:var(--space-3);
-                     padding:var(--space-3) var(--space-4);margin-bottom:var(--space-4);
-                     background:var(--bg-elevated);border:1px solid var(--border);
-                     border-radius:var(--radius-md);font-size:var(--text-sm)">
-            <?= icon('ic_fluent_location_24_regular', 13, 'color:var(--text-tertiary);flex-shrink:0') ?>
-            <span style="font-weight:var(--weight-medium)"><?= e($deskLabel) ?></span>
-            <?php if ($deskNotes): ?>
-                <span style="color:var(--text-tertiary)"><?= e($deskNotes) ?></span>
-            <?php endif; ?>
-            <a href="<?= e(url('/staff/interviews/setup')) ?>"
-               style="margin-left:auto;font-size:var(--text-xs);color:var(--text-tertiary);text-decoration:none">
-                Edit
-            </a>
-        </div>
-    <?php else: ?>
-        <div class="alert alert-warning" style="margin-bottom:var(--space-4)">
-            <?= icon('ic_fluent_warning_24_regular', 15) ?>
-            <span>No desk location set.
-                <a href="<?= e(url('/staff/interviews/setup')) ?>">Set it up in Interview Setup</a>
-                so students know where to go.
-            </span>
-        </div>
-    <?php endif; ?>
+<?php if (!$isAdmin && !$isSSO && !$isDean && $deskLabel): ?>
+    <div style="display:flex;align-items:center;gap:var(--space-3);
+                 padding:var(--space-3) var(--space-4);margin-bottom:var(--space-4);
+                 background:var(--bg-elevated);border:1px solid var(--border);
+                 border-radius:var(--radius-md);font-size:var(--text-sm)">
+        <?= icon('ic_fluent_location_24_regular', 13, 'color:var(--text-tertiary);flex-shrink:0') ?>
+        <span style="font-weight:var(--weight-medium)"><?= e($deskLabel) ?></span>
+        <?php if ($deskNotes): ?>
+            <span style="color:var(--text-tertiary)"><?= e($deskNotes) ?></span>
+        <?php endif; ?>
+    </div>
 <?php endif; ?>
 
 <?php if (empty($rows)):
@@ -385,10 +382,17 @@ ob_start();
         $emptyBody  = 'Once a session in your college is scheduled and applicants are placed, they will show up here.';
     } else {
         $emptyTitle = 'No interviews assigned to you yet';
-        $emptyBody  = 'Applicants will appear here automatically once they are placed on a session you own. Make sure you have a session created on the Interview Setup page.';
+        $emptyBody  = 'Applicants will appear here automatically once SSO places them on a session you own.';
     }
 ?>
-    <div class="card" style="padding:var(--space-12) var(--space-8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-3);text-align:center">
+    <!--
+        Use the same .iq-table-card wrapper a populated queue uses so the
+        empty state extends the full width AND height of the page area
+        (the .page:has(.iq-table-card) rule above turns the page into a
+        flex column, and flex:1 makes this card claim the leftover space).
+    -->
+    <div class="card iq-table-card"
+         style="padding:var(--space-12) var(--space-8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-3);text-align:center">
         <div style="width:56px;height:56px;border-radius:var(--radius-lg);background:var(--bg-subtle);color:var(--text-tertiary);display:flex;align-items:center;justify-content:center">
             <?= icon('ic_fluent_calendar_ltr_24_regular', 28) ?>
         </div>
@@ -398,12 +402,6 @@ ob_start();
         <div style="max-width:480px;font-size:var(--text-sm);color:var(--text-tertiary);line-height:1.5">
             <?= e($emptyBody) ?>
         </div>
-        <?php if (!$isAdmin && !$isSSO && !$isDean): ?>
-            <a href="<?= e(url('/staff/interviews/setup')) ?>" class="btn btn-primary btn-sm" style="margin-top:var(--space-3)">
-                <?= icon('ic_fluent_settings_24_regular', 13) ?>
-                Open Interview Setup
-            </a>
-        <?php endif; ?>
     </div>
 <?php else: ?>
 
@@ -452,7 +450,10 @@ ob_start();
         ?>
             <tr class="<?= $rowClass ?>" data-name="<?= e($haystack) ?>">
                 <td>
-                    <div class="iq-name-cell">
+                    <button type="button"
+                            class="iq-name-cell iq-name-cell-clickable"
+                            data-applicant-panel="<?= (int)$r['app_id'] ?>"
+                            title="View applicant details">
                         <span><?= e($name) ?></span>
                         <?php if ($r['evaluation_result']): ?>
                             <span class="sub">
@@ -467,7 +468,7 @@ ob_start();
                                 <?= e($existing) ?>
                             </span>
                         <?php endif; ?>
-                    </div>
+                    </button>
                 </td>
 
                 <?php if ($canSeeAll && $showAll): ?>
@@ -496,29 +497,38 @@ ob_start();
                 </td>
 
                 <td>
-                    <?php if ($isFinal): ?>
-                        <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                            <?php if ($r['status'] === 'no_show'): ?>
-                                Marked no-show
-                            <?php else: ?>
-                                <?= $r['evaluation_result']
-                                    ? e(ucfirst($r['evaluation_result']))
-                                    : 'Completed' ?>
-                            <?php endif; ?>
-                        </span>
-                    <?php else: ?>
-                        <button type="button" class="btn btn-primary btn-sm"
-                                onclick="openEvalModal(
-                                    <?= (int)$r['queue_id'] ?>,
-                                    <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>,
-                                    <?= htmlspecialchars(json_encode($course), ENT_QUOTES) ?>,
-                                    <?= htmlspecialchars(json_encode($type), ENT_QUOTES) ?>,
-                                    <?= htmlspecialchars(json_encode($existing), ENT_QUOTES) ?>
-                                )">
-                            <?= icon('ic_fluent_edit_24_regular', 13) ?>
-                            Evaluation
+                    <div class="iq-actions">
+                        <button type="button"
+                                class="btn btn-ghost btn-sm iq-view-btn"
+                                data-applicant-panel="<?= (int)$r['app_id'] ?>"
+                                title="View applicant details"
+                                aria-label="View applicant details">
+                            <?= icon('ic_fluent_eye_show_24_regular', 14) ?>
                         </button>
-                    <?php endif; ?>
+                        <?php if ($isFinal): ?>
+                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                                <?php if ($r['status'] === 'no_show'): ?>
+                                    Marked no-show
+                                <?php else: ?>
+                                    <?= $r['evaluation_result']
+                                        ? e(ucfirst($r['evaluation_result']))
+                                        : 'Completed' ?>
+                                <?php endif; ?>
+                            </span>
+                        <?php else: ?>
+                            <button type="button" class="btn btn-primary btn-sm"
+                                    onclick="openEvalModal(
+                                        <?= (int)$r['queue_id'] ?>,
+                                        <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>,
+                                        <?= htmlspecialchars(json_encode($course), ENT_QUOTES) ?>,
+                                        <?= htmlspecialchars(json_encode($type), ENT_QUOTES) ?>,
+                                        <?= htmlspecialchars(json_encode($existing), ENT_QUOTES) ?>
+                                    )">
+                                <?= icon('ic_fluent_edit_24_regular', 13) ?>
+                                Evaluation
+                            </button>
+                        <?php endif; ?>
+                    </div>
                 </td>
             </tr>
         <?php endforeach; ?>
@@ -665,6 +675,9 @@ setInterval(() => {
 </script>
 
 <?php
+// Slide-in applicant detail drawer (markup + JS opener).
+include VIEWS_PATH . '/partials/applicant_drawer.php';
+
 $content   = ob_get_clean();
 if ($canSeeAll) {
     $pageTitle = $showAll

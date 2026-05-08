@@ -38,6 +38,7 @@ $router->get( '/api/notifications',      'api/notifications');
 $router->post('/api/notifications',      'api/notifications');
 $router->post('/api/auto-validate',      'api/auto_validate');
 $router->get( '/api/auto-validate',      'api/auto_validate');
+$router->get( '/api/applicant-panel',    'api/applicant_panel');
 
 // -- Staff -------------------------------------------------------
 $router->get( '/staff/dashboard',           'auth/staff/dashboard');

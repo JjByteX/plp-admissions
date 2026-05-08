@@ -425,6 +425,10 @@ function email_template(string $title, string $body): string
 }
 
 // -- Audit log --------------------------------------------------
+// IP addresses are intentionally NOT recorded — the school doesn't want
+// them in the log table or in the admin UI. We still write a NULL into
+// the legacy `ip_address` column so deployments that haven't dropped
+// it yet keep working without a schema change.
 function audit_log(
     string  $action,
     string  $description = '',
@@ -435,19 +439,12 @@ function audit_log(
         $userId   = Auth::check() ? Auth::id()   : null;
         $userName = Auth::check() ? (Auth::user()['name'] ?? '') : 'System';
         $userRole = Auth::check() ? (Auth::user()['role'] ?? '') : '';
-        $ip       = $_SERVER['HTTP_X_FORWARDED_FOR']
-                    ?? $_SERVER['REMOTE_ADDR']
-                    ?? null;
-        // Take only the first IP if comma-separated
-        if ($ip && str_contains($ip, ',')) {
-            $ip = trim(explode(',', $ip)[0]);
-        }
         db()->prepare(
             'INSERT INTO audit_logs
              (user_id, user_name, user_role, action, description, entity_type, entity_id, ip_address)
-             VALUES (?,?,?,?,?,?,?,?)'
+             VALUES (?,?,?,?,?,?,?,NULL)'
         )->execute([$userId, $userName, $userRole, $action, $description ?: null,
-                    $entityType, $entityId, $ip]);
+                    $entityType, $entityId]);
     } catch (Throwable) {
         // Never let audit failures break the main request
     }
@@ -577,6 +574,19 @@ function strand_qualified_courses(int $rankScore, string $appliedCourse, string 
         if ($rankScore >= $threshold) $result[] = $course;      // rank qualifies
     }
     return $result;
+}
+
+// ================================================================
+// AJAX request detection — used by JSON-returning POST endpoints to
+// decide between echoing JSON and redirecting after a non-AJAX submit.
+// Was previously local to modules/exam/staff_manage.php which broke
+// staff_slots.php's per-room access-code AJAX (fatal undefined-function
+// error → 500 HTML → JS reported as "Network error").
+// ================================================================
+if (!function_exists('is_ajax_request')) {
+    function is_ajax_request(): bool {
+        return !empty($_SERVER['HTTP_X_REQUESTED_WITH']) || !empty($_POST['_ajax']);
+    }
 }
 
 // ================================================================

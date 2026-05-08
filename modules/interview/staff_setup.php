@@ -191,6 +191,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // ─── Bulk Delete Sessions (from select-mode bar) ───────
+    if ($action === 'delete_sessions_bulk') {
+        $rawIds  = trim($_POST['ids']     ?? '');
+        $deptCtx = trim($_POST['college'] ?? $college);
+        $ids     = array_values(array_filter(array_map('intval', explode(',', $rawIds)), fn($v) => $v > 0));
+
+        if (empty($ids)) {
+            Session::flash('error', 'No sessions selected.');
+        } else {
+            $ph     = implode(',', array_fill(0, count($ids), '?'));
+            // Skip sessions that have at least one booked applicant — same
+            // rule the single-row delete enforces. Only the empty ones are
+            // safe to remove.
+            $bkStmt = $db->prepare(
+                "SELECT s.id, COUNT(q.id) AS booked
+                   FROM interview_slots s
+                   LEFT JOIN interview_queue q ON q.slot_id = s.id
+                  WHERE s.id IN ({$ph})
+                  GROUP BY s.id"
+            );
+            $bkStmt->execute($ids);
+            $deletable = [];
+            $skipped   = 0;
+            foreach ($bkStmt->fetchAll() as $row) {
+                if ((int)$row['booked'] > 0) { $skipped++; continue; }
+                $deletable[] = (int)$row['id'];
+            }
+
+            $deletedCount = 0;
+            if (!empty($deletable)) {
+                $delPh  = implode(',', array_fill(0, count($deletable), '?'));
+                $del    = $db->prepare("DELETE FROM interview_slots WHERE id IN ({$delPh})");
+                $del->execute($deletable);
+                $deletedCount = $del->rowCount();
+                audit_log('interview_slots_bulk_deleted',
+                    "Bulk-deleted {$deletedCount} session(s): " . implode(',', $deletable));
+            }
+
+            if ($deletedCount > 0 && $skipped > 0) {
+                Session::flash('success', "{$deletedCount} session(s) removed; {$skipped} skipped (had bookings).");
+            } elseif ($deletedCount > 0) {
+                Session::flash('success', "{$deletedCount} session(s) removed.");
+            } elseif ($skipped > 0) {
+                Session::flash('error', "Nothing removed — all {$skipped} selected session(s) have bookings.");
+            }
+            redirect('/staff/interviews/setup?college=' . urlencode($deptCtx));
+        }
+    }
+
     // ─── Delete Session ───────────────────────────────────
     if ($action === 'delete_session' || $action === 'delete_slot') {
         $slotId = (int)($_POST['slot_id'] ?? 0);

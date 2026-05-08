@@ -148,19 +148,21 @@ if ($isSlotPast) {
 // exam questions. The password is per-room (lives on the slot row, per Chunk 7)
 // and is valid for 5 minutes from when the proctor issued it.
 //
-// We also enforce a global late-cutoff: applicants who try to enter their
-// code more than `exam_late_cutoff_minutes` after the slot's start time are
-// locked out for the day so latecomers can't disrupt an in-progress room.
+// Late-entry lockout was removed. The proctor's "Extend +5m" button is
+// the official mechanism for letting late-but-legitimate applicants in
+// — anyone with a valid reason gets a freshly-issued code from the
+// room proctor, regardless of how late they arrive.
 $pwGateKey    = 'exam_pw_unlocked_' . $examId . '_slot_' . (int)$mySlot['id']; // session key (per-slot)
-$needsPwGate  = !empty($mySlot['access_password']) && $isSlotToday;
+// Password gate is mandatory on the slot day — a student must enter the
+// proctor's per-room access code before reaching the exam, even if no
+// code has been issued yet (in that case the gate shows "no active code"
+// with the input disabled). This guarantees nobody loads the exam
+// without a freshly-issued code from the room proctor.
+$needsPwGate  = $isSlotToday;
 $isUnlocked   = isset($_SESSION[$pwGateKey]);
 
-// Global late-cutoff (school setting). Once now > slot_opens + cutoff,
-// applicants in this room can no longer enter their code for the day.
 $slotOpensTs   = strtotime($mySlot['exam_date'] . ' ' . $mySlot['slot_time']);
-$lateCutoffMin = exam_late_cutoff_minutes();
-$lateCutoffTs  = $slotOpensTs + ($lateCutoffMin * 60);
-$isLateLockout = $isSlotToday && time() > $lateCutoffTs;
+$isLateLockout = false; // disabled — proctor decides via the Extend button
 
 if ($needsPwGate && !$isUnlocked) {
     $pwValid    = exam_password_is_valid($mySlot);
@@ -172,10 +174,8 @@ if ($needsPwGate && !$isUnlocked) {
         $submitted = strtoupper(trim($_POST['exam_access_password'] ?? ''));
         $correct   = strtoupper(trim($mySlot['access_password']));
 
-        if ($isLateLockout) {
-            $pwError = 'You are past the late-entry cutoff for this slot. Please contact the admissions office to request a reschedule.';
-        } elseif (!$pwValid) {
-            $pwError = 'The access code has expired. Please ask your proctor to generate a new one.';
+        if (!$pwValid) {
+            $pwError = 'The access code has expired. Please ask your proctor to generate or extend the code.';
         } elseif ($submitted !== $correct) {
             $pwError = 'Incorrect access code. Please check with your proctor and try again.';
         } else {
@@ -211,15 +211,7 @@ if ($needsPwGate && !$isUnlocked) {
                 <div class="alert alert-error" style="margin-bottom:var(--space-4);text-align:left"><?= e($pwError) ?></div>
             <?php endif; ?>
 
-            <?php if ($isLateLockout): ?>
-                <div class="alert alert-error" style="margin-bottom:var(--space-4);text-align:left">
-                    <strong>Late-entry cutoff passed.</strong>
-                    Your slot opened at <?= e(date('g:i A', $slotOpensTs)) ?> in
-                    <?= e($mySlot['room_label']) ?>. The <?= (int)$lateCutoffMin ?>-minute
-                    late-entry window has closed for the day. Please contact the admissions
-                    office to request a reschedule.
-                </div>
-            <?php elseif (!$pwValid): ?>
+            <?php if (!$pwValid): ?>
                 <div class="alert alert-warning" style="margin-bottom:var(--space-4);text-align:left">
                     <strong>No active code right now.</strong>
                     The access code has not been issued yet or has expired.
@@ -237,19 +229,19 @@ if ($needsPwGate && !$isUnlocked) {
                        autocomplete="off" autocorrect="off" spellcheck="false"
                        style="font-family:monospace;font-size:var(--text-2xl);letter-spacing:.4em;
                               text-align:center;text-transform:uppercase;margin-bottom:var(--space-4)"
-                       placeholder="Access code" <?= (!$pwValid || $isLateLockout) ? 'disabled' : '' ?>
+                       placeholder="Access code" <?= !$pwValid ? 'disabled' : '' ?>
                        oninput="this.value=this.value.toUpperCase()" autofocus>
-                <?php if ($pwValid && !$isLateLockout): ?>
+                <?php if ($pwValid): ?>
                     <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-4)">
                         Code expires in <strong id="gate-timer"><?= $pwSecsLeft ?></strong> seconds.
                     </p>
                 <?php endif; ?>
-                <button type="submit" class="btn btn-primary" style="width:100%" <?= (!$pwValid || $isLateLockout) ? 'disabled' : '' ?>>
+                <button type="submit" class="btn btn-primary" style="width:100%" <?= !$pwValid ? 'disabled' : '' ?>>
                     Enter Exam
                 </button>
             </form>
         </div>
-        <?php if ($pwValid && !$isLateLockout): ?>
+        <?php if ($pwValid): ?>
         <script>
         (function() {
             let s = <?= $pwSecsLeft ?>;
@@ -277,18 +269,19 @@ if ($needsPwGate && !$isUnlocked) {
 }
 // ── End password gate ────────────────────────────────────────────────────────
 
-// Load saved draft (if any)
+// Saved drafts are NOT auto-restored on the student exam page —
+// students should always start the exam with a clean slate, even if
+// a previous browser session managed to write something into the
+// `exam_drafts` table. The auto-save endpoint is left in place so a
+// crash during the timed exam doesn't lose absolutely everything,
+// but rendering this page never reads it back.
 $savedDraft = [];
 try {
     ensure_exam_drafts_table();
-    $draftStmt = $db->prepare('SELECT answers FROM exam_drafts WHERE applicant_id = ? AND exam_id = ? LIMIT 1');
-    $draftStmt->execute([$applicantId, $examId]);
-    $draftRow = $draftStmt->fetch();
-    if ($draftRow) {
-        $savedDraft = json_decode($draftRow['answers'], true) ?: [];
-    }
+    db()->prepare('DELETE FROM exam_drafts WHERE applicant_id = ? AND exam_id = ?')
+        ->execute([$applicantId, $examId]);
 } catch (\Throwable $e) {
-    // Ignore — draft loading is non-critical
+    // Ignore — draft cleanup is non-critical.
 }
 
 // Fetch questions
@@ -1171,26 +1164,9 @@ window.addEventListener('beforeunload', e => {
     }
 });
 
-// ── Restore saved draft ─────────────────────────────────────
-<?php if (!empty($savedDraft)): ?>
-(function() {
-    const draft = <?= json_encode($savedDraft) ?>;
-    const form = document.getElementById('exam-form');
-    Object.entries(draft).forEach(([key, val]) => {
-        const inputs = form.querySelectorAll(`[name="${key}"]`);
-        if (!inputs.length) return;
-        inputs.forEach(inp => {
-            if (inp.type === 'radio') {
-                if (inp.value == val) { inp.checked = true; markAnswered(inp.name.match(/\[(\d+)\]/)?.[1]); }
-            } else if (inp.type === 'checkbox') {
-                if (Array.isArray(val) && val.includes(inp.value)) { inp.checked = true; markAnswered(inp.name.match(/\[(\d+)\]/)?.[1]); }
-            } else {
-                inp.value = val; markAnswered(inp.name.match(/\[(\d+)\]/)?.[1]);
-            }
-        });
-    });
-})();
-<?php endif; ?>
+// (Draft auto-restore was intentionally removed — every exam load
+// starts with empty answers. Auto-save below still runs so a mid-exam
+// crash doesn't wipe everything from the server-side draft row.)
 
 // ── Auto-save every 60 seconds ──────────────────────────────
 (function() {

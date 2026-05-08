@@ -26,11 +26,17 @@ function _session_expired(string $date, ?string $endTime, string $today, string 
 <?php endif; ?>
 
 <!-- Header -->
-<div style="margin-bottom:var(--space-3)">
+<div style="margin-bottom:var(--space-3);display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">
     <?php if ($canManage): ?>
         <a href="<?= url('/staff/interviews/setup') ?>" class="btn btn-ghost btn-sm">← Back</a>
     <?php else: ?>
         <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
+    <?php endif; ?>
+    <?php if ($canManage && !empty($byDate)): ?>
+        <button type="button" id="sess-select-toggle" class="btn btn-ghost btn-sm"
+                style="margin-left:auto" onclick="toggleSessSelectMode()">
+            Select
+        </button>
     <?php endif; ?>
 </div>
 
@@ -84,6 +90,30 @@ function _session_expired(string $date, ?string $endTime, string $today, string 
     margin-top: auto; padding-top: var(--space-3);
     border-top: 1px solid var(--border);
 }
+
+/* ── Bulk-select mode: checkboxes + selected highlight ──────── */
+.sess-select-checkbox {
+    position:absolute;top:var(--space-3);left:var(--space-3);
+    width:18px;height:18px;accent-color:var(--accent);
+    cursor:pointer;z-index:2;display:none;
+}
+.sess-dir-grid.is-selecting .sess-select-checkbox { display:inline-block; }
+.sess-dir-grid.is-selecting .sess-dir-card.is-selected {
+    border-color:var(--accent);background:var(--accent-muted);
+}
+.sess-dir-grid.is-selecting .sess-dir-card.is-undeletable {
+    opacity:.55;
+}
+/* Floating bulk-delete bar that pins to the bottom while in select mode. */
+.sess-bulk-bar {
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
+    background:var(--bg-elevated);border:1px solid var(--border);
+    border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);
+    padding:var(--space-3) var(--space-4);
+    display:none;align-items:center;gap:var(--space-3);z-index:50;
+    font-size:var(--text-sm);
+}
+.sess-bulk-bar.is-visible { display:flex; }
 </style>
 
 <?php
@@ -129,8 +159,19 @@ foreach ($byDate as $date => $dateSlots) {
             'location_label' => $slot['location_label'] ?? '',
             'location_notes' => $slot['location_notes'] ?? '',
         ], JSON_HEX_APOS | JSON_HEX_QUOT);
+        // Sessions with bookings can't be deleted via bulk select either —
+        // dim the card and disable its checkbox to match the single-delete rule.
+        $undeletable = $booked > 0;
+        if ($undeletable) $cardClasses .= ' is-undeletable';
     ?>
-        <div class="<?= $cardClasses ?>" onclick='openEditSession(<?= $editPayload ?>)'>
+        <div class="<?= $cardClasses ?>" data-session-id="<?= (int)$slot['id'] ?>"
+             onclick='handleSessCardClick(event, <?= $editPayload ?>)'>
+            <?php if ($canManage): ?>
+                <input type="checkbox" class="sess-select-checkbox"
+                       value="<?= (int)$slot['id'] ?>"
+                       <?= $undeletable ? 'disabled title="Has bookings — cannot remove"' : '' ?>
+                       onclick="event.stopPropagation();onSessCheckboxChange(this)">
+            <?php endif; ?>
 
             <!-- Status badge top-right -->
             <div style="position:absolute;top:var(--space-4);right:var(--space-4)">
@@ -192,7 +233,7 @@ foreach ($byDate as $date => $dateSlots) {
     <?php endforeach; ?>
 
     <?php /* ── Add Session card (always last in grid; opens the modal) ─── */ ?>
-    <div class="sess-dir-card"
+    <div class="sess-dir-card sess-add-card"
          onclick="document.getElementById('add-session-modal').style.display='flex'"
          role="button" tabindex="0"
          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
@@ -205,6 +246,27 @@ foreach ($byDate as $date => $dateSlots) {
     </div>
 
 </div>
+
+<?php if ($canManage && !empty($byDate)): ?>
+<!-- Floating bar for bulk delete (visible while in select mode). -->
+<div id="sess-bulk-bar" class="sess-bulk-bar">
+    <span id="sess-bulk-count" style="font-weight:var(--weight-medium)">0 selected</span>
+    <form method="POST" action="<?= url('/staff/interviews/setup') ?>" id="sess-bulk-form"
+          style="display:flex;gap:var(--space-2);align-items:center;margin:0">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="delete_sessions_bulk">
+        <input type="hidden" name="college" value="<?= e($college) ?>">
+        <input type="hidden" name="ids"     id="sess-bulk-ids" value="">
+        <button type="button" class="btn btn-ghost btn-sm"
+                onclick="cancelSessSelectMode()">Cancel</button>
+        <button type="submit" class="btn btn-sm" id="sess-bulk-delete-btn"
+                style="background:var(--error);color:#fff;border-color:var(--error)"
+                onclick="return confirmSessBulkDelete()">
+            Delete Selected
+        </button>
+    </form>
+</div>
+<?php endif; ?>
 
 <!-- ─────────────────────────────────────────────────────────
      ADD SESSION MODAL — with Single / Recurring toggle.
@@ -433,6 +495,67 @@ foreach ($byDate as $date => $dateSlots) {
 </div>
 
 <script>
+// ── Bulk select mode for session cards ───────────────────────
+function _sessGrid()  { return document.querySelector('.sess-dir-grid'); }
+function _sessBar()   { return document.getElementById('sess-bulk-bar'); }
+function _sessTBtn()  { return document.getElementById('sess-select-toggle'); }
+
+function toggleSessSelectMode() {
+    var grid = _sessGrid(); if (!grid) return;
+    if (grid.classList.contains('is-selecting')) {
+        cancelSessSelectMode();
+    } else {
+        grid.classList.add('is-selecting');
+        var btn = _sessTBtn();   if (btn) btn.textContent = 'Done';
+        var bar = _sessBar();    if (bar) bar.classList.add('is-visible');
+        updateSessBulkCount();
+    }
+}
+function cancelSessSelectMode() {
+    var grid = _sessGrid(); if (!grid) return;
+    grid.classList.remove('is-selecting');
+    grid.querySelectorAll('.sess-select-checkbox').forEach(function(cb){ cb.checked = false; });
+    grid.querySelectorAll('.sess-dir-card').forEach(function(c){ c.classList.remove('is-selected'); });
+    var btn = _sessTBtn(); if (btn) btn.textContent = 'Select';
+    var bar = _sessBar();  if (bar) bar.classList.remove('is-visible');
+}
+function onSessCheckboxChange(cb) {
+    var card = cb.closest('.sess-dir-card');
+    if (card) card.classList.toggle('is-selected', cb.checked);
+    updateSessBulkCount();
+}
+function updateSessBulkCount() {
+    var grid = _sessGrid(); if (!grid) return;
+    var n = grid.querySelectorAll('.sess-select-checkbox:checked').length;
+    var c = document.getElementById('sess-bulk-count');
+    if (c) c.textContent = n + ' selected';
+    var btn = document.getElementById('sess-bulk-delete-btn');
+    if (btn) btn.disabled = (n === 0);
+}
+function handleSessCardClick(event, payload) {
+    var grid = _sessGrid();
+    if (grid && grid.classList.contains('is-selecting')) {
+        // In select mode the card toggles its own checkbox instead of opening
+        // the edit modal. Disabled (booked) cards do nothing.
+        var cb = event.currentTarget.querySelector('.sess-select-checkbox');
+        if (cb && !cb.disabled) {
+            cb.checked = !cb.checked;
+            onSessCheckboxChange(cb);
+        }
+        return;
+    }
+    openEditSession(payload);
+}
+function confirmSessBulkDelete() {
+    var grid = _sessGrid(); if (!grid) return false;
+    var ids = Array.from(grid.querySelectorAll('.sess-select-checkbox:checked'))
+                  .map(function(cb){ return cb.value; });
+    if (ids.length === 0) return false;
+    if (!confirm('Remove ' + ids.length + ' session(s)? This cannot be undone.')) return false;
+    document.getElementById('sess-bulk-ids').value = ids.join(',');
+    return true;
+}
+
 // ── Add modal: switch between Single and Recurring fields ─────
 function setAddMode(mode) {
     var single   = document.getElementById('add-single-fields');

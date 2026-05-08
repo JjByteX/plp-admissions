@@ -43,6 +43,7 @@ $router->post('/api/auto-validate',      'api/auto_validate');
 $router->get( '/api/auto-validate',      'api/auto_validate');
 $router->post('/api/exam-autosave',      'api/exam_autosave');
 $router->post('/api/reschedule-request', 'api/reschedule_request');
+$router->get( '/api/applicant-panel',    'api/applicant_panel');
 
 // -- Staff -------------------------------------------------------
 $router->get( '/staff/dashboard',           'auth/staff/dashboard');

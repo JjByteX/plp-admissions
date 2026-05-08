@@ -38,10 +38,11 @@ $SECTION_COLORS = [
 // ----------------------------------------------------------------
 // POST handlers
 // ----------------------------------------------------------------
-// AJAX detection: X-Requested-With header OR explicit _ajax POST param (fallback for servers that strip custom headers)
-function is_ajax_request(): bool {
-    return !empty($_SERVER['HTTP_X_REQUESTED_WITH']) || !empty($_POST['_ajax']);
-}
+// AJAX detection helper now lives in core/helpers.php so every module
+// that returns JSON can use the same predicate. The local declaration
+// here was kept as a fallback during the migration but has been removed
+// to avoid "Cannot redeclare is_ajax_request()" fatals once helpers.php
+// is loaded (bootstrap.php already pulls it in).
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -1018,28 +1019,34 @@ elseif ($selectedExamId) $view = 'editor';
                 $secJson   = htmlspecialchars(json_encode($sec));
             ?>
                 <div class="card section-block" style="margin-bottom:var(--space-5);padding:0;overflow:visible" data-section-id="<?= $sec['id'] ?>">
-                    <div class="section-header" style="background:<?= $sc['bg'] ?>;border-color:<?= $sc['border'] ?>;border-radius:var(--radius-md) var(--radius-md) 0 0;margin-bottom:0">
-                        <div id="sec-title-view-<?= $sec['id'] ?>" style="display:flex;align-items:center;gap:var(--space-2);flex:1;min-width:0">
-                            <?= typeIcon($sec['question_type']) ?>
-                            <span id="sec-title-text-<?= $sec['id'] ?>"
-                                  style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:<?= $sc['text'] ?>;cursor:pointer"
-                                  class="inline-editable"
-                                  onclick="startInlineSecEdit(<?= $sec['id'] ?>)"
-                                  title="Click to rename"><?= e($sec['title']) ?></span>
-                            <span style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.65" id="sec-count-<?= $sec['id'] ?>"><?= count($secQs) ?> question<?= count($secQs)!==1?'s':'' ?></span>
-                        </div>
-                        <?php if (!empty($sec['description'])): ?>
-                            <div style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.7;margin-top:2px;padding-left:var(--space-2)"><?= e($sec['description']) ?></div>
-                        <?php endif; ?>
-                        <div id="sec-title-edit-<?= $sec['id'] ?>" style="display:none;flex:1">
-                            <input type="text" id="sec-title-input-<?= $sec['id'] ?>"
-                                   class="inline-edit-input"
-                                   value="<?= e($sec['title']) ?>"
-                                   style="font-size:var(--text-sm);font-weight:var(--weight-semibold)">
-                            <div class="inline-edit-actions">
-                                <button class="inline-save-btn" onclick="saveInlineSecTitle(<?= $sec['id'] ?>, '<?= e($sec['question_type']) ?>')">Save</button>
-                                <button class="inline-cancel-btn" onclick="cancelInlineSecEdit(<?= $sec['id'] ?>)">Cancel</button>
-                                <button class="inline-cancel-btn" onclick="openEditSectionModal(<?= $secJson ?>)" style="margin-left:auto">Full edit…</button>
+                    <div class="section-header" style="background:<?= $sc['bg'] ?>;border-color:<?= $sc['border'] ?>;border-radius:var(--radius-md) var(--radius-md) 0 0;margin-bottom:0;align-items:flex-start">
+                        <?php /* Stack title row + description vertically inside one flex
+                                 cell so a long description wraps below the title instead
+                                 of getting laid out alongside it (which used to push the
+                                 title under the description and look like an overlap). */ ?>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                            <div id="sec-title-view-<?= $sec['id'] ?>" style="display:flex;align-items:center;gap:var(--space-2);min-width:0">
+                                <?= typeIcon($sec['question_type']) ?>
+                                <span id="sec-title-text-<?= $sec['id'] ?>"
+                                      style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:<?= $sc['text'] ?>;cursor:pointer"
+                                      class="inline-editable"
+                                      onclick="startInlineSecEdit(<?= $sec['id'] ?>)"
+                                      title="Click to rename"><?= e($sec['title']) ?></span>
+                                <span style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.65" id="sec-count-<?= $sec['id'] ?>"><?= count($secQs) ?> question<?= count($secQs)!==1?'s':'' ?></span>
+                            </div>
+                            <?php if (!empty($sec['description'])): ?>
+                                <div style="font-size:var(--text-xs);color:<?= $sc['text'] ?>;opacity:.7;line-height:1.4;word-break:break-word"><?= e($sec['description']) ?></div>
+                            <?php endif; ?>
+                            <div id="sec-title-edit-<?= $sec['id'] ?>" style="display:none">
+                                <input type="text" id="sec-title-input-<?= $sec['id'] ?>"
+                                       class="inline-edit-input"
+                                       value="<?= e($sec['title']) ?>"
+                                       style="font-size:var(--text-sm);font-weight:var(--weight-semibold)">
+                                <div class="inline-edit-actions">
+                                    <button class="inline-save-btn" onclick="saveInlineSecTitle(<?= $sec['id'] ?>, '<?= e($sec['question_type']) ?>')">Save</button>
+                                    <button class="inline-cancel-btn" onclick="cancelInlineSecEdit(<?= $sec['id'] ?>)">Cancel</button>
+                                    <button class="inline-cancel-btn" onclick="openEditSectionModal(<?= $secJson ?>)" style="margin-left:auto">Full edit…</button>
+                                </div>
                             </div>
                         </div>
                         <div class="section-actions">
@@ -2147,7 +2154,19 @@ function showAiStep(step) {
     ['upload','processing','preview','error'].forEach(s=>{ const el=document.getElementById('ai-step-'+s); if(!el) return; el.style.display=s===step?(s==='processing'||s==='preview'?'flex':''):'none'; });
 }
 // ── Progress bar helpers ──────────────────────────────────────
+// ── AI import progress ────────────────────────────────────────
+// The pre-AI steps (file read → text extraction → upload) finish in
+// milliseconds, so the bar used to ping straight to 88% the instant
+// the request was sent and then sit there for the whole AI wait. To
+// make the wait feel steady, we time-lock the 0 → 80% ramp to ~5s of
+// real elapsed time, regardless of how fast the per-step targets
+// arrive. Once the AI returns and we set target=100, we snap to the
+// finish quickly.
+const PROGRESS_RAMP_MS  = 10000;  // 0 → 80% takes this many ms of wall time
+const PROGRESS_RAMP_PCT = 80;     // ceiling for the time-locked phase
+
 let _progressTarget = 0, _progressCurrent = 0, _progressTimer = null;
+let _progressStartedAt = 0;
 
 function setProgress(pct, label, step) {
     _progressTarget = pct;
@@ -2158,25 +2177,45 @@ function setProgress(pct, label, step) {
 
 function _tickProgress() {
     if (_progressTimer) clearInterval(_progressTimer);
+    if (!_progressStartedAt) _progressStartedAt = Date.now();
+
     _progressTimer = setInterval(() => {
         const gap = _progressTarget - _progressCurrent;
         if (gap <= 0) { clearInterval(_progressTimer); return; }
-        // Ease towards target — slows as it approaches
-        _progressCurrent += Math.max(0.3, gap * 0.06);
-        if (_progressCurrent >= _progressTarget) {
-            _progressCurrent = _progressTarget;
+
+        let next;
+        if (_progressTarget >= 95) {
+            // Closing out — snap home (covers the AI-just-returned case).
+            next = _progressCurrent + Math.max(2, gap * 0.3);
+        } else {
+            // Time-locked steady climb: position purely follows wall clock,
+            // capped at PROGRESS_RAMP_PCT so we never blow past 80% before
+            // the AI actually replies. Targets below the ceiling still cap
+            // the climb (e.g. step says "30%" → bar parks at 30% even if
+            // real time would put it higher).
+            const elapsed = Date.now() - _progressStartedAt;
+            const byTime  = Math.min(PROGRESS_RAMP_PCT, (elapsed / PROGRESS_RAMP_MS) * PROGRESS_RAMP_PCT);
+            const minStep = _progressCurrent + 0.1;
+            next = Math.min(_progressTarget, Math.max(minStep, byTime));
+        }
+
+        if (next >= _progressTarget) {
+            next = _progressTarget;
             clearInterval(_progressTimer);
         }
+        _progressCurrent = next;
+
         const fill = document.getElementById('ai-progress-fill');
         const pct  = document.getElementById('ai-progress-pct');
         if (fill) fill.style.width = _progressCurrent.toFixed(1) + '%';
         if (pct)  pct.textContent  = Math.round(_progressCurrent) + '%';
-    }, 30);
+    }, 80);
 }
 
 function resetProgress() {
     if (_progressTimer) clearInterval(_progressTimer);
     _progressTarget = 0; _progressCurrent = 0;
+    _progressStartedAt = 0;
     const fill = document.getElementById('ai-progress-fill');
     const pct  = document.getElementById('ai-progress-pct');
     if (fill) fill.style.width = '0%';

@@ -20,20 +20,26 @@ $role     = Auth::role();
 
 // Admin and SSO can add/edit/delete courses, set enrollment caps, and
 // edit tier thresholds school-wide. Dean is restricted to tier thresholds
-// for the courses in their own college (oversight + standards-setting).
+// AND max-slots edits for the courses in their own college (oversight +
+// standards-setting + their own college's intake size).
 $canManageCourses = ($role === ROLE_ADMIN || $role === ROLE_SSO);
-$scopedDept       = ($role === ROLE_DEAN) ? (string) user_department($adminId) : '';
+$isDean           = ($role === ROLE_DEAN);
+$scopedDept       = $isDean ? (string) user_department($adminId) : '';
 $scopedCourses    = ($scopedDept !== '') ? courses_in_department($scopedDept) : [];
+// Anyone here can change max-slots, but Dean's writes are scoped to their
+// own college (enforced in the `update_course_caps` handler below).
+$canEditMaxSlots  = $canManageCourses || $isDean;
 
 // ── POST handlers ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
 
-    // Dean is read-only on everything except tier thresholds. Drop any
-    // other write action up front so the if-blocks below short-circuit.
-    if (!$canManageCourses && $action !== 'update_tiers') {
-        $errors[] = 'Read-only access — only SSO and Admin can manage courses and enrollment caps.';
+    // Dean is read-only on everything except tier thresholds and max-slots.
+    // Anything else is dropped up front so the if-blocks below short-circuit.
+    $deanWritable = ['update_tiers', 'update_course_caps'];
+    if (!$canManageCourses && !in_array($action, $deanWritable, true)) {
+        $errors[] = 'Read-only access — only SSO and Admin can manage courses.';
         $action   = '';
     }
 
@@ -130,9 +136,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $schoolYear = school_setting('current_school_year', date('Y').'-'.(date('Y')+1));
         $caps       = $_POST['caps'] ?? [];
         $allCourses = function_exists('get_all_courses') ? get_all_courses() : PLP_COURSES;
+        // Dean writes are restricted to courses in their own college only.
+        // Admin / SSO can write any course.
+        $writableCourses = $canManageCourses
+            ? $allCourses
+            : array_values(array_intersect($allCourses, $scopedCourses));
         $written    = 0;
         foreach ($caps as $courseName => $maxVal) {
-            if (!in_array($courseName, $allCourses, true)) continue;
+            if (!in_array($courseName, $writableCourses, true)) continue;
             $max = ($maxVal === '' || $maxVal === null) ? null : max(0, (int)$maxVal);
             $db->prepare(
                 'INSERT INTO course_caps (course_name, school_year, max_slots)
@@ -302,7 +313,19 @@ ob_start();
             <div style="padding:var(--space-3) var(--space-4);text-align:center;color:var(--text-secondary)"><?= $avgFrom ?>–<?= $highFrom - 1 ?></div>
             <div style="padding:var(--space-3) var(--space-4);text-align:center;color:var(--text-secondary)">1–<?= max(0, $avgFrom - 1) ?></div>
             <div style="padding:var(--space-3) var(--space-4);text-align:center"><strong><?= $accepted ?></strong></div>
-            <div style="padding:var(--space-3) var(--space-4);text-align:center;color:var(--text-tertiary)"><?= $maxSlots !== null ? $maxSlots : '∞' ?></div>
+            <div style="padding:var(--space-3) var(--space-4);text-align:center;color:var(--text-tertiary);position:relative">
+                <?php
+                    // Red dot when this row's max-slots hasn't been set yet AND
+                    // the current user is allowed to set it. Visual nudge so the
+                    // Dean knows which of their courses still needs an intake cap.
+                    $needsCap = ($maxSlots === null) && $canEditMaxSlots;
+                ?>
+                <?php if ($needsCap): ?>
+                    <span title="Max slots not set" style="position:absolute;top:8px;right:10px;
+                                 width:8px;height:8px;border-radius:50%;background:var(--error)"></span>
+                <?php endif; ?>
+                <?= $maxSlots !== null ? $maxSlots : '∞' ?>
+            </div>
             <div style="padding:var(--space-3) var(--space-4);text-align:center">
                 <button type="button" class="btn-icon" title="Edit" onclick="startRowEdit(<?= $ci ?>)" style="color:var(--text-tertiary)">
                     <?= icon('ic_fluent_edit_24_regular', 14) ?>
@@ -342,7 +365,7 @@ ob_start();
                 </div>
                 <div style="padding:var(--space-3) var(--space-4);text-align:center"><strong><?= $accepted ?></strong></div>
                 <div style="padding:var(--space-3) var(--space-4)">
-                    <?php if ($canManageCourses): ?>
+                    <?php if ($canEditMaxSlots): ?>
                         <input type="number" name="caps[<?= $enc ?>]" class="form-control"
                                min="0" max="99999"
                                value="<?= $maxSlots !== null ? (int)$maxSlots : '' ?>"
@@ -366,6 +389,10 @@ ob_start();
         </div>
         <?php endforeach; ?>
     </div>
+
+    <?php if ($canManageCourses): /* Dean is scoped to their own college's
+              tier thresholds + max-slots only — Custom Courses and the SHS
+              Strand reference are out of scope for that role. */ ?>
 
     <!-- ── Section 4: Custom Courses ───────────────────────────── -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
@@ -452,6 +479,8 @@ ob_start();
         <?php endforeach; ?>
         </div>
     </div>
+
+    <?php endif; /* /Custom Courses + SHS Strand Reference for Admin/SSO only */ ?>
 </div>
 
 <!-- ── Add Course Modal ───────────────────────────────────────────────── -->

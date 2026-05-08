@@ -154,28 +154,35 @@ ob_start();
         </div>
     <?php else: ?>
     <div style="overflow-x:auto">
-        <table class="table">
+        <?php /* Compact one-line-per-row layout: date + time on one line,
+                  user name + role badge on one line, action badge inline,
+                  description truncated with ellipsis (full text in title). */ ?>
+        <style>
+            .audit-table td { white-space: nowrap; vertical-align: middle; }
+            .audit-table td.audit-desc {
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                max-width: 1px; /* lets the column shrink so ellipsis kicks in */
+            }
+        </style>
+        <table class="table audit-table" style="table-layout:fixed;width:100%">
             <thead>
                 <tr>
-                    <th style="width:160px">Date & Time</th>
+                    <th style="width:200px">Date & Time</th>
                     <?php if ($isAdmin): ?>
-                    <th style="width:160px">User</th>
+                    <th style="width:240px">User</th>
                     <?php endif; ?>
-                    <th style="width:190px">Action</th>
+                    <th style="width:200px">Action</th>
                     <th>Description</th>
-                    <th style="width:130px">IP Address</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($logs as $log): ?>
                 <tr>
-                    <td style="font-size:var(--text-xs);color:var(--text-secondary);white-space:nowrap">
-                        <?= e(date('M j, Y', strtotime($log['created_at']))) ?><br>
-                        <span style="color:var(--text-tertiary)"><?= e(date('g:i:s A', strtotime($log['created_at']))) ?></span>
+                    <td style="font-size:var(--text-xs);color:var(--text-secondary)">
+                        <?= e(date('M j, Y g:i A', strtotime($log['created_at']))) ?>
                     </td>
                     <?php if ($isAdmin): ?>
                     <td>
-                        <div style="font-size:var(--text-sm);font-weight:var(--weight-medium)"><?= e($log['user_name']) ?></div>
                         <?php
                             $roleBadge = match ($log['user_role']) {
                                 ROLE_ADMIN   => 'error',
@@ -188,21 +195,20 @@ ob_start();
                                 ? Auth::roleLabel($log['user_role'])
                                 : 'System';
                         ?>
-                        <span class="badge badge-<?= $roleBadge ?>" style="font-size:10px">
-                            <?= e($roleLabel) ?>
+                        <span style="display:inline-flex;align-items:center;gap:var(--space-2)">
+                            <span style="font-size:var(--text-sm);font-weight:var(--weight-medium)"><?= e($log['user_name']) ?></span>
+                            <span class="badge badge-<?= $roleBadge ?>" style="font-size:10px"><?= e($roleLabel) ?></span>
                         </span>
                     </td>
                     <?php endif; ?>
                     <td>
-                        <span class="badge <?= $actionBadge($log['action']) ?>" style="font-size:10px;white-space:nowrap">
+                        <span class="badge <?= $actionBadge($log['action']) ?>" style="font-size:10px">
                             <?= e($actionLabel($log['action'])) ?>
                         </span>
                     </td>
-                    <td style="font-size:var(--text-sm);color:var(--text-secondary)">
+                    <td class="audit-desc" style="font-size:var(--text-sm);color:var(--text-secondary)"
+                        title="<?= e($log['description'] ?? '') ?>">
                         <?= e($log['description'] ?? '—') ?>
-                    </td>
-                    <td style="font-size:var(--text-xs);color:var(--text-tertiary);font-family:monospace">
-                        <?= e($log['ip_address'] ?? '—') ?>
                     </td>
                 </tr>
                 <?php endforeach; ?>

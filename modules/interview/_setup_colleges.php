@@ -1,11 +1,18 @@
 <?php
 // _setup_colleges.php — College card grid for admin
 // Variables: $departments, $collegeCounts
+//
+// The "← Back" target (the two-card /staff/interviews landing) is only
+// reachable for Admin. SSO lands here directly from the sidebar and
+// has nowhere to go back to, so we hide the button for them.
+$_isSSO_picker = (Auth::role() === ROLE_SSO);
 ?>
 
+<?php if (!$_isSSO_picker): ?>
 <div style="margin-bottom:var(--space-3)">
     <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
 </div>
+<?php endif; ?>
 
 <div class="page-header" style="text-align:center;margin-bottom:var(--space-6)">
     <h1 class="page-title" style="margin:0 0 var(--space-1) 0">Interview Setup</h1>
@@ -42,6 +49,11 @@
         font-size:var(--text-xs);color:var(--text-tertiary);
         display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;justify-content:center;
     }
+    .college-card-dot {
+        position:absolute;top:var(--space-3);right:var(--space-3);
+        width:8px;height:8px;border-radius:50%;background:var(--error);
+    }
+    .college-card { position:relative; }
 </style>
 
 <?php if (empty($departments)): ?>
@@ -52,9 +64,13 @@
     <div class="college-grid">
         <?php foreach ($departments as $dept):
             $info = $collegeCounts[$dept] ?? ['sessions' => 0, 'upcoming' => 0];
+            $needsSetup = ((int)$info['upcoming']) === 0;
         ?>
             <a href="<?= url('/staff/interviews/setup') ?>?college=<?= urlencode($dept) ?>"
                class="college-card">
+                <?php if ($needsSetup): ?>
+                    <span class="college-card-dot" title="No upcoming sessions — needs setup"></span>
+                <?php endif; ?>
                 <div class="college-card-icon">
                     <?= icon('ic_fluent_building_bank_24_regular', 24) ?>
                 </div>
