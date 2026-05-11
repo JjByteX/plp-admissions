@@ -11,6 +11,27 @@ exam auto-assign zip:
 
 ## What's new in this round
 
+### Interview queue — date + slot filter dropdowns
+
+`/staff/interviews/queue` toolbar now has two cascading filter
+dropdowns alongside the existing name/course search:
+
+- **Filter by date** — every distinct interview date the table
+  contains. Each entry shows `{date} (Past) · {N} applicants`
+  (past flag only on dates earlier than today). Selecting a date
+  scopes the table to that date.
+- **Filter by slot** — every distinct slot the table contains,
+  formatted as `{date} · {start–end} (Past) · {dept} · {N}
+  applicants`. The slot dropdown **cascades** off the date
+  dropdown — picking a date hides slots on other dates, and
+  clears the slot selection if it no longer matches.
+
+Both filters are pure client-side (rows already include
+`data-slot` + new `data-date` attributes), so there's no extra DB
+query and switching filters is instant. The "X applicants" badge
+on the right of the toolbar always reflects what's currently
+visible.
+
 ### Crash fix — Results search box (PDOException HY093)
 
 `/staff/results` was throwing
@@ -105,7 +126,8 @@ core/automation.php                          MOD  — auto_close_expired_session
                                                      backfill_interview_slot_assignments() helper.
 core/interview_scheduler.php                 MOD  — new auto_detect_interview_no_shows() + _notify_applicant_marked_absent().
 modules/results/staff_manage.php             MOD  — search box no longer crashes (HY093): :q split into :q1/:q2/:q3.
-modules/interview/staff_queue.php            MOD  — inline auto-no-show update replaced with shared helper (all 3 fields).
+modules/interview/staff_queue.php            MOD  — inline auto-no-show update replaced with shared helper (all 3 fields);
+                                                     date + slot cascading filter dropdowns added to toolbar.
 modules/interview/staff_action.php           MOD  — mark_no_show sets full canonical absent state, not just q.status.
 modules/interview/staff_absent.php           MOD  — auto-detect on page load + $pageWide = true.
 modules/interview/staff_cancel_slot.php      MOD  — $pageWide = true so the table fills the window.

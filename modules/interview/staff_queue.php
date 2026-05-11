@@ -233,23 +233,53 @@ if ($canSeeAll && !$showAll) {
 }
 $rows = $stmt->fetchAll();
 
-// Build unique slot list for the slot filter dropdown.
+// Build the slot + date maps used by the two toolbar dropdowns.
+//
+//   $slotMap  — every distinct slot the visible rows belong to,
+//               with a per-slot applicant count. Drives the
+//               "Filter by slot" dropdown.
+//   $dateMap  — every distinct slot date with a per-date applicant
+//               count and a "past" flag. Drives the
+//               "Filter by date" dropdown.
+//
+// Both filters are pure client-side (the rows already include
+// data-slot / data-date attributes), so there's no extra DB hit.
 $slotMap = [];
+$dateMap = [];
+$todayDate = $today; // YYYY-MM-DD, declared at the top of the file
 foreach ($rows as $r) {
-    $sid = (int)$r['slot_id'];
-    if (!isset($slotMap[$sid])) {
+    $sid  = (int)$r['slot_id'];
+    $date = (string)($r['slot_date'] ?? '');
+    if ($sid > 0 && !isset($slotMap[$sid])) {
         $slotMap[$sid] = [
             'id'         => $sid,
-            'date'       => $r['slot_date'] ?? '',
+            'date'       => $date,
             'time'       => $r['slot_time'] ?? '',
             'end_time'   => $r['slot_end_time'] ?? '',
             'department' => $r['slot_department'] ?? '',
+            'count'      => 0,
         ];
     }
+    if ($sid > 0) $slotMap[$sid]['count']++;
+
+    if ($date !== '') {
+        if (!isset($dateMap[$date])) {
+            $dateMap[$date] = [
+                'date'    => $date,
+                'count'   => 0,
+                'is_past' => $date < $todayDate,
+            ];
+        }
+        $dateMap[$date]['count']++;
+    }
 }
-// Sort slots by date ASC, time ASC
+// Sort slots by date ASC, time ASC.
 usort($slotMap, function ($a, $b) {
     return ($a['date'] <=> $b['date']) ?: ($a['time'] <=> $b['time']);
+});
+// Sort dates ASC.
+usort($dateMap, function ($a, $b) {
+    return $a['date'] <=> $b['date'];
 });
 
 // Format name as "SURNAME SUFFIX, FIRST MIDDLE" (uses shared helper)
@@ -308,6 +338,17 @@ ob_start();
     font-size:var(--text-sm);
     border:1px solid var(--border);
     border-radius:var(--radius-sm);
+    background:var(--bg-elevated);
+    color:var(--text-primary);
+}
+.iq-toolbar .iq-filter-select {
+    height:36px;
+    min-height:36px;
+    font-size:var(--text-sm);
+    max-width:340px;
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    padding:0 var(--space-3);
     background:var(--bg-elevated);
     color:var(--text-primary);
 }
@@ -463,20 +504,54 @@ ob_start();
         <input type="search" id="iq-filter" placeholder="Filter by name or course…"
                autocomplete="off">
     </div>
+    <?php if (count($dateMap) > 1): ?>
+    <select id="iq-date-filter" class="form-control iq-filter-select"
+            title="Filter by interview date">
+        <?php
+            // The "All dates" item leads so the page starts unfiltered. The
+            // applicant count next to each row mirrors what's currently visible
+            // in the table (rebuilt client-side as filters change so the badge
+            // and the visible count never drift apart).
+            $totalApplicants = count($rows);
+        ?>
+        <option value="" data-count="<?= (int)$totalApplicants ?>">
+            All dates · <?= (int)$totalApplicants ?> applicant<?= $totalApplicants === 1 ? '' : 's' ?>
+        </option>
+        <?php foreach ($dateMap as $d): ?>
+            <option value="<?= e($d['date']) ?>" data-count="<?= (int)$d['count'] ?>">
+                <?= format_date($d['date']) ?><?= $d['is_past'] ? ' (Past)' : '' ?>
+                · <?= (int)$d['count'] ?> applicant<?= (int)$d['count'] === 1 ? '' : 's' ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
+    <?php endif; ?>
     <?php if (count($slotMap) > 1): ?>
-    <select id="iq-slot-filter" class="form-control"
-            style="height:36px;min-height:36px;font-size:var(--text-sm);max-width:320px;
-                   border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 var(--space-3)">
-        <option value="">All slots</option>
+    <select id="iq-slot-filter" class="form-control iq-filter-select"
+            title="Filter by specific slot within the selected date">
+        <?php $totalSlotApplicants = array_sum(array_column($slotMap, 'count')); ?>
+        <option value="" data-date="" data-count="<?= (int)$totalSlotApplicants ?>">
+            All slots · <?= (int)$totalSlotApplicants ?> applicant<?= $totalSlotApplicants === 1 ? '' : 's' ?>
+        </option>
         <?php foreach ($slotMap as $sl): ?>
-            <option value="<?= (int)$sl['id'] ?>">
-                <?= format_date($sl['date']) ?>
-                <?php if ($sl['time']): ?>
-                    <?= format_time($sl['time']) ?><?= $sl['end_time'] ? ' – ' . format_time($sl['end_time']) : '' ?>
-                <?php endif; ?>
-                <?php if ($sl['department']): ?>
-                    · <?= e($sl['department']) ?>
-                <?php endif; ?>
+            <?php
+                $slPast = (string)$sl['date'] !== '' && (string)$sl['date'] < $todayDate;
+                $slLbl  = format_date($sl['date']);
+                if (!empty($sl['time'])) {
+                    $slLbl .= ' · ' . format_time($sl['time']);
+                    if (!empty($sl['end_time'])) {
+                        $slLbl .= ' – ' . format_time($sl['end_time']);
+                    }
+                }
+                if ($slPast) $slLbl .= ' (Past)';
+                if (!empty($sl['department'])) {
+                    $slLbl .= ' · ' . $sl['department'];
+                }
+                $slLbl .= ' · ' . (int)$sl['count'] . ' applicant' . ((int)$sl['count'] === 1 ? '' : 's');
+            ?>
+            <option value="<?= (int)$sl['id'] ?>"
+                    data-date="<?= e($sl['date']) ?>"
+                    data-count="<?= (int)$sl['count'] ?>">
+                <?= e($slLbl) ?>
             </option>
         <?php endforeach; ?>
     </select>
@@ -515,7 +590,10 @@ ob_start();
             $existing  = $r['interview_notes'] ?? '';
             $haystack  = strtolower($name . ' ' . $course . ' ' . $type);
         ?>
-            <tr class="<?= $rowClass ?>" data-name="<?= e($haystack) ?>" data-slot="<?= (int)$r['slot_id'] ?>">
+            <tr class="<?= $rowClass ?>"
+                data-name="<?= e($haystack) ?>"
+                data-slot="<?= (int)$r['slot_id'] ?>"
+                data-date="<?= e($r['slot_date'] ?? '') ?>">
                 <td>
                     <button type="button"
                             class="iq-name-cell iq-name-cell-clickable"
@@ -726,27 +804,58 @@ ob_start();
      SCRIPT
 ============================================================ -->
 <script>
-// Live filter — combines text search + slot dropdown
-function applyFilters() {
+// Live filters — combines the name/course search box, the date
+// dropdown and the slot dropdown. The slot dropdown cascades off the
+// date one: picking a date hides slots on other dates and resets the
+// slot filter if its current selection no longer matches.
+(function() {
     var filterEl = document.getElementById('iq-filter');
+    var dateEl   = document.getElementById('iq-date-filter');
     var slotEl   = document.getElementById('iq-slot-filter');
-    var term     = filterEl ? filterEl.value.toLowerCase().trim() : '';
-    var slotId   = slotEl ? slotEl.value : '';
-    var visible  = 0;
-    document.querySelectorAll('#queue-table tbody tr').forEach(function(tr) {
-        var haystack   = tr.dataset.name || '';
-        var rowSlot    = tr.dataset.slot || '';
-        var matchText  = !term || haystack.includes(term);
-        var matchSlot  = !slotId || rowSlot === slotId;
-        var show       = matchText && matchSlot;
-        tr.style.display = show ? '' : 'none';
-        if (show) visible++;
-    });
-    var countEl = document.getElementById('iq-count');
-    if (countEl) countEl.textContent = visible + ' applicant' + (visible === 1 ? '' : 's');
-}
-document.getElementById('iq-filter')?.addEventListener('input', applyFilters);
-document.getElementById('iq-slot-filter')?.addEventListener('change', applyFilters);
+    var countEl  = document.getElementById('iq-count');
+
+    function syncSlotOptions() {
+        if (!slotEl) return;
+        var selectedDate = dateEl ? dateEl.value : '';
+        var currentSlot  = slotEl.value;
+        var stillVisible = false;
+        Array.prototype.forEach.call(slotEl.options, function(opt) {
+            if (opt.value === '') { opt.hidden = false; return; } // keep "All slots"
+            var optDate = opt.getAttribute('data-date') || '';
+            var match   = !selectedDate || optDate === selectedDate;
+            opt.hidden  = !match;
+            if (match && opt.value === currentSlot) stillVisible = true;
+        });
+        // If the previously-selected slot is on a different date, clear it.
+        if (currentSlot && !stillVisible) slotEl.value = '';
+    }
+
+    function applyFilters() {
+        var term       = filterEl ? filterEl.value.toLowerCase().trim() : '';
+        var slotId     = slotEl   ? slotEl.value : '';
+        var dateValue  = dateEl   ? dateEl.value : '';
+        var visible    = 0;
+        document.querySelectorAll('#queue-table tbody tr').forEach(function(tr) {
+            var haystack   = tr.dataset.name || '';
+            var rowSlot    = tr.dataset.slot || '';
+            var rowDate    = tr.dataset.date || '';
+            var matchText  = !term      || haystack.includes(term);
+            var matchSlot  = !slotId    || rowSlot === slotId;
+            var matchDate  = !dateValue || rowDate === dateValue;
+            var show       = matchText && matchSlot && matchDate;
+            tr.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        if (countEl) countEl.textContent = visible + ' applicant' + (visible === 1 ? '' : 's');
+    }
+
+    if (filterEl) filterEl.addEventListener('input', applyFilters);
+    if (dateEl)   dateEl.addEventListener('change', function() { syncSlotOptions(); applyFilters(); });
+    if (slotEl)   slotEl.addEventListener('change', applyFilters);
+
+    // Initial sync in case the page is reloaded with a date already chosen.
+    syncSlotOptions();
+})();
 
 // Evaluation modal handlers
 const evalModal = document.getElementById('eval-modal');
