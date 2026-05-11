@@ -474,7 +474,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                 <div>
                     <label class="form-label">Type <strong>Withdraw</strong> to confirm</label>
                     <input type="text" id="withdraw-confirm-input" class="form-control"
-                           placeholder="Withdraw" autocomplete="off" style="max-width:220px"
+                           placeholder="Withdraw" autocomplete="off" style="max-width:220px;text-transform:none"
                            oninput="document.getElementById('withdraw-submit-btn').disabled = this.value.trim().toLowerCase() !== 'withdraw'">
                 </div>
                 <div>

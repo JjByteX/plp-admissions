@@ -154,29 +154,6 @@ ob_start();
             <?php endif; ?>
         </div>
 
-        <?php if ($result['result'] === 'accepted' && ($result['enrollment_intent'] ?? '') !== 'confirmed' && !$isWithdrawn): ?>
-        <!-- Enrollment Confirmation -->
-        <div class="card" style="padding:var(--space-5);margin-bottom:var(--space-5);border:1.5px solid var(--success);background:var(--success-bg)">
-            <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3)">
-                <?= icon('ic_fluent_checkmark_circle_24_regular', 24, 'color:var(--success)') ?>
-                <div>
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">Confirm Your Enrollment</div>
-                    <div style="font-size:var(--text-xs);color:var(--text-secondary)">Click below to confirm that you intend to enroll at PLP.</div>
-                </div>
-            </div>
-            <form method="POST" action="<?= url('/student/result') ?>" onsubmit="return confirm('Are you sure you want to confirm your enrollment?')">
-                <?= csrf_field() ?>
-                <input type="hidden" name="action" value="confirm_enrollment">
-                <button type="submit" class="btn btn-primary" style="width:100%">I Confirm My Enrollment</button>
-            </form>
-        </div>
-        <?php elseif ($result['result'] === 'accepted' && ($result['enrollment_intent'] ?? '') === 'confirmed'): ?>
-        <div class="alert alert-success" style="margin-bottom:var(--space-5)">
-            <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
-            You have confirmed your enrollment. Welcome to PLP!
-        </div>
-        <?php endif; ?>
-
         <!-- Exam score breakdown -->
         <?php if ($_examResult): ?>
         <?php

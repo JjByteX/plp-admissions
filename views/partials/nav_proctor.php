@@ -21,9 +21,8 @@ $_navSlotStmt = $_navDb->prepare('SELECT COUNT(*) FROM exam_slot_schedule WHERE 
 $_navSlotStmt->execute([$_navSY]);
 $_navExamReady = (int)$_navSlotStmt->fetchColumn() > 0;
 
-// Flat list — only 2 items: Dashboard → Exam Slots.
+// Single item — Proctor goes straight to Exam Slots (no dashboard).
 $items = [
-    ['href' => '/staff/dashboard',   'key' => 'dashboard', 'label' => 'Dashboard',  'icon' => 'ic_fluent_home_24_regular'],
     ['href' => '/staff/exam/slots',  'key' => 'exam',      'label' => 'Exam Slots', 'icon' => 'ic_fluent_calendar_ltr_24_regular', 'alert' => !$_navExamReady],
 ];
 ?>

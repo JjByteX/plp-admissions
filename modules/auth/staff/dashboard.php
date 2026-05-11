@@ -7,12 +7,13 @@ require_once ROOT_PATH . '/core/Auth.php';
 Auth::requireRole(ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 // Professors (ROLE_STAFF) go straight to the Interview Queue, which is
-// their primary workpage. Proctors are NOT redirected — the interview
-// queue is locked to interviewers (Professor / SSO / Dean / Admin), so a
-// proctor hitting it would 403. Their sidebar's "Dashboard" entry lands
-// them here, and they can navigate to Exam Slots from there.
+// their primary workpage. Proctors go straight to Exam Slots — no
+// dashboard for them.
 if (Auth::role() === ROLE_STAFF) {
     redirect('/staff/interviews/queue');
+}
+if (Auth::role() === ROLE_PROCTOR) {
+    redirect('/staff/exam/slots');
 }
 
 // ── A4: Dashboard POST handlers ──────────────────────────────
@@ -40,8 +41,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    SELECT 1 FROM documents d WHERE d.applicant_id = a.id AND d.status = 'approved'
                )"
         );
-        audit_log('bulk_approve_docs', "Approved all pending documents ({$count} docs)");
-        Session::flash('success', "Approved {$count} pending document(s).");
+
+        // Backfill exam-slot assignments for everyone who just got
+        // advanced (and anyone who'd been stuck at exam-with-no-slot
+        // from a previous run). Without this, a bulk approval can
+        // leave dozens of students sitting on the "Awaiting Slot
+        // Assignment" page.
+        $assigned = backfill_exam_slot_assignments();
+
+        audit_log('bulk_approve_docs', "Approved all pending documents ({$count} docs); assigned exam slot to {$assigned} applicant(s)");
+        Session::flash(
+            'success',
+            "Approved {$count} pending document(s)."
+            . ($assigned > 0 ? " Auto-assigned exam slots to {$assigned} applicant(s)." : '')
+        );
         redirect('/staff/dashboard');
     }
 

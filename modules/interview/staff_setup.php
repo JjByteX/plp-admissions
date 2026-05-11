@@ -332,10 +332,11 @@ if ($college !== '') {
         $byDate[$s['slot_date']][] = $s;
     }
 
-    // Staff dropdown (interviewers in this college, plus admins)
+    // Staff dropdown (interviewers in this college, plus admins).
+    // Deans only appear for their own college, same as staff.
     $staffStmt = $db->prepare(
         "SELECT id, name FROM users
-          WHERE role IN ('staff','admin') AND is_active = 1
+          WHERE role IN ('staff','dean','admin') AND is_active = 1
             AND (department = ? OR ? = '' OR role = 'admin')
           ORDER BY name"
     );

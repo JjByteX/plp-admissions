@@ -67,6 +67,46 @@ $myEntry = $stmt->fetch() ?: null;
 
 $stepperCurrent = current_step($applicant, $_examResult, $myEntry, $_admissionResult);
 
+// ----------------------------------------------------------------
+// Latest reschedule-request state for this applicant.
+//
+// This is what makes the student-side page change immediately after
+// they submit "Need to reschedule?":
+//   • pending  → show a banner, hide the form (no double submits)
+//   • denied   → show a small note explaining staff kept the old slot
+//   • approved → the queue row already points at the new slot, so the
+//                normal "Interview Scheduled" view handles it; we just
+//                surface a one-time confirmation banner.
+// The table is created on-demand by the API endpoint, so we wrap the
+// read in try/catch to stay safe on fresh installs.
+// ----------------------------------------------------------------
+$myReschedule    = null;
+$rescheduleHistory = [];
+try {
+    $rrStmt = $db->prepare(
+        'SELECT id, queue_id, reason, status, created_at, reviewed_at, deny_reason
+           FROM reschedule_requests
+          WHERE applicant_id = ?
+          ORDER BY id DESC
+          LIMIT 5'
+    );
+    $rrStmt->execute([$applicantId]);
+    $rescheduleHistory = $rrStmt->fetchAll() ?: [];
+    $myReschedule      = $rescheduleHistory[0] ?? null;
+} catch (\Throwable) {
+    $myReschedule      = null;
+    $rescheduleHistory = [];
+}
+$reschedulePending = $myReschedule && $myReschedule['status'] === 'pending';
+$rescheduleDenied  = $myReschedule
+    && $myReschedule['status'] === 'denied'
+    && $myEntry
+    && (int)$myReschedule['queue_id'] === (int)$myEntry['id'];
+$rescheduleApproved = $myReschedule
+    && $myReschedule['status'] === 'approved'
+    && $myEntry
+    && (int)$myReschedule['queue_id'] !== (int)$myEntry['id'];
+
 $errors = [];
 $today  = date('Y-m-d');
 
@@ -178,24 +218,18 @@ ob_start();
         ============================================================ -->
         <div class="card" style="padding:var(--space-6);text-align:center;margin-bottom:var(--space-4)">
 
-            <div style="display:inline-flex;flex-direction:column;align-items:center;
-                        background:var(--accent);color:#fff;border-radius:var(--radius-xl);
-                        padding:var(--space-6) var(--space-10);margin-bottom:var(--space-5)">
-                <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.1em;
-                             opacity:.85;font-weight:var(--weight-medium);margin-bottom:var(--space-1)">
-                    Queue Number
-                </div>
-                <div style="font-size:3.5rem;font-weight:var(--weight-semibold);line-height:1">
-                    <?= e($myEntry['queue_number']) ?>
-                </div>
-            </div>
-
             <?php if ($myEntry['status'] === 'in_progress'): ?>
                 <div class="badge badge-info"
                      style="font-size:var(--text-sm);padding:var(--space-2) var(--space-4);margin-bottom:var(--space-4)">
                     Your interview is now in progress
                 </div>
             <?php else: ?>
+                <div style="display:inline-flex;align-items:center;gap:var(--space-2);
+                            background:var(--success-bg);color:var(--success);border-radius:var(--radius-md);
+                            padding:var(--space-2) var(--space-4);margin-bottom:var(--space-4);font-weight:var(--weight-semibold)">
+                    <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
+                    Checked In
+                </div>
                 <?php if ($queuePosition !== null): ?>
                     <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-4)">
                         <?php if ($queuePosition === 1): ?>
@@ -239,6 +273,58 @@ ob_start();
             Please stay nearby and have your valid ID and application documents ready.
         </div>
 
+        <?php if ($myEntry['status'] !== 'in_progress'): ?>
+        <div class="card" style="padding:var(--space-4);margin-top:var(--space-4)">
+            <?php if ($reschedulePending): ?>
+                <!-- The request is sitting in the SSO/Admin/Dean queue.
+                     Hide the form so the student can't submit a duplicate. -->
+                <div style="display:flex;align-items:center;gap:var(--space-3)">
+                    <?= icon('ic_fluent_hourglass_24_regular', 18, 'color:var(--warning)') ?>
+                    <div>
+                        <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">
+                            Reschedule request submitted
+                        </div>
+                        <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                            Submitted <?= date('M j, g:i A', strtotime($myReschedule['created_at'])) ?>
+                            — awaiting staff review.
+                        </div>
+                    </div>
+                </div>
+                <?php if (!empty($myReschedule['reason'])): ?>
+                    <div style="margin-top:var(--space-3);padding:var(--space-3) var(--space-4);background:var(--bg-subtle);
+                                 border-radius:var(--radius-md);font-size:var(--text-sm);white-space:pre-line;color:var(--text-secondary)">
+                        <?= e($myReschedule['reason']) ?>
+                    </div>
+                <?php endif; ?>
+            <?php else: ?>
+                <?php if ($rescheduleDenied): ?>
+                    <div class="alert alert-warning" style="margin-bottom:var(--space-3);font-size:var(--text-sm)">
+                        Your previous reschedule request was not approved — you've kept your current slot.
+                        <?php if (!empty($myReschedule['deny_reason'])): ?>
+                            <div style="margin-top:var(--space-2);font-weight:var(--weight-medium)">
+                                Reason from staff:
+                                <span style="font-weight:var(--weight-regular);white-space:pre-line">
+                                    <?= e($myReschedule['deny_reason']) ?>
+                                </span>
+                            </div>
+                        <?php endif; ?>
+                        <div style="margin-top:var(--space-2)">You may submit a new request below if needed.</div>
+                    </div>
+                <?php endif; ?>
+                <details>
+                    <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
+                        Need to reschedule?
+                    </summary>
+                    <form method="POST" action="<?= url('/api/reschedule-request') ?>" style="margin-top:var(--space-3)">
+                        <?= csrf_field() ?>
+                        <textarea name="reschedule_reason" class="form-textarea" rows="3" placeholder="Please explain why you need to reschedule (e.g. emergency)..." required style="margin-bottom:var(--space-3)"></textarea>
+                        <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
+                    </form>
+                </details>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
         <script>setTimeout(function(){ window.location.reload(); }, 30000);</script>
 
     <?php else: ?>
@@ -280,16 +366,104 @@ ob_start();
             <?php endif; ?>
 
             <!-- Reschedule request -->
-            <details style="margin-top:var(--space-4)">
-                <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
-                    Need to reschedule?
-                </summary>
-                <form method="POST" action="<?= url('/api/reschedule-request') ?>" style="margin-top:var(--space-3)">
-                    <?= csrf_field() ?>
-                    <textarea name="reschedule_reason" class="form-textarea" rows="3" placeholder="Please explain why you need to reschedule..." required style="margin-bottom:var(--space-3)"></textarea>
-                    <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
-                </form>
-            </details>
+            <?php if ($reschedulePending): ?>
+                <!-- Pending review — the page has "changed" the moment they
+                     submitted, so they see status instead of the form. -->
+                <div style="margin-top:var(--space-4);padding:var(--space-4) var(--space-5);
+                             background:var(--warning-bg);border-radius:var(--radius-md);
+                             display:flex;align-items:flex-start;gap:var(--space-3)">
+                    <?= icon('ic_fluent_hourglass_24_regular', 18, 'color:var(--warning)') ?>
+                    <div style="flex:1">
+                        <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:var(--warning)">
+                            Reschedule request submitted
+                        </div>
+                        <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px">
+                            Submitted <?= date('M j, g:i A', strtotime($myReschedule['created_at'])) ?>
+                            — awaiting staff review. You'll see a new slot here once it's approved.
+                        </div>
+                        <?php if (!empty($myReschedule['reason'])): ?>
+                            <div style="margin-top:var(--space-2);font-size:var(--text-sm);color:var(--text-secondary);
+                                         white-space:pre-line">
+                                <?= e($myReschedule['reason']) ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php else: ?>
+                <?php if ($rescheduleApproved): ?>
+                    <div class="alert alert-success" style="margin-top:var(--space-4);font-size:var(--text-sm)">
+                        Your reschedule request was approved — you've been moved to the slot shown above.
+                    </div>
+                <?php elseif ($rescheduleDenied): ?>
+                    <div class="alert alert-warning" style="margin-top:var(--space-4);font-size:var(--text-sm)">
+                        Your previous reschedule request was not approved — you've kept your current slot.
+                        <?php if (!empty($myReschedule['deny_reason'])): ?>
+                            <div style="margin-top:var(--space-2);font-weight:var(--weight-medium)">
+                                Reason from staff:
+                                <span style="font-weight:var(--weight-regular);white-space:pre-line">
+                                    <?= e($myReschedule['deny_reason']) ?>
+                                </span>
+                            </div>
+                        <?php endif; ?>
+                        <div style="margin-top:var(--space-2)">You may submit a new request below if needed.</div>
+                    </div>
+                <?php endif; ?>
+                <details style="margin-top:var(--space-4)">
+                    <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
+                        Need to reschedule?
+                    </summary>
+                    <form method="POST" action="<?= url('/api/reschedule-request') ?>" style="margin-top:var(--space-3)">
+                        <?= csrf_field() ?>
+                        <textarea name="reschedule_reason" class="form-textarea" rows="3" placeholder="Please explain why you need to reschedule..." required style="margin-bottom:var(--space-3)"></textarea>
+                        <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
+                    </form>
+                </details>
+            <?php endif; ?>
+
+            <?php
+                // Past reschedule requests — lets students see the full
+                // history of their attempts (and the reason staff gave
+                // when one was denied). Hidden by default to avoid
+                // cluttering the card; click to expand.
+                $pastReschedules = array_slice($rescheduleHistory, $reschedulePending ? 1 : 0);
+            ?>
+            <?php if (!empty($pastReschedules)): ?>
+                <details style="margin-top:var(--space-4)">
+                    <summary style="cursor:pointer;font-size:var(--text-xs);color:var(--text-tertiary)">
+                        Past reschedule requests (<?= count($pastReschedules) ?>)
+                    </summary>
+                    <div style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
+                        <?php foreach ($pastReschedules as $h): ?>
+                            <div style="padding:var(--space-3);background:var(--bg-subtle);border-radius:var(--radius-md);
+                                         font-size:var(--text-xs)">
+                                <div style="display:flex;justify-content:space-between;gap:var(--space-3);align-items:flex-start">
+                                    <div style="color:var(--text-tertiary)">
+                                        <?= date('M j, Y · g:i A', strtotime($h['created_at'])) ?>
+                                    </div>
+                                    <?php
+                                        $sLabel = $h['status'];
+                                        $sClass = $sLabel === 'approved' ? 'badge-success'
+                                                : ($sLabel === 'denied' ? 'badge-error' : 'badge-warning');
+                                    ?>
+                                    <span class="badge <?= $sClass ?>" style="font-size:10px">
+                                        <?= e(ucfirst($sLabel)) ?>
+                                    </span>
+                                </div>
+                                <?php if (!empty($h['reason'])): ?>
+                                    <div style="margin-top:var(--space-2);color:var(--text-secondary);white-space:pre-line">
+                                        <?= e($h['reason']) ?>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
+                                    <div style="margin-top:var(--space-2);color:var(--text-tertiary);font-style:italic">
+                                        Staff: <?= e($h['deny_reason']) ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </details>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 

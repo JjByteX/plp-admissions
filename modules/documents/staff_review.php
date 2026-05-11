@@ -730,8 +730,10 @@ if ($courseFilter) {
     $params[':course'] = $courseFilter;
 }
 if ($search) {
-    $where[]       = '(u.name LIKE :q OR u.email LIKE :q OR a.course_applied LIKE :q)';
-    $params[':q']  = '%' . $search . '%';
+    $where[]        = '(u.name LIKE :q1 OR u.email LIKE :q2 OR a.course_applied LIKE :q3)';
+    $params[':q1']  = '%' . $search . '%';
+    $params[':q2']  = '%' . $search . '%';
+    $params[':q3']  = '%' . $search . '%';
 }
 $whereStr = implode(' AND ', $where);
 
@@ -797,7 +799,7 @@ $docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $c
     flex-wrap:wrap;
 ">
     <!-- Search + Filter (LEFT) -->
-    <form method="GET" style="display:flex;align-items:center;gap:var(--space-2);flex-shrink:0">
+    <form method="GET" action="<?= url('/staff/applicants') ?>" style="display:flex;align-items:center;gap:var(--space-2);flex-shrink:0">
         <input type="hidden" name="status"   value="<?= e($statusFilter) ?>">
         <input type="hidden" name="type"     value="<?= e($typeFilter) ?>">
         <input type="hidden" name="course"   value="<?= e($courseFilter) ?>">
@@ -915,7 +917,7 @@ $docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $c
             </div>
         </div>
 
-        <button type="submit" style="display:none" aria-hidden="true"></button>
+        <button type="submit" style="position:absolute;width:0;height:0;overflow:hidden;padding:0;border:0;opacity:0" aria-hidden="true"></button>
     </form>
 
 </div>

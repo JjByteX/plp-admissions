@@ -65,6 +65,19 @@ if ($applicant['overall_status'] !== 'exam') {
     redirect('/student/documents');
 }
 
+// Background safety-net: if the student is at the exam stage but
+// somehow doesn't have a slot row yet (e.g. they were advanced to
+// exam before any matching slot existed, or an earlier auto-assign
+// failed for any reason), try again every time they open this page.
+// auto_assign_exam_slot is a no-op when a row already exists.
+if (function_exists('auto_assign_exam_slot')) {
+    $hasSlot = $db->prepare('SELECT id FROM applicant_exam_slots WHERE applicant_id = ? LIMIT 1');
+    $hasSlot->execute([$applicantId]);
+    if (!$hasSlot->fetch()) {
+        auto_assign_exam_slot($applicantId);
+    }
+}
+
 // Already submitted?
 $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);
@@ -74,8 +87,25 @@ if ($existing) {
     redirect($existing['passed'] ? '/student/interview' : '/student/documents');
 }
 
-// Fetch active exam
+// Fetch active exam — try multiple fallbacks so students with valid
+// slot assignments are not blocked by a missing is_active flag.
 $exam = $db->query('SELECT * FROM exams WHERE is_active=1 LIMIT 1')->fetch();
+if (!$exam) {
+    // Fallback: exam linked to this student's assigned slot
+    $slotExamStmt = $db->prepare(
+        'SELECT e.* FROM applicant_exam_slots aes
+         JOIN exam_slot_schedule s ON s.id = aes.slot_id
+         JOIN exams e ON e.id = s.exam_id
+         WHERE aes.applicant_id = ?
+         LIMIT 1'
+    );
+    $slotExamStmt->execute([$applicantId]);
+    $exam = $slotExamStmt->fetch();
+}
+if (!$exam) {
+    // Fallback: most recent exam regardless of is_active
+    $exam = $db->query('SELECT * FROM exams ORDER BY id DESC LIMIT 1')->fetch();
+}
 if (!$exam) {
     ob_start();
     echo '<div class="alert alert-warning">No active entrance exam has been set up yet. Please check back later.</div>';
@@ -103,6 +133,41 @@ $slotStmt = $db->prepare(
 );
 $slotStmt->execute([$applicantId]);
 $mySlot = $slotStmt->fetch();
+
+// ----------------------------------------------------------------
+// Latest EXAM reschedule-request state for this applicant.
+//
+// Drives the same UI pattern we use on the interview side: when the
+// student submits "Need to reschedule?" the form is replaced with a
+// pending banner so they cannot submit a duplicate, and they see a
+// "denied" / "approved" note on the next page load.
+// ----------------------------------------------------------------
+$myExamReschedule        = null;
+$examRescheduleHistory   = [];
+try {
+    $rrStmt = $db->prepare(
+        'SELECT id, slot_id, reason, status, created_at, reviewed_at, deny_reason
+           FROM exam_reschedule_requests
+          WHERE applicant_id = ?
+          ORDER BY id DESC
+          LIMIT 5'
+    );
+    $rrStmt->execute([$applicantId]);
+    $examRescheduleHistory = $rrStmt->fetchAll() ?: [];
+    $myExamReschedule      = $examRescheduleHistory[0] ?? null;
+} catch (\Throwable) {
+    $myExamReschedule      = null;
+    $examRescheduleHistory = [];
+}
+$examReschedulePending  = $myExamReschedule && $myExamReschedule['status'] === 'pending';
+$examRescheduleDenied   = $myExamReschedule
+    && $myExamReschedule['status'] === 'denied'
+    && $mySlot
+    && (int)$myExamReschedule['slot_id'] === (int)$mySlot['id'];
+$examRescheduleApproved = $myExamReschedule
+    && $myExamReschedule['status'] === 'approved'
+    && $mySlot
+    && (int)$myExamReschedule['slot_id'] !== (int)$mySlot['id'];
 
 if (!$mySlot) {
     ob_start();
@@ -155,9 +220,107 @@ if ($isSlotFuture) {
                 <div style="font-size:var(--text-lg);font-weight:var(--weight-medium)"><?= e($mySlot['room_label']) ?></div>
             </div>
             <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
-                On exam day, log in here and click <strong>Start Exam</strong>. The proctor in your room will announce the access code when the exam opens — you'll have 5 minutes to enter it.
+                On exam day, log in here. The proctor in your room will announce the access code when the exam opens — you'll have 5 minutes to enter it to start.
             </p>
         </div>
+
+        <?php if ($examReschedulePending): ?>
+            <!-- Pending review — hide the form so the student can't
+                 submit a duplicate. Page has "changed" the moment they
+                 hit submit. -->
+            <div style="margin-top:var(--space-4);padding:var(--space-4) var(--space-5);
+                        background:var(--warning-bg);border-radius:var(--radius-md)">
+                <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:var(--warning)">
+                    Reschedule request submitted
+                </div>
+                <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px">
+                    Submitted <?= date('M j, g:i A', strtotime($myExamReschedule['created_at'])) ?>
+                    — awaiting staff review. You'll see a new slot here once it's approved.
+                </div>
+                <?php if (!empty($myExamReschedule['reason'])): ?>
+                    <div style="margin-top:var(--space-2);font-size:var(--text-sm);color:var(--text-secondary);
+                                 white-space:pre-line">
+                        <?= e($myExamReschedule['reason']) ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        <?php else: ?>
+            <?php if ($examRescheduleApproved): ?>
+                <div class="alert alert-success" style="margin-top:var(--space-4);font-size:var(--text-sm)">
+                    Your reschedule request was approved — you've been moved to the slot shown above.
+                </div>
+            <?php elseif ($examRescheduleDenied): ?>
+                <div class="alert alert-warning" style="margin-top:var(--space-4);font-size:var(--text-sm)">
+                    Your previous reschedule request was not approved — you've kept your current slot.
+                    <?php if (!empty($myExamReschedule['deny_reason'])): ?>
+                        <div style="margin-top:var(--space-2);font-weight:var(--weight-medium)">
+                            Reason from staff:
+                            <span style="font-weight:var(--weight-regular);white-space:pre-line">
+                                <?= e($myExamReschedule['deny_reason']) ?>
+                            </span>
+                        </div>
+                    <?php endif; ?>
+                    <div style="margin-top:var(--space-2)">You may submit a new request below if needed.</div>
+                </div>
+            <?php endif; ?>
+            <div class="card" style="padding:var(--space-4);margin-top:var(--space-4)">
+                <details>
+                    <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
+                        Need to reschedule?
+                    </summary>
+                    <form method="POST" action="<?= url('/api/exam-reschedule-request') ?>" style="margin-top:var(--space-3)">
+                        <?= csrf_field() ?>
+                        <textarea name="reschedule_reason" class="form-textarea" rows="3"
+                                  placeholder="Please explain why you need to reschedule your exam (e.g. emergency)..."
+                                  required style="margin-bottom:var(--space-3)"></textarea>
+                        <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
+                    </form>
+                </details>
+            </div>
+        <?php endif; ?>
+
+        <?php
+            // Reschedule history — collapsed by default so it doesn't
+            // crowd the page. Shows the most recent attempts and
+            // includes the deny reason if staff provided one.
+            $pastExamReschedules = array_slice($examRescheduleHistory, $examReschedulePending ? 1 : 0);
+        ?>
+        <?php if (!empty($pastExamReschedules)): ?>
+            <details style="margin-top:var(--space-4)">
+                <summary style="cursor:pointer;font-size:var(--text-xs);color:var(--text-tertiary)">
+                    Past reschedule requests (<?= count($pastExamReschedules) ?>)
+                </summary>
+                <div style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
+                    <?php foreach ($pastExamReschedules as $h): ?>
+                        <div style="padding:var(--space-3);background:var(--bg-subtle);border-radius:var(--radius-md);font-size:var(--text-xs)">
+                            <div style="display:flex;justify-content:space-between;gap:var(--space-3);align-items:flex-start">
+                                <div style="color:var(--text-tertiary)">
+                                    <?= date('M j, Y · g:i A', strtotime($h['created_at'])) ?>
+                                </div>
+                                <?php
+                                    $sLabel = $h['status'];
+                                    $sClass = $sLabel === 'approved' ? 'badge-success'
+                                            : ($sLabel === 'denied' ? 'badge-error' : 'badge-warning');
+                                ?>
+                                <span class="badge <?= $sClass ?>" style="font-size:10px">
+                                    <?= e(ucfirst($sLabel)) ?>
+                                </span>
+                            </div>
+                            <?php if (!empty($h['reason'])): ?>
+                                <div style="margin-top:var(--space-2);color:var(--text-secondary);white-space:pre-line">
+                                    <?= e($h['reason']) ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
+                                <div style="margin-top:var(--space-2);color:var(--text-tertiary);font-style:italic">
+                                    Staff: <?= e($h['deny_reason']) ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </details>
+        <?php endif; ?>
     </div>
     <?php
     $content = ob_get_clean(); $pageTitle='Entrance Exam'; $activeNav='exam'; $showStepper=true;
@@ -173,9 +336,97 @@ if ($isSlotPast) {
             <strong>Your exam date has passed.</strong>
             <p style="margin:var(--space-2) 0 0">
                 Your scheduled exam was on <?= e($slotDateNice) ?> in <?= e($mySlot['room_label']) ?>.
-                If you missed it, please contact the admissions office to request a reschedule.
+                <?php if (!$examReschedulePending): ?>
+                    If you missed it, use the form below to request a reschedule.
+                <?php endif; ?>
             </p>
         </div>
+
+        <?php if ($examReschedulePending): ?>
+            <div style="margin-top:var(--space-4);padding:var(--space-4) var(--space-5);
+                        background:var(--warning-bg);border-radius:var(--radius-md);text-align:left">
+                <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:var(--warning)">
+                    Reschedule request submitted
+                </div>
+                <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px">
+                    Submitted <?= date('M j, g:i A', strtotime($myExamReschedule['created_at'])) ?>
+                    — awaiting staff review.
+                </div>
+                <?php if (!empty($myExamReschedule['reason'])): ?>
+                    <div style="margin-top:var(--space-2);font-size:var(--text-sm);color:var(--text-secondary);
+                                 white-space:pre-line">
+                        <?= e($myExamReschedule['reason']) ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        <?php else: ?>
+            <?php if ($examRescheduleDenied): ?>
+                <div class="alert alert-warning" style="margin-top:var(--space-4);font-size:var(--text-sm);text-align:left">
+                    Your previous reschedule request was not approved.
+                    <?php if (!empty($myExamReschedule['deny_reason'])): ?>
+                        <div style="margin-top:var(--space-2);font-weight:var(--weight-medium)">
+                            Reason from staff:
+                            <span style="font-weight:var(--weight-regular);white-space:pre-line">
+                                <?= e($myExamReschedule['deny_reason']) ?>
+                            </span>
+                        </div>
+                    <?php endif; ?>
+                    <div style="margin-top:var(--space-2)">You may submit a new request below.</div>
+                </div>
+            <?php endif; ?>
+            <div class="card" style="padding:var(--space-4);margin-top:var(--space-4);text-align:left">
+                <details open>
+                    <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
+                        Request a reschedule
+                    </summary>
+                    <form method="POST" action="<?= url('/api/exam-reschedule-request') ?>" style="margin-top:var(--space-3)">
+                        <?= csrf_field() ?>
+                        <textarea name="reschedule_reason" class="form-textarea" rows="3"
+                                  placeholder="Please explain why you missed your exam and why you need to reschedule..."
+                                  required style="margin-bottom:var(--space-3)"></textarea>
+                        <button type="submit" class="btn btn-primary" style="width:100%">Submit Reschedule Request</button>
+                    </form>
+                </details>
+            </div>
+        <?php endif; ?>
+
+        <?php $pastExamReschedules = array_slice($examRescheduleHistory, $examReschedulePending ? 1 : 0); ?>
+        <?php if (!empty($pastExamReschedules)): ?>
+            <details style="margin-top:var(--space-4);text-align:left">
+                <summary style="cursor:pointer;font-size:var(--text-xs);color:var(--text-tertiary)">
+                    Past reschedule requests (<?= count($pastExamReschedules) ?>)
+                </summary>
+                <div style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
+                    <?php foreach ($pastExamReschedules as $h): ?>
+                        <div style="padding:var(--space-3);background:var(--bg-subtle);border-radius:var(--radius-md);font-size:var(--text-xs)">
+                            <div style="display:flex;justify-content:space-between;gap:var(--space-3);align-items:flex-start">
+                                <div style="color:var(--text-tertiary)">
+                                    <?= date('M j, Y · g:i A', strtotime($h['created_at'])) ?>
+                                </div>
+                                <?php
+                                    $sLabel = $h['status'];
+                                    $sClass = $sLabel === 'approved' ? 'badge-success'
+                                            : ($sLabel === 'denied' ? 'badge-error' : 'badge-warning');
+                                ?>
+                                <span class="badge <?= $sClass ?>" style="font-size:10px">
+                                    <?= e(ucfirst($sLabel)) ?>
+                                </span>
+                            </div>
+                            <?php if (!empty($h['reason'])): ?>
+                                <div style="margin-top:var(--space-2);color:var(--text-secondary);white-space:pre-line">
+                                    <?= e($h['reason']) ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
+                                <div style="margin-top:var(--space-2);color:var(--text-tertiary);font-style:italic">
+                                    Staff: <?= e($h['deny_reason']) ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </details>
+        <?php endif; ?>
     </div>
     <?php
     $content = ob_get_clean(); $pageTitle='Entrance Exam'; $activeNav='exam'; $showStepper=true;
@@ -423,6 +674,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    $totalPoints = array_sum(array_column($questions, 'points')) ?: count($questions);
+
     $stmt = $db->prepare(
         'INSERT INTO exam_results (applicant_id, exam_id, score, total_items, answers)
          VALUES (?,?,?,?,?)'
@@ -431,14 +684,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $applicantId,
         $examId,
         $score,
-        count($questions),
+        $totalPoints,
         json_encode($savedAnswers),
     ]);
 
-    $rank     = score_to_rank($score, count($questions));
+    $rank     = score_to_rank($score, $totalPoints);
     $tierInfo = rank_tier_info($rank);
-    $passed   = exam_passed($score, count($questions), $applicant['course_applied']);
-    $pct      = count($questions) > 0 ? round(($score / count($questions)) * 100) : 0;
+    $passed   = exam_passed($score, $totalPoints, $applicant['course_applied']);
+    $pct      = $totalPoints > 0 ? round(($score / $totalPoints) * 100) : 0;
 
     // Determine next status
     // Passed → advance to interview; failed → stay at exam so staff can review
@@ -523,7 +776,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Raw Score</div>
                     <div style="font-size:var(--text-2xl);font-weight:var(--weight-semibold)"><?= $score ?></div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary)">out of <?= count($questions) ?></div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary)">out of <?= $totalPoints ?></div>
                 </div>
                 <div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Percentage</div>

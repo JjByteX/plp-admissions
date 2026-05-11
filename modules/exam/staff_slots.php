@@ -265,7 +265,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )->execute([$activeExamId, $date, $time . ':00', $endTime . ':00', $room, $slotDept, $capacity, $schoolYear, $staffId]);
             audit_log('exam_slot_added',
                 "Added slot: {$date} {$time}-{$endTime} {$room} [{$slotDept}] (cap {$capacity})");
-            Session::flash('success', "Slot added: {$room} ({$slotDept}) on " . date('M j, Y', strtotime($date)) . " at {$time}-{$endTime}.");
+
+            // Backfill: any applicant who advanced to exam stage
+            // before this slot existed should now get auto-assigned.
+            // Without this, those students stay on the "Awaiting Slot
+            // Assignment" page until someone manually intervenes.
+            $assigned = 0;
+            if (function_exists('backfill_exam_slot_assignments')) {
+                $assigned = backfill_exam_slot_assignments();
+            }
+
+            Session::flash(
+                'success',
+                "Slot added: {$room} ({$slotDept}) on " . date('M j, Y', strtotime($date)) . " at {$time}-{$endTime}."
+                . ($assigned > 0 ? " Auto-assigned {$assigned} waiting applicant(s)." : '')
+            );
             _slots_redirect_back($slotDept ?: $ctxCollege);
         }
     }
@@ -532,7 +546,6 @@ $departments = departments_list();
 
 $slotsForCollege = [];
 $rosterBySlot    = [];
-$unassignedApplicants = [];
 $slotDetail      = null;
 $slotRoster      = [];
 
@@ -563,27 +576,6 @@ if ($mode === 'slots') {
     $stmt->execute([$schoolYear, $collegeParam]);
     $slotsForCollege = $stmt->fetchAll();
 
-    // Awaiting-slot applicants — only those whose course maps to this college,
-    // ordered FCFS by docs_approved_at.
-    $stmt = $db->prepare(
-        "SELECT a.id, a.course_applied, a.applicant_type, a.documents_approved_at,
-                u.name AS student_name,
-                u.first_name, u.middle_name, u.last_name, u.suffix
-           FROM applicants a
-           JOIN users u ON u.id = a.user_id
-      LEFT JOIN applicant_exam_slots aes ON aes.applicant_id = a.id
-          WHERE a.school_year   = ?
-            AND a.overall_status = 'exam'
-            AND aes.id IS NULL
-       ORDER BY a.course_applied ASC, a.documents_approved_at IS NULL,
-                a.documents_approved_at ASC, a.id ASC"
-    );
-    $stmt->execute([$schoolYear]);
-    foreach ($stmt->fetchAll() as $row) {
-        $applicantDept = course_to_department($row['course_applied']);
-        if ($applicantDept && $applicantDept !== $collegeParam) continue;
-        $unassignedApplicants[] = $row;
-    }
 }
 
 if ($mode === 'roster') {
@@ -1152,77 +1144,7 @@ ob_start();
     </div>
     <?php endif; ?>
 
-    <!-- ── Awaiting-slot list, filtered to this college ─────────── -->
-    <?php if ($unassignedApplicants): ?>
-        <div class="card" style="padding:0;overflow:hidden;margin-top:var(--space-6)">
-            <div style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border);
-                        display:flex;justify-content:space-between;align-items:center">
-                <div>
-                    <div style="font-weight:var(--weight-semibold)">
-                        Awaiting Slot (<?= count($unassignedApplicants) ?>)
-                    </div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
-                        Documents approved · earliest-approved first.
-                    </div>
-                </div>
-            </div>
-            <table class="data-table" style="margin:0;width:100%">
-                <thead>
-                    <tr>
-                        <th>Applicant</th>
-                        <th>Course</th>
-                        <th>Type</th>
-                        <th>Approved</th>
-                        <th style="width:340px">Assign to Slot</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($unassignedApplicants as $u): ?>
-                    <tr>
-                        <td><?= e(format_full_name($u)) ?></td>
-                        <td style="font-size:var(--text-sm)"><?= e($u['course_applied']) ?></td>
-                        <td><span class="badge badge-neutral"><?= e(ucfirst($u['applicant_type'])) ?></span></td>
-                        <td style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                            <?= $u['documents_approved_at']
-                                ? e(date('M j, g:i A', strtotime($u['documents_approved_at'])))
-                                : '<em>—</em>' ?>
-                        </td>
-                        <td>
-                            <?php if ($canManage): ?>
-                                <form method="POST"
-                                      style="display:flex;gap:var(--space-2);align-items:center;margin:0">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="action"        value="assign">
-                                    <input type="hidden" name="ctx_college"   value="<?= e($collegeParam) ?>">
-                                    <input type="hidden" name="applicant_id"  value="<?= (int)$u['id'] ?>">
-                                    <select name="slot_id" required class="form-input"
-                                            style="flex:1;font-size:var(--text-xs);padding:4px 8px">
-                                        <option value="">— Choose slot —</option>
-                                        <?php foreach ($slotsForCollege as $s):
-                                            if ((int)$s['filled'] >= (int)$s['capacity']) continue;
-                                            if ($s['exam_date'] < $today) continue;
-                                        ?>
-                                            <option value="<?= (int)$s['id'] ?>">
-                                                <?= e(format_date($s['exam_date'], 'M j')) ?>
-                                                · <?= e(format_time($s['slot_time'])) ?><?php if (!empty($s['end_time'])): ?>–<?= e(format_time($s['end_time'])) ?><?php endif; ?>
-                                                · <?= e($s['room_label']) ?>
-                                                (<?= (int)$s['filled'] ?>/<?= (int)$s['capacity'] ?>)
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                    <button type="submit" class="btn btn-primary btn-sm"
-                                            style="font-size:var(--text-xs)">Assign</button>
-                                </form>
-                            <?php else: ?>
-                                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">—</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
+
 
 <?php elseif ($mode === 'roster'): ?>
 

@@ -41,6 +41,7 @@ $router->get( '/api/notifications',      'api/notifications');
 $router->post('/api/notifications',      'api/notifications');
 $router->post('/api/exam-autosave',      'api/exam_autosave');
 $router->post('/api/reschedule-request', 'api/reschedule_request');
+$router->post('/api/exam-reschedule-request', 'api/exam_reschedule_request');
 $router->get( '/api/applicant-panel',    'api/applicant_panel');
 
 // -- Staff -------------------------------------------------------
@@ -62,6 +63,8 @@ $router->post('/staff/interviews/call-next',    'interview/staff_call_next');
 // auto-checked-in at slot assignment time (interview_scheduler.php).
 $router->get( '/staff/interviews/absent',       'interview/staff_absent');
 $router->post('/staff/interviews/absent',       'interview/staff_absent');
+$router->get( '/staff/interviews/cancel-slot',  'interview/staff_cancel_slot');
+$router->post('/staff/interviews/cancel-slot',  'interview/staff_cancel_slot');
 // Roster routes removed — the roster is now baked into the live queue
 // page itself (modules/interview/staff_queue.php), so a per-session
 // view is no longer needed.
@@ -75,6 +78,10 @@ $router->get( '/staff/exam',                'exam/staff_manage');
 $router->post('/staff/exam',                'exam/staff_manage');
 $router->get( '/staff/exam/slots',          'exam/staff_slots');
 $router->post('/staff/exam/slots',          'exam/staff_slots');
+$router->get( '/staff/exam/reschedule',     'exam/staff_reschedule');
+$router->post('/staff/exam/reschedule',     'exam/staff_reschedule');
+$router->get( '/staff/exam/cancel-slot',    'exam/staff_cancel_slot');
+$router->post('/staff/exam/cancel-slot',    'exam/staff_cancel_slot');
 $router->get( '/staff/exam/export-rooms',   'exam/staff_export_rooms');
 $router->get( '/staff/settings',            'settings/staff');
 $router->post('/staff/settings',            'settings/staff');

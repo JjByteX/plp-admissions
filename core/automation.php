@@ -144,100 +144,262 @@ function send_registration_email(string $email, string $name): void
 
 /**
  * Auto-assign an applicant to the next available exam slot.
- * Called after all documents are approved.
+ *
+ * Called automatically after all documents are approved, and as a
+ * backfill from a handful of safety-net code paths (exam page open,
+ * new slot created, manual advance-to-exam, etc.) so an applicant
+ * who was advanced before any matching slot existed will still get
+ * assigned the moment one does.
+ *
+ * Hardening over the original version:
+ *   - Wraps the slot pick + insert in a transaction with FOR UPDATE
+ *     so two concurrent approvals can't both grab the last seat.
+ *   - Skips withdrawn applicants and anyone not actually at the
+ *     exam stage.
+ *   - Skips slots whose date is today AND whose start time has
+ *     already passed.
+ *   - Honors the same exam (when exam_id is set on the slot) and
+ *     prefers the active exam.
+ *   - Falls back when the department field is blank or mistyped
+ *     instead of giving up.
  */
 function auto_assign_exam_slot(int $applicantId): ?int
 {
     if (school_setting('auto_assign_exam_slots', '1') !== '1') return null;
+    if ($applicantId <= 0) return null;
 
     $pdo = db();
 
-    // Check if already assigned
-    $stmt = $pdo->prepare('SELECT id FROM applicant_exam_slots WHERE applicant_id = ?');
-    $stmt->execute([$applicantId]);
-    if ($stmt->fetch()) return null;
-
-    // Get applicant's department
+    // ----------------------------------------------------------------
+    // Pre-checks (cheap, no locks).
+    // ----------------------------------------------------------------
     $stmt = $pdo->prepare(
-        'SELECT a.course_applied, u.department
-         FROM applicants a JOIN users u ON u.id = a.user_id
-         WHERE a.id = ?'
+        'SELECT a.id, a.overall_status, a.course_applied, u.department
+           FROM applicants a
+           JOIN users      u ON u.id = a.user_id
+          WHERE a.id = ?
+          LIMIT 1'
     );
     $stmt->execute([$applicantId]);
     $appl = $stmt->fetch();
     if (!$appl) return null;
+    if (($appl['overall_status'] ?? '') === 'withdrawn') return null;
+    // Only assign students who are currently at the exam stage. If a
+    // caller fires this for someone still at documents/submitted we
+    // skip rather than booking them prematurely.
+    if (!in_array($appl['overall_status'] ?? '', ['exam'], true)) return null;
 
-    $dept = $appl['department'] ?: course_to_department($appl['course_applied']);
+    $stmt = $pdo->prepare('SELECT id FROM applicant_exam_slots WHERE applicant_id = ? LIMIT 1');
+    $stmt->execute([$applicantId]);
+    if ($stmt->fetch()) return null;
 
-    // Find next available slot (matching department, future date, has capacity)
-    $stmt = $pdo->prepare(
-        'SELECT ess.id, ess.capacity, ess.filled
-         FROM exam_slot_schedule ess
-         WHERE ess.department = ?
-           AND ess.exam_date >= CURDATE()
-           AND ess.filled < ess.capacity
-         ORDER BY ess.exam_date ASC, ess.slot_time ASC
-         LIMIT 1'
-    );
-    $stmt->execute([$dept]);
-    $slot = $stmt->fetch();
+    $dept = trim((string)($appl['department'] ?? ''))
+          ?: course_to_department((string)($appl['course_applied'] ?? ''));
 
-    // If no dept-specific slot, try any slot
-    if (!$slot) {
-        $stmt = $pdo->prepare(
-            'SELECT ess.id, ess.capacity, ess.filled
-             FROM exam_slot_schedule ess
-             WHERE ess.exam_date >= CURDATE()
-               AND ess.filled < ess.capacity
-             ORDER BY ess.exam_date ASC, ess.slot_time ASC
-             LIMIT 1'
-        );
-        $stmt->execute();
-        $slot = $stmt->fetch();
-    }
-
-    if (!$slot) return null;
-
-    $slotId = (int) $slot['id'];
-
+    // Active exam (if any) — when multiple exams coexist we prefer
+    // slots tied to the active one so applicants don't get booked
+    // into a stale exam.
+    $activeExamId = null;
     try {
-        $pdo->prepare(
-            'INSERT INTO applicant_exam_slots (applicant_id, slot_id) VALUES (?, ?)'
-        )->execute([$applicantId, $slotId]);
+        $activeExamId = (int)($pdo->query('SELECT id FROM exams WHERE is_active = 1 ORDER BY id DESC LIMIT 1')
+                              ->fetchColumn() ?: 0) ?: null;
+    } catch (\Throwable) {}
 
-        $pdo->prepare(
-            'UPDATE exam_slot_schedule SET filled = filled + 1 WHERE id = ?'
-        )->execute([$slotId]);
+    // ----------------------------------------------------------------
+    // Candidate-slot search, in priority order:
+    //   1. Same department + active exam
+    //   2. Same department + any exam
+    //   3. Department-agnostic ('' dept) + active exam
+    //   4. Any open slot
+    //
+    // Each query already filters out past slots (date < today, or
+    // date = today AND slot_time <= now).
+    // ----------------------------------------------------------------
+    $today   = date('Y-m-d');
+    $nowTime = date('H:i:s');
 
-        // Get slot details for notification
-        $stmt = $pdo->prepare('SELECT exam_date, slot_time, room_label FROM exam_slot_schedule WHERE id = ?');
-        $stmt->execute([$slotId]);
-        $slotInfo = $stmt->fetch();
-
-        if ($slotInfo) {
-            $dateStr = date('F j, Y', strtotime($slotInfo['exam_date']));
-            $timeStr = date('g:i A', strtotime($slotInfo['slot_time']));
-            $room = $slotInfo['room_label'];
-
-            $stmt = $pdo->prepare('SELECT user_id FROM applicants WHERE id = ?');
-            $stmt->execute([$applicantId]);
-            $userId = (int) $stmt->fetchColumn();
-
-            create_notification(
-                $userId,
-                'exam_slot_assigned',
-                'Exam Slot Assigned',
-                "You have been assigned to take the exam on {$dateStr} at {$timeStr} in {$room}.",
-                '/student/exam'
-            );
-        }
-
-        audit_log('exam_slot_auto_assigned', "Auto-assigned applicant {$applicantId} to slot {$slotId}", 'applicant', $applicantId);
-        return $slotId;
-    } catch (\Throwable $e) {
-        error_log('Auto-assign exam slot error: ' . $e->getMessage());
-        return null;
+    $candidates = [];
+    $queries = [];
+    if ($dept !== '' && $activeExamId !== null) {
+        $queries[] = [
+            'sql' => 'SELECT id FROM exam_slot_schedule
+                       WHERE department = ?
+                         AND exam_id = ?
+                         AND filled < capacity
+                         AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
+                       ORDER BY exam_date ASC, slot_time ASC',
+            'params' => [$dept, $activeExamId, $today, $today, $nowTime],
+        ];
     }
+    if ($dept !== '') {
+        $queries[] = [
+            'sql' => 'SELECT id FROM exam_slot_schedule
+                       WHERE department = ?
+                         AND filled < capacity
+                         AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
+                       ORDER BY exam_date ASC, slot_time ASC',
+            'params' => [$dept, $today, $today, $nowTime],
+        ];
+    }
+    if ($activeExamId !== null) {
+        $queries[] = [
+            'sql' => 'SELECT id FROM exam_slot_schedule
+                       WHERE exam_id = ?
+                         AND filled < capacity
+                         AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
+                       ORDER BY exam_date ASC, slot_time ASC',
+            'params' => [$activeExamId, $today, $today, $nowTime],
+        ];
+    }
+    $queries[] = [
+        'sql' => 'SELECT id FROM exam_slot_schedule
+                   WHERE filled < capacity
+                     AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
+                   ORDER BY exam_date ASC, slot_time ASC',
+        'params' => [$today, $today, $nowTime],
+    ];
+
+    foreach ($queries as $q) {
+        $stmt = $pdo->prepare($q['sql']);
+        $stmt->execute($q['params']);
+        $rows = $stmt->fetchAll();
+        if ($rows) {
+            $candidates = $rows;
+            break;
+        }
+    }
+
+    if (!$candidates) return null;
+
+    // ----------------------------------------------------------------
+    // Try each candidate inside its own transaction. The FOR UPDATE
+    // lock guarantees the capacity check + INSERT are atomic — if
+    // someone else grabbed the last seat between SELECT and INSERT
+    // we move on to the next candidate.
+    // ----------------------------------------------------------------
+    foreach ($candidates as $row) {
+        $slotId = (int)$row['id'];
+        try {
+            $pdo->beginTransaction();
+
+            $lock = $pdo->prepare(
+                'SELECT id, exam_date, slot_time, end_time, room_label, capacity, filled
+                   FROM exam_slot_schedule
+                  WHERE id = ?
+                  FOR UPDATE'
+            );
+            $lock->execute([$slotId]);
+            $slot = $lock->fetch();
+            if (!$slot
+                || (int)$slot['filled'] >= (int)$slot['capacity']
+                || (string)$slot['exam_date'] < $today
+                || ((string)$slot['exam_date'] === $today
+                    && !empty($slot['slot_time'])
+                    && (string)$slot['slot_time'] <= $nowTime)) {
+                $pdo->rollBack();
+                continue;
+            }
+
+            // Defensive: re-check the applicant hasn't been assigned
+            // between our pre-check and this point.
+            $dupe = $pdo->prepare(
+                'SELECT id FROM applicant_exam_slots WHERE applicant_id = ? FOR UPDATE'
+            );
+            $dupe->execute([$applicantId]);
+            if ($dupe->fetch()) {
+                $pdo->rollBack();
+                return null;
+            }
+
+            $pdo->prepare(
+                'INSERT INTO applicant_exam_slots (applicant_id, slot_id) VALUES (?, ?)'
+            )->execute([$applicantId, $slotId]);
+
+            $pdo->prepare(
+                'UPDATE exam_slot_schedule SET filled = filled + 1 WHERE id = ?'
+            )->execute([$slotId]);
+
+            $pdo->commit();
+
+            // ── post-commit notifications (best-effort) ──────────
+            $dateStr = date('F j, Y', strtotime((string)$slot['exam_date']));
+            $timeStr = !empty($slot['slot_time'])
+                     ? date('g:i A', strtotime((string)$slot['slot_time']))
+                     : '';
+            $room    = (string)($slot['room_label'] ?? '');
+
+            try {
+                $uStmt = $pdo->prepare('SELECT user_id FROM applicants WHERE id = ?');
+                $uStmt->execute([$applicantId]);
+                $userId = (int)$uStmt->fetchColumn();
+                if ($userId > 0) {
+                    create_notification(
+                        $userId,
+                        'exam_slot_assigned',
+                        'Exam Slot Assigned',
+                        trim("You have been assigned to take the exam on {$dateStr}"
+                            . ($timeStr ? " at {$timeStr}" : '')
+                            . ($room    ? " in {$room}"    : '')
+                            . '.'),
+                        '/student/exam'
+                    );
+                }
+            } catch (\Throwable $e) {
+                error_log('exam slot assigned notification failed: ' . $e->getMessage());
+            }
+
+            audit_log(
+                'exam_slot_auto_assigned',
+                "Auto-assigned applicant {$applicantId} to slot {$slotId}",
+                'applicant',
+                $applicantId
+            );
+            return $slotId;
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('Auto-assign exam slot error: ' . $e->getMessage());
+            // Continue to next candidate on transient errors.
+            continue;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Backfill exam-slot assignments for every applicant who is at the
+ * exam stage but has no slot row yet. Safe to call multiple times.
+ *
+ * Use cases:
+ *   - When a new exam slot is created (a waiting applicant who
+ *     matches its department / capacity is picked up immediately).
+ *   - As a safety-net after bulk advance-to-exam.
+ *
+ * Returns the number of applicants who actually got assigned.
+ */
+function backfill_exam_slot_assignments(): int
+{
+    $pdo = db();
+    $assigned = 0;
+    try {
+        $stmt = $pdo->query(
+            'SELECT a.id
+               FROM applicants a
+          LEFT JOIN applicant_exam_slots aes ON aes.applicant_id = a.id
+              WHERE a.overall_status = "exam"
+                AND aes.id IS NULL
+              ORDER BY a.documents_approved_at ASC, a.id ASC'
+        );
+        $waiting = $stmt->fetchAll();
+    } catch (\Throwable $e) {
+        error_log('backfill_exam_slot_assignments query failed: ' . $e->getMessage());
+        return 0;
+    }
+    foreach ($waiting as $r) {
+        $newSlot = auto_assign_exam_slot((int)$r['id']);
+        if ($newSlot !== null) $assigned++;
+    }
+    return $assigned;
 }
 
 // ----------------------------------------------------------------
@@ -832,10 +994,126 @@ function ensure_reschedule_requests_table(): void
             `status` ENUM("pending","approved","denied") NOT NULL DEFAULT "pending",
             `reviewed_by` INT(10) UNSIGNED DEFAULT NULL,
             `reviewed_at` DATETIME DEFAULT NULL,
+            `deny_reason` TEXT DEFAULT NULL,
             `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             KEY `idx_rr_applicant` (`applicant_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    }
+    // Add deny_reason on existing installs without a manual migration.
+    try {
+        db()->query('SELECT deny_reason FROM reschedule_requests LIMIT 0');
+    } catch (\Throwable) {
+        try {
+            db()->exec('ALTER TABLE `reschedule_requests` ADD COLUMN `deny_reason` TEXT NULL AFTER `reviewed_at`');
+        } catch (\Throwable) {}
+    }
+}
+
+// ----------------------------------------------------------------
+// EXAM RESCHEDULE REQUESTS
+// ----------------------------------------------------------------
+//
+// Mirror of reschedule_requests but for exam slots. Created on-demand
+// the first time a student submits an exam-reschedule request, so
+// existing installs don't need a manual migration.
+//
+function ensure_exam_reschedule_requests_table(): void
+{
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+    try {
+        db()->query('SELECT 1 FROM exam_reschedule_requests LIMIT 0');
+    } catch (\Throwable) {
+        db()->exec('CREATE TABLE IF NOT EXISTS `exam_reschedule_requests` (
+            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            `applicant_id` INT(10) UNSIGNED NOT NULL,
+            `slot_id` INT(10) UNSIGNED NOT NULL,
+            `reason` TEXT NOT NULL,
+            `status` ENUM("pending","approved","denied") NOT NULL DEFAULT "pending",
+            `reviewed_by` INT(10) UNSIGNED DEFAULT NULL,
+            `reviewed_at` DATETIME DEFAULT NULL,
+            `deny_reason` TEXT DEFAULT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_err_applicant` (`applicant_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    }
+    // Add deny_reason on existing installs without a manual migration.
+    try {
+        db()->query('SELECT deny_reason FROM exam_reschedule_requests LIMIT 0');
+    } catch (\Throwable) {
+        try {
+            db()->exec('ALTER TABLE `exam_reschedule_requests` ADD COLUMN `deny_reason` TEXT NULL AFTER `reviewed_at`');
+        } catch (\Throwable) {}
+    }
+}
+
+// ----------------------------------------------------------------
+// RESCHEDULE: shared decision notification (in-app + email)
+// ----------------------------------------------------------------
+
+/**
+ * In-app notification + branded email letting a student know their
+ * reschedule request was approved or denied. Used by both the
+ * interview and exam approve/deny handlers.
+ *
+ * $kind     = 'interview' | 'exam'
+ * $decision = 'approved'  | 'denied'
+ * $extra    = optional details ("new slot: Mon Jan 5, 9 AM, Rm 201"
+ *             on approve; "reason: scheduling conflict" on deny)
+ */
+function notify_reschedule_decision(
+    int $applicantId,
+    string $kind,
+    string $decision,
+    string $extra = ''
+): void {
+    $kind     = $kind === 'exam' ? 'exam' : 'interview';
+    $decision = $decision === 'approved' ? 'approved' : 'denied';
+
+    try {
+        $stmt = db()->prepare(
+            'SELECT u.id AS user_id, u.email, u.name
+               FROM applicants a
+               JOIN users u ON u.id = a.user_id
+              WHERE a.id = ?
+              LIMIT 1'
+        );
+        $stmt->execute([$applicantId]);
+        $user = $stmt->fetch();
+        if (!$user) return;
+
+        $link = $kind === 'exam' ? '/student/exam' : '/student/interview';
+
+        if ($decision === 'approved') {
+            $title = 'Reschedule approved';
+            $msg   = ucfirst($kind) . " reschedule approved."
+                   . ($extra ? ' ' . $extra : '');
+        } else {
+            $title = 'Reschedule request denied';
+            $msg   = "Your {$kind} reschedule request was not approved."
+                   . ($extra ? ' ' . $extra : '');
+        }
+
+        create_notification((int)$user['user_id'], 'reschedule_' . $decision, $title, $msg, $link);
+
+        if (!empty($user['email'])) {
+            $fullLink  = rtrim(BASE_URL, '/') . $link;
+            $emailBody = '<p>' . e($msg) . '</p>'
+                       . '<p style="margin-top:16px"><a href="' . e($fullLink) . '" '
+                       . 'style="display:inline-block;padding:10px 24px;background:' . e(school_setting('accent_color', '#2d6a4f')) . ';color:#fff;'
+                       . 'text-decoration:none;border-radius:6px;font-weight:bold">View Details</a></p>';
+            send_email(
+                (string)$user['email'],
+                $title . ' — ' . school_setting('school_name', 'PLP Admissions'),
+                email_template($title, $emailBody),
+                (string)$user['name']
+            );
+        }
+    } catch (\Throwable $e) {
+        error_log('reschedule decision notify failed: ' . $e->getMessage());
     }
 }
 

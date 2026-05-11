@@ -191,6 +191,13 @@ switch ($action) {
                 AND overall_status IN ("pending","documents")'
         );
         $stmt->execute([$id]);
+
+        // Manual advance must run the same automation hooks as the
+        // approve-all path — otherwise the student lands on /student/exam
+        // with no slot until a different code path heals it.
+        notify_stage_transition($id, 'exam');
+        auto_assign_exam_slot($id);
+
         audit_log('applicant_advanced_exam', "Manually advanced applicant {$id} to exam stage", 'applicant', $id);
         Session::flash('success', 'Applicant advanced to exam stage.');
         redirect('/staff/applicants/' . $id);

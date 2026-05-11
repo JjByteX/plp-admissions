@@ -243,6 +243,25 @@ if ($canSeeAll && !$showAll) {
 }
 $rows = $stmt->fetchAll();
 
+// Build unique slot list for the slot filter dropdown.
+$slotMap = [];
+foreach ($rows as $r) {
+    $sid = (int)$r['slot_id'];
+    if (!isset($slotMap[$sid])) {
+        $slotMap[$sid] = [
+            'id'         => $sid,
+            'date'       => $r['slot_date'] ?? '',
+            'time'       => $r['slot_time'] ?? '',
+            'end_time'   => $r['slot_end_time'] ?? '',
+            'department' => $r['slot_department'] ?? '',
+        ];
+    }
+}
+// Sort slots by date ASC, time ASC
+usort($slotMap, function ($a, $b) {
+    return ($a['date'] <=> $b['date']) ?: ($a['time'] <=> $b['time']);
+});
+
 // Format name as "SURNAME SUFFIX, FIRST MIDDLE" (uses shared helper)
 function queue_format_name(array $r): string {
     return format_full_name($r);
@@ -454,7 +473,25 @@ ob_start();
         <input type="search" id="iq-filter" placeholder="Filter by name or course…"
                autocomplete="off">
     </div>
-    <span class="iq-count">
+    <?php if (count($slotMap) > 1): ?>
+    <select id="iq-slot-filter" class="form-control"
+            style="height:36px;min-height:36px;font-size:var(--text-sm);max-width:320px;
+                   border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 var(--space-3)">
+        <option value="">All slots</option>
+        <?php foreach ($slotMap as $sl): ?>
+            <option value="<?= (int)$sl['id'] ?>">
+                <?= format_date($sl['date']) ?>
+                <?php if ($sl['time']): ?>
+                    <?= format_time($sl['time']) ?><?= $sl['end_time'] ? ' – ' . format_time($sl['end_time']) : '' ?>
+                <?php endif; ?>
+                <?php if ($sl['department']): ?>
+                    · <?= e($sl['department']) ?>
+                <?php endif; ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
+    <?php endif; ?>
+    <span class="iq-count" id="iq-count">
         <?= count($rows) ?> applicant<?= count($rows) === 1 ? '' : 's' ?>
     </span>
 </div>
@@ -488,7 +525,7 @@ ob_start();
             $existing  = $r['interview_notes'] ?? '';
             $haystack  = strtolower($name . ' ' . $course . ' ' . $type);
         ?>
-            <tr class="<?= $rowClass ?>" data-name="<?= e($haystack) ?>">
+            <tr class="<?= $rowClass ?>" data-name="<?= e($haystack) ?>" data-slot="<?= (int)$r['slot_id'] ?>">
                 <td>
                     <button type="button"
                             class="iq-name-cell iq-name-cell-clickable"
@@ -699,14 +736,27 @@ ob_start();
      SCRIPT
 ============================================================ -->
 <script>
-// Live filter
-document.getElementById('iq-filter')?.addEventListener('input', (e) => {
-    const term = e.target.value.toLowerCase().trim();
-    document.querySelectorAll('#queue-table tbody tr').forEach(tr => {
-        const haystack = tr.dataset.name || '';
-        tr.style.display = (!term || haystack.includes(term)) ? '' : 'none';
+// Live filter — combines text search + slot dropdown
+function applyFilters() {
+    var filterEl = document.getElementById('iq-filter');
+    var slotEl   = document.getElementById('iq-slot-filter');
+    var term     = filterEl ? filterEl.value.toLowerCase().trim() : '';
+    var slotId   = slotEl ? slotEl.value : '';
+    var visible  = 0;
+    document.querySelectorAll('#queue-table tbody tr').forEach(function(tr) {
+        var haystack   = tr.dataset.name || '';
+        var rowSlot    = tr.dataset.slot || '';
+        var matchText  = !term || haystack.includes(term);
+        var matchSlot  = !slotId || rowSlot === slotId;
+        var show       = matchText && matchSlot;
+        tr.style.display = show ? '' : 'none';
+        if (show) visible++;
     });
-});
+    var countEl = document.getElementById('iq-count');
+    if (countEl) countEl.textContent = visible + ' applicant' + (visible === 1 ? '' : 's');
+}
+document.getElementById('iq-filter')?.addEventListener('input', applyFilters);
+document.getElementById('iq-slot-filter')?.addEventListener('change', applyFilters);
 
 // Evaluation modal handlers
 const evalModal = document.getElementById('eval-modal');
