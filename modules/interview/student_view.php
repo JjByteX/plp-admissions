@@ -112,14 +112,24 @@ $stepperCurrent = current_step($applicant, $_examResult, $myEntry, $_admissionRe
 $myReschedule    = null;
 $rescheduleHistory = [];
 try {
+    // Defensive: join through applicants so a stray row with a
+    // wrong applicant_id can NEVER leak across users. We require
+    // (a) the request to belong to *this* user's applicant chain
+    // and (b) it to belong to the same applicant row we just
+    // resolved from the session. Both constraints together make
+    // it impossible to render another student's request even if
+    // legacy/bad data exists in reschedule_requests.
     $rrStmt = $db->prepare(
-        'SELECT id, queue_id, reason, status, created_at, reviewed_at, deny_reason
-           FROM reschedule_requests
-          WHERE applicant_id = ?
-          ORDER BY id DESC
+        'SELECT rr.id, rr.queue_id, rr.reason, rr.status,
+                rr.created_at, rr.reviewed_at, rr.deny_reason
+           FROM reschedule_requests rr
+           JOIN applicants a ON a.id = rr.applicant_id
+          WHERE a.user_id = ?
+            AND rr.applicant_id = ?
+          ORDER BY rr.id DESC
           LIMIT 5'
     );
-    $rrStmt->execute([$applicantId]);
+    $rrStmt->execute([$userId, $applicantId]);
     $rescheduleHistory = $rrStmt->fetchAll() ?: [];
     $myReschedule      = $rescheduleHistory[0] ?? null;
 } catch (\Throwable) {
@@ -346,7 +356,7 @@ ob_start();
                     </summary>
                     <form method="POST" action="<?= url('/api/reschedule-request') ?>" style="margin-top:var(--space-3)">
                         <?= csrf_field() ?>
-                        <textarea name="reschedule_reason" class="form-textarea" rows="3" placeholder="Please explain why you need to reschedule (e.g. emergency)..." required style="margin-bottom:var(--space-3)"></textarea>
+                        <textarea name="reschedule_reason" class="form-textarea" rows="3" placeholder="Why do you need to reschedule? (e.g. emergency)" required style="margin-bottom:var(--space-3)"></textarea>
                         <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
                     </form>
                 </details>
@@ -443,7 +453,7 @@ ob_start();
                     </summary>
                     <form method="POST" action="<?= url('/api/reschedule-request') ?>" style="margin-top:var(--space-3)">
                         <?= csrf_field() ?>
-                        <textarea name="reschedule_reason" class="form-textarea" rows="3" placeholder="Please explain why you need to reschedule..." required style="margin-bottom:var(--space-3)"></textarea>
+                        <textarea name="reschedule_reason" class="form-textarea" rows="3" placeholder="Why do you need to reschedule?" required style="margin-bottom:var(--space-3)"></textarea>
                         <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
                     </form>
                 </details>
@@ -535,7 +545,7 @@ ob_start();
         <a href="<?= url('/student/result') ?>" class="btn btn-primary">My Result →</a>
     <?php elseif ($interviewDone): ?>
         <button type="button" class="btn btn-primary" disabled
-                title="Your result has not been released yet. You'll be notified when it is."
+                title="Result not released yet. You'll be notified."
                 aria-disabled="true"
                 style="opacity:.55;cursor:not-allowed">
             Result not released yet

@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!$absent) {
                 if ($result !== 'pass' && $result !== 'reject') {
-                    $errors[] = 'Every present student needs a Pass/Reject evaluation.';
+                    $errors[] = 'Every present student needs a Pass/Decline evaluation.';
                     $toSave = [];
                     break;
                 }
@@ -247,10 +247,9 @@ ob_start();
                 ?>
                     <tr data-queue-id="<?= (int)$row['queue_id'] ?>" style="border-top:1px solid var(--border);font-size:var(--text-sm)">
                         <td style="padding:var(--space-3) var(--space-4)">
-                            <div style="font-weight:var(--weight-medium);white-space:nowrap"><?= e(format_full_name($row)) ?></div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);white-space:nowrap">
-                                <?= e($row['student_email']) ?>
-                            </div>
+                            <?php // Single-line row — email shows as tooltip on hover. ?>
+                            <span style="font-weight:var(--weight-medium);white-space:nowrap"
+                                  title="<?= e($row['student_email']) ?>"><?= e(format_full_name($row)) ?></span>
                         </td>
                         <td style="padding:var(--space-3) var(--space-4)">
                             <?= e($row['course_applied'] ?: '—') ?>
@@ -286,18 +285,15 @@ ob_start();
                                            class="js-result-radio"
                                            <?= $evalReject ? 'checked' : '' ?>
                                            <?= ($isLocked || $absentChecked) ? 'disabled' : '' ?>>
-                                    Reject
+                                    Decline
                                 </label>
                             </div>
                         </td>
                         <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
                             <?php if ($row['interview_status'] === 'completed'): ?>
+                                <?php // Eval result lives in the adjacent column;
+                                      // showing "(Pass)" here would just repeat it. ?>
                                 <span class="badge badge-approved">Completed</span>
-                                <?php if ($row['evaluation_result']): ?>
-                                    <span style="margin-left:var(--space-1);font-size:var(--text-xs);color:var(--text-tertiary)">
-                                        (<?= e(ucfirst($row['evaluation_result'])) ?>)
-                                    </span>
-                                <?php endif; ?>
                             <?php elseif ($row['interview_status'] === 'absent'): ?>
                                 <span class="badge badge-rejected">Absent</span>
                             <?php elseif ($row['interview_status'] === 'rescheduled'): ?>
@@ -358,7 +354,7 @@ ob_start();
             });
             if (missing.length > 0) {
                 evt.preventDefault();
-                alert('Please select Pass or Reject for every present student:\n\n' + missing.join('\n'));
+                alert('Please select Pass or Decline for every present student:\n\n' + missing.join('\n'));
             }
         });
     </script>

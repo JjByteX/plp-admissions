@@ -462,17 +462,17 @@ ob_start();
     // ----------------------------------------------------------------
     if ($canSeeAll && $showAll) {
         $emptyTitle = 'No interviews scheduled yet';
-        $emptyBody  = 'Once SSO creates interview sessions and applicants are placed, they will show up here.';
+        $emptyBody  = 'Applicants will appear here once SSO sets up sessions and places them.';
     } elseif ($canSeeAll) {
         $emptyTitle = 'No interviews in ' . $collegeFilter . ' yet';
-        $emptyBody  = 'Once a session in this college is scheduled and applicants are placed, they will show up here.';
+        $emptyBody  = 'Applicants will appear here once a session in this college is set up.';
     } elseif ($isDean) {
         $deptLabel  = $staffDept !== '' ? $staffDept : 'your college';
         $emptyTitle = 'No interviews in ' . $deptLabel . ' yet';
-        $emptyBody  = 'Once a session in your college is scheduled and applicants are placed, they will show up here.';
+        $emptyBody  = 'Applicants will appear here once a session in your college is set up.';
     } else {
         $emptyTitle = 'No interviews assigned to you yet';
-        $emptyBody  = 'Applicants will appear here automatically once SSO places them on a session you own.';
+        $emptyBody  = 'Applicants will appear here once SSO places them on your session.';
     }
 ?>
     <!--
@@ -595,24 +595,14 @@ ob_start();
                 data-slot="<?= (int)$r['slot_id'] ?>"
                 data-date="<?= e($r['slot_date'] ?? '') ?>">
                 <td>
+                    <?php // Single-line row — name only.
+                          // Eval result moved into the Status column.
+                          // Eval notes are in the detail panel that opens on click. ?>
                     <button type="button"
                             class="iq-name-cell iq-name-cell-clickable"
                             data-applicant-panel="<?= (int)$r['app_id'] ?>"
                             title="View applicant details">
                         <span><?= e($name) ?></span>
-                        <?php if ($r['evaluation_result']): ?>
-                            <span class="sub">
-                                Result:
-                                <strong style="color:<?= $r['evaluation_result'] === 'pass' ? 'var(--success)' : 'var(--error)' ?>">
-                                    <?= ucfirst($r['evaluation_result']) ?>
-                                </strong>
-                            </span>
-                        <?php endif; ?>
-                        <?php if ($isFinal && $existing !== ''): ?>
-                            <span class="sub iq-eval-summary" title="<?= e($existing) ?>">
-                                <?= e($existing) ?>
-                            </span>
-                        <?php endif; ?>
                     </button>
                 </td>
 
@@ -632,12 +622,30 @@ ob_start();
                 </td>
 
                 <td>
-                    <span class="badge <?= $badgeClass ?>" style="font-size:var(--text-xs)">
+                    <?php
+                        // For completed rows, surface the eval result (Pass / Decline)
+                        // as the badge itself — same pattern as the Results page.
+                        // For non-completed rows (Scheduled / In Progress / No-show / etc.)
+                        // we still show the queue stage as the badge.
+                        $statusBadgeClass = $badgeClass;
+                        $statusBadgeText  = $badgeText;
+                        if ($r['status'] === 'completed' && $r['evaluation_result']) {
+                            if ($r['evaluation_result'] === 'pass') {
+                                $statusBadgeClass = 'badge-approved';
+                                $statusBadgeText  = 'Pass';
+                            } elseif ($r['evaluation_result'] === 'reject') {
+                                $statusBadgeClass = 'badge-rejected';
+                                $statusBadgeText  = 'Decline';
+                            }
+                        }
+                    ?>
+                    <span class="badge <?= $statusBadgeClass ?>" style="font-size:var(--text-xs)"
+                          <?= ($isFinal && $existing !== '') ? 'title="' . e($existing) . '"' : '' ?>>
                         <?php if ($isInProg): ?>
                             <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
                                          background:#fff;animation:pulse-dot 1.4s infinite;margin-right:4px"></span>
                         <?php endif; ?>
-                        <?= e($badgeText) ?>
+                        <?= e($statusBadgeText) ?>
                     </span>
                 </td>
 
@@ -651,15 +659,9 @@ ob_start();
                             <?= icon('ic_fluent_eye_show_24_regular', 14) ?>
                         </button>
                         <?php if ($isFinal): ?>
-                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                                <?php if ($r['status'] === 'no_show'): ?>
-                                    Marked no-show
-                                <?php else: ?>
-                                    <?= $r['evaluation_result']
-                                        ? e(ucfirst($r['evaluation_result']))
-                                        : 'Completed' ?>
-                                <?php endif; ?>
-                            </span>
+                            <?php // Final-state rows: View-only. The Status
+                                  // column already shows Pass / Decline / No-show,
+                                  // so we don't repeat it here. ?>
                         <?php else: ?>
                             <?php
                                 $evalData = [
@@ -779,7 +781,7 @@ ob_start();
                         </div>
 
                         <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                            Choose Pass or Reject to finalize this interview.
+                            Choose Pass or Decline to finalize this interview.
                         </div>
                     </div>
 
@@ -787,7 +789,7 @@ ob_start();
                         <button type="button" class="btn btn-ghost" onclick="closeEvalModal()">Cancel</button>
                         <button type="submit" class="btn btn-reject"
                                 onclick="document.getElementById('eval-result-input').value='reject'">
-                            <?= icon('ic_fluent_dismiss_24_regular', 13) ?> Reject
+                            <?= icon('ic_fluent_dismiss_24_regular', 13) ?> Decline
                         </button>
                         <button type="submit" class="btn btn-pass"
                                 onclick="document.getElementById('eval-result-input').value='pass'">
@@ -896,7 +898,7 @@ function openEvalModal(d) {
         if (d.exam_passed === 1) {
             scoreText += ' — <span style="color:var(--success);font-weight:var(--weight-semibold)">Passed</span>';
         } else if (d.exam_passed === 0) {
-            scoreText += ' — <span style="color:var(--error);font-weight:var(--weight-semibold)">Failed</span>';
+            scoreText += ' — <span style="color:var(--error);font-weight:var(--weight-semibold)">Did not pass</span>';
         }
         examEl.innerHTML = scoreText;
         examWrap.style.display = '';

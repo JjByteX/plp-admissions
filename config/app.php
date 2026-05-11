@@ -211,18 +211,20 @@ define('DOC_STATUS_LABELS', [
     'uploaded'     => 'Uploaded',
     'under_review' => 'Under Review',
     'approved'     => 'Approved',
-    'rejected'     => 'Rejected',
+    'rejected'     => 'Declined',
 ]);
 
 // -- Admission result labels ------------------------------------
 // Waitlist tier was retired in the role redesign — the only outcomes
-// are Accepted or Rejected (a Professor's interview Fail blocks
+// are Accepted or Declined (a Professor's interview Fail blocks
 // acceptance entirely). Legacy 'waitlisted' rows in the DB still
 // render as "Waitlisted (legacy)" via the fallback in pages that
-// read this constant.
+// read this constant. DB enum value stays 'rejected'; the label
+// shown to users is "Declined" — softer wording requested by the
+// admissions office.
 define('RESULT_LABELS', [
     'accepted' => 'Accepted',
-    'rejected' => 'Rejected',
+    'rejected' => 'Declined',
 ]);
 
 // ----------------------------------------------------------------

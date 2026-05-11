@@ -81,12 +81,15 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 }
 
 // ── Stats ──────────────────────────────────────────────────────────
+// Waitlisted tier was retired in the role redesign — the only outcomes
+// are Accepted or Declined. The third KPI now surfaces Withdrawn,
+// which is tracked on applicants.overall_status (not admission_results).
 $statsStmt = $pdo->prepare("
     SELECT
         COUNT(*)                              AS total,
         SUM(ar.result = 'accepted')           AS accepted,
         SUM(ar.result = 'rejected')           AS rejected,
-        SUM(ar.result = 'waitlisted')         AS waitlisted,
+        SUM(a.overall_status = 'withdrawn')   AS withdrawn,
         SUM(a.overall_status = 'released')    AS released
     FROM applicants a
     LEFT JOIN admission_results ar ON ar.applicant_id = a.id
@@ -98,12 +101,17 @@ $t = $statsStmt->fetch(PDO::FETCH_ASSOC);
 $total         = (int)$t['total'];
 $accepted      = (int)$t['accepted'];
 $rejected      = (int)$t['rejected'];
-$waitlisted    = (int)$t['waitlisted'];
+$withdrawn     = (int)$t['withdrawn'];
 $released      = (int)$t['released'];
-$acceptedPct   = $released > 0 ? round($accepted   / $released * 100, 1) : 0;
-$rejectedPct   = $released > 0 ? round($rejected   / $released * 100, 1) : 0;
-$waitlistedPct = $released > 0 ? round($waitlisted / $released * 100, 1) : 0;
-$completionPct = $total > 0    ? round($released   / $total    * 100)    : 0;
+// All three outcome KPIs use the same denominator (total applicants) so
+// the percentages are directly comparable. Withdrawn can happen at any
+// stage, so anchoring it to released-only would understate it; anchoring
+// Accepted / Declined to total is honest too (anyone not yet released
+// just hasn't landed there yet — they're part of the same denominator).
+$acceptedPct   = $total > 0 ? round($accepted  / $total * 100, 1) : 0;
+$rejectedPct   = $total > 0 ? round($rejected  / $total * 100, 1) : 0;
+$withdrawnPct  = $total > 0 ? round($withdrawn / $total * 100, 1) : 0;
+$completionPct = $total > 0 ? round($released  / $total * 100)    : 0;
 
 // ── Pipeline ───────────────────────────────────────────────────────
 $pipelineStmt = $pdo->prepare("
@@ -396,17 +404,17 @@ ob_start();
                 <div class="db-kpi-item">
                     <div class="db-kpi-val db-kpi-val--success"><?= number_format($accepted) ?></div>
                     <div class="db-kpi-lbl">Accepted</div>
-                    <div class="db-kpi-sub"><?= $acceptedPct ?>% of released</div>
+                    <div class="db-kpi-sub"><?= $acceptedPct ?>% of total</div>
                 </div>
                 <div class="db-kpi-item">
                     <div class="db-kpi-val db-kpi-val--error"><?= number_format($rejected) ?></div>
-                    <div class="db-kpi-lbl">Rejected</div>
-                    <div class="db-kpi-sub"><?= $rejectedPct ?>% of released</div>
+                    <div class="db-kpi-lbl">Declined</div>
+                    <div class="db-kpi-sub"><?= $rejectedPct ?>% of total</div>
                 </div>
                 <div class="db-kpi-item">
-                    <div class="db-kpi-val db-kpi-val--warning"><?= number_format($waitlisted) ?></div>
-                    <div class="db-kpi-lbl">Waitlisted</div>
-                    <div class="db-kpi-sub"><?= $waitlistedPct ?>% of released</div>
+                    <div class="db-kpi-val"><?= number_format($withdrawn) ?></div>
+                    <div class="db-kpi-lbl">Withdrawn</div>
+                    <div class="db-kpi-sub"><?= $withdrawnPct ?>% of total</div>
                 </div>
             </div>
         </div>

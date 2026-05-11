@@ -163,7 +163,7 @@ $items = [
     ['href' => '/staff/interviews/absent?tab=requests', 'key' => 'reschedule', 'label' => 'Interview Reschedules', 'icon' => 'ic_fluent_arrow_sync_24_regular', 'pending' => $_navReschedPending,
         'roles' => [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN]],
     ['href' => '/staff/results',     'key' => 'results',     'label' => 'Results',          'icon' => 'ic_fluent_ribbon_star_24_regular',   'pending' => $_navResPending,
-        'roles' => [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN]],
+        'roles' => [ROLE_ADMIN, ROLE_DEAN]],
 
     ['href' => '/admin/users',       'key' => 'users',       'label' => 'Users',            'icon' => 'ic_fluent_shield_24_regular',
         'roles' => [ROLE_ADMIN]],

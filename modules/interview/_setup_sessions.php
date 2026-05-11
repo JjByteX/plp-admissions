@@ -40,10 +40,52 @@ function _session_expired(string $date, ?string $endTime, string $today, string 
     <?php endif; ?>
 </div>
 
-<div class="page-header" style="text-align:center;margin-bottom:var(--space-6)">
+<div class="page-header" style="text-align:center;margin-bottom:var(--space-4)">
     <h1 class="page-title" style="margin:0 0 var(--space-1) 0"><?= e($college) ?></h1>
     <p class="page-subtitle" style="text-align:center">Interview Sessions</p>
 </div>
+
+<?php
+// Build a date map for the toolbar filter dropdown. Mirrors the
+// interview-queue date filter — one entry per distinct session date
+// with a count and a "past" flag. Filtering is pure client-side via
+// data-date on each card.
+$sessDateMap = [];
+foreach ($byDate as $_d => $_sessions) {
+    $_d = (string)$_d;
+    if ($_d === '') continue;
+    $sessDateMap[] = [
+        'date'    => $_d,
+        'count'   => count($_sessions),
+        'is_past' => $_d < $today,
+    ];
+}
+usort($sessDateMap, fn($a, $b) => $a['date'] <=> $b['date']);
+$totalSessCount = array_sum(array_column($sessDateMap, 'count'));
+?>
+<?php if (count($sessDateMap) > 1): ?>
+<div style="display:flex;align-items:center;justify-content:center;gap:var(--space-3);
+            margin-bottom:var(--space-3);flex-wrap:wrap">
+    <select id="sess-date-filter" class="form-control"
+            title="Filter by session date"
+            style="height:32px;min-height:32px;font-size:var(--text-xs);max-width:280px;
+                   border:1px solid var(--border);border-radius:var(--radius-sm);
+                   padding:0 var(--space-2);background:var(--bg-elevated);color:var(--text-primary)">
+        <option value="" data-count="<?= (int)$totalSessCount ?>">
+            All dates · <?= (int)$totalSessCount ?> session<?= (int)$totalSessCount === 1 ? '' : 's' ?>
+        </option>
+        <?php foreach ($sessDateMap as $_d): ?>
+            <option value="<?= e($_d['date']) ?>" data-count="<?= (int)$_d['count'] ?>">
+                <?= format_date($_d['date']) ?><?= $_d['is_past'] ? ' (Past)' : '' ?>
+                · <?= (int)$_d['count'] ?> session<?= (int)$_d['count'] === 1 ? '' : 's' ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
+    <span id="sess-count" style="font-size:var(--text-xs);color:var(--text-tertiary)">
+        <?= (int)$totalSessCount ?> session<?= (int)$totalSessCount === 1 ? '' : 's' ?>
+    </span>
+</div>
+<?php endif; ?>
 
 <style>
 /* Mirrors .exam-dir-grid / .exam-dir-card from staff_manage.php so the
@@ -165,6 +207,7 @@ foreach ($byDate as $date => $dateSlots) {
         if ($undeletable) $cardClasses .= ' is-undeletable';
     ?>
         <div class="<?= $cardClasses ?>" data-session-id="<?= (int)$slot['id'] ?>"
+             data-date="<?= e($date) ?>"
              onclick='handleSessCardClick(event, <?= $editPayload ?>)'>
             <?php if ($canManage): ?>
                 <input type="checkbox" class="sess-select-checkbox"
@@ -495,6 +538,31 @@ foreach ($byDate as $date => $dateSlots) {
 </div>
 
 <script>
+// ── Date filter on the session card grid ─────────────────────
+// Mirrors the interview queue's date dropdown. Pure client-side:
+// hide cards whose data-date doesn't match the selected value, then
+// rebuild the "N sessions" badge so it always reflects what's visible.
+(function() {
+    var dateEl  = document.getElementById('sess-date-filter');
+    var countEl = document.getElementById('sess-count');
+    if (!dateEl) return;
+
+    function applySessDateFilter() {
+        var picked  = dateEl.value;
+        var visible = 0;
+        document.querySelectorAll('.sess-dir-grid .sess-dir-card').forEach(function(card) {
+            var d = card.getAttribute('data-date') || '';
+            var match = !picked || d === picked;
+            card.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        if (countEl) {
+            countEl.textContent = visible + ' session' + (visible === 1 ? '' : 's');
+        }
+    }
+    dateEl.addEventListener('change', applySessDateFilter);
+})();
+
 // ── Bulk select mode for session cards ───────────────────────
 function _sessGrid()  { return document.querySelector('.sess-dir-grid'); }
 function _sessBar()   { return document.getElementById('sess-bulk-bar'); }

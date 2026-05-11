@@ -295,20 +295,21 @@ ob_start();
                     && ((int)$r['capacity'] - (int)$r['booked']) >= $needed
                 );
             ?>
-                <tr style="border-top:1px solid var(--border);font-size:var(--text-sm);vertical-align:top">
-                    <td style="padding:var(--space-3) var(--space-4)">
-                        <div style="font-weight:var(--weight-medium)">
-                            <?= format_date($s['slot_date']) ?>
-                        </div>
-                        <?php if ($s['slot_time']): ?>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                <?= format_time($s['slot_time']) ?><?= $s['end_time'] ? ' – ' . format_time($s['end_time']) : '' ?>
-                            </div>
-                        <?php endif; ?>
-                        <?php if (!empty($s['location_label'])): ?>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                <?= e($s['location_label']) ?>
-                            </div>
+                <tr style="border-top:1px solid var(--border);font-size:var(--text-sm)">
+                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
+                        <?php
+                            // Single-line slot label: "May 14, 2026 · 9:00 AM – 11:00 AM · Room 101"
+                            $_slotParts = [format_date($s['slot_date'])];
+                            if ($s['slot_time']) {
+                                $_t = format_time($s['slot_time']);
+                                if ($s['end_time']) $_t .= '–' . format_time($s['end_time']);
+                                $_slotParts[] = $_t;
+                            }
+                            if (!empty($s['location_label'])) $_slotParts[] = $s['location_label'];
+                        ?>
+                        <span style="font-weight:var(--weight-medium)"><?= format_date($s['slot_date']) ?></span>
+                        <?php if (count($_slotParts) > 1): ?>
+                            <span style="color:var(--text-tertiary)"> · <?= e(implode(' · ', array_slice($_slotParts, 1))) ?></span>
                         <?php endif; ?>
                     </td>
                     <td style="padding:var(--space-3) var(--space-4)"><?= e($s['interviewer_name'] ?: '—') ?></td>

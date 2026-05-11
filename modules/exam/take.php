@@ -145,14 +145,20 @@ $mySlot = $slotStmt->fetch();
 $myExamReschedule        = null;
 $examRescheduleHistory   = [];
 try {
+    // Defensive: join through applicants so a stray row with a
+    // wrong applicant_id can NEVER leak across users. Same
+    // pattern as modules/interview/student_view.php.
     $rrStmt = $db->prepare(
-        'SELECT id, slot_id, reason, status, created_at, reviewed_at, deny_reason
-           FROM exam_reschedule_requests
-          WHERE applicant_id = ?
-          ORDER BY id DESC
+        'SELECT rr.id, rr.slot_id, rr.reason, rr.status,
+                rr.created_at, rr.reviewed_at, rr.deny_reason
+           FROM exam_reschedule_requests rr
+           JOIN applicants a ON a.id = rr.applicant_id
+          WHERE a.user_id = ?
+            AND rr.applicant_id = ?
+          ORDER BY rr.id DESC
           LIMIT 5'
     );
-    $rrStmt->execute([$applicantId]);
+    $rrStmt->execute([$userId, $applicantId]);
     $examRescheduleHistory = $rrStmt->fetchAll() ?: [];
     $myExamReschedule      = $examRescheduleHistory[0] ?? null;
 } catch (\Throwable) {
@@ -271,7 +277,7 @@ if ($isSlotFuture) {
                     <form method="POST" action="<?= url('/api/exam-reschedule-request') ?>" style="margin-top:var(--space-3)">
                         <?= csrf_field() ?>
                         <textarea name="reschedule_reason" class="form-textarea" rows="3"
-                                  placeholder="Please explain why you need to reschedule your exam (e.g. emergency)..."
+                                  placeholder="Why do you need to reschedule? (e.g. emergency)"
                                   required style="margin-bottom:var(--space-3)"></textarea>
                         <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
                     </form>
@@ -382,7 +388,7 @@ if ($isSlotPast) {
                     <form method="POST" action="<?= url('/api/exam-reschedule-request') ?>" style="margin-top:var(--space-3)">
                         <?= csrf_field() ?>
                         <textarea name="reschedule_reason" class="form-textarea" rows="3"
-                                  placeholder="Please explain why you missed your exam and why you need to reschedule..."
+                                  placeholder="Why did you miss the exam, and why reschedule?"
                                   required style="margin-bottom:var(--space-3)"></textarea>
                         <button type="submit" class="btn btn-primary" style="width:100%">Submit Reschedule Request</button>
                     </form>
@@ -757,7 +763,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     Passed
                 <?php else: ?>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                    Failed
+                    Did not pass
                 <?php endif; ?>
             </div>
 

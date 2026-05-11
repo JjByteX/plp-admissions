@@ -125,8 +125,10 @@ $statsStmt = db()->prepare(
        /* result breakdown from admission_results */
        SUM((SELECT ar2.result FROM admission_results ar2
              WHERE ar2.applicant_id = a.id LIMIT 1) = 'accepted')            AS cnt_accepted,
-       SUM((SELECT ar2.result FROM admission_results ar2
-             WHERE ar2.applicant_id = a.id LIMIT 1) = 'waitlisted')          AS cnt_waitlisted,
+       /* Withdrawn is tracked on applicants.overall_status, not admission_results.
+          The legacy 'waitlisted' tier was retired in the role redesign, so the
+          third KPI tile now shows Withdrawn — a live operational signal. */
+       SUM(a.overall_status = 'withdrawn')                                    AS cnt_withdrawn,
        SUM((SELECT ar2.result FROM admission_results ar2
              WHERE ar2.applicant_id = a.id LIMIT 1) = 'rejected')            AS cnt_rejected
      FROM applicants a $deptWhere"
@@ -175,7 +177,7 @@ $pipeline = [
 $docPipeline = [
     ['label' => 'Approved',      'count' => (int) ($docStats['approved']     ?? 0), 'color' => 'var(--chart-lime)'],
     ['label' => 'Under review',  'count' => (int) ($docStats['under_review'] ?? 0), 'color' => 'var(--chart-amber)'],
-    ['label' => 'Rejected',      'count' => (int) ($docStats['rejected']     ?? 0), 'color' => 'var(--chart-red)'],
+    ['label' => 'Declined',      'count' => (int) ($docStats['rejected']     ?? 0), 'color' => 'var(--chart-red)'],
 ];
 
 $typePipeline = [
@@ -237,9 +239,9 @@ ob_start();
         <div class="stat-badge badge-green"><?= pct((int) $stats['cnt_accepted'], $total) ?>%</div>
     </div>
     <div class="stat-card">
-        <div class="stat-label">Waitlisted</div>
-        <div class="stat-value"><?= number_format((int) $stats['cnt_waitlisted']) ?></div>
-        <div class="stat-badge badge-amber"><?= pct((int) $stats['cnt_waitlisted'], $total) ?>%</div>
+        <div class="stat-label">Withdrawn</div>
+        <div class="stat-value"><?= number_format((int) $stats['cnt_withdrawn']) ?></div>
+        <div class="stat-badge badge-neutral"><?= pct((int) $stats['cnt_withdrawn'], $total) ?>%</div>
     </div>
 </div>
 
@@ -278,14 +280,16 @@ ob_start();
 <div class="card" style="padding:var(--space-4);margin-bottom:var(--space-6)">
     <strong style="font-size:var(--text-sm);display:block;margin-bottom:var(--space-3)">Quick Actions</strong>
     <div style="display:flex;flex-wrap:wrap;gap:var(--space-3)">
+        <?php if (Auth::role() === ROLE_ADMIN): ?>
         <form method="POST" action="<?= url('/staff/results/auto-release') ?>" style="margin:0">
             <?= csrf_field() ?>
             <button type="submit" class="btn btn-sm"
-                    onclick="return confirm('Auto-release results for all eligible applicants based on score thresholds?')">
+                    onclick="return confirm('Auto-release results for all eligible applicants?')">
                 <?= icon('ic_fluent_ribbon_star_24_regular', 14) ?>
                 Auto-Release Results
             </button>
         </form>
+        <?php endif; ?>
         <a href="<?= url('/staff/interviews') ?>?view=sessions" class="btn btn-sm">
             <?= icon('ic_fluent_calendar_add_24_regular', 14) ?>
             Batch Create Interviews
@@ -294,7 +298,7 @@ ob_start();
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="approve_all_pending_docs">
             <button type="submit" class="btn btn-sm"
-                    onclick="return confirm('Approve all uploaded documents currently pending review?')">
+                    onclick="return confirm('Approve all pending documents?')">
                 <?= icon('ic_fluent_document_checkmark_24_regular', 14) ?>
                 Approve All Pending Docs
             </button>
@@ -303,7 +307,7 @@ ob_start();
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="reschedule_absent">
             <button type="submit" class="btn btn-sm"
-                    onclick="return confirm('Reschedule all no-show students to available interview slots?')">
+                    onclick="return confirm('Reschedule all no-show students?')">
                 <?= icon('ic_fluent_calendar_sync_24_regular', 14) ?>
                 Reschedule Absent Students
             </button>
@@ -316,7 +320,7 @@ ob_start();
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="send_doc_reminders">
             <button type="submit" class="btn btn-sm"
-                    onclick="return confirm('Send reminder notifications to students with incomplete documents?')">
+                    onclick="return confirm('Send reminders to students with incomplete documents?')">
                 <?= icon('ic_fluent_mail_24_regular', 14) ?>
                 Send Doc Reminders
             </button>
@@ -325,7 +329,7 @@ ob_start();
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="close_expired_sessions">
             <button type="submit" class="btn btn-sm"
-                    onclick="return confirm('Auto-close all interview sessions past their end time and mark remaining as no-shows?')">
+                    onclick="return confirm('Close expired sessions and mark no-shows?')">
                 <?= icon('ic_fluent_calendar_cancel_24_regular', 14) ?>
                 Close Expired Sessions
             </button>

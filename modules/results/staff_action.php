@@ -26,7 +26,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+Auth::requireRole(ROLE_DEAN, ROLE_ADMIN);
 csrf_check();
 
 $db          = db();
@@ -113,7 +113,7 @@ if ($row['overall_status'] === 'withdrawn') {
     redirect('/staff/results');
 }
 if ($row['existing_result'] !== null) {
-    Session::flash('error', 'Applicant already has a released result. Admin can use Edit to override.');
+    Session::flash('error', 'Result already released. Admin can override via Edit.');
     redirect('/staff/results');
 }
 
@@ -121,7 +121,7 @@ $decision = $_POST['decision'] ?? '';
 $reason   = trim($_POST['reason'] ?? '');
 
 if (!in_array($decision, ['accepted', 'rejected'], true)) {
-    Session::flash('error', 'Pick a result: Accept or Reject.');
+    Session::flash('error', 'Pick a result: Accept or Decline.');
     redirect('/staff/results');
 }
 
@@ -164,7 +164,7 @@ $db->prepare(
 $db->prepare('UPDATE applicants SET overall_status = "released" WHERE id = ?')
    ->execute([$applicantId]);
 
-notify_stage_transition($applicantId, 'released', 'Result: ' . ucfirst($decision));
+notify_stage_transition($applicantId, 'released', 'Result: ' . (RESULT_LABELS[$decision] ?? ucfirst($decision)));
 
 if ($isOverride) {
     audit_log(

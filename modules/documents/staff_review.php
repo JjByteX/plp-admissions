@@ -141,7 +141,7 @@ if ($applicantId) {
         'uploaded'     => ['label'=>'Uploaded',     'class'=>'badge-uploaded'],
         'under_review' => ['label'=>'Under Review', 'class'=>'badge-review'],
         'approved'     => ['label'=>'Approved',     'class'=>'badge-approved'],
-        'rejected'     => ['label'=>'Rejected',     'class'=>'badge-rejected'],
+        'rejected'     => ['label'=>'Declined',     'class'=>'badge-rejected'],
     ];
     $badge = $statusMap[$status] ?? $statusMap['pending'];
 
@@ -980,8 +980,9 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
                                style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
                     </td>
                     <td>
-                        <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></div>
-                        <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
+                        <?php // Single-line row — email lives in the review detail
+                              // page; tooltip surfaces it on hover for quick context. ?>
+                        <span style="font-weight:var(--weight-medium)" title="<?= e($row['email']) ?>"><?= e(format_full_name($row)) ?></span>
                     </td>
                     <td><span class="badge badge-neutral"><?= e(ucfirst($row['applicant_type'])) ?></span></td>
                     <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>

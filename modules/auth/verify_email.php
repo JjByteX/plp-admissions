@@ -24,7 +24,7 @@ $user = find_user_by_verify_token($token);
 
 // Token unknown or expired — kick to /verify-pending so the user can request a new code.
 if (!$user) {
-    Session::flash('error', 'This verification link is invalid or has expired. Request a new one below.');
+    Session::flash('error', 'Link invalid or expired. Request a new one below.');
     redirect('/verify-pending');
 }
 

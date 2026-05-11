@@ -19,7 +19,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+Auth::requireRole(ROLE_DEAN, ROLE_ADMIN);
 csrf_check();
 
 $db      = db();
@@ -27,14 +27,14 @@ $staffId = Auth::id();
 $role    = Auth::role();
 $action  = $_POST['action'] ?? '';
 
-// ── Close Admissions (SSO / Admin only) ───────────────────────
+// ── Close Admissions (Admin only) ──────────────────────────────
 // Bulk-reject every applicant in the current cycle who hasn't been
 // released yet (ready_accept / ready_reject / awaiting). Withdrawn
 // applicants are left alone. The reason is recorded as the remarks
 // so the rejection trail is auditable.
 if ($action === 'close_admissions') {
-    if ($role !== ROLE_SSO && $role !== ROLE_ADMIN) {
-        Session::flash('error', 'Only SSO or Admin can close admissions.');
+    if ($role !== ROLE_ADMIN) {
+        Session::flash('error', 'Only Admin can close admissions.');
         redirect('/staff/results');
     }
 
@@ -75,7 +75,7 @@ if ($action === 'close_admissions') {
     foreach ($ids as $appId) {
         $upsert->execute([$appId, $reason, $staffId]);
         $upStatus->execute([$appId]);
-        notify_stage_transition($appId, 'released', 'Result: Rejected');
+        notify_stage_transition($appId, 'released', 'Result: Declined');
         audit_log('admission_close_admissions',
             "Closed admissions: applicant {$appId} bulk-rejected. Reason: {$reason}",
             'applicant', $appId);
@@ -174,7 +174,7 @@ foreach ($rows as $row) {
     $appId = (int)$row['id'];
     $upsert->execute([$appId, $decision, $remarks, $staffId]);
     $upStatus->execute([$appId]);
-    notify_stage_transition($appId, 'released', 'Result: ' . ucfirst($decision));
+    notify_stage_transition($appId, 'released', 'Result: ' . (RESULT_LABELS[$decision] ?? ucfirst($decision)));
     audit_log(
         $isOverride ? 'admission_result_released_override' : 'admission_result_released',
         "Bulk-released applicant {$appId} as {$decision}"

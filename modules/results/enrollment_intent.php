@@ -70,7 +70,7 @@ if ($action === 'withdraw') {
     $stmt->execute([$applicant['id']]);
     $ar = $stmt->fetch();
     if ($ar && $ar['enrollment_intent'] === 'confirmed') {
-        Session::flash('error', 'You cannot withdraw after confirming enrollment. Please visit the admissions office.');
+        Session::flash('error', 'Already enrolled. Visit the admissions office to withdraw.');
         redirect('/student/result');
     }
 

@@ -93,7 +93,7 @@
     window.apEvalConfirm = function (form) {
         var r = (form.querySelector('.ap-eval-input') || {}).value || '';
         if (!r) {
-            alert('Please choose Pass or Reject.');
+            alert('Please choose Pass or Decline.');
             return false;
         }
         if (r === 'pass' || r === 'reject') {

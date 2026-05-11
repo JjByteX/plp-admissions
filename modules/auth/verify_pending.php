@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Either way (user exists or not), show a generic success so attackers
         // can't enumerate accounts.
         if (empty($errors['general'])) {
-            Session::flash('success', 'If that email is registered and unverified, a fresh code is on its way.');
+            Session::flash('success', 'If the email is registered and unverified, a new code has been sent.');
             Session::set('verify_pending_email', $email);
             redirect('/verify-pending');
         }

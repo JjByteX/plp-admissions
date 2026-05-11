@@ -11,7 +11,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
+Auth::requireRole(ROLE_ADMIN);
 csrf_check();
 
 $counts = auto_release_results();

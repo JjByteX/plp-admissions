@@ -59,7 +59,7 @@ switch ($action) {
         $evalNotes  = trim($_POST['interview_notes'] ?? '');
 
         if ($evalResult !== 'pass' && $evalResult !== 'reject') {
-            Session::flash('error', 'Please select Pass or Reject before completing.');
+            Session::flash('error', 'Please select Pass or Decline before completing.');
             redirect('/staff/interviews/queue');
         }
 

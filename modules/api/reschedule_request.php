@@ -73,5 +73,5 @@ try {
     error_log('notify reviewers (reschedule) failed: ' . $e->getMessage());
 }
 
-Session::flash('success', 'Your reschedule request has been submitted. Staff will review it shortly.');
+Session::flash('success', 'Reschedule request submitted. Staff will review it shortly.');
 redirect('/student/interview');

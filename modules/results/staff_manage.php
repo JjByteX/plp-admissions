@@ -8,7 +8,7 @@
 //                        This is a RECOMMENDATION only — the Dean is
 //                        the final decision-maker and can override it
 //                        (a written reason is required and audited).
-//   Gate 2 (Dean/SSO/Admin) — Release. Final confirmation that flips
+//   Gate 2 (Dean/Admin) — Release. Final confirmation that flips
 //                        the result from internal-only to applicant-
 //                        visible. The releaser explicitly picks Accept
 //                        or Reject per row.
@@ -32,23 +32,23 @@
 //   modal demanding a written reason, which gets stored on the result
 //   row and written to the audit log.
 //
-// SSO/Admin can also "Close Admissions" — bulk-reject every applicant
+// Admin can also "Close Admissions" — bulk-reject every applicant
 // who hasn't been released yet, so leftover rows don't sit forever.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+Auth::requireRole(ROLE_DEAN, ROLE_ADMIN);
 
 $db      = db();
 $staffId = Auth::id();
 $role    = Auth::role();
 
-$canRelease       = ($role === ROLE_SSO || $role === ROLE_DEAN || $role === ROLE_ADMIN);
+$canRelease       = ($role === ROLE_DEAN || $role === ROLE_ADMIN);
 $canOverride      = ($role === ROLE_ADMIN);
-$canCloseCycle    = ($role === ROLE_SSO || $role === ROLE_ADMIN);
+$canCloseCycle    = ($role === ROLE_ADMIN);
 
 // Dean is dept-scoped — only see applicants whose course maps to their
-// own college. Admin and SSO see every applicant across all colleges.
+// own college. Admin sees every applicant across all colleges.
 $scopedDept    = ($role === ROLE_DEAN) ? (string) user_department($staffId) : '';
 $scopedCourses = ($scopedDept !== '') ? courses_in_department($scopedDept) : [];
 
@@ -282,7 +282,7 @@ ob_start();
 // — the Dean has final say and can release either way.
 $primaryTabs = [
     'ready_accept' => ['label' => 'Recommended: Accept', 'count' => (int)$countRows['ready_accept_count']],
-    'ready_reject' => ['label' => 'Recommended: Reject', 'count' => (int)$countRows['ready_reject_count']],
+    'ready_reject' => ['label' => 'Recommended: Decline', 'count' => (int)$countRows['ready_reject_count']],
     'released'     => ['label' => 'Released',            'count' => (int)$countRows['released_count']],
 ];
 // Secondary tab — archive-style, rendered muted at the end.
@@ -395,7 +395,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
        "
        onmouseover="this.style.background='var(--bg-overlay)';this.style.color='var(--text-secondary)'"
        onmouseout="this.style.background='var(--bg-secondary)';this.style.color='var(--text-tertiary)'"
-       title="Open the Interviews queue to record Pass/Reject">
+       title="Open the Interviews queue to record Pass/Decline">
         <?= icon('ic_fluent_clock_24_regular', 12) ?>
         <span><strong style="color:var(--text-secondary);font-weight:var(--weight-medium)"><?= $awaitingCount ?></strong>
             applicant<?= $awaitingCount === 1 ? '' : 's' ?> awaiting Professor evaluation</span>
@@ -499,54 +499,68 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                     <?php endif; ?>
 
                     <td>
+                        <?php // Single-line row — email lives in the detail panel
+                              // that opens on click (tooltip also shows it on hover). ?>
                         <button type="button"
                                 data-applicant-panel="<?= (int)$row['id'] ?>"
-                                title="View applicant details"
+                                title="<?= e($row['email']) ?>"
                                 style="background:none;border:none;padding:0;cursor:pointer;text-align:left;width:100%">
-                            <div style="font-weight:var(--weight-medium);color:var(--text-primary);white-space:nowrap"><?= e($fullName) ?></div>
-                            <div style="font-size:var(--text-xs);color:var(--text-tertiary);white-space:nowrap"><?= e($row['email']) ?></div>
+                            <span style="font-weight:var(--weight-medium);color:var(--text-primary);white-space:nowrap"><?= e($fullName) ?></span>
                         </button>
                     </td>
 
                     <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>
 
-                    <!-- Exam score -->
+                    <!-- Exam score — color carries the pass/fail signal so we
+                         don't repeat it as text. Tooltip stays explicit for
+                         hover + screen-reader users. -->
                     <td style="font-size:var(--text-sm);white-space:nowrap">
-                        <?php if ($row['exam_score'] !== null): ?>
-                            <?= (int)$row['exam_score'] ?>/<?= (int)$row['exam_total'] ?>
-                            <?php if ((int)$row['exam_passed'] === 1): ?>
-                                <span style="color:var(--success)">&nbsp;Passed</span>
-                            <?php elseif ((int)$row['exam_passed'] === 0): ?>
-                                <span style="color:var(--error)">&nbsp;Failed</span>
-                            <?php endif; ?>
+                        <?php if ($row['exam_score'] !== null):
+                            $_examScoreColor = ((int)$row['exam_passed'] === 1) ? 'var(--success)'
+                                              : (((int)$row['exam_passed'] === 0) ? 'var(--error)' : 'inherit');
+                            $_examScoreTitle = ((int)$row['exam_passed'] === 1) ? 'Passed the entrance exam'
+                                              : (((int)$row['exam_passed'] === 0) ? 'Did not pass the entrance exam' : '');
+                        ?>
+                            <span style="color:<?= $_examScoreColor ?>;font-weight:var(--weight-medium)"
+                                  title="<?= e($_examScoreTitle) ?>">
+                                <?= (int)$row['exam_score'] ?>/<?= (int)$row['exam_total'] ?>
+                            </span>
                         <?php else: ?>
                             <span style="color:var(--text-tertiary)">—</span>
                         <?php endif; ?>
                     </td>
 
-                    <!-- Interview status + Pass/Reject -->
+                    <!-- Interview column — if the interview is completed, the
+                         evaluation result (Pass / Decline) is the meaningful
+                         signal, so we show that as the badge instead of
+                         "Completed · Pass" (which double-states the outcome).
+                         For other statuses (Scheduled, In Progress, No-show, etc.)
+                         we show the status as-is, since there's no result yet. -->
                     <td style="font-size:var(--text-sm);white-space:nowrap">
-                        <?php if ($row['interview_status']): ?>
-                            <?php
-                                $iMap = [
-                                    'scheduled'   => ['badge-uploaded', 'Scheduled'],
-                                    'checked_in'  => ['badge-uploaded', 'Checked In'],
-                                    'in_progress' => ['badge-review',   'In Progress'],
-                                    'completed'   => ['badge-approved', 'Completed'],
-                                    'no_show'     => ['badge-rejected', 'No-show'],
-                                ];
-                                [$ibadge, $ilabel] = $iMap[$row['interview_status']] ?? ['badge-pending', ucfirst($row['interview_status'])];
-                                $evalLabel = '';
-                                $evalColor = '';
-                                if ($row['evaluation_result'] === 'pass') { $evalLabel = 'Pass'; $evalColor = 'var(--success)'; }
-                                elseif ($row['evaluation_result'] === 'reject') { $evalLabel = 'Reject'; $evalColor = 'var(--error)'; }
-                            ?>
+                        <?php if ($row['interview_status']):
+                            $iMap = [
+                                'scheduled'   => ['badge-uploaded', 'Scheduled'],
+                                'checked_in'  => ['badge-uploaded', 'Checked In'],
+                                'in_progress' => ['badge-review',   'In Progress'],
+                                'completed'   => ['badge-approved', 'Completed'],
+                                'no_show'     => ['badge-rejected', 'No-show'],
+                            ];
+                            [$ibadge, $ilabel] = $iMap[$row['interview_status']] ?? ['badge-pending', ucfirst($row['interview_status'])];
+                            // For completed rows, surface the eval result as the
+                            // badge itself — "Pass" or "Decline" with matching color.
+                            if ($row['interview_status'] === 'completed' && $row['evaluation_result']) {
+                                if ($row['evaluation_result'] === 'pass') {
+                                    $ibadge = 'badge-approved';
+                                    $ilabel = 'Pass';
+                                } elseif ($row['evaluation_result'] === 'reject') {
+                                    $ibadge = 'badge-rejected';
+                                    $ilabel = 'Decline';
+                                }
+                            }
+                        ?>
                             <span class="badge <?= $ibadge ?>"
                                   <?= $row['interview_notes'] ? 'title="' . e($row['interview_notes']) . '"' : '' ?>>
-                                <?= $ilabel ?><?= $evalLabel ? ' · ' : '' ?>
-                                <?php if ($evalLabel): ?>
-                                    <span style="color:<?= $evalColor ?>;font-weight:var(--weight-semibold)"><?= $evalLabel ?></span>
-                                <?php endif; ?>
+                                <?= e($ilabel) ?>
                             </span>
                         <?php else: ?>
                             <span style="color:var(--text-tertiary)">—</span>
@@ -565,7 +579,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                         <?php elseif ($bucket === 'ready_accept'): ?>
                             <span class="badge badge-approved" title="Professor recommends: Accept">Recommended: Accept</span>
                         <?php elseif ($bucket === 'ready_reject'): ?>
-                            <span class="badge badge-rejected" title="Professor recommends: Reject">Recommended: Reject</span>
+                            <span class="badge badge-rejected" title="Professor recommends: Decline">Recommended: Decline</span>
                         <?php else: /* awaiting */ ?>
                             <span style="color:var(--text-tertiary);font-size:var(--text-sm)">Awaiting interview</span>
                         <?php endif; ?>
@@ -590,7 +604,8 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                         </button>
 
                         <?php if ($bucket === 'withdrawn'): ?>
-                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Withdrawn</span>
+                            <?php // Result column already shows the "Withdrawn" pill,
+                                  // so no extra label is needed here. ?>
 
                         <?php elseif ($bucket === 'released'): ?>
                             <?php if ($canOverride): ?>
@@ -609,7 +624,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                                 $bucketJson  = htmlspecialchars(json_encode($bucket), ENT_QUOTES);
                                 // Confirmation text for the "matches recommendation" path.
                                 $confirmAccept = "Release {$fullName} as Accepted? The applicant will be notified by email.";
-                                $confirmReject = "Release {$fullName} as Rejected? The applicant will be notified by email.";
+                                $confirmReject = "Release {$fullName} as Declined? The applicant will be notified by email.";
                             ?>
                             <!-- Accept button -->
                             <?php if ($recAccept): ?>
@@ -636,7 +651,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                                 </button>
                             <?php endif; ?>
 
-                            <!-- Reject button -->
+                            <!-- Decline button (DB value stays 'rejected') -->
                             <?php if (!$recAccept): ?>
                                 <!-- Matches recommendation: direct release with a confirm. -->
                                 <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
@@ -647,7 +662,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                                             style="background:var(--error);color:#fff;border-color:var(--error);font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px"
                                             onclick="return confirm(<?= htmlspecialchars(json_encode($confirmReject), ENT_QUOTES) ?>)">
                                         <?= icon('ic_fluent_dismiss_circle_24_regular', 13) ?>
-                                        Reject
+                                        Decline
                                     </button>
                                 </form>
                             <?php else: ?>
@@ -657,7 +672,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                                         title="Override Professor recommendation (reason required)"
                                         onclick="openReleaseOverrideModal(<?= (int)$row['id'] ?>, <?= $nameJson ?>, 'rejected', <?= $bucketJson ?>)">
                                     <?= icon('ic_fluent_dismiss_circle_24_regular', 13) ?>
-                                    Reject&hellip;
+                                    Decline&hellip;
                                 </button>
                             <?php endif; ?>
 
@@ -665,7 +680,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                             <span style="font-size:var(--text-xs);color:var(--success);font-weight:var(--weight-medium)">Recommended: Accept</span>
 
                         <?php elseif ($bucket === 'ready_reject'): ?>
-                            <span style="font-size:var(--text-xs);color:var(--error);font-weight:var(--weight-medium)">Recommended: Reject</span>
+                            <span style="font-size:var(--text-xs);color:var(--error);font-weight:var(--weight-medium)">Recommended: Decline</span>
 
                         <?php else: /* awaiting */ ?>
                             <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Awaiting interview</span>
@@ -728,7 +743,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                     <label class="form-label">Result <span style="color:var(--error)">*</span></label>
                     <select name="result" class="form-control" id="override-result" required>
                         <option value="accepted">Accepted</option>
-                        <option value="rejected">Rejected</option>
+                        <option value="rejected">Declined</option>
                     </select>
                 </div>
                 <div>
@@ -786,7 +801,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                     </label>
                     <textarea name="reason" id="release-override-reason" class="form-control"
                               rows="4" required
-                              placeholder="Why are you overriding the Professor's recommendation?"></textarea>
+                              placeholder="Reason for override (required)"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -819,10 +834,9 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                             border:1px solid var(--error);
                             border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);
                             font-size:var(--text-xs);color:var(--text-secondary)">
-                    <strong style="color:var(--error)">This is irreversible.</strong>
-                    Every applicant who has not yet been released will be marked as
-                    <strong>Rejected</strong> and emailed. Withdrawn applicants and
-                    already-released results are not touched.
+                    <strong style="color:var(--error)">Irreversible.</strong>
+                    All unreleased applicants will be marked <strong>Declined</strong>
+                    and emailed. Withdrawn and already-released applicants are not affected.
                 </div>
                 <div>
                     <label class="form-label" for="close-admissions-reason">
@@ -836,7 +850,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
             <div class="modal-footer">
                 <button type="button" class="btn btn-ghost" onclick="document.getElementById('close-admissions-modal').style.display='none'">Cancel</button>
                 <button type="submit" class="btn" style="background:var(--error);color:#fff;border-color:var(--error)"
-                        onclick="return confirm('Close admissions and bulk-reject every unreleased applicant? This cannot be undone.')">
+                        onclick="return confirm('Close admissions? All unreleased applicants will be rejected. Irreversible.')">
                     Close Admissions
                 </button>
             </div>
@@ -871,7 +885,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                 <div>
                     <label class="form-label">Note for applicant (optional)</label>
                     <textarea name="suggest_note" class="form-control" rows="2"
-                              placeholder="e.g. We recommend you consider this course based on your exam results…"></textarea>
+                              placeholder="e.g. Strong match based on your exam results."></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -961,7 +975,7 @@ document.getElementById('suggest-modal').addEventListener('click', function(e){
     <button type="button" class="btn btn-sm" onclick="resBulkRelease('rejected')"
             style="background:var(--error);color:#fff;border-color:var(--error);display:flex;align-items:center;gap:5px;white-space:nowrap">
         <?= icon('ic_fluent_dismiss_circle_24_regular', 14) ?>
-        Reject Selected
+        Decline Selected
     </button>
 
     <div style="width:1px;height:24px;background:var(--border)"></div>
@@ -1116,7 +1130,7 @@ function resBulkRelease(decision) {
         else overrides++;
     });
 
-    var label = (decision === 'accepted') ? 'Accepted' : 'Rejected';
+    var label = (decision === 'accepted') ? 'Accepted' : 'Declined';
     var msg = 'Release ' + ids.length + ' selected applicant(s) as ' + label + '?\n\n'
             + '\u2022 ' + matches   + ' match the Professor\u2019s recommendation\n'
             + '\u2022 ' + overrides + ' will override the Professor\u2019s recommendation\n\n'
@@ -1178,8 +1192,8 @@ function openReleaseOverrideModal(appId, name, decision, bucket) {
     document.getElementById('release-override-name').textContent = name;
 
     var label = (decision === 'accepted')
-        ? 'Release as \u201cAccepted\u201d (Professor recommended Reject)'
-        : 'Release as \u201cRejected\u201d (Professor recommended Accept)';
+        ? 'Release as \u201cAccepted\u201d (Professor recommended Decline)'
+        : 'Release as \u201cDeclined\u201d (Professor recommended Accept)';
     document.getElementById('release-override-result-label').textContent = label;
     document.getElementById('release-override-reason').value = '';
     modal.style.display = 'flex';

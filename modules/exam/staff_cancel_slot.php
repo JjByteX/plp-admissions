@@ -276,14 +276,11 @@ ob_start();
                 });
             ?>
                 <tr style="border-top:1px solid var(--border);font-size:var(--text-sm);vertical-align:top">
-                    <td style="padding:var(--space-3) var(--space-4)">
-                        <div style="font-weight:var(--weight-medium)">
-                            <?= format_date($s['exam_date']) ?>
-                        </div>
+                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
+                        <?php // Single-line slot label: "May 14, 2026 · 9:00 AM – 11:00 AM" ?>
+                        <span style="font-weight:var(--weight-medium)"><?= format_date($s['exam_date']) ?></span>
                         <?php if ($s['slot_time']): ?>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                <?= format_time($s['slot_time']) ?><?= $s['end_time'] ? ' – ' . format_time($s['end_time']) : '' ?>
-                            </div>
+                            <span style="color:var(--text-tertiary)"> · <?= format_time($s['slot_time']) ?><?= $s['end_time'] ? '–' . format_time($s['end_time']) : '' ?></span>
                         <?php endif; ?>
                     </td>
                     <td style="padding:var(--space-3) var(--space-4)"><?= e($s['room_label'] ?: '—') ?></td>

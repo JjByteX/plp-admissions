@@ -407,39 +407,43 @@ ob_start();
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($reschedRequests as $rr): ?>
+            <?php foreach ($reschedRequests as $rr):
+                // Build a single-line current-slot label so the row stays 1 line per cell.
+                // Full breakdown (date + time + room) is condensed with · separators
+                // and shown as a tooltip too.
+                $curSlotLabel = '—';
+                if ($rr['cur_date']) {
+                    $parts = [format_date($rr['cur_date'])];
+                    if ($rr['cur_time']) {
+                        $t = format_time($rr['cur_time']);
+                        if ($rr['cur_end_time']) $t .= '–' . format_time($rr['cur_end_time']);
+                        $parts[] = $t;
+                    }
+                    if ($rr['cur_room']) $parts[] = $rr['cur_room'];
+                    $curSlotLabel = implode(' · ', $parts);
+                }
+            ?>
                 <tr style="border-top:1px solid var(--border);font-size:var(--text-sm)">
-                    <td style="padding:var(--space-3) var(--space-4)">
-                        <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($rr)) ?></div>
-                        <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                            <?= e($rr['student_email']) ?>
-                        </div>
+                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
+                        <?php // Single-line — email is a tooltip on hover. ?>
+                        <span style="font-weight:var(--weight-medium)"
+                              title="<?= e($rr['student_email']) ?>"><?= e(format_full_name($rr)) ?></span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4)">
-                        <div><?= e($rr['course_applied'] ?: '—') ?></div>
-                        <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                            <?= e($rr['student_department'] ?: 'no department') ?>
-                        </div>
-                    </td>
-                    <td style="padding:var(--space-3) var(--space-4)">
-                        <?php if ($rr['cur_date']): ?>
-                            <?= format_date($rr['cur_date']) ?>
-                            <?php if ($rr['cur_time']): ?>
-                                <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                    <?= format_time($rr['cur_time']) ?><?= $rr['cur_end_time'] ? ' – ' . format_time($rr['cur_end_time']) : '' ?>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ($rr['cur_room']): ?>
-                                <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                    <?= e($rr['cur_room']) ?>
-                                </div>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            —
+                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
+                        <?= e($rr['course_applied'] ?: '—') ?><?php if ($rr['student_department']): ?>
+                            <span style="color:var(--text-tertiary)"> · <?= e($rr['student_department']) ?></span>
                         <?php endif; ?>
                     </td>
+                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap"
+                        title="<?= e($curSlotLabel) ?>">
+                        <?= e($curSlotLabel) ?>
+                    </td>
                     <td style="padding:var(--space-3) var(--space-4);max-width:280px">
-                        <div style="white-space:pre-line;word-break:break-word"><?= e($rr['reason']) ?></div>
+                        <?php // Single-line — truncate with ellipsis; full reason on hover. ?>
+                        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px"
+                             title="<?= e($rr['reason']) ?>">
+                            <?= e($rr['reason']) ?>
+                        </div>
                     </td>
                     <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
                         <?= date('M j, g:i A', strtotime($rr['created_at'])) ?>

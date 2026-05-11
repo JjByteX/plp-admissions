@@ -29,7 +29,7 @@ if (!$applicant) {
 // — once they've moved on to interview/result/released, the exam side
 // is fixed.
 if (($applicant['overall_status'] ?? '') !== 'exam') {
-    Session::flash('error', 'Your exam stage has already finished — a reschedule is no longer possible.');
+    Session::flash('error', 'Your exam stage is finished — reschedule unavailable.');
     redirect('/student/exam');
 }
 
@@ -43,7 +43,7 @@ $stmt = $db->prepare(
 $stmt->execute([$applicant['id']]);
 $mySlot = $stmt->fetch();
 if (!$mySlot) {
-    Session::flash('error', 'You do not have an assigned exam slot yet, so there is nothing to reschedule.');
+    Session::flash('error', 'No exam slot assigned yet — nothing to reschedule.');
     redirect('/student/exam');
 }
 
@@ -99,5 +99,5 @@ try {
     error_log('notify reviewers (exam reschedule) failed: ' . $e->getMessage());
 }
 
-Session::flash('success', 'Your exam reschedule request has been submitted. Staff will review it shortly.');
+Session::flash('success', 'Exam reschedule request submitted. Staff will review it shortly.');
 redirect('/student/exam');

@@ -520,7 +520,7 @@ ob_start();
         'uploaded'              => ['label' => 'Uploaded',             'class' => 'badge-info'],
         'under_review'          => ['label' => 'Under Review',         'class' => 'badge-warning'],
         'approved'              => ['label' => 'Approved',             'class' => 'badge-success'],
-        'rejected'              => ['label' => 'Rejected',             'class' => 'badge-error'],
+        'rejected'              => ['label' => 'Declined',             'class' => 'badge-error'],
         'resubmission_required' => ['label' => 'Resubmission Required','class' => 'badge-error'],
     ];
     $badge      = $statusMap[$status] ?? $statusMap['pending'];

@@ -552,13 +552,13 @@ function auto_release_results(): array
         $pdo->prepare('UPDATE applicants SET overall_status = "released" WHERE id = ?')
             ->execute([(int) $appl['applicant_id']]);
 
-        notify_stage_transition((int) $appl['applicant_id'], 'released', 'Result: ' . ucfirst($decision));
+        notify_stage_transition((int) $appl['applicant_id'], 'released', 'Result: ' . (RESULT_LABELS[$decision] ?? ucfirst($decision)));
         $counts[$decision]++;
     }
 
     if (array_sum($counts) > 0) {
         audit_log('auto_release_results',
-            "Auto-released results: {$counts['accepted']} accepted, {$counts['rejected']} rejected");
+            "Auto-released results: {$counts['accepted']} accepted, {$counts['rejected']} declined");
     }
 
     return $counts;

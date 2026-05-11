@@ -498,5 +498,19 @@ document.getElementById('withdraw-modal').addEventListener('click', function(e) 
 </script>
 <?php endif; ?>
 
+<script>
+// Global Escape-to-close for any open modal. Modals across the app
+// use the same .modal-backdrop wrapper toggled via inline display:
+// this listens once at the document level so every modal benefits
+// without per-page wiring.
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.modal-backdrop').forEach(function(m) {
+        var visible = m.style.display && m.style.display !== 'none';
+        if (visible) m.style.display = 'none';
+    });
+});
+</script>
+
 </body>
 </html>

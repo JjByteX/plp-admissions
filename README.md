@@ -11,6 +11,42 @@ exam auto-assign zip:
 
 ## What's new in this round
 
+### Privacy fix — past reschedule requests leaking across students
+
+A student visiting `/student/interview` or `/student/exam` was
+seeing **past reschedule requests that belonged to other
+students**. Both pages were filtering only by `applicant_id = ?`
+and trusting whatever `applicant_id` was on the
+`reschedule_requests` / `exam_reschedule_requests` rows. If any row
+had been written with a stray `applicant_id` (legacy data, a bad
+migration, a script that bulk-inserted with the wrong id, etc.),
+it would render on someone else's screen.
+
+Hardened both queries to **join through `applicants`** and require
+both:
+
+- `applicants.user_id = <logged-in user>` — the request's
+  applicant must belong to the current session user, AND
+- `reschedule_requests.applicant_id = <current applicant>` — keep
+  the existing scope.
+
+A request can now only render if both constraints hold, so no
+amount of data corruption can leak another student's history into
+this view.
+
+Files: `modules/interview/student_view.php`,
+`modules/exam/take.php`.
+
+> If you want to find any actually-corrupted rows in your DB, run:
+> ```sql
+> SELECT rr.id, rr.applicant_id, a.user_id, u.email
+>   FROM reschedule_requests rr
+>   LEFT JOIN applicants a ON a.id = rr.applicant_id
+>   LEFT JOIN users      u ON u.id = a.user_id
+>  WHERE a.id IS NULL;          -- orphan rows
+> ```
+> Same query against `exam_reschedule_requests` for the exam side.
+
 ### Interview queue — date + slot filter dropdowns
 
 `/staff/interviews/queue` toolbar now has two cascading filter

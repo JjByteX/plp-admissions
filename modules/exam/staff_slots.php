@@ -214,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Dean and Proctor reach this page in read-only mode — if any
     // other action posts through, reject it.
     if (!$canManage) {
-        Session::flash('error', 'Read-only access — only SSO and Admin can modify exam slots.');
+        Session::flash('error', 'Read-only — only SSO and Admin can modify exam slots.');
         _slots_redirect_back($ctxCollege, $ctxSlotId);
     }
 
@@ -975,10 +975,42 @@ ob_start();
     $today      = date('Y-m-d');
     $totalCap   = array_sum(array_column($slotsForCollege, 'capacity'));
     $totalFil   = array_sum(array_column($slotsForCollege, 'filled'));
+
+    // Build a date map for the toolbar filter dropdown. One entry per
+    // distinct exam date, with a count of slots on that date and a
+    // "past" flag for dates earlier than today. Filtering is pure
+    // client-side via data-date on each card — no extra DB queries.
+    $slotDateMap = [];
+    foreach ($slotsForCollege as $_s) {
+        $d = (string)($_s['exam_date'] ?? '');
+        if ($d === '') continue;
+        if (!isset($slotDateMap[$d])) {
+            $slotDateMap[$d] = ['date' => $d, 'count' => 0, 'is_past' => $d < $today];
+        }
+        $slotDateMap[$d]['count']++;
+    }
+    usort($slotDateMap, fn($a, $b) => $a['date'] <=> $b['date']);
     ?>
     <div style="display:flex;align-items:center;justify-content:center;gap:var(--space-3);
                 color:var(--text-tertiary);font-size:var(--text-xs);margin-bottom:var(--space-3);flex-wrap:wrap">
-        <span>
+        <?php if (count($slotDateMap) > 1): ?>
+            <select id="es-date-filter" class="form-control"
+                    title="Filter by exam date"
+                    style="height:32px;min-height:32px;font-size:var(--text-xs);max-width:280px;
+                           border:1px solid var(--border);border-radius:var(--radius-sm);
+                           padding:0 var(--space-2);background:var(--bg-elevated);color:var(--text-primary)">
+                <option value="" data-count="<?= count($slotsForCollege) ?>">
+                    All dates · <?= count($slotsForCollege) ?> slot<?= count($slotsForCollege) === 1 ? '' : 's' ?>
+                </option>
+                <?php foreach ($slotDateMap as $_d): ?>
+                    <option value="<?= e($_d['date']) ?>" data-count="<?= (int)$_d['count'] ?>">
+                        <?= format_date($_d['date']) ?><?= $_d['is_past'] ? ' (Past)' : '' ?>
+                        · <?= (int)$_d['count'] ?> slot<?= (int)$_d['count'] === 1 ? '' : 's' ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        <?php endif; ?>
+        <span id="es-slot-count">
             <?= count($slotsForCollege) ?> slot<?= count($slotsForCollege) === 1 ? '' : 's' ?>
             &nbsp;·&nbsp; <?= $totalFil ?> / <?= $totalCap ?> seats filled
         </span>
@@ -1021,6 +1053,9 @@ ob_start();
             <a href="<?= e(url('/staff/exam/slots') . '?slot=' . $sid) ?>"
                class="<?= $cardClass ?>"
                data-slot-id="<?= $sid ?>"
+               data-date="<?= e($slot['exam_date'] ?? '') ?>"
+               data-filled="<?= $filled ?>"
+               data-capacity="<?= $cap ?>"
                onclick="return onEsCardClick(event, this)">
                 <?php if ($canManage): ?>
                     <input type="checkbox" class="es-select-checkbox"
@@ -1649,6 +1684,37 @@ ob_start();
     var m = document.getElementById(id);
     if (m) m.addEventListener('click', function (e) { if (e.target === this) this.style.display = 'none'; });
 });
+
+// ── Date filter on the slot card grid ────────────────────────
+// Mirrors the interview queue's date dropdown (see staff_queue.php).
+// Pure client-side: hide cards whose data-date doesn't match the
+// selected value, then rebuild the "N slots · X / Y seats filled"
+// summary line so the badge always reflects what's visible.
+(function() {
+    var dateEl  = document.getElementById('es-date-filter');
+    var countEl = document.getElementById('es-slot-count');
+    if (!dateEl) return;
+
+    function applyEsDateFilter() {
+        var picked  = dateEl.value;
+        var visible = 0, filled = 0, capacity = 0;
+        document.querySelectorAll('.es-slot-grid .es-slot-card').forEach(function(card) {
+            var d = card.getAttribute('data-date') || '';
+            var match = !picked || d === picked;
+            card.style.display = match ? '' : 'none';
+            if (match) {
+                visible++;
+                filled   += parseInt(card.getAttribute('data-filled')   || '0', 10);
+                capacity += parseInt(card.getAttribute('data-capacity') || '0', 10);
+            }
+        });
+        if (countEl) {
+            countEl.innerHTML = visible + ' slot' + (visible === 1 ? '' : 's')
+                + ' \u00a0\u00b7\u00a0 ' + filled + ' / ' + capacity + ' seats filled';
+        }
+    }
+    dateEl.addEventListener('change', applyEsDateFilter);
+})();
 
 // ── Bulk select mode for exam slot cards ─────────────────────
 function _esGrid()  { return document.querySelector('.es-slot-grid'); }
