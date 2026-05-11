@@ -627,8 +627,8 @@ function saveRowEdit(i) {
         var capsData = new FormData();
         capsData.append('action', 'update_course_caps');
         // Add CSRF token
-        var csrfInput = form.querySelector('input[name="csrf_token"]');
-        if (csrfInput) capsData.append('csrf_token', csrfInput.value);
+        var csrfInput = form.querySelector('input[name="_csrf"]');
+        if (csrfInput) capsData.append('_csrf', csrfInput.value);
         capsData.append(capInput.name, capInput.value);
         fetch(window.location.pathname, { method: 'POST', body: capsData })
             .then(function() { form.submit(); })
