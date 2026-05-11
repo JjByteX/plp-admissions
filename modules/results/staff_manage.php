@@ -4,15 +4,15 @@
 // Results — release admission decisions (SSO / Dean / Admin)
 //
 // Two-gate flow:
-//   Gate 1 (Professor) — Pass/Fail at interview. A Fail is blocking;
-//                        the applicant can never be released as Accepted.
-//   Gate 2 (SSO/Admin) — Release. Final confirmation that flips the
-//                        result from internal-only to applicant-visible.
+//   Gate 1 (Interviewer) — Pass/Reject at interview. A Reject is blocking;
+//                          the applicant can never be released as Accepted.
+//   Gate 2 (SSO/Admin)   — Release. Final confirmation that flips the
+//                          result from internal-only to applicant-visible.
 //
 // Buckets shown on this page:
 //   awaiting     — exam done, interview not yet evaluated
 //   ready_accept — exam passed AND Professor marked Pass
-//   ready_reject — exam failed OR Professor marked Fail
+//   ready_reject — exam failed OR interviewer marked Reject
 //   released     — admission_results row exists (final, applicant-visible)
 //   withdrawn    — applicant pulled out of the cycle
 //
@@ -32,7 +32,7 @@ $db      = db();
 $staffId = Auth::id();
 $role    = Auth::role();
 
-$canRelease  = ($role === ROLE_SSO   || $role === ROLE_ADMIN);
+$canRelease  = ($role === ROLE_SSO || $role === ROLE_DEAN || $role === ROLE_ADMIN);
 $canOverride = ($role === ROLE_ADMIN);
 
 // Dean is dept-scoped — only see applicants whose course maps to their
@@ -52,7 +52,7 @@ $page      = max(1, (int)($_GET['page'] ?? 1));
 $bucketCase = "CASE
     WHEN a.overall_status = 'withdrawn' THEN 'withdrawn'
     WHEN ar.result IS NOT NULL THEN 'released'
-    WHEN er.passed = 0 OR iq.evaluation_result = 'fail' THEN 'ready_reject'
+    WHEN er.passed = 0 OR iq.evaluation_result = 'reject' THEN 'ready_reject'
     WHEN er.passed = 1 AND iq.evaluation_result = 'pass' THEN 'ready_accept'
     ELSE 'awaiting'
   END";
@@ -348,7 +348,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
        "
        onmouseover="this.style.background='var(--bg-overlay)';this.style.color='var(--text-secondary)'"
        onmouseout="this.style.background='var(--bg-secondary)';this.style.color='var(--text-tertiary)'"
-       title="Open the Interviews queue to record Pass/Fail">
+       title="Open the Interviews queue to record Pass/Reject">
         <?= icon('ic_fluent_clock_24_regular', 12) ?>
         <span><strong style="color:var(--text-secondary);font-weight:var(--weight-medium)"><?= $awaitingCount ?></strong>
             applicant<?= $awaitingCount === 1 ? '' : 's' ?> awaiting Professor evaluation</span>
@@ -404,11 +404,16 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                     <?php endif; ?>
 
                     <td>
-                        <div style="font-weight:var(--weight-medium)"><?= e($fullName) ?></div>
-                        <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
-                        <div style="margin-top:2px">
-                            <span class="badge badge-<?= $row['overall_status'] ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span>
-                        </div>
+                        <button type="button"
+                                data-applicant-panel="<?= (int)$row['id'] ?>"
+                                title="View applicant details"
+                                style="background:none;border:none;padding:0;cursor:pointer;text-align:left;width:100%">
+                            <div style="font-weight:var(--weight-medium);color:var(--text-primary)"><?= e($fullName) ?></div>
+                            <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
+                            <div style="margin-top:2px">
+                                <span class="badge badge-<?= $row['overall_status'] ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span>
+                            </div>
+                        </button>
                     </td>
 
                     <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>
@@ -427,7 +432,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                         <?php endif; ?>
                     </td>
 
-                    <!-- Interview status + Pass/Fail -->
+                    <!-- Interview status + Pass/Reject -->
                     <td>
                         <?php if ($row['interview_status']): ?>
                             <?php
@@ -443,8 +448,8 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                             <span class="badge <?= $ibadge ?>"><?= $ilabel ?></span>
                             <?php if ($row['evaluation_result'] === 'pass'): ?>
                                 <div style="font-size:var(--text-xs);color:var(--success);margin-top:2px;font-weight:var(--weight-medium)">Pass</div>
-                            <?php elseif ($row['evaluation_result'] === 'fail'): ?>
-                                <div style="font-size:var(--text-xs);color:var(--error);margin-top:2px;font-weight:var(--weight-medium)">Fail</div>
+                            <?php elseif ($row['evaluation_result'] === 'reject'): ?>
+                                <div style="font-size:var(--text-xs);color:var(--error);margin-top:2px;font-weight:var(--weight-medium)">Rejected</div>
                             <?php endif; ?>
                             <?php if ($row['interview_notes']): ?>
                                 <div style="font-size:var(--text-xs);color:var(--text-tertiary);
@@ -496,6 +501,17 @@ $awaitingCount = (int)$countRows['awaiting_count'];
 
                     <!-- Actions -->
                     <td>
+                        <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">
+
+                        <!-- View Details button — visible to all roles -->
+                        <button type="button" class="btn btn-ghost btn-sm"
+                                data-applicant-panel="<?= (int)$row['id'] ?>"
+                                title="View applicant details"
+                                style="font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px">
+                            <?= icon('ic_fluent_eye_show_24_regular', 13) ?>
+                            View
+                        </button>
+
                         <?php if ($bucket === 'withdrawn'): ?>
                             <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Withdrawn</span>
 
@@ -507,8 +523,6 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                                     <?= icon('ic_fluent_edit_24_regular', 13) ?>
                                     Edit
                                 </button>
-                            <?php else: ?>
-                                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Released</span>
                             <?php endif; ?>
 
                         <?php elseif (($bucket === 'ready_accept' || $bucket === 'ready_reject') && $canRelease): ?>
@@ -543,6 +557,8 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                         <?php else: /* awaiting */ ?>
                             <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Awaiting interview</span>
                         <?php endif; ?>
+
+                        </div><!-- /actions flex -->
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -748,12 +764,80 @@ document.getElementById('suggest-modal').addEventListener('click', function(e){
     from { opacity:0; transform:translateX(-50%) translateY(16px); }
     to   { opacity:1; transform:translateX(-50%) translateY(0); }
 }
+@keyframes resUndoSlideUp {
+    from { opacity:0; transform:translateX(-50%) translateY(20px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
 tr.res-bulk-row.res-selected { background:var(--accent-muted); }
 tr.res-bulk-row.res-selected td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
 </style>
 
 <script>
-/* ── Results bulk selection logic ───────────────────────── */
+/* ── Undo toast (bulk release) ──────────────────────────────── */
+function showResUndoToast(msg, onCommit) {
+    var existing = document.getElementById('res-undo-toast');
+    if (existing) { existing._cancelFn && existing._cancelFn(); existing.remove(); }
+
+    var DELAY = 6000;
+    var toast = document.createElement('div');
+    toast.id = 'res-undo-toast';
+    toast.style.cssText = [
+        'position:fixed;bottom:calc(var(--space-6) + 56px);left:50%;transform:translateX(-50%);',
+        'z-index:600;background:var(--bg-elevated);border:1px solid var(--border);',
+        'border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);',
+        'padding:12px 20px;display:flex;align-items:center;gap:12px;',
+        'font-size:var(--text-sm);min-width:320px;',
+        'animation:resUndoSlideUp .25s ease'
+    ].join('');
+
+    // Progress bar
+    var bar = document.createElement('div');
+    bar.style.cssText = 'position:absolute;bottom:0;left:0;height:3px;background:var(--accent);border-radius:0 0 var(--radius-lg) var(--radius-lg);width:100%;transition:width ' + DELAY + 'ms linear';
+
+    toast.innerHTML = '<span style="flex:1">' + msg + '</span>'
+        + '<button id="res-undo-btn" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 14px;cursor:pointer;font-size:var(--text-sm);color:var(--text-primary);font-weight:500;white-space:nowrap">Undo</button>'
+        + '<button onclick="dismissResUndoToast()" style="background:none;border:none;cursor:pointer;color:var(--text-tertiary);font-size:16px;padding:0 4px">&times;</button>';
+    toast.appendChild(bar);
+    document.body.appendChild(toast);
+
+    // Kick off the progress bar shrink
+    requestAnimationFrame(function() { requestAnimationFrame(function() { bar.style.width = '0'; }); });
+
+    var timer = setTimeout(function() {
+        dismissResUndoToast();
+        onCommit();
+    }, DELAY);
+
+    toast._cancelFn = function() { clearTimeout(timer); };
+
+    document.getElementById('res-undo-btn').addEventListener('click', function() {
+        dismissResUndoToast();
+        resClearSelection();
+    });
+}
+
+function dismissResUndoToast() {
+    var t = document.getElementById('res-undo-toast');
+    if (t) { t._cancelFn && t._cancelFn(); t.remove(); }
+}
+
+/* ── Single-release undo intercept ──────────────────────────── */
+// Intercept individual "Release as Accept/Reject" form submits and
+// show a short undo window before actually posting.
+document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (!form || form.id === 'res-bulk-form') return;
+    var actionInput = form.querySelector('input[name="action"]');
+    if (!actionInput || actionInput.value !== 'release') return;
+
+    e.preventDefault();
+
+    var btn = form.querySelector('button[type="submit"]');
+    var label = btn ? btn.textContent.trim() : 'Releasing…';
+
+    showResUndoToast(label + ' — releasing…', function() { form.submit(); });
+}, true);
+
 function resGetSelectedIds() {
     return Array.from(document.querySelectorAll('.res-check:checked')).map(function(cb) { return cb.value; });
 }
@@ -823,12 +907,20 @@ function resBulkRelease() {
         input.value = id;
         form.appendChild(input);
     });
-    form.submit();
+
+    // Show undo toast — submits form after 6s unless Undo is clicked
+    showResUndoToast(
+        'Releasing ' + ids.length + ' applicant(s)…',
+        function() { form.submit(); }
+    );
 }
 </script>
 <?php endif; ?>
 
 <?php
+// Slide-in applicant detail drawer (markup + JS opener).
+include VIEWS_PATH . '/partials/applicant_drawer.php';
+
 $content   = ob_get_clean();
 $pageTitle = 'Results';
 $activeNav = 'results';

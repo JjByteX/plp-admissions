@@ -440,7 +440,7 @@ function bulk_assign_pending_applicants(?string $department = null, ?int $actorU
  *
  * Validation rules (mirrored in the UI):
  *   - If $absent is true  → evaluation_result MUST be NULL
- *   - If $absent is false → evaluation_result MUST be 'pass' or 'fail'
+ *   - If $absent is false → evaluation_result MUST be 'pass' or 'reject'
  *
  * Side-effects on success:
  *   - interview_queue columns are updated (attendance_status,
@@ -463,7 +463,7 @@ function record_interview_evaluation(
     if ($absent) {
         $result = null; // ignore anything staff sent through for absent rows
     } else {
-        if ($result !== 'pass' && $result !== 'fail') {
+        if ($result !== 'pass' && $result !== 'reject') {
             return false; // missing / invalid evaluation — UI should prevent
         }
     }

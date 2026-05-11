@@ -3,7 +3,7 @@
 // modules/results/staff_bulk.php
 // Bulk release POST handler. The only supported action is
 // 'release_selected' — the server picks accepted vs rejected
-// per applicant from their bucket (exam_passed + interview Pass/Fail).
+// per applicant from their bucket (exam_passed + interview Pass/Reject).
 // Applicants still in 'awaiting' or already released are skipped.
 // ============================================================
 
@@ -58,7 +58,7 @@ foreach ($rows as $row) {
     $examPassed   = (int)($row['exam_passed'] ?? -1);
     $interviewRes = $row['evaluation_result'];
 
-    if ($examPassed === 0 || $interviewRes === 'fail') {
+    if ($examPassed === 0 || $interviewRes === 'reject') {
         $decision = 'rejected';
     } elseif ($examPassed === 1 && $interviewRes === 'pass') {
         $decision = 'accepted';

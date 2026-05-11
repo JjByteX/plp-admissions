@@ -95,7 +95,7 @@ try {
           WHERE ar.result IS NULL
             AND a.overall_status <> 'withdrawn'
             AND ( er.passed = 0
-               OR iq.evaluation_result IN ('pass','fail') )";
+               OR iq.evaluation_result IN ('pass','reject') )";
 
     if ($isDean) {
         $_navDeanDept = function_exists('user_department')

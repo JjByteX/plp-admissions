@@ -351,7 +351,7 @@ CREATE TABLE `interview_queue` (
     `interview_notes`   TEXT             DEFAULT NULL,
     `attendance_status` ENUM('present','absent') NULL DEFAULT NULL
                         COMMENT 'Filled in by staff at interview time',
-    `evaluation_result` ENUM('pass','fail') NULL DEFAULT NULL
+    `evaluation_result` ENUM('pass','reject') NULL DEFAULT NULL
                         COMMENT 'Only meaningful when attendance_status = present',
     `interview_status`  ENUM('pending','completed','absent','rescheduled')
                         NOT NULL DEFAULT 'pending'

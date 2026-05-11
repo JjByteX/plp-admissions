@@ -5,7 +5,7 @@
 // Live interview queue — single unified page that lists every
 // auto-assigned applicant. Each row exposes a single "Evaluation"
 // action that opens a modal where the interviewer records notes
-// plus a Pass / Fail decision.
+// plus a Pass / Reject decision.
 //
 // • Staff see every applicant assigned to a session they own
 //   (assigned_to with created_by fallback for legacy rows).
@@ -110,6 +110,10 @@ try { $db->query("SELECT evaluated_at FROM interview_queue LIMIT 0"); }
 catch (\Throwable $e) {
     $db->exec("ALTER TABLE interview_queue ADD COLUMN evaluated_at DATETIME DEFAULT NULL AFTER evaluation_result");
 }
+// Migrate 'fail' → 'reject' for existing data
+try {
+    $db->exec("UPDATE interview_queue SET evaluation_result='reject' WHERE evaluation_result='fail'");
+} catch (\Throwable $e) {}
 
 // ----------------------------------------------------------------
 // AUTO NO-SHOW
@@ -169,16 +173,26 @@ $selectCols =
             u.last_name,
             u.suffix,
             u.email       AS student_email,
+            u.phone       AS student_phone,
+            u.birthdate   AS student_birthdate,
+            u.sex         AS student_sex,
+            u.address     AS student_address,
             u.department  AS student_department,
+            a.shs_strand,
+            a.school_year,
             s.id          AS slot_id,
             s.slot_date   AS slot_date,
             s.slot_time   AS slot_time,
             s.end_time    AS slot_end_time,
-            s.department  AS slot_department
+            s.department  AS slot_department,
+            er.score      AS exam_score,
+            er.total_items AS exam_total,
+            er.passed     AS exam_passed
      FROM   interview_queue q
      JOIN   interview_slots s ON s.id = q.slot_id
      JOIN   applicants a      ON a.id = q.applicant_id
-     JOIN   users u           ON u.id = a.user_id ';
+     JOIN   users u           ON u.id = a.user_id
+     LEFT JOIN exam_results er ON er.applicant_id = a.id ';
 
 $orderTail =
     ' ORDER BY
@@ -317,9 +331,9 @@ ob_start();
     text-overflow:ellipsis;
 }
 
-/* Pass/Fail buttons inside the Evaluation modal */
-.btn-pass { background: var(--success-bg, #d1fae5); color: var(--success, #15803d); border-color: var(--success, #15803d); }
-.btn-fail { background: var(--error-bg, #fee2e2);   color: var(--error, #b91c1c);     border-color: var(--error, #b91c1c); }
+/* Pass/Reject buttons inside the Evaluation modal */
+.btn-pass   { background: var(--success-bg, #d1fae5); color: var(--success, #15803d); border-color: var(--success, #15803d); }
+.btn-reject { background: var(--error-bg, #fee2e2);   color: var(--error, #b91c1c);     border-color: var(--error, #b91c1c); }
 </style>
 
 <!-- ============================================================
@@ -516,14 +530,27 @@ ob_start();
                                 <?php endif; ?>
                             </span>
                         <?php else: ?>
+                            <?php
+                                $evalData = [
+                                    'queueId' => (int)$r['queue_id'],
+                                    'name'    => $name,
+                                    'course'  => $course,
+                                    'type'    => $type,
+                                    'notes'   => $existing,
+                                    'email'   => $r['student_email'] ?? '',
+                                    'phone'   => $r['student_phone'] ?? '',
+                                    'birthdate' => $r['student_birthdate'] ?? '',
+                                    'sex'     => $r['student_sex'] ?? '',
+                                    'address' => $r['student_address'] ?? '',
+                                    'strand'  => $r['shs_strand'] ?? '',
+                                    'school_year' => $r['school_year'] ?? '',
+                                    'exam_score'  => $r['exam_score'] !== null ? (int)$r['exam_score'] : null,
+                                    'exam_total'  => $r['exam_total'] !== null ? (int)$r['exam_total'] : null,
+                                    'exam_passed' => $r['exam_passed'] !== null ? (int)$r['exam_passed'] : null,
+                                ];
+                            ?>
                             <button type="button" class="btn btn-primary btn-sm"
-                                    onclick="openEvalModal(
-                                        <?= (int)$r['queue_id'] ?>,
-                                        <?= htmlspecialchars(json_encode($name), ENT_QUOTES) ?>,
-                                        <?= htmlspecialchars(json_encode($course), ENT_QUOTES) ?>,
-                                        <?= htmlspecialchars(json_encode($type), ENT_QUOTES) ?>,
-                                        <?= htmlspecialchars(json_encode($existing), ENT_QUOTES) ?>
-                                    )">
+                                    onclick='openEvalModal(<?= htmlspecialchars(json_encode($evalData), ENT_QUOTES) ?>)'>
                                 <?= icon('ic_fluent_edit_24_regular', 13) ?>
                                 Evaluation
                             </button>
@@ -541,10 +568,10 @@ ob_start();
 <?php endif; // empty($rows) ?>
 
 <!-- ============================================================
-     EVALUATION MODAL — notes + Pass / Fail
+     EVALUATION MODAL — notes + Pass / Reject
 ============================================================ -->
 <div id="eval-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
-    <div class="modal" style="max-width:480px">
+    <div class="modal" style="max-width:860px;display:flex;flex-direction:column;overflow:hidden">
         <div class="modal-header">
             <div class="modal-title">Interview Evaluation</div>
             <button class="btn-icon" type="button" onclick="closeEvalModal()">
@@ -552,45 +579,93 @@ ob_start();
             </button>
         </div>
 
-        <form method="POST" id="eval-form" action="">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="complete_with_evaluation">
-            <input type="hidden" name="evaluation_result" id="eval-result-input" value="">
-
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
-                            padding:var(--space-3) var(--space-4);font-size:var(--text-sm)">
-                    Applicant: <strong id="eval-name"></strong>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
-                        <span id="eval-type"></span>
-                        <span id="eval-sep" style="margin:0 4px">·</span>
-                        <span id="eval-course"></span>
+        <div style="display:flex;flex:1;overflow:hidden;min-height:0">
+            <!-- LEFT: Applicant details panel -->
+            <div style="width:320px;flex-shrink:0;border-right:1px solid var(--border);padding:var(--space-4) var(--space-5);overflow-y:auto;background:var(--bg-subtle)">
+                <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-3)">Applicant Details</div>
+                <div style="display:flex;flex-direction:column;gap:var(--space-3);font-size:var(--text-sm)">
+                    <div>
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Full Name</div>
+                        <div id="eval-detail-name" style="font-weight:var(--weight-medium)"></div>
+                    </div>
+                    <div id="eval-detail-email-wrap">
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Email</div>
+                        <div id="eval-detail-email"></div>
+                    </div>
+                    <div id="eval-detail-phone-wrap" style="display:none">
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Phone</div>
+                        <div id="eval-detail-phone"></div>
+                    </div>
+                    <div id="eval-detail-bday-wrap" style="display:none">
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Birthdate</div>
+                        <div id="eval-detail-bday"></div>
+                    </div>
+                    <div id="eval-detail-sex-wrap" style="display:none">
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Sex</div>
+                        <div id="eval-detail-sex"></div>
+                    </div>
+                    <div id="eval-detail-address-wrap" style="display:none">
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Address</div>
+                        <div id="eval-detail-address"></div>
+                    </div>
+                    <div style="border-top:1px solid var(--border);margin:var(--space-1) 0"></div>
+                    <div>
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Applicant Type</div>
+                        <div id="eval-detail-type"></div>
+                    </div>
+                    <div>
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Course Applied</div>
+                        <div id="eval-detail-course" style="font-weight:var(--weight-medium)"></div>
+                    </div>
+                    <div id="eval-detail-strand-wrap" style="display:none">
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">SHS Strand</div>
+                        <div id="eval-detail-strand"></div>
+                    </div>
+                    <div id="eval-detail-sy-wrap" style="display:none">
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">School Year</div>
+                        <div id="eval-detail-sy"></div>
+                    </div>
+                    <div style="border-top:1px solid var(--border);margin:var(--space-1) 0"></div>
+                    <div id="eval-detail-exam-wrap" style="display:none">
+                        <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Exam Score</div>
+                        <div id="eval-detail-exam" style="font-weight:var(--weight-medium)"></div>
                     </div>
                 </div>
-
-                <div>
-                    <label class="form-label" for="eval-notes">Interview notes</label>
-                    <textarea id="eval-notes" name="interview_notes" class="form-control"
-                              rows="5" placeholder="Interview notes / evaluation remarks…"></textarea>
-                </div>
-
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                    Choose Pass or Fail to finalize this interview.
-                </div>
             </div>
 
-            <div class="modal-footer" style="display:flex;gap:var(--space-2);justify-content:flex-end">
-                <button type="button" class="btn btn-ghost" onclick="closeEvalModal()">Cancel</button>
-                <button type="submit" class="btn btn-fail"
-                        onclick="document.getElementById('eval-result-input').value='fail'">
-                    <?= icon('ic_fluent_dismiss_24_regular', 13) ?> Fail
-                </button>
-                <button type="submit" class="btn btn-pass"
-                        onclick="document.getElementById('eval-result-input').value='pass'">
-                    <?= icon('ic_fluent_checkmark_24_regular', 13) ?> Pass
-                </button>
+            <!-- RIGHT: Eval form -->
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+                <form method="POST" id="eval-form" action="" style="display:flex;flex-direction:column;flex:1">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="complete_with_evaluation">
+                    <input type="hidden" name="evaluation_result" id="eval-result-input" value="">
+
+                    <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4);flex:1">
+                        <div>
+                            <label class="form-label" for="eval-notes">Interview notes</label>
+                            <textarea id="eval-notes" name="interview_notes" class="form-control"
+                                      rows="7" placeholder="Interview notes / evaluation remarks…"></textarea>
+                        </div>
+
+                        <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                            Choose Pass or Reject to finalize this interview.
+                        </div>
+                    </div>
+
+                    <div class="modal-footer" style="display:flex;gap:var(--space-2);justify-content:flex-end">
+                        <button type="button" class="btn btn-ghost" onclick="closeEvalModal()">Cancel</button>
+                        <button type="submit" class="btn btn-reject"
+                                onclick="document.getElementById('eval-result-input').value='reject'">
+                            <?= icon('ic_fluent_dismiss_24_regular', 13) ?> Reject
+                        </button>
+                        <button type="submit" class="btn btn-pass"
+                                onclick="document.getElementById('eval-result-input').value='pass'">
+                            <?= icon('ic_fluent_checkmark_24_regular', 13) ?> Pass
+                        </button>
+                    </div>
+                </form>
             </div>
-        </form>
+        </div>
     </div>
 </div>
 
@@ -610,17 +685,51 @@ document.getElementById('iq-filter')?.addEventListener('input', (e) => {
 // Evaluation modal handlers
 const evalModal = document.getElementById('eval-modal');
 
-function openEvalModal(queueId, name, course, type, notes) {
+function _showField(id, value) {
+    var wrap = document.getElementById(id + '-wrap');
+    var el   = document.getElementById(id);
+    if (value) {
+        el.textContent = value;
+        if (wrap) wrap.style.display = '';
+    } else {
+        if (wrap) wrap.style.display = 'none';
+    }
+}
+
+function openEvalModal(d) {
     document.getElementById('eval-form').action =
-        '<?= e(url('/staff/interviews/')) ?>' + queueId;
-    document.getElementById('eval-name').textContent  = name || '';
-    document.getElementById('eval-course').textContent = course || '';
-    document.getElementById('eval-type').textContent  = type
-        ? type.charAt(0).toUpperCase() + type.slice(1)
-        : '';
-    document.getElementById('eval-sep').style.display =
-        (course && type) ? '' : 'none';
-    document.getElementById('eval-notes').value = notes || '';
+        '<?= e(url('/staff/interviews/')) ?>' + d.queueId;
+
+    // Applicant details panel
+    document.getElementById('eval-detail-name').textContent = d.name || '';
+    document.getElementById('eval-detail-email').textContent = d.email || '';
+    document.getElementById('eval-detail-type').textContent = d.type ? d.type.charAt(0).toUpperCase() + d.type.slice(1) : '—';
+    document.getElementById('eval-detail-course').textContent = d.course || '—';
+
+    _showField('eval-detail-phone', d.phone);
+    _showField('eval-detail-bday', d.birthdate);
+    _showField('eval-detail-sex', d.sex === 'M' ? 'Male' : (d.sex === 'F' ? 'Female' : ''));
+    _showField('eval-detail-address', d.address);
+    _showField('eval-detail-strand', d.strand);
+    _showField('eval-detail-sy', d.school_year);
+
+    // Exam score
+    var examWrap = document.getElementById('eval-detail-exam-wrap');
+    var examEl   = document.getElementById('eval-detail-exam');
+    if (d.exam_score !== null && d.exam_total !== null) {
+        var scoreText = d.exam_score + '/' + d.exam_total;
+        if (d.exam_passed === 1) {
+            scoreText += ' — <span style="color:var(--success);font-weight:var(--weight-semibold)">Passed</span>';
+        } else if (d.exam_passed === 0) {
+            scoreText += ' — <span style="color:var(--error);font-weight:var(--weight-semibold)">Failed</span>';
+        }
+        examEl.innerHTML = scoreText;
+        examWrap.style.display = '';
+    } else {
+        examWrap.style.display = 'none';
+    }
+
+    document.getElementById('eval-notes').value = d.notes || '';
     document.getElementById('eval-result-input').value = '';
     evalModal.style.display = 'flex';
     setTimeout(() => document.getElementById('eval-notes').focus(), 50);
@@ -640,10 +749,10 @@ document.addEventListener('keydown', function (e) {
     }
 });
 
-// Submission guard — make sure the user actually clicked Pass or Fail
+// Submission guard — make sure the user actually clicked Pass or Reject
 document.getElementById('eval-form').addEventListener('submit', function (e) {
     const decision = document.getElementById('eval-result-input').value;
-    if (decision !== 'pass' && decision !== 'fail') {
+    if (decision !== 'pass' && decision !== 'reject') {
         e.preventDefault();
         return false;
     }

@@ -3002,6 +3002,8 @@ body.ap-drawer-locked { overflow: hidden; }
     font-size: var(--text-xs);
     color: var(--text-tertiary);
 }
+.btn-pass   { background: var(--success-bg, #d1fae5); color: var(--success, #15803d); border-color: var(--success, #15803d); }
+.btn-reject { background: var(--error-bg, #fee2e2);   color: var(--error, #b91c1c);   border-color: var(--error, #b91c1c); }
 
 /* Audit list */
 .ap-audit {

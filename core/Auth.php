@@ -143,8 +143,8 @@ class Auth
             ROLE_ADMIN   => url('/admin/dashboard'),
             ROLE_SSO     => url('/admin/dashboard'),
             ROLE_DEAN    => url('/admin/dashboard'),
-            ROLE_STAFF   => url('/staff/dashboard'),
-            ROLE_PROCTOR => url('/staff/dashboard'),
+            ROLE_STAFF   => url('/staff/interviews/queue'),
+            ROLE_PROCTOR => url('/staff/interviews/queue'),
             default      => url('/student/documents'),
         };
     }

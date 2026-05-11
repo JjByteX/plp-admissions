@@ -6,6 +6,12 @@
 require_once ROOT_PATH . '/core/Auth.php';
 Auth::requireRole(ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
+// Staff (Professor) and Proctor no longer have their own dashboard —
+// they go straight to the Interview Queue which is their primary workpage.
+if (Auth::role() === ROLE_STAFF || Auth::role() === ROLE_PROCTOR) {
+    redirect('/staff/interviews/queue');
+}
+
 // ── A4: Dashboard POST handlers ──────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -70,11 +76,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ── Dean / Professor dept scope ──────────────────────────────
-// Dean and Professor see only stats for applicants whose course maps
-// to their own college. Admin / SSO see everything.
-[$deptFilter, $deptParams] = viewer_course_filter('a');
-$deptWhere = $deptFilter !== '' ? ('WHERE 1 ' . $deptFilter) : '';
+// All roles see global stats (no department scoping on dashboard)
+$deptFilter = '';
+$deptParams = [];
+$deptWhere = '';
 
 // ── Fetch summary counts ─────────────────────────────────────
 $statsStmt = db()->prepare(
@@ -253,8 +258,7 @@ ob_start();
 </div>
 <?php endif; ?>
 
-<!-- ── Quick Actions (SSO/Admin only — Dean & Professor are read-only here) ─ -->
-<?php if (Auth::isAdmin() || Auth::isSSO()): ?>
+<!-- ── Quick Actions ─ -->
 <div class="card" style="padding:var(--space-4);margin-bottom:var(--space-6)">
     <strong style="font-size:var(--text-sm);display:block;margin-bottom:var(--space-3)">Quick Actions</strong>
     <div style="display:flex;flex-wrap:wrap;gap:var(--space-3)">
@@ -312,7 +316,6 @@ ob_start();
         </form>
     </div>
 </div>
-<?php endif; ?>
 
 <!-- ── Pipeline charts ────────────────────────────────── -->
 <div class="dashboard-grid">

@@ -20,10 +20,9 @@ $_navIntReady = (int)$_navDb->query(
     "SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURDATE()"
 )->fetchColumn() > 0;
 
-// Flat list — only 2 items: Dashboard → Interview Queue.
-// Exam Slots moved to the Proctor role.
+// Flat list — only Interview Queue now. Dashboard removed;
+// Staff (Professor) role lands directly on the Interview Queue.
 $items = [
-    ['href' => '/staff/dashboard',         'key' => 'dashboard',  'label' => 'Dashboard',       'icon' => 'ic_fluent_home_24_regular'],
     ['href' => '/staff/interviews/queue',  'key' => 'interviews', 'label' => 'Interview Queue', 'icon' => 'ic_fluent_people_24_regular',     'alert' => !$_navIntReady],
 ];
 ?>

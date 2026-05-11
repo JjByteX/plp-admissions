@@ -540,7 +540,7 @@ function auto_release_results(): array
         $examPassed   = isset($appl['exam_passed']) ? (int) $appl['exam_passed'] : -1;
         $interviewRes = $appl['evaluation_result'];
 
-        if ($examPassed === 0 || $interviewRes === 'fail') {
+        if ($examPassed === 0 || $interviewRes === 'reject') {
             $decision = 'rejected';
         } elseif ($examPassed === 1 && $interviewRes === 'pass') {
             $decision = 'accepted';

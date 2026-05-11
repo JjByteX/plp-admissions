@@ -44,7 +44,7 @@ switch ($action) {
 
         // Interview completion no longer auto-creates an admission_results
         // row — SSO releases manually from the Results page after seeing
-        // the Pass/Fail eval. We still leave the applicant in 'interview'
+        // the Pass/Reject eval. We still leave the applicant in 'interview'
         // so the Results page bucket logic picks it up correctly.
         audit_log('interview_completed', "Marked interview queue ID {$id} as completed", 'interview_queue', $id);
         Session::flash('success', 'Interview marked as completed.');
@@ -52,14 +52,14 @@ switch ($action) {
         break;
 
     // ----------------------------------------------------------------
-    // Queue: complete with inline evaluation (Pass/Fail + notes)
+    // Queue: complete with inline evaluation (Pass/Reject + notes)
     // ----------------------------------------------------------------
     case 'complete_with_evaluation':
         $evalResult = strtolower(trim($_POST['evaluation_result'] ?? ''));
         $evalNotes  = trim($_POST['interview_notes'] ?? '');
 
-        if ($evalResult !== 'pass' && $evalResult !== 'fail') {
-            Session::flash('error', 'Please select Pass or Fail before completing.');
+        if ($evalResult !== 'pass' && $evalResult !== 'reject') {
+            Session::flash('error', 'Please select Pass or Reject before completing.');
             redirect('/staff/interviews/queue');
         }
 
@@ -84,11 +84,16 @@ switch ($action) {
              WHERE id = ?'
         )->execute([$evalNotes ?: null, $evalResult, $id]);
 
-        // Two-gate flow: the Pass/Fail evaluation here is Gate 1 (the
-        // Professor's call). The applicant stays in 'interview' status
-        // until SSO performs Gate 2 (Release) on the Results page — that
-        // is the action that actually creates an admission_results row
-        // and emails the applicant.
+        // Two-gate flow: the Pass/Reject evaluation here is Gate 1 (the
+        // interviewer's call). The applicant moves to 'released' stage
+        // so they appear on the Results page. SSO performs Gate 2 (Release)
+        // on the Results page — the final confirmation that actually
+        // creates an admission_results row and emails the applicant.
+        $db->prepare(
+            'UPDATE applicants SET overall_status = "released"
+              WHERE id = ? AND overall_status IN ("interview","exam")'
+        )->execute([$row['applicant_id']]);
+
         audit_log('interview_completed_with_eval',
             "Completed interview queue ID {$id}: {$evalResult}",
             'interview_queue', $id);

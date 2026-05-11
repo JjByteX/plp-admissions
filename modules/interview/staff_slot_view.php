@@ -3,7 +3,7 @@
 // modules/interview/staff_slot_view.php
 //
 // Slot detail page — shows the students assigned to this slot
-// and lets staff mark attendance + record Pass/Fail evaluations
+// and lets staff mark attendance + record Pass/Reject evaluations
 // in a single submission.
 //
 // URL:
@@ -97,8 +97,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = strtolower(trim($result));
 
             if (!$absent) {
-                if ($result !== 'pass' && $result !== 'fail') {
-                    $errors[] = 'Every present student needs a Pass/Fail evaluation.';
+                if ($result !== 'pass' && $result !== 'reject') {
+                    $errors[] = 'Every present student needs a Pass/Reject evaluation.';
                     $toSave = [];
                     break;
                 }
@@ -243,7 +243,7 @@ ob_start();
                     $isLocked = in_array($row['interview_status'], ['completed','absent','rescheduled'], true);
                     $absentChecked = ($row['attendance_status'] ?? '') === 'absent';
                     $evalPass      = ($row['evaluation_result'] ?? '') === 'pass';
-                    $evalFail      = ($row['evaluation_result'] ?? '') === 'fail';
+                    $evalReject    = ($row['evaluation_result'] ?? '') === 'reject';
                 ?>
                     <tr data-queue-id="<?= (int)$row['queue_id'] ?>" style="border-top:1px solid var(--border);font-size:var(--text-sm)">
                         <td style="padding:var(--space-3) var(--space-4)">
@@ -282,11 +282,11 @@ ob_start();
                                 <label style="display:inline-flex;align-items:center;gap:var(--space-1);cursor:pointer">
                                     <input type="radio"
                                            name="rows[<?= (int)$row['queue_id'] ?>][result]"
-                                           value="fail"
+                                           value="reject"
                                            class="js-result-radio"
-                                           <?= $evalFail ? 'checked' : '' ?>
+                                           <?= $evalReject ? 'checked' : '' ?>
                                            <?= ($isLocked || $absentChecked) ? 'disabled' : '' ?>>
-                                    Fail
+                                    Reject
                                 </label>
                             </div>
                         </td>
@@ -326,7 +326,7 @@ ob_start();
 
     <script>
         // When the "Absent" checkbox is toggled on:
-        //   - uncheck + disable the Pass/Fail radios on that row
+        //   - uncheck + disable the Pass/Reject radios on that row
         // When toggled off:
         //   - re-enable the radios (staff will still need to pick one)
         document.querySelectorAll('.js-absent-toggle').forEach(function (cb) {
@@ -344,7 +344,7 @@ ob_start();
         });
 
         // Client-side validation mirrors the server rule — every non-absent
-        // student must have a Pass/Fail selected.
+        // student must have a Pass/Reject selected.
         document.getElementById('eval-form').addEventListener('submit', function (evt) {
             const missing = [];
             document.querySelectorAll('tr[data-queue-id]').forEach(function (tr) {
@@ -358,7 +358,7 @@ ob_start();
             });
             if (missing.length > 0) {
                 evt.preventDefault();
-                alert('Please select Pass or Fail for every present student:\n\n' + missing.join('\n'));
+                alert('Please select Pass or Reject for every present student:\n\n' + missing.join('\n'));
             }
         });
     </script>

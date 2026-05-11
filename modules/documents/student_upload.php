@@ -718,7 +718,7 @@ async function submitUpload() {
         const data = await res.json();
         closeUploadModal();
         if (data.ok) {
-            showResultModal(true, 'Upload successful!', data.message);
+            window.location.reload();
         } else {
             showResultModal(false, 'Upload failed', data.message);
         }

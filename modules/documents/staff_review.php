@@ -108,7 +108,8 @@ if ($applicantId) {
     // ---- Single applicant document review ----
     $stmt = $db->prepare(
         'SELECT a.*, u.name AS student_name, u.email,
-                u.first_name, u.middle_name, u.last_name, u.suffix
+                u.first_name, u.middle_name, u.last_name, u.suffix,
+                u.birthdate, u.sex, u.address, u.phone
          FROM applicants a JOIN users u ON u.id = a.user_id
          WHERE a.id = ?'
     );
@@ -139,6 +140,8 @@ if ($applicantId) {
                 'label'     => $label,
                 'file_path' => $doc['file_path'],
                 'url'       => file_url($doc['file_path']),
+                'doc_id'    => (int)$doc['id'],
+                'status'    => $doc['status'],
             ];
         }
     }
@@ -166,23 +169,17 @@ if ($applicantId) {
         <?= icon('ic_fluent_arrow_left_24_regular', 16) ?>
         Back
     </a>
-    <span class="badge badge-<?= $applicant['overall_status'] ?>" style="margin-left:auto">
-        <?= e(ucfirst(str_replace('_',' ',$applicant['overall_status']))) ?>
-    </span>
+    <div style="margin-left:auto"></div>
     <?php if ($approvableCount > 0): ?>
         <button type="button" class="btn btn-sm" onclick="openAiValidateAllModal()" id="ai-validate-all-btn">
             <?= icon('ic_fluent_sparkle_24_regular', 14, 'margin-right:3px') ?>
             AI Validate All
         </button>
-        <form method="POST" action="<?= url('/staff/documents/' . $applicantId) ?>"
-              onsubmit="return confirm('Approve all <?= $approvableCount ?> document(s) at once?')">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="approve_all">
-            <button type="submit" class="btn btn-success btn-sm">
-                <?= icon('ic_fluent_checkmark_circle_24_regular', 15) ?>
-                Approve All (<?= $approvableCount ?>)
-            </button>
-        </form>
+        <button type="button" class="btn btn-success btn-sm" id="approve-all-btn"
+                onclick="approveAllAjax()">
+            <?= icon('ic_fluent_checkmark_circle_24_regular', 15) ?>
+            Approve All (<?= $approvableCount ?>)
+        </button>
     <?php endif; ?>
 </div>
 
@@ -247,7 +244,7 @@ if ($applicantId) {
                     type="button"
                 >
                     <?= icon('ic_fluent_eye_show_24_regular', 14) ?>
-                    View File
+                    Review
                 </button>
             <?php else: ?>
                 <span style="font-size:var(--text-sm);color:var(--text-tertiary)">No file</span>
@@ -322,20 +319,26 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 </div>
 
 <!-- ============================================================
-     FILE VIEWER MODAL
+     FILE VIEWER / REVIEW MODAL (two-panel layout)
 ============================================================ -->
+<?php
+    $studentFullName = trim(($applicant['first_name'] ?? '') . ' ' . ($applicant['middle_name'] ?? '') . ' ' . ($applicant['last_name'] ?? ''));
+    if ($applicant['suffix'] ?? '') $studentFullName .= ', ' . $applicant['suffix'];
+    if (!$studentFullName) $studentFullName = $applicant['student_name'] ?? '—';
+    $strandLabel = isset(SHS_STRANDS[$applicant['shs_strand'] ?? '']) ? SHS_STRANDS[$applicant['shs_strand']] : ($applicant['shs_strand'] ?? '');
+?>
 <div id="file-viewer-modal" style="
     display:none;
     position:fixed;inset:0;z-index:9999;
     background:rgba(0,0,0,0.82);
     backdrop-filter:blur(4px);
     align-items:center;justify-content:center;
-" aria-modal="true" role="dialog" aria-label="Document Viewer">
+" aria-modal="true" role="dialog" aria-label="Document Review">
 
     <div style="
         position:relative;
-        width:min(92vw,1000px);
-        max-height:92vh;
+        width:min(96vw,1400px);
+        height:min(92vh,900px);
         background:var(--bg-elevated);
         border-radius:var(--radius-lg);
         box-shadow:var(--shadow-lg);
@@ -379,16 +382,14 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 
             <div style="width:1px;height:24px;background:var(--border);flex-shrink:0"></div>
 
-            <!-- Zoom out -->
+            <!-- Zoom controls -->
             <button onclick="fvZoom(-0.25)" type="button" class="fv-ctrl-btn" title="Zoom out (−)">
                 <?= icon('ic_fluent_subtract_24_regular', 14) ?>
             </button>
             <span id="fv-zoom-label" style="font-size:var(--text-xs);color:var(--text-secondary);min-width:38px;text-align:center;font-variant-numeric:tabular-nums">100%</span>
-            <!-- Zoom in -->
             <button onclick="fvZoom(0.25)" type="button" class="fv-ctrl-btn" title="Zoom in (+)">
                 <?= icon('ic_fluent_add_24_regular', 14) ?>
             </button>
-            <!-- Reset zoom -->
             <button onclick="fvResetZoom()" type="button" class="fv-ctrl-btn" title="Reset zoom (0)">
                 <?= icon('ic_fluent_arrow_sync_24_regular', 14) ?>
             </button>
@@ -401,35 +402,117 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
             </button>
         </div>
 
-        <!-- Viewport -->
-        <div id="fv-viewport" style="
-            flex:1;overflow:hidden;position:relative;
-            background:var(--bg-subtle);min-height:300px;
-            cursor:default;user-select:none;
-        ">
-            <div id="fv-transform-wrap" style="
-                position:absolute;top:0;left:0;
-                width:100%;height:100%;
-                display:flex;align-items:center;justify-content:center;
-                will-change:transform;
-                transform-origin:center center;
-            ">
-                <!-- content injected by _render() -->
+        <!-- Two-panel body -->
+        <div style="flex:1;display:flex;overflow:hidden;min-height:0">
+            <!-- LEFT: Document preview -->
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden">
+                <div id="fv-viewport" style="
+                    flex:1;overflow:hidden;position:relative;
+                    background:var(--bg-subtle);
+                    cursor:default;user-select:none;
+                ">
+                    <div id="fv-transform-wrap" style="
+                        position:absolute;top:0;left:0;
+                        width:100%;height:100%;
+                        display:flex;align-items:center;justify-content:center;
+                        will-change:transform;
+                        transform-origin:center center;
+                    "></div>
+                    <div id="fv-hint" style="
+                        position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+                        background:rgba(0,0,0,0.55);color:#fff;
+                        font-size:var(--text-xs);padding:5px 14px;border-radius:var(--radius-full);
+                        pointer-events:none;opacity:0;transition:opacity .4s ease;white-space:nowrap;
+                    ">Scroll to zoom · Drag to pan when zoomed in</div>
+                </div>
+                <!-- Nav dots -->
+                <div id="fv-dots" style="
+                    display:flex;align-items:center;justify-content:center;gap:6px;
+                    padding:var(--space-2);border-top:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
+                "></div>
             </div>
-            <!-- Hint -->
-            <div id="fv-hint" style="
-                position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
-                background:rgba(0,0,0,0.55);color:#fff;
-                font-size:var(--text-xs);padding:5px 14px;border-radius:var(--radius-full);
-                pointer-events:none;opacity:0;transition:opacity .4s ease;white-space:nowrap;
-            ">Scroll to zoom · Drag to pan when zoomed in</div>
-        </div>
 
-        <!-- Nav dots -->
-        <div id="fv-dots" style="
-            display:flex;align-items:center;justify-content:center;gap:6px;
-            padding:var(--space-3);border-top:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
-        "></div>
+            <!-- RIGHT: Student details + actions -->
+            <div style="width:360px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;background:var(--bg)">
+                <div style="padding:var(--space-5);flex:1">
+                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-base);margin-bottom:var(--space-4)">Applicant Details</div>
+
+                    <div style="display:flex;flex-direction:column;gap:var(--space-3);font-size:var(--text-sm)">
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Full Name</div>
+                            <div style="font-weight:var(--weight-medium)"><?= e($studentFullName) ?></div>
+                        </div>
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Email</div>
+                            <div><?= e($applicant['email'] ?? '—') ?></div>
+                        </div>
+                        <?php if (!empty($applicant['phone'])): ?>
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Phone</div>
+                            <div><?= e($applicant['phone']) ?></div>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (!empty($applicant['birthdate'])): ?>
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Birthdate</div>
+                            <div><?= e(format_date($applicant['birthdate'], 'M j, Y')) ?></div>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (!empty($applicant['sex'])): ?>
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Sex</div>
+                            <div><?= $applicant['sex'] === 'M' ? 'Male' : 'Female' ?></div>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (!empty($applicant['address'])): ?>
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Address</div>
+                            <div><?= e($applicant['address']) ?></div>
+                        </div>
+                        <?php endif; ?>
+
+                        <div style="border-top:1px solid var(--border);margin:var(--space-2) 0"></div>
+
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Applicant Type</div>
+                            <div><?= e(ucfirst($applicant['applicant_type'] ?? '—')) ?></div>
+                        </div>
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Course Applied</div>
+                            <div style="font-weight:var(--weight-medium)"><?= e($applicant['course_applied'] ?? '—') ?></div>
+                        </div>
+                        <?php if ($strandLabel): ?>
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">SHS Strand</div>
+                            <div><?= e($strandLabel) ?></div>
+                        </div>
+                        <?php endif; ?>
+                        <div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">School Year</div>
+                            <div><?= e($applicant['school_year'] ?? '—') ?></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action buttons (shown/hidden based on doc status) -->
+                <div id="fv-actions" style="padding:var(--space-4) var(--space-5);border-top:1px solid var(--border);display:flex;flex-direction:column;gap:var(--space-2);flex-shrink:0">
+                    <form method="POST" id="fv-approve-form" action="" style="display:none">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="approve">
+                        <button type="submit" class="btn btn-success" style="width:100%">
+                            <?= icon('ic_fluent_checkmark_circle_24_regular', 15, 'margin-right:4px') ?>
+                            Approve
+                        </button>
+                    </form>
+                    <button type="button" id="fv-resubmit-btn" class="btn btn-warning" style="width:100%;display:none"
+                            onclick="closeFileViewer(); openResubmitModal(window._fvCurrentDocId)">
+                        <?= icon('ic_fluent_arrow_undo_24_regular', 15, 'margin-right:4px') ?>
+                        Request Resubmission
+                    </button>
+                    <div id="fv-status-msg" style="text-align:center;font-size:var(--text-sm);color:var(--text-tertiary);display:none"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -451,6 +534,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 (function(){
     var _files=[], _idx=0, _scale=1, _tx=0, _ty=0;
     var _drag=false, _ds={x:0,y:0}, _touch=null;
+    window._fvCurrentDocId = 0;
 
     window.openFileViewer = function(idx, files) {
         _files=files; _idx=idx; _scale=1; _tx=0; _ty=0;
@@ -487,9 +571,9 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
         var wrap=document.getElementById('fv-transform-wrap');
         var isPdf=f.url.toLowerCase().split('?')[0].endsWith('.pdf');
         if(isPdf){
-            wrap.innerHTML='<iframe src="'+f.url+'" style="width:100%;height:72vh;border:none;border-radius:var(--radius-sm);background:#fff;"></iframe>';
+            wrap.innerHTML='<iframe src="'+f.url+'" style="width:100%;height:100%;border:none;background:#fff;"></iframe>';
         } else {
-            wrap.innerHTML='<img src="'+f.url+'" alt="Document preview" style="max-width:100%;max-height:72vh;border-radius:var(--radius-sm);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;">';
+            wrap.innerHTML='<img src="'+f.url+'" alt="Document preview" style="max-width:100%;max-height:100%;border-radius:var(--radius-sm);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;">';
         }
         document.getElementById('fv-label').textContent=f.label;
         document.getElementById('fv-counter').textContent=(_idx+1)+' of '+_files.length;
@@ -499,8 +583,35 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
         n.disabled=(_idx===_files.length-1); n.style.opacity=(_idx===_files.length-1)?'0.35':'1';
         _apply();
         _dots();
+        _updateActions(f);
         var h=document.getElementById('fv-hint');
         if(h){ h.style.opacity='1'; setTimeout(function(){ h.style.opacity='0'; },2800); }
+    }
+
+    function _updateActions(f) {
+        var approveForm = document.getElementById('fv-approve-form');
+        var resubmitBtn = document.getElementById('fv-resubmit-btn');
+        var statusMsg   = document.getElementById('fv-status-msg');
+        window._fvCurrentDocId = f.doc_id || 0;
+
+        if (f.status === 'uploaded' || f.status === 'under_review') {
+            approveForm.action = '<?= url('/staff/documents/') ?>' + f.doc_id;
+            approveForm.style.display = '';
+            resubmitBtn.style.display = '';
+            statusMsg.style.display = 'none';
+        } else {
+            approveForm.style.display = 'none';
+            resubmitBtn.style.display = 'none';
+            statusMsg.style.display = '';
+            if (f.status === 'approved') {
+                statusMsg.textContent = 'This document has been approved.';
+            } else if (f.status === 'rejected') {
+                statusMsg.textContent = 'Resubmission requested for this document.';
+            } else {
+                statusMsg.textContent = '';
+                statusMsg.style.display = 'none';
+            }
+        }
     }
 
     function _apply() {
@@ -581,7 +692,78 @@ function openResubmitModal(docId) {
     document.getElementById('resubmit-form').action = '<?= url('/staff/documents/') ?>' + docId;
     document.getElementById('resubmit-modal').style.display = 'flex';
 }
+
+// AJAX Approve All — fast, non-blocking
+function approveAllAjax() {
+    var btn = document.getElementById('approve-all-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = 'Approving…';
+
+    var fd = new FormData();
+    fd.append('_csrf', '<?= e(csrf_token()) ?>');
+    fd.append('action', 'approve_all');
+
+    fetch('<?= url('/staff/documents/' . $applicantId) ?>', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: fd
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            showUndoToast(data.message || 'All documents approved.');
+        } else {
+            alert(data.message || 'Something went wrong.');
+            window.location.reload();
+        }
+    })
+    .catch(function() { window.location.reload(); });
+}
+
+// Undo toast
+function showUndoToast(msg) {
+    var existing = document.getElementById('undo-toast');
+    if (existing) existing.remove();
+
+    var toast = document.createElement('div');
+    toast.id = 'undo-toast';
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:12px 20px;display:flex;align-items:center;gap:12px;font-size:var(--text-sm);min-width:320px;animation:slideUp .25s ease';
+    toast.innerHTML = '<span style="flex:1">' + msg + '</span>'
+        + '<button onclick="undoApproveAll()" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 14px;cursor:pointer;font-size:var(--text-sm);color:var(--text-primary);font-weight:500">Undo</button>'
+        + '<button onclick="dismissToast()" style="background:none;border:none;cursor:pointer;color:var(--text-tertiary);font-size:16px;padding:0 4px">&times;</button>';
+    document.body.appendChild(toast);
+
+    window._undoToastTimer = setTimeout(function() {
+        dismissToast();
+        window.location.reload();
+    }, 6000);
+}
+
+function dismissToast() {
+    clearTimeout(window._undoToastTimer);
+    var t = document.getElementById('undo-toast');
+    if (t) t.remove();
+}
+
+function undoApproveAll() {
+    dismissToast();
+    var fd = new FormData();
+    fd.append('_csrf', '<?= e(csrf_token()) ?>');
+    fd.append('action', 'undo_approve_all');
+
+    fetch('<?= url('/staff/documents/' . $applicantId) ?>', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: fd
+    })
+    .then(function() { window.location.reload(); })
+    .catch(function() { window.location.reload(); });
+}
 </script>
+<style>
+@keyframes slideUp { from { opacity:0; transform:translateX(-50%) translateY(20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+</style>
 
 <!-- ════════════════════════════════════════════════════════════
      AI VALIDATE ALL — collages all docs into one image, sends to Puter AI
@@ -1194,14 +1376,16 @@ $docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $c
     <!-- Approve All (RIGHT) -->
     <div style="display:flex;align-items:center;gap:var(--space-2);flex-shrink:0">
     <?php if ($pendingReviewCount > 0): ?>
-        <form method="POST" style="margin:0"
-              onsubmit="return confirm('Approve all documents for <?= $pendingReviewCount ?> applicant(s) in review? This will advance them to the exam stage.')">
+        <button type="button" class="btn btn-success btn-sm" id="approve-all-list-btn"
+                style="display:flex;align-items:center;gap:5px;white-space:nowrap"
+                onclick="approveAllListAjax(<?= (int)$pendingReviewCount ?>)">
+            <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
+            Approve All in Review (<?= $pendingReviewCount ?>)
+        </button>
+        <!-- Hidden fallback form -->
+        <form id="approve-all-list-form" method="POST" style="display:none">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="approve_all_in_review">
-            <button type="submit" class="btn btn-success btn-sm" style="display:flex;align-items:center;gap:5px;white-space:nowrap">
-                <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
-                Approve All in Review (<?= $pendingReviewCount ?>)
-            </button>
         </form>
     <?php endif; ?>
     </div>
@@ -1476,6 +1660,80 @@ document.addEventListener('click', function(e) {
     }
 });
 </script>
+
+<script>
+/* ── Approve All in Review — AJAX with undo toast ───────────── */
+function approveAllListAjax(count) {
+    var btn = document.getElementById('approve-all-list-btn');
+    if (!btn) return;
+
+    showListUndoToast(
+        'Approving all documents for ' + count + ' applicant(s)…',
+        function() {
+            if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
+            document.getElementById('approve-all-list-form').submit();
+        },
+        function() {
+            // Undo: just dismiss, nothing was submitted yet
+        }
+    );
+}
+
+function showListUndoToast(msg, onCommit, onUndo) {
+    var existing = document.getElementById('list-undo-toast');
+    if (existing) { existing._cancelFn && existing._cancelFn(); existing.remove(); }
+
+    var DELAY = 6000;
+    var toast = document.createElement('div');
+    toast.id = 'list-undo-toast';
+    toast.style.cssText = [
+        'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);',
+        'z-index:10000;background:var(--bg-elevated);border:1px solid var(--border);',
+        'border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);',
+        'padding:12px 20px;display:flex;align-items:center;gap:12px;',
+        'font-size:var(--text-sm);min-width:320px;animation:listUndoSlideUp .25s ease;',
+        'overflow:hidden;'
+    ].join('');
+
+    // Progress bar
+    var bar = document.createElement('div');
+    bar.style.cssText = 'position:absolute;bottom:0;left:0;height:3px;background:var(--accent);' +
+        'border-radius:0 0 var(--radius-lg) var(--radius-lg);width:100%;' +
+        'transition:width ' + DELAY + 'ms linear';
+
+    var undoClicked = false;
+    toast.innerHTML = '<span style="flex:1">' + msg + '</span>'
+        + '<button id="list-undo-btn" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 14px;cursor:pointer;font-size:var(--text-sm);color:var(--text-primary);font-weight:500;white-space:nowrap">Undo</button>'
+        + '<button onclick="dismissListUndoToast()" style="background:none;border:none;cursor:pointer;color:var(--text-tertiary);font-size:16px;padding:0 4px">&times;</button>';
+    toast.appendChild(bar);
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(function() { requestAnimationFrame(function() { bar.style.width = '0'; }); });
+
+    var timer = setTimeout(function() {
+        if (!undoClicked) { dismissListUndoToast(); onCommit(); }
+    }, DELAY);
+
+    toast._cancelFn = function() { clearTimeout(timer); };
+
+    document.getElementById('list-undo-btn').addEventListener('click', function() {
+        undoClicked = true;
+        dismissListUndoToast();
+        if (onUndo) onUndo();
+    });
+}
+
+function dismissListUndoToast() {
+    var t = document.getElementById('list-undo-toast');
+    if (t) { t._cancelFn && t._cancelFn(); t.remove(); }
+}
+</script>
+<style>
+@keyframes listUndoSlideUp {
+    from { opacity:0; transform:translateX(-50%) translateY(20px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+</style>
 
 <?php
 $content   = ob_get_clean();

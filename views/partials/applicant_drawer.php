@@ -89,14 +89,14 @@
         }
     });
 
-    // Confirm helper used by the inline Pass/Fail form -----------
+    // Confirm helper used by the inline Pass/Reject form -----------
     window.apEvalConfirm = function (form) {
         var r = (form.querySelector('.ap-eval-input') || {}).value || '';
         if (!r) {
-            alert('Please choose Pass or Fail.');
+            alert('Please choose Pass or Reject.');
             return false;
         }
-        if (r === 'pass' || r === 'fail') {
+        if (r === 'pass' || r === 'reject') {
             return confirm('Submit this evaluation as ' + r.toUpperCase() + '?');
         }
         return true;

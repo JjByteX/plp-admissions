@@ -311,10 +311,10 @@ $_panelStatusColor = function (string $s): string {
                             Update notes
                         </button>
                     <?php else: ?>
-                        <span class="ap-eval-hint">Choose Pass or Fail to finalize.</span>
-                        <button type="submit" class="btn btn-fail btn-sm"
-                                onclick="this.form.querySelector('.ap-eval-input').value='fail'">
-                            <?= icon('ic_fluent_dismiss_24_regular', 13) ?> Fail
+                        <span class="ap-eval-hint">Choose Pass or Reject to finalize.</span>
+                        <button type="submit" class="btn btn-reject btn-sm"
+                                onclick="this.form.querySelector('.ap-eval-input').value='reject'">
+                            <?= icon('ic_fluent_dismiss_24_regular', 13) ?> Reject
                         </button>
                         <button type="submit" class="btn btn-pass btn-sm"
                                 onclick="this.form.querySelector('.ap-eval-input').value='pass'">

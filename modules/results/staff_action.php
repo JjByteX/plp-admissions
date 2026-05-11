@@ -6,7 +6,7 @@
 // Actions:
 //   action=release   — SSO/Admin only. Release a fresh result. Server
 //                      computes accepted vs rejected from the bucket
-//                      (exam_passed + interview Pass/Fail). Will not
+//                      (exam_passed + interview Pass/Reject). Will not
 //                      run if the applicant is still 'awaiting'.
 //   action=override  — Admin only. Edit an already-released result.
 //                      Audited; requires a non-empty remarks reason.
@@ -73,7 +73,7 @@ if ($action === 'override') {
 }
 
 // ── Release (SSO / Admin) ─────────────────────────────────────
-// Server computes the decision from exam_passed + interview Pass/Fail.
+// Server computes the decision from exam_passed + interview Pass/Reject.
 $stmt = $db->prepare(
     'SELECT a.id, a.overall_status,
             ar.result AS existing_result,
@@ -105,7 +105,7 @@ $examPassed   = (int)($row['exam_passed'] ?? -1);
 $interviewRes = $row['evaluation_result'];
 
 $decision = null;
-if ($examPassed === 0 || $interviewRes === 'fail') {
+if ($examPassed === 0 || $interviewRes === 'reject') {
     $decision = 'rejected';
 } elseif ($examPassed === 1 && $interviewRes === 'pass') {
     $decision = 'accepted';
