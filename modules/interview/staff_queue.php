@@ -336,6 +336,32 @@ ob_start();
 .btn-reject { background: var(--error-bg, #fee2e2);   color: var(--error, #b91c1c);     border-color: var(--error, #b91c1c); }
 </style>
 
+<?php if ($msg = Session::getFlash('success')): ?>
+    <div id="iq-flash-success" class="alert alert-success" style="margin-bottom:var(--space-4);display:flex;align-items:center;gap:var(--space-3)">
+        <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
+        <span style="flex:1"><?= e($msg) ?></span>
+        <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:inherit;font-size:18px;line-height:1;padding:0 2px">&times;</button>
+    </div>
+<?php endif; ?>
+<?php if ($msg = Session::getFlash('error')): ?>
+    <div id="iq-flash-error" class="alert alert-error" style="margin-bottom:var(--space-4);display:flex;align-items:center;gap:var(--space-3)">
+        <?= icon('ic_fluent_info_24_regular', 16) ?>
+        <span style="flex:1"><?= e($msg) ?></span>
+        <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:inherit;font-size:18px;line-height:1;padding:0 2px">&times;</button>
+    </div>
+<?php endif; ?>
+<script>
+// Auto-dismiss flash alerts after 5 seconds
+['iq-flash-success','iq-flash-error'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) setTimeout(function() {
+        el.style.transition = 'opacity .4s';
+        el.style.opacity = '0';
+        setTimeout(function() { el.remove(); }, 400);
+    }, 5000);
+});
+</script>
+
 <!-- ============================================================
      BACK BUTTON / CONTEXT HEADER
      ------------------------------------------------------------

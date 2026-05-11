@@ -8,7 +8,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 csrf_check();
 
 $db      = db();

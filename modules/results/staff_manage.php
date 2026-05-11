@@ -125,6 +125,40 @@ $countStmt = $db->prepare(
 $countStmt->execute($countParams);
 $countRows = $countStmt->fetch(PDO::FETCH_ASSOC);
 
+// ── Slot capacity per course ──────────────────────────────────
+// Shows how many are already accepted vs the max slots cap, so
+// the Dean can tell at a glance if they are at risk of over-accepting.
+$sy = school_setting('current_school_year', date('Y').'-'.(date('Y')+1));
+$slotCapParams = [':sy' => $sy];
+$slotCapCourseFilter = '';
+if ($role === ROLE_DEAN && !empty($scopedCourses)) {
+    $scNames = [];
+    foreach ($scopedCourses as $i => $c) {
+        $k = ':scc' . $i;
+        $scNames[] = $k;
+        $slotCapParams[$k] = $c;
+    }
+    $slotCapCourseFilter = ' AND cc.course_name IN (' . implode(',', $scNames) . ')';
+}
+$slotCapStmt = $db->prepare(
+    "SELECT cc.course_name,
+            cc.max_slots,
+            COALESCE(SUM(ar.result = 'accepted'), 0) AS accepted_count,
+            SUM(CASE WHEN $bucketCase = 'ready_accept' THEN 1 ELSE 0 END) AS pending_accept_count
+     FROM course_caps cc
+     LEFT JOIN applicants a   ON a.course_applied = cc.course_name AND a.school_year = cc.school_year
+     LEFT JOIN users u        ON u.id = a.user_id
+     LEFT JOIN admission_results ar ON ar.applicant_id = a.id
+     LEFT JOIN exam_results       er ON er.applicant_id = a.id
+     LEFT JOIN interview_queue    iq ON iq.applicant_id = a.id
+     WHERE cc.school_year = :sy AND cc.max_slots IS NOT NULL{$slotCapCourseFilter}
+     GROUP BY cc.course_name, cc.max_slots
+     HAVING cc.max_slots > 0
+     ORDER BY cc.course_name"
+);
+$slotCapStmt->execute($slotCapParams);
+$slotCaps = $slotCapStmt->fetchAll(PDO::FETCH_ASSOC);
+
 // ── Sort column map ───────────────────────────────────────────
 $colMap   = [
     'applicant' => 'u.name',
@@ -262,25 +296,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
             <button type="submit" style="display:none" aria-hidden="true"></button>
         </form>
 
-        <?php if ($canRelease): ?>
-        <!-- Auto-Release -->
-        <form method="POST" action="<?= url('/staff/results/auto-release') ?>" style="margin:0">
-            <?= csrf_field() ?>
-            <button type="submit"
-                    onclick="return confirm('Auto-release results for every applicant in Ready: Accept and Ready: Reject?\n\nApplicants whose interview has not been evaluated yet will be skipped.')"
-                    style="
-                        display:flex;align-items:center;gap:var(--space-2);
-                        height:32px;padding:0 var(--space-3);
-                        border:1px solid var(--border);border-radius:var(--radius-sm);
-                        background:var(--bg-elevated);color:var(--text-secondary);
-                        font-size:var(--text-sm);cursor:pointer;white-space:nowrap;
-                        transition:border-color var(--transition-fast),color var(--transition-fast);
-                    ">
-                <?= icon('ic_fluent_ribbon_star_24_regular', 14) ?>
-                Auto-Release Results
-            </button>
-        </form>
-        <?php endif; ?>
+
     </div>
 
     <!-- RIGHT: Bucket tabs (primary + de-emphasized Withdrawn) -->
@@ -357,6 +373,54 @@ $awaitingCount = (int)$countRows['awaiting_count'];
 </div>
 <?php endif; ?>
 
+<?php if (!empty($slotCaps)): ?>
+<!-- ── Slot capacity indicator ────────────────────────────── -->
+<div style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-4)">
+    <?php foreach ($slotCaps as $cap):
+        $accepted = (int)$cap['accepted_count'];
+        $pending  = (int)$cap['pending_accept_count'];
+        $max      = (int)$cap['max_slots'];
+        $total    = $accepted + $pending;
+        $pct      = $max > 0 ? min(100, round($total / $max * 100)) : 0;
+        $overLimit   = $total > $max;
+        $nearLimit   = !$overLimit && $pct >= 80;
+        $barColor    = $overLimit ? 'var(--error)' : ($nearLimit ? 'var(--warning)' : 'var(--success)');
+        $borderColor = $overLimit ? 'var(--error)' : ($nearLimit ? 'var(--warning)' : 'var(--border)');
+    ?>
+    <div style="
+        display:flex;flex-direction:column;gap:4px;
+        padding:var(--space-2) var(--space-3);
+        border:1px solid <?= $borderColor ?>;
+        border-radius:var(--radius-md);
+        background:var(--bg-elevated);
+        font-size:var(--text-xs);
+        min-width:180px;
+    ">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3)">
+            <span style="color:var(--text-secondary);font-weight:var(--weight-medium);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px" title="<?= e($cap['course_name']) ?>">
+                <?= e($cap['course_name']) ?>
+            </span>
+            <span style="color:<?= $barColor ?>;font-weight:var(--weight-semibold);white-space:nowrap">
+                <?= $accepted ?><?= $pending > 0 ? '+' . $pending : '' ?> / <?= $max ?>
+            </span>
+        </div>
+        <!-- Progress bar -->
+        <div style="height:4px;background:var(--border);border-radius:var(--radius-full);overflow:hidden">
+            <div style="height:100%;width:<?= $pct ?>%;background:<?= $barColor ?>;border-radius:var(--radius-full);transition:width .3s"></div>
+        </div>
+        <div style="color:var(--text-tertiary)">
+            <?= $accepted ?> accepted<?= $pending > 0 ? ' · <strong style="color:' . $barColor . '">' . $pending . ' pending</strong>' : '' ?>
+            <?php if ($overLimit): ?>
+                &nbsp;<span style="color:var(--error);font-weight:var(--weight-semibold)">· Over limit!</span>
+            <?php elseif ($nearLimit): ?>
+                &nbsp;<span style="color:var(--warning)">· Near limit</span>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
 <style>
 /* Make the table card stretch to fill the .page area so the gap below the
    card matches the .page horizontal padding (var(--space-8) = 32px). */
@@ -408,24 +472,21 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                                 data-applicant-panel="<?= (int)$row['id'] ?>"
                                 title="View applicant details"
                                 style="background:none;border:none;padding:0;cursor:pointer;text-align:left;width:100%">
-                            <div style="font-weight:var(--weight-medium);color:var(--text-primary)"><?= e($fullName) ?></div>
-                            <div style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= e($row['email']) ?></div>
-                            <div style="margin-top:2px">
-                                <span class="badge badge-<?= $row['overall_status'] ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span>
-                            </div>
+                            <div style="font-weight:var(--weight-medium);color:var(--text-primary);white-space:nowrap"><?= e($fullName) ?></div>
+                            <div style="font-size:var(--text-xs);color:var(--text-tertiary);white-space:nowrap"><?= e($row['email']) ?></div>
                         </button>
                     </td>
 
                     <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>
 
                     <!-- Exam score -->
-                    <td style="font-size:var(--text-sm)">
+                    <td style="font-size:var(--text-sm);white-space:nowrap">
                         <?php if ($row['exam_score'] !== null): ?>
                             <?= (int)$row['exam_score'] ?>/<?= (int)$row['exam_total'] ?>
                             <?php if ((int)$row['exam_passed'] === 1): ?>
-                                <div style="font-size:var(--text-xs);color:var(--success);margin-top:1px">Passed</div>
+                                <span style="color:var(--success)">&nbsp;Passed</span>
                             <?php elseif ((int)$row['exam_passed'] === 0): ?>
-                                <div style="font-size:var(--text-xs);color:var(--error);margin-top:1px">Failed</div>
+                                <span style="color:var(--error)">&nbsp;Failed</span>
                             <?php endif; ?>
                         <?php else: ?>
                             <span style="color:var(--text-tertiary)">—</span>
@@ -433,7 +494,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                     </td>
 
                     <!-- Interview status + Pass/Reject -->
-                    <td>
+                    <td style="font-size:var(--text-sm);white-space:nowrap">
                         <?php if ($row['interview_status']): ?>
                             <?php
                                 $iMap = [
@@ -444,47 +505,32 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                                     'no_show'     => ['badge-rejected', 'No-show'],
                                 ];
                                 [$ibadge, $ilabel] = $iMap[$row['interview_status']] ?? ['badge-pending', ucfirst($row['interview_status'])];
+                                $evalLabel = '';
+                                $evalColor = '';
+                                if ($row['evaluation_result'] === 'pass') { $evalLabel = 'Pass'; $evalColor = 'var(--success)'; }
+                                elseif ($row['evaluation_result'] === 'reject') { $evalLabel = 'Reject'; $evalColor = 'var(--error)'; }
                             ?>
-                            <span class="badge <?= $ibadge ?>"><?= $ilabel ?></span>
-                            <?php if ($row['evaluation_result'] === 'pass'): ?>
-                                <div style="font-size:var(--text-xs);color:var(--success);margin-top:2px;font-weight:var(--weight-medium)">Pass</div>
-                            <?php elseif ($row['evaluation_result'] === 'reject'): ?>
-                                <div style="font-size:var(--text-xs);color:var(--error);margin-top:2px;font-weight:var(--weight-medium)">Rejected</div>
-                            <?php endif; ?>
-                            <?php if ($row['interview_notes']): ?>
-                                <div style="font-size:var(--text-xs);color:var(--text-tertiary);
-                                             margin-top:var(--space-1);max-width:180px;
-                                             white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
-                                     title="<?= e($row['interview_notes']) ?>">
-                                    <?= e($row['interview_notes']) ?>
-                                </div>
-                            <?php endif; ?>
+                            <span class="badge <?= $ibadge ?>"
+                                  <?= $row['interview_notes'] ? 'title="' . e($row['interview_notes']) . '"' : '' ?>>
+                                <?= $ilabel ?><?= $evalLabel ? ' · ' : '' ?>
+                                <?php if ($evalLabel): ?>
+                                    <span style="color:<?= $evalColor ?>;font-weight:var(--weight-semibold)"><?= $evalLabel ?></span>
+                                <?php endif; ?>
+                            </span>
                         <?php else: ?>
-                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">—</span>
+                            <span style="color:var(--text-tertiary)">—</span>
                         <?php endif; ?>
                     </td>
 
                     <!-- Result column -->
-                    <td>
+                    <td style="white-space:nowrap">
                         <?php if ($bucket === 'withdrawn'): ?>
                             <span class="badge" style="color:#6b7280;background:#f3f4f6">Withdrawn</span>
-                            <?php if (!empty($row['withdrawn_at'])): ?>
-                                <div style="font-size:10px;color:var(--text-tertiary);margin-top:2px">
-                                    <?= format_date($row['withdrawn_at'], 'M j, Y') ?>
-                                </div>
-                            <?php endif; ?>
                         <?php elseif ($bucket === 'released'): ?>
-                            <span class="badge badge-<?= $row['admission_result'] ?>">
+                            <span class="badge badge-<?= $row['admission_result'] ?>"
+                                  <?= $row['admission_remarks'] ? 'title="' . e($row['admission_remarks']) . '"' : '' ?>>
                                 <?= e(RESULT_LABELS[$row['admission_result']] ?? ucfirst($row['admission_result'])) ?>
                             </span>
-                            <?php if ($row['admission_remarks']): ?>
-                                <div style="font-size:var(--text-xs);color:var(--text-tertiary);
-                                             margin-top:var(--space-1);max-width:160px;
-                                             white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
-                                     title="<?= e($row['admission_remarks']) ?>">
-                                    <?= e($row['admission_remarks']) ?>
-                                </div>
-                            <?php endif; ?>
                         <?php elseif ($bucket === 'ready_accept'): ?>
                             <span class="badge badge-approved">Ready: Accept</span>
                         <?php elseif ($bucket === 'ready_reject'): ?>

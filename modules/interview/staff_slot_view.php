@@ -247,8 +247,8 @@ ob_start();
                 ?>
                     <tr data-queue-id="<?= (int)$row['queue_id'] ?>" style="border-top:1px solid var(--border);font-size:var(--text-sm)">
                         <td style="padding:var(--space-3) var(--space-4)">
-                            <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
+                            <div style="font-weight:var(--weight-medium);white-space:nowrap"><?= e(format_full_name($row)) ?></div>
+                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);white-space:nowrap">
                                 <?= e($row['student_email']) ?>
                             </div>
                         </td>
@@ -290,7 +290,7 @@ ob_start();
                                 </label>
                             </div>
                         </td>
-                        <td style="padding:var(--space-3) var(--space-4)">
+                        <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
                             <?php if ($row['interview_status'] === 'completed'): ?>
                                 <span class="badge badge-approved">Completed</span>
                                 <?php if ($row['evaluation_result']): ?>
