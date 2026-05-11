@@ -6,9 +6,12 @@
 require_once ROOT_PATH . '/core/Auth.php';
 Auth::requireRole(ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
-// Staff (Professor) and Proctor no longer have their own dashboard —
-// they go straight to the Interview Queue which is their primary workpage.
-if (Auth::role() === ROLE_STAFF || Auth::role() === ROLE_PROCTOR) {
+// Professors (ROLE_STAFF) go straight to the Interview Queue, which is
+// their primary workpage. Proctors are NOT redirected — the interview
+// queue is locked to interviewers (Professor / SSO / Dean / Admin), so a
+// proctor hitting it would 403. Their sidebar's "Dashboard" entry lands
+// them here, and they can navigate to Exam Slots from there.
+if (Auth::role() === ROLE_STAFF) {
     redirect('/staff/interviews/queue');
 }
 

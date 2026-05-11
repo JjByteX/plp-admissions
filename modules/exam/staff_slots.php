@@ -235,27 +235,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add_slot') {
         $date     = trim($_POST['exam_date']  ?? '');
         $time     = trim($_POST['slot_time']  ?? '08:00');
+        $endTime  = trim($_POST['end_time']   ?? '');
         $room     = trim($_POST['room_label'] ?? '');
         $capacity = (int)($_POST['capacity']  ?? 35);
         $slotDept = $canManage
             ? trim($_POST['department'] ?? '')
             : user_department($staffId);
 
+        // Default close time = opens + 90 minutes if the form didn't
+        // supply one (older form variants, JS off, etc).
+        if ($endTime === '') {
+            $endTime = date('H:i', strtotime($time . ' +90 minutes'));
+        }
+
         if (!$date)              $errors[] = 'Exam date is required.';
         if (!$room)              $errors[] = 'Room label is required.';
         if (!$slotDept)          $errors[] = 'College / Department is required.';
         if ($capacity < 1)       $errors[] = 'Capacity must be at least 1.';
         if ($capacity > 500)     $errors[] = 'Capacity above 500 is unrealistic.';
+        if (strtotime($endTime) <= strtotime($time)) {
+            $errors[] = 'Close time must be after the start time.';
+        }
 
         if (!$errors) {
             $db->prepare(
                 'INSERT INTO exam_slot_schedule
-                    (exam_id, exam_date, slot_time, room_label, department, capacity, school_year, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-            )->execute([$activeExamId, $date, $time . ':00', $room, $slotDept, $capacity, $schoolYear, $staffId]);
+                    (exam_id, exam_date, slot_time, end_time, room_label, department, capacity, school_year, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            )->execute([$activeExamId, $date, $time . ':00', $endTime . ':00', $room, $slotDept, $capacity, $schoolYear, $staffId]);
             audit_log('exam_slot_added',
-                "Added slot: {$date} {$time} {$room} [{$slotDept}] (cap {$capacity})");
-            Session::flash('success', "Slot added: {$room} ({$slotDept}) on " . date('M j, Y', strtotime($date)) . " at {$time}.");
+                "Added slot: {$date} {$time}-{$endTime} {$room} [{$slotDept}] (cap {$capacity})");
+            Session::flash('success', "Slot added: {$room} ({$slotDept}) on " . date('M j, Y', strtotime($date)) . " at {$time}-{$endTime}.");
             _slots_redirect_back($slotDept ?: $ctxCollege);
         }
     }
@@ -265,11 +275,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $slotId   = (int)($_POST['slot_id']   ?? 0);
         $date     = trim($_POST['exam_date']  ?? '');
         $time     = trim($_POST['slot_time']  ?? '08:00');
+        $endTime  = trim($_POST['end_time']   ?? '');
         $room     = trim($_POST['room_label'] ?? '');
         $capacity = (int)($_POST['capacity']  ?? 35);
         $slotDept = $canManage
             ? trim($_POST['department'] ?? '')
             : user_department($staffId);
+
+        // Default close time = opens + 90 minutes if the form didn't
+        // supply one (older form variants, JS off, etc).
+        if ($endTime === '') {
+            $endTime = date('H:i', strtotime($time . ' +90 minutes'));
+        }
 
         if (!$slotId)          $errors[] = 'Invalid slot.';
         if (!$date)            $errors[] = 'Exam date is required.';
@@ -277,6 +294,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$slotDept)        $errors[] = 'College / Department is required.';
         if ($capacity < 1)     $errors[] = 'Capacity must be at least 1.';
         if ($capacity > 500)   $errors[] = 'Capacity above 500 is unrealistic.';
+        if (strtotime($endTime) <= strtotime($time)) {
+            $errors[] = 'Close time must be after the start time.';
+        }
 
         if (!$errors) {
             $stmt = $db->prepare('SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id=?');
@@ -287,11 +307,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $db->prepare(
                     'UPDATE exam_slot_schedule
-                        SET exam_date=?, slot_time=?, room_label=?, department=?, capacity=?
+                        SET exam_date=?, slot_time=?, end_time=?, room_label=?, department=?, capacity=?
                       WHERE id=?'
-                )->execute([$date, $time . ':00', $room, $slotDept, $capacity, $slotId]);
+                )->execute([$date, $time . ':00', $endTime . ':00', $room, $slotDept, $capacity, $slotId]);
                 audit_log('exam_slot_edited',
-                    "Edited slot {$slotId}: {$date} {$time} {$room} [{$slotDept}] (cap {$capacity})");
+                    "Edited slot {$slotId}: {$date} {$time}-{$endTime} {$room} [{$slotDept}] (cap {$capacity})");
                 Session::flash('success', 'Slot updated.');
                 // If we were on the roster page, stay on it; otherwise return to the college grid.
                 if ($ctxSlotId > 0) {

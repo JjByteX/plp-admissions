@@ -144,7 +144,9 @@ class Auth
             ROLE_SSO     => url('/admin/dashboard'),
             ROLE_DEAN    => url('/admin/dashboard'),
             ROLE_STAFF   => url('/staff/interviews/queue'),
-            ROLE_PROCTOR => url('/staff/interviews/queue'),
+            // Proctors land on the staff dashboard (their sidebar links to
+            // it). The interview queue is excluded for proctors by guard.
+            ROLE_PROCTOR => url('/staff/dashboard'),
             default      => url('/student/documents'),
         };
     }
