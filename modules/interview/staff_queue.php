@@ -118,9 +118,13 @@ try {
 // ----------------------------------------------------------------
 // AUTO NO-SHOW
 // Flip any still-waiting / in-progress queue row whose slot has
-// already finished into status='no_show'. This runs on every page
-// load so the table always reflects reality without anyone having
-// to click a button.
+// already finished into the canonical absent state:
+//   status='no_show', interview_status='absent', attendance_status='absent'
+// This runs on every page load so the table — and the Absent
+// Students tab — always reflect reality without anyone having to
+// click a button. The previous inline UPDATE only set q.status,
+// which left absent_tab queries (WHERE q.interview_status='absent')
+// missing these rows.
 //
 // "Finished" means:
 //   • slot_date is before today, OR
@@ -128,27 +132,13 @@ try {
 //   • slot_date is today AND end_time is NULL AND slot_time is set
 //     AND the start time was more than an hour ago.
 // ----------------------------------------------------------------
-try {
-    $autoNoShow = $db->prepare(
-        'UPDATE interview_queue q
-         JOIN   interview_slots s ON s.id = q.slot_id
-         SET    q.status = "no_show"
-         WHERE  q.status IN ("scheduled", "checked_in", "in_progress")
-           AND (
-                 s.slot_date < CURDATE()
-              OR (s.slot_date = CURDATE()
-                  AND s.end_time IS NOT NULL
-                  AND s.end_time <= CURTIME())
-              OR (s.slot_date = CURDATE()
-                  AND s.end_time IS NULL
-                  AND s.slot_time IS NOT NULL
-                  AND ADDTIME(s.slot_time, "01:00:00") <= CURTIME())
-           )'
-    );
-    $autoNoShow->execute();
-} catch (\Throwable $e) {
-    // Schema differences shouldn't block the page from rendering
-    error_log('auto-no-show update failed: ' . $e->getMessage());
+if (function_exists('auto_detect_interview_no_shows')) {
+    try {
+        auto_detect_interview_no_shows(null, Auth::id());
+    } catch (\Throwable $e) {
+        // Schema differences shouldn't block the page from rendering
+        error_log('auto-no-show update failed: ' . $e->getMessage());
+    }
 }
 
 // ----------------------------------------------------------------

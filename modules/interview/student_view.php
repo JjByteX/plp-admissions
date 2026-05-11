@@ -28,6 +28,35 @@ if (!in_array($applicant['overall_status'], $allowedStatuses, true)) {
     redirect('/student/documents');
 }
 
+// Background safety-net: if the student has reached the interview stage
+// but somehow doesn't have an interview_queue row yet (e.g. they passed
+// the exam before any matching session existed, an earlier auto-assign
+// returned null, or a staff member just created a fresh slot for their
+// department), retry assignment every time they open this page.
+// assign_interview_slot() is idempotent — it no-ops when an active
+// queue row already exists.
+//
+// This is the same pattern modules/exam/take.php uses for exam slots,
+// so the moment a slot exists in the student's department, refreshing
+// /student/interview books them automatically without staff action.
+if ($applicant['overall_status'] === 'interview'
+    && function_exists('assign_interview_slot')) {
+    try {
+        $hasActive = $db->prepare(
+            'SELECT id FROM interview_queue
+              WHERE applicant_id = ?
+                AND interview_status IN ("pending","completed")
+              LIMIT 1'
+        );
+        $hasActive->execute([$applicantId]);
+        if (!$hasActive->fetch()) {
+            assign_interview_slot($applicantId, $userId);
+        }
+    } catch (\Throwable $e) {
+        error_log('Interview slot self-heal on page visit failed: ' . $e->getMessage());
+    }
+}
+
 // Load stepper dependencies
 $stmt = $db->prepare('SELECT * FROM exam_results WHERE applicant_id=? LIMIT 1');
 $stmt->execute([$applicantId]);

@@ -107,10 +107,20 @@ switch ($action) {
     case 'mark_no_show':
         // After the desk/session merge, an interviewer is identified by
         // assigned_to with created_by fallback for legacy rows.
+        //
+        // Set the full canonical absent state (status='no_show',
+        // interview_status='absent', attendance_status='absent',
+        // evaluated_at=NOW) so the row shows up on the Absent Students
+        // tab — the previous version only set q.status, which left the
+        // absent_tab query (WHERE q.interview_status='absent') missing
+        // this row.
         $db->prepare(
             'UPDATE interview_queue q
              JOIN   interview_slots s ON s.id = q.slot_id
-             SET    q.status = "no_show"
+             SET    q.status            = "no_show",
+                    q.interview_status  = "absent",
+                    q.attendance_status = "absent",
+                    q.evaluated_at      = NOW()
              WHERE  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?'
         )->execute([$id, $staffId]);
         audit_log('interview_no_show', "Marked interview queue ID {$id} as no-show", 'interview_queue', $id);

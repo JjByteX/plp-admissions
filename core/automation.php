@@ -402,6 +402,59 @@ function backfill_exam_slot_assignments(): int
     return $assigned;
 }
 
+/**
+ * Symmetric helper for the interview side. Scans for every applicant
+ * sitting at the interview stage with no active interview_queue row
+ * and tries to assign each one. Safe to call multiple times.
+ *
+ * Use cases:
+ *   - As a safety-net after staff bulk actions, when the student
+ *     refreshes /student/interview without a slot, or any place the
+ *     applicant has been advanced to interview stage without being
+ *     paired with a slot yet.
+ *
+ * Unlike bulk_assign_pending_applicants() (which bails on the first
+ * applicant who can't be assigned, since it's normally used right
+ * after one specific department's slot was created), this one walks
+ * the full waiting list and keeps going — different applicants may
+ * have different department matches.
+ *
+ * Returns the number of applicants who actually got assigned.
+ */
+function backfill_interview_slot_assignments(?int $actorUserId = null): int
+{
+    if (!function_exists('assign_interview_slot')) {
+        return 0;
+    }
+    $pdo = db();
+    try {
+        $stmt = $pdo->query(
+            'SELECT a.id
+               FROM applicants a
+          LEFT JOIN interview_queue q ON q.applicant_id = a.id
+                                   AND q.interview_status IN ("pending","completed")
+              WHERE a.overall_status = "interview"
+                AND q.id IS NULL
+              ORDER BY a.id ASC'
+        );
+        $waiting = array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN) ?: []);
+    } catch (\Throwable $e) {
+        error_log('backfill_interview_slot_assignments query failed: ' . $e->getMessage());
+        return 0;
+    }
+    $assigned = 0;
+    foreach ($waiting as $aid) {
+        try {
+            if (assign_interview_slot($aid, $actorUserId)) {
+                $assigned++;
+            }
+        } catch (\Throwable $e) {
+            error_log("backfill_interview_slot_assignments: applicant #{$aid} failed — " . $e->getMessage());
+        }
+    }
+    return $assigned;
+}
+
 // ----------------------------------------------------------------
 // AUTO-PROMOTE WAITLIST  (DEPRECATED)
 // ----------------------------------------------------------------
@@ -1194,7 +1247,16 @@ function notify_staff_results_pending(int $count): void
 
 /**
  * Auto-reschedule a no-show applicant to the next available interview slot.
- * Called from record_interview_evaluation() when absent=true.
+ * Called from record_interview_evaluation() when absent=true, from the
+ * mark_no_show staff action, and from the dashboard "Reschedule absent
+ * students" button.
+ *
+ * Expects the applicant's queue row to already be in the canonical
+ * absent state (interview_status='absent'). When called from
+ * record_interview_evaluation / mark_no_show / auto_detect_interview_no_shows
+ * that is already true. If called against a still-pending row, this
+ * routine also flips it to 'absent' first so the rescheduler has a
+ * consistent starting point.
  */
 function auto_reschedule_noshow(int $applicantId, ?int $actorUserId = null): ?int
 {
@@ -1202,9 +1264,18 @@ function auto_reschedule_noshow(int $applicantId, ?int $actorUserId = null): ?in
 
     $pdo = db();
 
-    // Clear the old queue entry status
+    // If somehow the row is still 'pending', normalise it to the
+    // canonical absent state. This is a no-op when the caller (mark_no_show,
+    // record_interview_evaluation, auto_detect_interview_no_shows) already
+    // did it.
     $pdo->prepare(
-        'UPDATE interview_queue SET interview_status = "no_show" WHERE applicant_id = ? AND interview_status = "pending"'
+        'UPDATE interview_queue
+            SET status            = "no_show",
+                interview_status  = "absent",
+                attendance_status = "absent",
+                evaluated_at      = COALESCE(evaluated_at, NOW())
+          WHERE applicant_id = ?
+            AND interview_status = "pending"'
     )->execute([$applicantId]);
 
     // Ensure applicant stays in interview stage
@@ -1212,9 +1283,17 @@ function auto_reschedule_noshow(int $applicantId, ?int $actorUserId = null): ?in
         'UPDATE applicants SET overall_status = "interview" WHERE id = ? AND overall_status IN ("interview","result")'
     )->execute([$applicantId]);
 
-    // Try to reschedule using the scheduler
+    // Try to reschedule via the absent-aware path (which deletes the
+    // absent row and asks the scheduler for a new one). Fall back to
+    // the generic rescheduler for legacy rows that aren't yet absent.
     try {
-        $newSlotId = reschedule_interview($applicantId, $actorUserId);
+        $newSlotId = null;
+        if (function_exists('reschedule_absent_applicant')) {
+            $newSlotId = reschedule_absent_applicant($applicantId, null, $actorUserId ?? 0);
+        }
+        if (!$newSlotId && function_exists('reschedule_interview')) {
+            $newSlotId = reschedule_interview($applicantId, $actorUserId);
+        }
         if ($newSlotId) {
             // Notify the student
             $stmt = $pdo->prepare('SELECT user_id FROM applicants WHERE id = ?');
@@ -1388,21 +1467,26 @@ function auto_close_expired_sessions(): int
     $expired = $stmt->fetchAll();
 
     foreach ($expired as $slot) {
+        // Mark remaining unevaluated applicants as absent (canonical
+        // no-show state used by record_interview_evaluation). The
+        // dedicated helper sets status='no_show',
+        // interview_status='absent', attendance_status='absent' and
+        // notifies each student.
+        $noShows = 0;
+        if (function_exists('auto_detect_interview_no_shows')) {
+            try {
+                $noShows = auto_detect_interview_no_shows((int)$slot['id']);
+            } catch (\Throwable $e) {
+                error_log('auto_detect_interview_no_shows on slot ' . $slot['id'] . ' failed: ' . $e->getMessage());
+            }
+        }
+
         // Close the slot
         $pdo->prepare('UPDATE interview_slots SET status = "closed" WHERE id = ?')
             ->execute([$slot['id']]);
 
-        // Mark remaining "scheduled" applicants as no-shows
-        $pdo->prepare(
-            'UPDATE interview_queue
-             SET status = "no_show", interview_status = "no_show"
-             WHERE slot_id = ? AND status = "scheduled" AND interview_status = "pending"'
-        )->execute([$slot['id']]);
-
-        $noShows = (int)($pdo->query('SELECT ROW_COUNT()')->fetchColumn() ?: 0);
-
         audit_log('auto_close_session',
-            "Auto-closed expired session #{$slot['id']} ({$slot['slot_date']}). {$noShows} marked as no-show.",
+            "Auto-closed expired session #{$slot['id']} ({$slot['slot_date']}). {$noShows} marked as absent.",
             'interview_slot', $slot['id']);
 
         $closed++;

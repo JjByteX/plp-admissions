@@ -363,4 +363,5 @@ ob_start();
 $content   = ob_get_clean();
 $pageTitle = 'Cancel Interview Slot (Bulk)';
 $activeNav = 'interview';
+$pageWide  = true; // table-heavy page — match staff_slots / staff_review / staff_manage
 include VIEWS_PATH . '/layouts/app.php';

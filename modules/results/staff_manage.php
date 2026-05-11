@@ -90,8 +90,16 @@ if ($role === ROLE_DEAN) {
 }
 
 if ($search) {
-    $where[]      = '(u.name LIKE :q OR u.email LIKE :q OR a.course_applied LIKE :q)';
-    $params[':q'] = '%' . $search . '%';
+    // PDO::ATTR_EMULATE_PREPARES is off in config/db.php, so a single
+    // named placeholder cannot be reused across multiple positions in
+    // the same statement (MySQL native prepared statements bind by
+    // position). Use distinct names for each LIKE so execute(...) finds
+    // exactly one value per placeholder.
+    $where[]       = '(u.name LIKE :q1 OR u.email LIKE :q2 OR a.course_applied LIKE :q3)';
+    $needle        = '%' . $search . '%';
+    $params[':q1'] = $needle;
+    $params[':q2'] = $needle;
+    $params[':q3'] = $needle;
 }
 
 $validBuckets = ['awaiting', 'ready_accept', 'ready_reject', 'released', 'withdrawn'];

@@ -337,6 +337,20 @@ $reschedRequests = $db->query(
 // ----------------------------------------------------------------
 // Load absent applicants + their previous slot
 // ----------------------------------------------------------------
+// Auto-detect no-shows on page load: any pending queue row whose slot
+// has already ended is flipped to status='no_show',
+// interview_status='absent', attendance_status='absent', so unmarked
+// students show up here automatically without an interviewer having
+// to manually mark them.  Idempotent — already-absent rows are
+// skipped.
+if (function_exists('auto_detect_interview_no_shows')) {
+    try {
+        auto_detect_interview_no_shows(null, $staffId);
+    } catch (\Throwable $e) {
+        error_log('auto_detect_interview_no_shows on staff_absent load failed: ' . $e->getMessage());
+    }
+}
+
 $absent = $db->query(
     'SELECT q.id            AS queue_id,
             q.applicant_id,
@@ -707,4 +721,5 @@ ob_start();
 $content   = ob_get_clean();
 $pageTitle = $activeTab === 'requests' ? 'Reschedule Requests' : 'Absent Students';
 $activeNav = $activeTab === 'requests' ? 'reschedule' : 'interviews';
+$pageWide  = true; // table-heavy page — match staff_slots / staff_review / staff_manage
 include VIEWS_PATH . '/layouts/app.php';

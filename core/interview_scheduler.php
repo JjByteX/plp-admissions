@@ -12,6 +12,7 @@
 //   bulk_assign_pending_applicants(?string $department, ?int $actorUserId = null): int
 //   record_interview_evaluation(int $queueId, bool $absent, ?string $result, int $actorUserId): bool
 //   reschedule_absent_applicant(int $applicantId, ?int $targetSlotId, int $actorUserId): ?int
+//   auto_detect_interview_no_shows(?int $slotId = null, ?int $actorUserId = null): int
 //   slot_is_available(array $slotRow): bool
 //   departments_list(): array
 // ============================================================
@@ -620,6 +621,201 @@ function reschedule_absent_applicant(int $applicantId, ?int $targetSlotId, int $
     );
 
     return $newSlotId;
+}
+
+/**
+ * Auto-detect no-shows. Walks every interview_queue row that is still
+ * "pending" (status IN 'scheduled', 'checked_in', 'in_progress' and
+ * interview_status='pending') whose slot has fully ended, and flips
+ * it to the canonical "absent" state used by record_interview_evaluation():
+ *
+ *     status            = 'no_show'
+ *     interview_status  = 'absent'
+ *     attendance_status = 'absent'
+ *     evaluated_at      = NOW()
+ *
+ * That last field set is important: the Absent Students tab filters on
+ * `interview_status = 'absent'`, so without setting that field, an
+ * unevaluated student whose slot is hours past wouldn't show up there.
+ *
+ * "Slot has ended" matches what staff_queue.php and
+ * auto_close_expired_sessions() already check:
+ *   • slot_date < CURDATE(), OR
+ *   • slot_date = CURDATE() AND end_time IS NOT NULL AND end_time <= CURTIME(), OR
+ *   • slot_date = CURDATE() AND end_time IS NULL AND slot_time IS NOT NULL
+ *                 AND slot_time + 1 hour <= CURTIME()
+ *
+ * Pass $slotId to restrict to a specific slot (used by
+ * auto_close_expired_sessions when closing one session at a time).
+ * Pass null to sweep every expired slot. The function is idempotent —
+ * already-absent rows are skipped by the WHERE clause.
+ *
+ * Returns the number of rows that were actually flipped. Each flipped
+ * row also gets an in-app notification + email to the student so they
+ * know they were marked absent and can request a reschedule.
+ */
+function auto_detect_interview_no_shows(?int $slotId = null, ?int $actorUserId = null): int
+{
+    $pdo = db();
+
+    $select = 'SELECT q.id            AS queue_id,
+                      q.applicant_id,
+                      s.id            AS slot_id,
+                      s.slot_date,
+                      s.slot_time,
+                      s.end_time,
+                      s.department
+                 FROM interview_queue q
+                 JOIN interview_slots s ON s.id = q.slot_id
+                WHERE q.status IN ("scheduled","checked_in","in_progress")
+                  AND q.interview_status = "pending"
+                  AND (
+                        s.slot_date < CURDATE()
+                     OR (s.slot_date = CURDATE()
+                         AND s.end_time IS NOT NULL
+                         AND s.end_time <= CURTIME())
+                     OR (s.slot_date = CURDATE()
+                         AND s.end_time IS NULL
+                         AND s.slot_time IS NOT NULL
+                         AND ADDTIME(s.slot_time, "01:00:00") <= CURTIME())
+                  )';
+    $params = [];
+    if ($slotId !== null && $slotId > 0) {
+        $select .= ' AND s.id = ?';
+        $params[] = $slotId;
+    }
+
+    try {
+        $stmt = $pdo->prepare($select);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+    } catch (\Throwable $e) {
+        error_log('auto_detect_interview_no_shows select failed: ' . $e->getMessage());
+        return 0;
+    }
+    if (!$rows) return 0;
+
+    $flipped = 0;
+    $update = $pdo->prepare(
+        'UPDATE interview_queue
+            SET status            = "no_show",
+                interview_status  = "absent",
+                attendance_status = "absent",
+                evaluated_at      = NOW()
+          WHERE id = ?
+            AND interview_status = "pending"'
+    );
+
+    foreach ($rows as $r) {
+        try {
+            $update->execute([(int)$r['queue_id']]);
+            if ($update->rowCount() < 1) continue; // someone else got there first
+            $flipped++;
+
+            // Audit
+            _audit_slot_change(
+                'interview_auto_no_show',
+                "Auto-marked applicant #{$r['applicant_id']} as absent (queue #{$r['queue_id']}, slot #{$r['slot_id']})",
+                (int)$r['queue_id'],
+                $actorUserId,
+                'interview_queue'
+            );
+
+            // Notify the student (in-app + email).  Best-effort —
+            // never let a notification failure undo the flip.
+            try {
+                _notify_applicant_marked_absent(
+                    (int)$r['applicant_id'],
+                    (string)$r['slot_date'],
+                    (string)($r['slot_time'] ?? '')
+                );
+            } catch (\Throwable $e) {
+                error_log('notify_applicant_marked_absent failed: ' . $e->getMessage());
+            }
+
+            // Notify staff bucket (existing helper).
+            try {
+                if (function_exists('notify_staff_no_show')) {
+                    $nameStmt = $pdo->prepare(
+                        'SELECT u.name FROM applicants a JOIN users u ON u.id=a.user_id WHERE a.id=?'
+                    );
+                    $nameStmt->execute([(int)$r['applicant_id']]);
+                    notify_staff_no_show(
+                        (int)$r['applicant_id'],
+                        (string)($nameStmt->fetchColumn() ?: 'Applicant')
+                    );
+                }
+            } catch (\Throwable $e) {
+                error_log('notify_staff_no_show failed: ' . $e->getMessage());
+            }
+        } catch (\Throwable $e) {
+            error_log('auto_detect_interview_no_shows: queue #' . $r['queue_id'] . ' failed — ' . $e->getMessage());
+        }
+    }
+
+    return $flipped;
+}
+
+/**
+ * Internal helper — send an applicant the "you were marked absent for
+ * your interview" in-app notification + email. Mirrors the style of
+ * notify_reschedule_decision() in core/automation.php.
+ */
+function _notify_applicant_marked_absent(int $applicantId, string $slotDate, string $slotTime): void
+{
+    $pdo  = db();
+    $stmt = $pdo->prepare(
+        'SELECT u.id AS user_id, u.email, u.name
+           FROM applicants a JOIN users u ON u.id = a.user_id
+          WHERE a.id = ? LIMIT 1'
+    );
+    $stmt->execute([$applicantId]);
+    $user = $stmt->fetch();
+    if (!$user) return;
+
+    $when = trim(($slotDate !== '' ? date('F j, Y', strtotime($slotDate)) : '')
+               . ($slotTime !== '' ? ' at ' . date('g:i A', strtotime($slotTime)) : ''));
+    $title = 'Marked absent for your interview';
+    $msg   = 'You were marked absent for your scheduled interview'
+           . ($when !== '' ? " on {$when}" : '')
+           . '. You can request a reschedule from your interview page.';
+
+    if (function_exists('create_notification')) {
+        try {
+            create_notification(
+                (int)$user['user_id'],
+                'interview_marked_absent',
+                $title,
+                $msg,
+                '/student/interview'
+            );
+        } catch (\Throwable $e) {
+            error_log('create_notification (marked absent) failed: ' . $e->getMessage());
+        }
+    }
+
+    if (!empty($user['email'])
+        && function_exists('send_email')
+        && function_exists('email_template')) {
+        try {
+            $accent = function_exists('school_setting') ? school_setting('accent_color', '#2d6a4f') : '#2d6a4f';
+            $school = function_exists('school_setting') ? school_setting('school_name', 'PLP Admissions') : 'PLP Admissions';
+            $base   = defined('BASE_URL') ? BASE_URL : '';
+            $link   = rtrim((string)$base, '/') . '/student/interview';
+            $body   = '<p>' . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') . '</p>'
+                    . '<p style="margin-top:16px"><a href="' . htmlspecialchars($link, ENT_QUOTES, 'UTF-8') . '" '
+                    . 'style="display:inline-block;padding:10px 24px;background:' . htmlspecialchars($accent, ENT_QUOTES, 'UTF-8') . ';color:#fff;'
+                    . 'text-decoration:none;border-radius:6px;font-weight:bold">Request a reschedule</a></p>';
+            send_email(
+                (string)$user['email'],
+                $title . ' — ' . $school,
+                email_template($title, $body),
+                (string)$user['name']
+            );
+        } catch (\Throwable $e) {
+            error_log('send_email (marked absent) failed: ' . $e->getMessage());
+        }
+    }
 }
 
 /**

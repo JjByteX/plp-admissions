@@ -1,122 +1,143 @@
-# PLP Admissions — Reschedule + Auto-Assign Patch
+# PLP Admissions — Interview Auto-Assign + Auto-Absent + Wider Reschedule Tables
 
-Drag-and-drop on top of your existing `plp-admissions/` folder. All
-files preserve their original path. No DB migrations required —
-new columns (`deny_reason`) and the `exam_reschedule_requests`
-table are added on-demand by `ALTER TABLE` / `CREATE TABLE IF NOT
-EXISTS` guards inside `core/automation.php`.
+Drag-and-drop on top of your existing `plp-admissions/` folder.
+Every file preserves its original path. No DB migrations required.
 
-## What's in this drop
+This is the combined drop covering the two follow-ups to the original
+exam auto-assign zip:
 
-### 1. Exam slot auto-assign is now 100% reliable
-The original `auto_assign_exam_slot()` had a handful of holes that
-explain "sometimes it doesn't auto-assign":
+1. Interview-side auto-assign hardening + wider tables (previous round)
+2. Auto-absent for no-shows (this round)
 
-- **Race condition** — two simultaneous approvals could both grab
-  the last seat (or both fail silently on a duplicate-key error).
-- **Past-time slots picked** — a slot scheduled for 9 AM today
-  could be picked at 2 PM.
-- **No retry after the fact** — if an applicant was advanced to
-  exam stage *before* a matching slot existed, they were stuck on
-  "Awaiting Slot Assignment" forever, because no later code path
-  ever retried.
-- **Missed call sites** — the manual *Advance to exam* button and
-  the dashboard's *Approve all pending docs* bulk action never
-  triggered auto-assignment at all.
+## What's new in this round
 
-Fixes:
+### Crash fix — Results search box (PDOException HY093)
 
-- **`core/automation.php`** — `auto_assign_exam_slot()` now runs
-  inside a transaction with `FOR UPDATE` on the chosen slot,
-  filters out past slots (date < today, or date = today AND
-  slot_time <= now), prefers the active exam, falls back through
-  department-matching tiers, and skips withdrawn / wrong-stage
-  applicants. The function is now idempotent and safe to call
-  repeatedly from anywhere.
-- **`core/automation.php`** — new `backfill_exam_slot_assignments()`
-  scans for every applicant at exam stage with no slot row and
-  tries to assign each one.
-- **`modules/documents/staff_action.php`** — the `advance_to_exam`
-  action now fires `notify_stage_transition()` and
-  `auto_assign_exam_slot()` like the other approve paths do.
-- **`modules/auth/staff/dashboard.php`** — *Approve all pending
-  docs* now runs `backfill_exam_slot_assignments()` after
-  advancing applicants in bulk.
-- **`modules/exam/staff_slots.php`** — creating a new exam slot
-  now runs `backfill_exam_slot_assignments()` so waiting students
-  are picked up the instant a matching slot exists.
-- **`modules/exam/take.php`** — every visit to the student exam
-  page re-attempts auto-assign if the student is at exam stage
-  without a slot. This is the final safety net.
+`/staff/results` was throwing
+`SQLSTATE[HY093]: Invalid parameter number` whenever the search box
+was used. The WHERE clause reused the same `:q` placeholder three
+times (name / email / course), and the project's PDO connection has
+`PDO::ATTR_EMULATE_PREPARES => false` (`config/db.php`), so MySQL
+native prepared statements need a distinct placeholder per position.
+Replaced with `:q1`, `:q2`, `:q3` — same pattern already used in
+`modules/documents/staff_review.php`.
 
-Net effect: a student lands on `/student/exam` → if there's any
-matching open slot in the future, they get one. If not, the
-moment staff creates a slot (or runs bulk approve), every waiting
-applicant is picked up automatically.
+### Auto-absent for no-shows
 
-### 2. Self-serve reschedule flow (interview + exam) — closed holes
-From the earlier rounds, plus the fixes you asked me to ship:
+Before: a student who didn't show up only got `interview_status='absent'`
+when an interviewer explicitly clicked "Mark Absent" on the queue page.
+Auto-routines (`auto_close_expired_sessions`, staff_queue.php inline
+update, and `mark_no_show` itself) only set `q.status='no_show'` and
+left `interview_status` at `'pending'` — which meant the Absent
+Students tab (which filters `WHERE q.interview_status = 'absent'`)
+never saw those students. They were stranded.
 
-- **#1 Transaction-safe interview approve** — full rewrite of
-  `approve_reschedule` in `modules/interview/staff_absent.php`
-  with `PDO::beginTransaction()` + `FOR UPDATE` on the target
-  slot. Two SSOs can no longer double-book the same seat.
-- **#2 Dup-pending rejection** — confirmed in both endpoints.
-- **#5 Deny-with-reason** — both interview and exam staff
-  approve/deny pages have an optional reason field. The reason
-  is saved (`deny_reason` column, auto-added with `ALTER TABLE`
-  on existing installs) and surfaced to the student in their
-  banner, their in-app notification, and the email.
-- **#6 Email notifications** — new shared
-  `notify_reschedule_decision()` helper sends both the in-app
-  notification AND an SMTP-branded email (using your existing
-  `send_email()` + `email_template()`). Used by approve, deny,
-  and the bulk-cancel flow.
-- **#7 Hide withdrawn applicants** — both interview and exam
-  request lists filter out anyone whose `overall_status =
-  'withdrawn'`.
-- **#8 Same-exam constraint** — exam approve refuses to move a
-  student between two different `exam_id`s. Auto-assign also
-  prefers the active exam.
-- **#9 Past requests history** — the student interview + exam
-  pages now show a collapsible "Past reschedule requests" block
-  with date, status badge, the student's original reason, and
-  any staff deny reason.
-
-### 3. Bulk cancel-slot (new feature)
-For typhoon scenarios or anything else where you need to move
-**everyone** in a slot at once:
-
-- **`/staff/interviews/cancel-slot`** — pick a slot with bookings,
-  pick a replacement slot with enough capacity, write a reason →
-  every applicant gets moved in one transaction, gets an in-app
-  notification, gets a branded email, and the cancelled slot is
-  closed.
-- **`/staff/exam/cancel-slot`** — same, mirrored for the exam side.
-  Honors the same-exam constraint from #8.
-
-Discoverable via a "Cancel a slot (bulk move) →" link on each
-existing reschedule-requests page (top right).
-
-## File list (15 files: 13 modified, 2 new)
+After: any queue row whose slot has fully ended without an evaluation
+is now automatically flipped to the **canonical absent state**:
 
 ```
-core/automation.php                          MOD  — auto_assign hardened, new backfill + notify_reschedule_decision helpers
-public/index.php                             MOD  — 2 new bulk-cancel routes
-views/partials/nav_admin.php                 MOD  — (from earlier rounds) reschedule items grouped under parents
-modules/api/reschedule_request.php           MOD  — interview submit endpoint (from round 1)
-modules/api/exam_reschedule_request.php      MOD  — exam submit endpoint (round 2)
-modules/auth/staff/dashboard.php             MOD  — Approve all pending docs now backfills exam slots
-modules/documents/staff_action.php           MOD  — Advance to exam now triggers auto-assign + notify
-modules/exam/take.php                        MOD  — student page + retries auto-assign on visit
-modules/exam/staff_slots.php                 MOD  — slot creation backfills waiting students
-modules/exam/staff_reschedule.php            MOD  — deny_reason, same-exam constraint, shared notifier
-modules/exam/staff_cancel_slot.php           NEW  — bulk cancel/move page (exam)
-modules/interview/staff_absent.php           MOD  — transaction-safe approve, deny_reason, withdrawn filter
-modules/interview/student_view.php           MOD  — deny_reason surfaced, history block
-modules/interview/staff_cancel_slot.php      NEW  — bulk cancel/move page (interview)
-modules/results/student_view.php             MOD  — (from round 3) confirm-enrollment card removed
+status            = 'no_show'
+interview_status  = 'absent'
+attendance_status = 'absent'
+evaluated_at      = NOW()
 ```
 
-## Sanity-check
-Every PHP file in this drop passes `php -l` clean.
+…with these triggers:
+
+- **Visiting `/staff/interviews/queue`** — already had an inline
+  auto-no-show update. Now uses the shared helper so all three fields
+  get set, not just `q.status`.
+- **Visiting `/staff/interviews/absent`** (new) — runs the same sweep
+  on page load, so the Absent Students tab is always up to date the
+  moment any SSO / admin / dean opens it.
+- **Dashboard → "Auto-close expired interview sessions"** — already
+  closed the slots; now also marks every unfinished applicant in
+  those slots as absent (the previous code was setting an *invalid
+  enum value* `interview_status='no_show'` which silently dropped on
+  strict MySQL).
+- **Queue → "Mark Absent" button** — manual flip already worked for
+  the queue row, but only set `q.status`; now sets all three fields
+  so the student also lands in the Absent Students tab without a
+  refresh dance.
+
+Every auto-flipped row also fires:
+
+- An in-app notification to the applicant: "Marked absent for your
+  interview" → links to `/student/interview` so they can submit a
+  reschedule request.
+- The existing email template via `send_email()` /
+  `email_template()` — same path as the reschedule-decision emails.
+- The existing `notify_staff_no_show()` so the admissions desk sees
+  it too.
+- A full audit log entry (`interview_auto_no_show`).
+
+Auto-reschedule for no-shows still runs after the flip (controlled by
+`auto_reschedule_noshows` school setting). The path was retargeted at
+`reschedule_absent_applicant()` since the row is now properly absent —
+this also fixes a latent bug where the previous `auto_reschedule_noshow`
+would leave a stale `interview_status='no_show'` (invalid enum) row
+that violated the `uq_applicant_active` unique constraint when trying
+to insert the new pending row.
+
+### What was in the previous round (still included here)
+
+- **Interview auto-assign safety net** on `/student/interview` — every
+  page visit, if the applicant is at the interview stage with no
+  active queue row, retry `assign_interview_slot()`. Mirrors the
+  `modules/exam/take.php` pattern. So the "student sees Waiting →
+  admin creates session → student refreshes → booked" loop works
+  end-to-end with zero staff action.
+- **`backfill_interview_slot_assignments()`** helper in
+  `core/automation.php`, symmetric with the existing exam-side
+  backfill. Walks every applicant at the interview stage without a
+  slot and tries to assign each one, regardless of department
+  matches.
+- **`$pageWide = true;`** on `/staff/exam/reschedule`,
+  `/staff/interviews/absent`, `/staff/exam/cancel-slot`, and
+  `/staff/interviews/cancel-slot` so the tables fill the window
+  instead of being squeezed into the narrow 900px container.
+
+## File list (10 modified)
+
+```
+core/automation.php                          MOD  — auto_close_expired_sessions delegates to auto_detect_interview_no_shows;
+                                                     auto_reschedule_noshow rewired to reschedule_absent_applicant;
+                                                     backfill_interview_slot_assignments() helper.
+core/interview_scheduler.php                 MOD  — new auto_detect_interview_no_shows() + _notify_applicant_marked_absent().
+modules/results/staff_manage.php             MOD  — search box no longer crashes (HY093): :q split into :q1/:q2/:q3.
+modules/interview/staff_queue.php            MOD  — inline auto-no-show update replaced with shared helper (all 3 fields).
+modules/interview/staff_action.php           MOD  — mark_no_show sets full canonical absent state, not just q.status.
+modules/interview/staff_absent.php           MOD  — auto-detect on page load + $pageWide = true.
+modules/interview/staff_cancel_slot.php      MOD  — $pageWide = true so the table fills the window.
+modules/interview/student_view.php           MOD  — page-load auto-assign safety net (mirrors modules/exam/take.php).
+modules/exam/staff_reschedule.php            MOD  — $pageWide = true so the table fills the window.
+modules/exam/staff_cancel_slot.php           MOD  — $pageWide = true so the table fills the window.
+```
+
+Every file passes `php -l` clean. No new migrations or schema changes.
+
+## Quick smoke test
+
+1. **Auto-absent:**
+   - Find an interview slot whose `end_time` has passed today.
+   - Confirm at least one queue row for that slot is still
+     `status='scheduled'`.
+   - Open `/staff/interviews/absent` as SSO / Admin.
+   - The student should now appear in the Absent Students table
+     immediately, even though no one clicked Mark Absent.
+   - The student should also have an in-app + email notification
+     about being marked absent.
+
+2. **Auto-assign retry (interview side):**
+   - Make a student pass the exam in a department with no interview
+     session — they should land on `/student/interview` with the
+     Waiting card.
+   - Create an interview session for that department.
+   - The student refreshes `/student/interview` — slot appears
+     immediately, no staff action needed.
+
+3. **Wider tables:**
+   - `/staff/exam/reschedule` and
+     `/staff/interviews/absent?tab=requests` should stretch full
+     width on a wide monitor instead of squeezing the table into the
+     middle.
