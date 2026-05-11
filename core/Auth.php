@@ -52,37 +52,38 @@ class Auth
         ];
     }
 
-    public static function isStudent():   bool { return self::role() === ROLE_STUDENT; }
-    public static function isStaff():     bool { return self::role() === ROLE_STAFF;   }
-    public static function isProfessor(): bool { return self::role() === ROLE_STAFF;   } // alias
-    public static function isSSO():       bool { return self::role() === ROLE_SSO;     }
-    public static function isDean():      bool { return self::role() === ROLE_DEAN;    }
-    public static function isAdmin():     bool { return self::role() === ROLE_ADMIN;   }
+    public static function isStudent():   bool { return self::role() === ROLE_STUDENT;  }
+    public static function isStaff():     bool { return self::role() === ROLE_STAFF;    }
+    public static function isProfessor(): bool { return self::role() === ROLE_STAFF;    } // alias
+    public static function isProctor():   bool { return self::role() === ROLE_PROCTOR;  }
+    public static function isSSO():       bool { return self::role() === ROLE_SSO;      }
+    public static function isDean():      bool { return self::role() === ROLE_DEAN;     }
+    public static function isAdmin():     bool { return self::role() === ROLE_ADMIN;    }
 
     /**
-     * Any non-student authenticated user (Professor / SSO / Dean / Admin).
+     * Any non-student authenticated user (Professor / Proctor / SSO / Dean / Admin).
      * Use for pages that everyone with admin-side access can view (e.g.
      * shared dashboards, the interview queue, user-profile settings).
      */
     public static function isStaffPlus(): bool
     {
-        return in_array(self::role(), [ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN], true);
+        return in_array(self::role(), [ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN], true);
     }
 
     /**
      * SSO / Dean / Admin — the "oversight" tier.
      * Use for pages that read across applicants but where Professors
-     * have no business (results review, courses & strands, dashboards).
+     * and Proctors have no business (results review, courses & strands).
      */
     public static function isOversight(): bool
     {
         return in_array(self::role(), [ROLE_SSO, ROLE_DEAN, ROLE_ADMIN], true);
     }
 
-    /** Legacy helper kept for back-compat (Staff OR Admin only). */
+    /** Legacy helper kept for back-compat (Staff / Proctor OR Admin only). */
     public static function isStaffOrAdmin(): bool
     {
-        return in_array(self::role(), [ROLE_STAFF, ROLE_ADMIN], true);
+        return in_array(self::role(), [ROLE_STAFF, ROLE_PROCTOR, ROLE_ADMIN], true);
     }
 
     // -- Role labels --------------------------------------------
@@ -92,12 +93,13 @@ class Auth
     public static function roleLabel(?string $role): string
     {
         return match ($role) {
-            ROLE_STUDENT => 'Student',
-            ROLE_STAFF   => 'Professor',
-            ROLE_SSO     => 'SSO',
-            ROLE_DEAN    => 'Dean',
-            ROLE_ADMIN   => 'Admin',
-            default      => ucfirst((string)$role),
+            ROLE_STUDENT  => 'Student',
+            ROLE_STAFF    => 'Professor',
+            ROLE_PROCTOR  => 'Proctor',
+            ROLE_SSO      => 'SSO',
+            ROLE_DEAN     => 'Dean',
+            ROLE_ADMIN    => 'Admin',
+            default       => ucfirst((string)$role),
         };
     }
 
@@ -125,7 +127,7 @@ class Auth
     /** Convenience: any non-student authenticated user. */
     public static function requireStaffPlus(): void
     {
-        self::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+        self::requireRole(ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
     }
 
     /** Convenience: SSO / Dean / Admin (oversight tier). */
@@ -138,11 +140,12 @@ class Auth
     public static function homeUrl(): string
     {
         return match (self::role()) {
-            ROLE_ADMIN => url('/admin/dashboard'),
-            ROLE_SSO   => url('/admin/dashboard'),
-            ROLE_DEAN  => url('/admin/dashboard'),
-            ROLE_STAFF => url('/staff/dashboard'),
-            default    => url('/student/documents'),
+            ROLE_ADMIN   => url('/admin/dashboard'),
+            ROLE_SSO     => url('/admin/dashboard'),
+            ROLE_DEAN    => url('/admin/dashboard'),
+            ROLE_STAFF   => url('/staff/dashboard'),
+            ROLE_PROCTOR => url('/staff/dashboard'),
+            default      => url('/student/documents'),
         };
     }
 }

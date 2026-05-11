@@ -110,7 +110,7 @@ function viewer_scoped_department(): string
     if (!Auth::check()) return '';
     $role = Auth::role();
     if ($role === ROLE_ADMIN || $role === ROLE_SSO) return '';
-    if ($role === ROLE_DEAN || $role === ROLE_STAFF) {
+    if ($role === ROLE_DEAN || $role === ROLE_STAFF || $role === ROLE_PROCTOR) {
         return user_department(Auth::id());
     }
     return '';

@@ -74,7 +74,7 @@ CREATE TABLE `users` (
     `phone`         VARCHAR(20)      NOT NULL DEFAULT '',
     `email`         VARCHAR(180)     NOT NULL,
     `password_hash` VARCHAR(255)     NOT NULL,
-    `role`          ENUM('student','staff','sso','dean','admin') NOT NULL DEFAULT 'student',
+    `role`          ENUM('student','staff','proctor','sso','dean','admin') NOT NULL DEFAULT 'student',
     `department`    VARCHAR(120)     NOT NULL DEFAULT ''
                     COMMENT 'College/department name (see departments.name)',
     `is_active`     TINYINT(1)       NOT NULL DEFAULT 1,

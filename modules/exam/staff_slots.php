@@ -22,26 +22,25 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+Auth::requireRole(ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 $db          = db();
 $staffId     = Auth::id();
 $role        = Auth::role();
 $isAdmin     = $role === ROLE_ADMIN;
 $isSSO       = $role === ROLE_SSO;
-$isProfessor = $role === ROLE_STAFF;
+$isProctor = $role === ROLE_PROCTOR;
 // Admin and SSO can manage slots across all departments. Dean is
-// read-only oversight. Professor proctors — they can only generate
-// access codes for slots in their own department (per the role
-// redesign).
+// read-only oversight. Proctor can only generate access codes for
+// slots in their own department.
 $canManage = $isAdmin || $isSSO;
 $staffDept = $canManage ? '' : (string) user_department($staffId);
 // Per-slot "can generate code" check. Admin and SSO can do it for
-// any room. Professors can do it only for slots in their own
-// department — they're the proctor for those rooms.
-$canGenerateCodeFor = function (string $slotDept) use ($isAdmin, $isSSO, $isProfessor, $staffDept): bool {
+// any room. Proctors can do it only for slots in their own
+// department.
+$canGenerateCodeFor = function (string $slotDept) use ($isAdmin, $isSSO, $isProctor, $staffDept): bool {
     if ($isAdmin || $isSSO) return true;
-    if ($isProfessor && $slotDept !== '' && $slotDept === $staffDept) return true;
+    if ($isProctor && $slotDept !== '' && $slotDept === $staffDept) return true;
     return false;
 };
 $errors    = [];
@@ -80,7 +79,7 @@ $defaultDate = date('Y-m-d', strtotime('+1 day'));
 $collegeParam = trim($_GET['college'] ?? '');
 $slotIdParam  = (int)($_GET['slot']    ?? 0);
 
-// Admin and SSO see the cross-college selector; Dean and Professor
+// Admin and SSO see the cross-college selector; Dean and Proctor
 // land directly on their own college's slot grid (no point showing
 // them a selector — they can only manage one college).
 // $staffDept is computed above (needed for $canGenerateCodeFor).
@@ -114,9 +113,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //
     // Each room's proctor can independently issue an 8-character
     // code valid for EXAM_PASSWORD_EXPIRY_SECONDS (5 minutes). Admin
-    // and SSO can do this for any room; Professors only for slots
+    // and SSO can do this for any room; Proctors only for slots
     // in their own department. Handled before the canManage gate so
-    // Professors are not redirected away.
+    // Proctors are not redirected away.
     if ($action === 'generate_slot_code' || $action === 'extend_slot_code') {
         $slotId = (int)($_POST['slot_id'] ?? 0);
         $stmt   = $db->prepare(
@@ -212,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Only Admin and SSO can mutate exam slots from this point on.
-    // Dean and Professor reach this page in read-only mode — if any
+    // Dean and Proctor reach this page in read-only mode — if any
     // other action posts through, reject it.
     if (!$canManage) {
         Session::flash('error', 'Read-only access — only SSO and Admin can modify exam slots.');

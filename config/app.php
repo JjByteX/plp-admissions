@@ -61,15 +61,16 @@ define('ALLOWED_MIME_TYPES', ['application/pdf', 'image/jpeg', 'image/png', 'ima
 
 // -- Roles -------------------------------------------------------
 // DB enum values stored on users.role:
-//   'student' | 'staff' | 'sso' | 'dean' | 'admin'
+//   'student' | 'staff' | 'proctor' | 'sso' | 'dean' | 'admin'
 //
-// ROLE_STAFF and ROLE_PROFESSOR both refer to the 'staff' enum value —
-// "Professor" is just the user-facing label for legacy 'staff' rows
-// (faculty who proctor exams and conduct interviews). SSO and Dean are
-// new top-level roles introduced for the role-redesign rollout.
+// ROLE_STAFF is the legacy 'staff' enum value — used for faculty who
+// conduct interviews ("Professor" is the user-facing label).
+// ROLE_PROCTOR is a new role for faculty who proctor exams.
+// SSO and Dean are top-level roles for the role-redesign rollout.
 define('ROLE_STUDENT',   'student');
 define('ROLE_STAFF',     'staff');
 define('ROLE_PROFESSOR', 'staff');     // alias — DB enum stays 'staff'
+define('ROLE_PROCTOR',   'proctor');
 define('ROLE_SSO',       'sso');
 define('ROLE_DEAN',      'dean');
 define('ROLE_ADMIN',     'admin');

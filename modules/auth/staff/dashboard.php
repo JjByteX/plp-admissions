@@ -4,7 +4,7 @@
 // Staff dashboard — pipeline bars with visible left-side labels
 // ============================================================
 require_once ROOT_PATH . '/core/Auth.php';
-Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+Auth::requireRole(ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
 // ── A4: Dashboard POST handlers ──────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

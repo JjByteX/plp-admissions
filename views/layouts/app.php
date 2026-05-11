@@ -209,11 +209,14 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 
         <!-- Navigation — rendered per role.
              Professor (staff) uses the trimmed nav_staff.php.
+             Proctor uses nav_proctor.php (exam-only sidebar).
              Admin / SSO / Dean share the management nav, which itself
              filters individual items per role. -->
         <nav class="sidebar-nav" aria-label="Main navigation">
             <?php if ($userRole === ROLE_STAFF): ?>
                 <?php include __DIR__ . '/../partials/nav_staff.php'; ?>
+            <?php elseif ($userRole === ROLE_PROCTOR): ?>
+                <?php include __DIR__ . '/../partials/nav_proctor.php'; ?>
             <?php elseif (in_array($userRole, [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN], true)): ?>
                 <?php include __DIR__ . '/../partials/nav_admin.php'; ?>
             <?php endif; ?>

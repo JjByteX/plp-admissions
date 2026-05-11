@@ -1,8 +1,9 @@
 -- ============================================================
 -- seed_users.sql
 -- Run this ONCE after loading schema.sql to create the admin,
--- SSO (Student Success Office), one Dean per college, and one
--- Professor (legacy 'staff' role) per college.
+-- SSO (Student Success Office), one Dean per college, one
+-- Professor (legacy 'staff' role) per college, and one
+-- Proctor per college.
 --
 -- ⚠️  Change all passwords after first login.
 --
@@ -11,6 +12,7 @@
 --   sso@plp.edu.ph           → SSO@123
 --   dean.<dept>@plp.edu.ph   → Dean@123
 --   staff.<dept>@plp.edu.ph  → Staff@123
+--   proctor.<dept>@plp.edu.ph → Proctor@123
 -- ============================================================
 
 -- Remove any existing seeded accounts first (safe to re-run)
@@ -28,7 +30,13 @@ DELETE FROM `users` WHERE `email` IN (
     'staff.cba@plp.edu.ph',
     'staff.coe@plp.edu.ph',
     'staff.cas@plp.edu.ph',
-    'staff.cen@plp.edu.ph'
+    'staff.cen@plp.edu.ph',
+    'proctor.ccs@plp.edu.ph',
+    'proctor.con@plp.edu.ph',
+    'proctor.cba@plp.edu.ph',
+    'proctor.coe@plp.edu.ph',
+    'proctor.cas@plp.edu.ph',
+    'proctor.cen@plp.edu.ph'
 );
 
 -- ── Admin ──────────────────────────────────────────────────
@@ -115,7 +123,7 @@ VALUES
      'dean', 'College of Engineering');
 
 -- ── Professors (legacy 'staff' role, one per college) ──────
--- These are faculty who proctor exams and conduct interviews.
+-- These are faculty who conduct interviews.
 -- The DB enum value stays 'staff' for compatibility; the UI shows
 -- "Professor" as the role label.
 -- Password for all professors: Staff@123
@@ -173,3 +181,62 @@ VALUES
      'staff.cen@plp.edu.ph',
      '$2b$12$euGKeofGDb/1XMIinGyopOzQ7NqxJI0N.LR3dALq18BgGYOcYkvZG',
      'staff', 'College of Engineering');
+
+-- ── Proctors (one per college) ──────────────────────────────
+-- These are faculty who proctor exams (generate access codes,
+-- manage exam-day room operations). They do NOT conduct interviews.
+-- Password for all proctors: Proctor@123
+
+-- College of Computer Studies
+INSERT INTO `users`
+    (`name`, `first_name`, `last_name`, `email`, `password_hash`, `role`, `department`)
+VALUES
+    ('CCS Proctor', 'CCS', 'Proctor',
+     'proctor.ccs@plp.edu.ph',
+     '$2b$12$DcDqM1sl5FyNcqJgUOvBSu1waVHuXFH39J.clfl9/dDeS4DyP5QMW',
+     'proctor', 'College of Computer Studies');
+
+-- College of Nursing
+INSERT INTO `users`
+    (`name`, `first_name`, `last_name`, `email`, `password_hash`, `role`, `department`)
+VALUES
+    ('CON Proctor', 'CON', 'Proctor',
+     'proctor.con@plp.edu.ph',
+     '$2b$12$e4TtX5zYv1Jy3qE9iMRu8ebBc7goQ0pcm23p8MhLtPTNk6a87j776',
+     'proctor', 'College of Nursing');
+
+-- College of Business and Accountancy
+INSERT INTO `users`
+    (`name`, `first_name`, `last_name`, `email`, `password_hash`, `role`, `department`)
+VALUES
+    ('CBA Proctor', 'CBA', 'Proctor',
+     'proctor.cba@plp.edu.ph',
+     '$2b$12$vPW4SSmZEkyRLRCaDYLEhuTtLDH3nO/31DT1T1NwxV47n8kB6Q2z.',
+     'proctor', 'College of Business and Accountancy');
+
+-- College of Education
+INSERT INTO `users`
+    (`name`, `first_name`, `last_name`, `email`, `password_hash`, `role`, `department`)
+VALUES
+    ('COE Proctor', 'COE', 'Proctor',
+     'proctor.coe@plp.edu.ph',
+     '$2b$12$sJ/IRDb6bxpBRrHHSXSixemXOjK4tI6TBWwyuRRRB3Czmszvm.hOa',
+     'proctor', 'College of Education');
+
+-- College of Arts and Sciences
+INSERT INTO `users`
+    (`name`, `first_name`, `last_name`, `email`, `password_hash`, `role`, `department`)
+VALUES
+    ('CAS Proctor', 'CAS', 'Proctor',
+     'proctor.cas@plp.edu.ph',
+     '$2b$12$UBsGGx0MgYrTjVF8a9fVc.YVQ/yiQPNGR9/4zjQ766Y39k7XsvcXO',
+     'proctor', 'College of Arts and Sciences');
+
+-- College of Engineering
+INSERT INTO `users`
+    (`name`, `first_name`, `last_name`, `email`, `password_hash`, `role`, `department`)
+VALUES
+    ('CEN Proctor', 'CEN', 'Proctor',
+     'proctor.cen@plp.edu.ph',
+     '$2b$12$ywUI.JzgtkdBKAVmxKJ6AOLX8FM2g9YT8WdeojgSFABdBwzEA5Q7i',
+     'proctor', 'College of Engineering');

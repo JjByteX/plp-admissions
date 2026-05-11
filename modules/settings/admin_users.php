@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pass  = $_POST['password'] ?? '';
             $dept  = trim($_POST['department'] ?? '');
 
-            $allowedRoles = [ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN];
+            $allowedRoles = [ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN];
             if (!$name || !$email || !in_array($role, $allowedRoles, true) || strlen($pass) < 8) {
                 $errors[] = 'All fields are required. Password must be at least 8 characters.';
                 break;
@@ -36,9 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             }
 
-            // Dean accounts must be scoped to a department.
+            // Dean and Proctor accounts must be scoped to a department.
             if ($role === ROLE_DEAN && $dept === '') {
                 $errors[] = 'Dean accounts must be assigned to a department.';
+                break;
+            }
+            if ($role === ROLE_PROCTOR && $dept === '') {
+                $errors[] = 'Proctor accounts must be assigned to a department.';
                 break;
             }
 
@@ -112,7 +116,7 @@ if ($filterDept !== '' && !in_array($filterDept, $availableDepts, true)) {
     $filterDept = '';
 }
 
-$sql     = 'SELECT * FROM users WHERE role IN ("staff","sso","dean","admin")';
+$sql     = 'SELECT * FROM users WHERE role IN ("staff","proctor","sso","dean","admin")';
 $params  = [];
 if ($filterDept !== '') {
     $sql    .= ' AND department = ?';
@@ -183,16 +187,20 @@ ob_start();
                     <td>
                         <?php
                             $roleBadge = match ($u['role']) {
-                                ROLE_ADMIN => 'error',
-                                ROLE_DEAN  => 'warning',
-                                ROLE_SSO   => 'success',
-                                ROLE_STAFF => 'info',
-                                default    => 'neutral',
+                                ROLE_ADMIN   => 'error',
+                                ROLE_DEAN    => 'warning',
+                                ROLE_SSO     => 'success',
+                                ROLE_STAFF   => 'info',
+                                ROLE_PROCTOR => 'info',
+                                default      => 'neutral',
                             };
                         ?>
                         <span class="badge badge-<?= e($roleBadge) ?>"><?= e(Auth::roleLabel($u['role'])) ?></span>
                     </td>
                     <td style="font-size:var(--text-sm)">
+                        <?php if (in_array($u['role'], [ROLE_ADMIN, ROLE_SSO], true)): ?>
+                            <span style="color:var(--text-tertiary);font-size:var(--text-xs)">—</span>
+                        <?php else: ?>
                         <form method="POST" style="display:inline-flex;align-items:center;gap:var(--space-1)">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="update_department">
@@ -208,6 +216,7 @@ ob_start();
                                 <?php endforeach; ?>
                             </select>
                         </form>
+                        <?php endif; ?>
                     </td>
                     <td>
                         <?php if ($u['is_active']): ?>
@@ -276,7 +285,8 @@ ob_start();
                     <label class="form-label">Role <span style="color:var(--error)">*</span></label>
                     <select name="role" id="role-select" class="form-control" required>
                         <option value="">Select role…</option>
-                        <option value="<?= ROLE_STAFF ?>">Professor (proctor exams &amp; conduct interviews)</option>
+                        <option value="<?= ROLE_STAFF ?>">Professor (conduct interviews)</option>
+                        <option value="<?= ROLE_PROCTOR ?>">Proctor (proctor exams, generate access codes)</option>
                         <option value="<?= ROLE_SSO ?>">SSO (documents, scheduling, exam content, results release)</option>
                         <option value="<?= ROLE_DEAN ?>">Dean (per-college oversight, courses &amp; tier thresholds)</option>
                         <option value="<?= ROLE_ADMIN ?>">Admin (full access)</option>
@@ -352,11 +362,25 @@ function openResetModal(uid, name) {
     if (!roleSel || !deptSel) return;
     function sync() {
         var isDean = roleSel.value === '<?= ROLE_DEAN ?>';
-        deptSel.required = isDean;
-        if (deptHint) {
-            deptHint.textContent = isDean
-                ? ' — required for Dean'
-                : ' — optional for SSO and Admin';
+        var isProctor = roleSel.value === '<?= ROLE_PROCTOR ?>';
+        var isStaff = roleSel.value === '<?= ROLE_STAFF ?>';
+        var needsDept = isDean || isProctor || isStaff;
+        var isAdmin = roleSel.value === '<?= ROLE_ADMIN ?>';
+        var isSSO = roleSel.value === '<?= ROLE_SSO ?>';
+        var hideDept = isAdmin || isSSO;
+        var deptRow = deptSel.closest('div');
+        if (hideDept) {
+            deptRow.style.display = 'none';
+            deptSel.required = false;
+            deptSel.value = '';
+        } else {
+            deptRow.style.display = '';
+            deptSel.required = needsDept;
+        }
+        if (deptHint && !hideDept) {
+            deptHint.textContent = needsDept
+                ? ' — required'
+                : '';
         }
     }
     roleSel.addEventListener('change', sync);

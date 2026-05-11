@@ -66,15 +66,6 @@ $docDeadline       = school_setting('document_deadline', '');
 $currentYear       = school_setting('current_school_year', '—');
 $isOpen          = admissions_is_open();
 
-// Check if exam & interview are set up for readiness indicators
-$syCheck           = $currentYear !== '—' ? $currentYear : date('Y').'-'.(date('Y')+1);
-$hasActiveExam     = (int)$db->query('SELECT COUNT(*) FROM exams WHERE is_active=1')->fetchColumn() > 0;
-$_q2 = $db->prepare('SELECT COUNT(*) FROM exam_slot_schedule WHERE school_year=?');
-$_q2->execute([$syCheck]);
-$hasExamSlots      = (int)$_q2->fetchColumn() > 0;
-$hasInterviewSlots = (int)$db->query("SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURDATE()")->fetchColumn() > 0;
-$examReady         = $hasActiveExam && $hasExamSlots;
-$interviewReady    = $hasInterviewSlots;
 // Stats by school year
 $stmt = $db->query(
     'SELECT school_year, overall_status, COUNT(*) as cnt
@@ -113,28 +104,6 @@ ob_start();
         </div>
 
 
-
-        <!-- Readiness indicators -->
-        <div style="display:flex;gap:var(--space-4);margin-bottom:var(--space-5);flex-wrap:wrap">
-            <div style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm)">
-                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
-                             background:<?= $examReady ? 'var(--success)' : 'var(--error)' ?>"></span>
-                <span style="color:var(--text-secondary)">Exams</span>
-                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                    <?php if ($examReady): ?>
-                        — Ready
-                    <?php endif; ?>
-                </span>
-            </div>
-            <div style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm)">
-                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
-                             background:<?= $interviewReady ? 'var(--success)' : 'var(--error)' ?>"></span>
-                <span style="color:var(--text-secondary)">Interviews</span>
-                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                    <?php if ($interviewReady): ?>— Ready<?php endif; ?>
-                </span>
-            </div>
-        </div>
 
         <form method="POST" id="apw-form">
             <?= csrf_field() ?>

@@ -6,7 +6,7 @@
 // Per the role redesign:
 //   Documents       → SSO / Admin (Professor cannot review)
 //   Exam Builder    → SSO / Admin (Professor has no exam content access)
-//   Exam Slots      → Professor in read-only (room sheet visibility)
+//   Exam Slots      → Proctor role only (Professor no longer has exam access)
 //   Interview Queue → Professor (their own desk's queue)
 //   Results / Audit → out of scope for Professor
 
@@ -20,11 +20,10 @@ $_navIntReady = (int)$_navDb->query(
     "SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURDATE()"
 )->fetchColumn() > 0;
 
-// Flat list — only 3 items, no section label needed.
-// Order: Dashboard → Exam Slots → Interview Queue.
+// Flat list — only 2 items: Dashboard → Interview Queue.
+// Exam Slots moved to the Proctor role.
 $items = [
     ['href' => '/staff/dashboard',         'key' => 'dashboard',  'label' => 'Dashboard',       'icon' => 'ic_fluent_home_24_regular'],
-    ['href' => '/staff/exam/slots',        'key' => 'exam',       'label' => 'Exam Slots',      'icon' => 'ic_fluent_calendar_ltr_24_regular'],
     ['href' => '/staff/interviews/queue',  'key' => 'interviews', 'label' => 'Interview Queue', 'icon' => 'ic_fluent_people_24_regular',     'alert' => !$_navIntReady],
 ];
 ?>
