@@ -3,11 +3,24 @@
 // modules/results/staff_action.php
 // Per-applicant result POST handler.
 //
+// Roles & responsibilities (post role-redesign):
+//   Professor  — interviews the student, marks Pass/Reject. This is a
+//                RECOMMENDATION only, not a verdict.
+//   Dean       — final decision-maker for applicants in their college.
+//                Picks Accept or Reject per row regardless of what the
+//                Professor recommended. Overriding the Professor's
+//                recommendation requires a written reason (audited).
+//   SSO        — same release powers as the Dean, but school-wide.
+//                Can also trigger "Close Admissions" (see staff_bulk.php).
+//   Admin      — can do everything + override an already-released result.
+//
 // Actions:
-//   action=release   — SSO/Admin only. Release a fresh result. Server
-//                      computes accepted vs rejected from the bucket
-//                      (exam_passed + interview Pass/Reject). Will not
-//                      run if the applicant is still 'awaiting'.
+//   action=release   — SSO/Dean/Admin. POST a `decision` of 'accepted' or
+//                      'rejected'. If the decision conflicts with the
+//                      Professor's recommendation (or with a failed exam
+//                      result), a non-empty `reason` is required and is
+//                      stored in admission_results.remarks for the audit
+//                      trail.
 //   action=override  — Admin only. Edit an already-released result.
 //                      Audited; requires a non-empty remarks reason.
 // ============================================================
@@ -72,8 +85,11 @@ if ($action === 'override') {
     redirect('/staff/results');
 }
 
-// ── Release (SSO / Admin) ─────────────────────────────────────
-// Server computes the decision from exam_passed + interview Pass/Reject.
+// ── Release (SSO / Dean / Admin) ──────────────────────────────
+// The releaser explicitly picks Accept or Reject. The server pulls the
+// Professor's recommendation + exam result to decide whether the choice
+// counts as an "override" (in which case a written reason is required
+// and gets stored as the remarks for the audit trail).
 $stmt = $db->prepare(
     'SELECT a.id, a.overall_status,
             ar.result AS existing_result,
@@ -101,39 +117,70 @@ if ($row['existing_result'] !== null) {
     redirect('/staff/results');
 }
 
-$examPassed   = (int)($row['exam_passed'] ?? -1);
-$interviewRes = $row['evaluation_result'];
+$decision = $_POST['decision'] ?? '';
+$reason   = trim($_POST['reason'] ?? '');
 
-$decision = null;
-if ($examPassed === 0 || $interviewRes === 'reject') {
-    $decision = 'rejected';
-} elseif ($examPassed === 1 && $interviewRes === 'pass') {
-    $decision = 'accepted';
+if (!in_array($decision, ['accepted', 'rejected'], true)) {
+    Session::flash('error', 'Pick a result: Accept or Reject.');
+    redirect('/staff/results');
 }
 
-if ($decision === null) {
+$examPassed   = isset($row['exam_passed']) ? (int) $row['exam_passed'] : -1;
+$interviewRes = $row['evaluation_result'];
+
+// Block release while the interview hasn't been evaluated yet. The Dean
+// can still override later — but only after the Professor records a
+// Pass/Reject so the recommendation is on file.
+if ($interviewRes !== 'pass' && $interviewRes !== 'reject' && $examPassed !== 0) {
     Session::flash('error', 'Cannot release yet — interview must be evaluated first.');
     redirect('/staff/results');
 }
 
+// Determine the Professor + exam recommendation.
+$recommended = ($examPassed === 0 || $interviewRes === 'reject')
+    ? 'rejected'
+    : (($examPassed === 1 && $interviewRes === 'pass') ? 'accepted' : null);
+
+$isOverride = ($recommended !== null && $recommended !== $decision);
+
+if ($isOverride && $reason === '') {
+    Session::flash('error',
+        'A written reason is required to release this applicant as '
+        . ucfirst($decision) . ' against the Professor\'s recommendation.');
+    redirect('/staff/results');
+}
+
+$remarks = $isOverride ? $reason : null;
+
 $db->prepare(
-    'INSERT INTO admission_results (applicant_id, result, released_by, released_at)
-     VALUES (?, ?, ?, NOW())
-     ON DUPLICATE KEY UPDATE result = VALUES(result),
+    'INSERT INTO admission_results (applicant_id, result, remarks, released_by, released_at)
+     VALUES (?, ?, ?, ?, NOW())
+     ON DUPLICATE KEY UPDATE result      = VALUES(result),
+                             remarks     = VALUES(remarks),
                              released_by = VALUES(released_by),
                              released_at = NOW()'
-)->execute([$applicantId, $decision, $staffId]);
+)->execute([$applicantId, $decision, $remarks, $staffId]);
 
 $db->prepare('UPDATE applicants SET overall_status = "released" WHERE id = ?')
    ->execute([$applicantId]);
 
 notify_stage_transition($applicantId, 'released', 'Result: ' . ucfirst($decision));
 
-audit_log(
-    'admission_result_released',
-    "Released applicant {$applicantId} as {$decision}",
-    'applicant', $applicantId
-);
+if ($isOverride) {
+    audit_log(
+        'admission_result_released_override',
+        "Released applicant {$applicantId} as {$decision} "
+        . "(Professor recommended " . ucfirst($recommended) . "). Reason: {$reason}",
+        'applicant', $applicantId
+    );
+} else {
+    audit_log(
+        'admission_result_released',
+        "Released applicant {$applicantId} as {$decision}",
+        'applicant', $applicantId
+    );
+}
 
-Session::flash('success', 'Result released as ' . ucfirst($decision) . '.');
+Session::flash('success', 'Result released as ' . ucfirst($decision) . '.'
+    . ($isOverride ? ' (Override of Professor recommendation recorded.)' : ''));
 redirect('/staff/results');

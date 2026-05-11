@@ -25,6 +25,39 @@ $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
 
 $requiredDocs = docs_for_type($applicant['applicant_type']);
 
+// Self-heal: if every required doc is approved but overall_status didn't
+// auto-advance (rejected-then-replaced-then-approved edge case), fix it
+// now so the stepper / exam page unblock immediately.
+if (in_array($applicant['overall_status'] ?? '', ['submitted', 'documents'], true) && !empty($requiredDocs)) {
+    $slugs = array_keys($requiredDocs);
+    $placeholders = implode(',', array_fill(0, count($slugs), '?'));
+    $stmt = $db->prepare(
+        "SELECT COUNT(*) FROM documents
+          WHERE applicant_id = ?
+            AND doc_type IN ($placeholders)
+            AND status = 'approved'"
+    );
+    $stmt->execute(array_merge([$applicantId], $slugs));
+    if ((int)$stmt->fetchColumn() === count($requiredDocs)) {
+        $db->prepare(
+            'UPDATE applicants
+                SET overall_status = "exam",
+                    documents_approved_at = COALESCE(documents_approved_at, NOW())
+              WHERE id = ?
+                AND overall_status NOT IN ("exam","interview","result","released","withdrawn")'
+        )->execute([$applicantId]);
+
+        $stmt = $db->prepare('SELECT * FROM applicants WHERE id = ?');
+        $stmt->execute([$applicantId]);
+        $applicant = $stmt->fetch() ?: $applicant;
+        $isSubmitted = ($applicant['overall_status'] ?? '') === 'submitted';
+
+        if (function_exists('notify_stage_transition')) notify_stage_transition($applicantId, 'exam');
+        if (function_exists('auto_assign_exam_slot'))   auto_assign_exam_slot($applicantId);
+        audit_log('applicant_advanced_exam_selfheal', "Self-healed advance to exam for applicant {$applicantId}", 'applicant', $applicantId);
+    }
+}
+
 // Document deadline enforcement
 $docDeadlineStr = school_setting('document_deadline', '');
 $docDeadlinePassed = false;
@@ -194,20 +227,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
 
             $success[] = $requiredDocs[$docSlug] . ' uploaded successfully.';
-
-            // Automation: auto-validate the uploaded document
-            $docId = $docRows[$docSlug]['id'] ?? 0;
-            $validationResult = 'uncertain';
-            if ($docId) {
-                $validationResult = auto_validate_document($docId);
-                if ($validationResult === 'passed') {
-                    // Re-fetch after auto-approval
-                    $stmt = $db->prepare('SELECT * FROM documents WHERE applicant_id = ?');
-                    $stmt->execute([$applicantId]);
-                    $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
-                    $success[] = 'Document auto-validated and approved.';
-                }
-            }
         }
     }
 
@@ -216,10 +235,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Content-Type: application/json');
         if (empty($errors)) {
             echo json_encode([
-                'ok' => true,
+                'ok'      => true,
                 'message' => $success[0] ?? 'Uploaded successfully.',
-                'validation' => $validationResult ?? 'uncertain',
-                'auto_approved' => ($validationResult ?? '') === 'passed',
             ]);
         } else {
             echo json_encode(['ok' => false, 'message' => implode(' ', $errors)]);
@@ -540,20 +557,8 @@ ob_start();
                         Staff note: <?= e($doc['staff_remarks']) ?>
                     </div>
                 <?php elseif ($status === 'approved'): ?>
-                    <?php
-                    $autoValidated = false;
-                    if ($doc) {
-                        try {
-                            ensure_document_validations_table();
-                            $vStmt = db()->prepare('SELECT status FROM document_validations WHERE document_id = ? ORDER BY validated_at DESC LIMIT 1');
-                            $vStmt->execute([$doc['id']]);
-                            $vRow = $vStmt->fetch();
-                            $autoValidated = $vRow && $vRow['status'] === 'passed';
-                        } catch (\Throwable) {}
-                    }
-                    ?>
                     <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:2px">
-                        <?= $autoValidated ? 'Auto-validated and approved' : 'Approved by admissions staff' ?>
+                        Approved by admissions staff
                     </div>
                 <?php endif; ?>
             </div>

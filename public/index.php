@@ -39,8 +39,6 @@ $router->post('/student/settings',  'settings/student');
 // -- API (AJAX) --------------------------------------------------
 $router->get( '/api/notifications',      'api/notifications');
 $router->post('/api/notifications',      'api/notifications');
-$router->post('/api/auto-validate',      'api/auto_validate');
-$router->get( '/api/auto-validate',      'api/auto_validate');
 $router->post('/api/exam-autosave',      'api/exam_autosave');
 $router->post('/api/reschedule-request', 'api/reschedule_request');
 $router->get( '/api/applicant-panel',    'api/applicant_panel');
@@ -49,6 +47,7 @@ $router->get( '/api/applicant-panel',    'api/applicant_panel');
 $router->get( '/staff/dashboard',           'auth/staff/dashboard');
 $router->post('/staff/dashboard',           'auth/staff/dashboard');
 $router->get( '/staff/applicants',          'documents/staff_review');
+$router->post('/staff/applicants',          'documents/staff_review');
 $router->get( '/staff/applicants/{id}',     'documents/staff_review');
 $router->post('/staff/documents/{id}',      'documents/staff_action');
 $router->get( '/staff/interviews',              'interview/staff_manage');

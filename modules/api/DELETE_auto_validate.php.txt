@@ -1,0 +1,6 @@
+Delete the file `modules/api/auto_validate.php` from your project root.
+
+This endpoint (POST /api/auto-validate) used to handle the documents AI
+validation requests. It is no longer needed because all documents AI code
+has been removed. The matching route was also removed from
+public/index.php and api/index.php.

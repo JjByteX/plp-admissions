@@ -4,25 +4,36 @@
 // Results — release admission decisions (SSO / Dean / Admin)
 //
 // Two-gate flow:
-//   Gate 1 (Interviewer) — Pass/Reject at interview. A Reject is blocking;
-//                          the applicant can never be released as Accepted.
-//   Gate 2 (SSO/Admin)   — Release. Final confirmation that flips the
-//                          result from internal-only to applicant-visible.
+//   Gate 1 (Professor) — interviews the student, marks Pass/Reject.
+//                        This is a RECOMMENDATION only — the Dean is
+//                        the final decision-maker and can override it
+//                        (a written reason is required and audited).
+//   Gate 2 (Dean/SSO/Admin) — Release. Final confirmation that flips
+//                        the result from internal-only to applicant-
+//                        visible. The releaser explicitly picks Accept
+//                        or Reject per row.
 //
-// Buckets shown on this page:
+// Buckets shown on this page (the Professor's recommendation):
 //   awaiting     — exam done, interview not yet evaluated
 //   ready_accept — exam passed AND Professor marked Pass
-//   ready_reject — exam failed OR interviewer marked Reject
+//                  (Recommended: Accept)
+//   ready_reject — exam failed OR Professor marked Reject
+//                  (Recommended: Reject)
 //   released     — admission_results row exists (final, applicant-visible)
 //   withdrawn    — applicant pulled out of the cycle
 //
 // Per-row actions:
 //   • Awaiting interview → no actions, status text only
-//   • Ready: Accept       → "Release as Accept" (SSO/Admin)
-//   • Ready: Reject       → "Release as Reject" (SSO/Admin)
+//   • Recommended: Accept → "Accept" (matches), "Reject" (override)
+//   • Recommended: Reject → "Reject" (matches), "Accept" (override)
 //   • Released            → "Edit" override button (Admin only, audited)
 //   • Withdrawn           → status text only
-//   Dean is read-only — never sees release/edit buttons.
+//   Override (the choice that contradicts the recommendation) opens a
+//   modal demanding a written reason, which gets stored on the result
+//   row and written to the audit log.
+//
+// SSO/Admin can also "Close Admissions" — bulk-reject every applicant
+// who hasn't been released yet, so leftover rows don't sit forever.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -32,8 +43,9 @@ $db      = db();
 $staffId = Auth::id();
 $role    = Auth::role();
 
-$canRelease  = ($role === ROLE_SSO || $role === ROLE_DEAN || $role === ROLE_ADMIN);
-$canOverride = ($role === ROLE_ADMIN);
+$canRelease       = ($role === ROLE_SSO || $role === ROLE_DEAN || $role === ROLE_ADMIN);
+$canOverride      = ($role === ROLE_ADMIN);
+$canCloseCycle    = ($role === ROLE_SSO || $role === ROLE_ADMIN);
 
 // Dean is dept-scoped — only see applicants whose course maps to their
 // own college. Admin and SSO see every applicant across all colleges.
@@ -257,11 +269,13 @@ ob_start();
        • "Withdrawn" kept but de-emphasized (muted style).
 ============================================================ -->
 <?php
-// Primary tabs — SSO's worklist + audit view.
+// Primary tabs — the Dean / SSO worklist + audit view. Labels read as
+// "Recommended:" because the bucket reflects the Professor's recommendation
+// — the Dean has final say and can release either way.
 $primaryTabs = [
-    'ready_accept' => ['label' => 'Ready: Accept', 'count' => (int)$countRows['ready_accept_count']],
-    'ready_reject' => ['label' => 'Ready: Reject', 'count' => (int)$countRows['ready_reject_count']],
-    'released'     => ['label' => 'Released',     'count' => (int)$countRows['released_count']],
+    'ready_accept' => ['label' => 'Recommended: Accept', 'count' => (int)$countRows['ready_accept_count']],
+    'ready_reject' => ['label' => 'Recommended: Reject', 'count' => (int)$countRows['ready_reject_count']],
+    'released'     => ['label' => 'Released',            'count' => (int)$countRows['released_count']],
 ];
 // Secondary tab — archive-style, rendered muted at the end.
 $secondaryTabs = [
@@ -296,7 +310,16 @@ $awaitingCount = (int)$countRows['awaiting_count'];
             <button type="submit" style="display:none" aria-hidden="true"></button>
         </form>
 
-
+        <?php if ($canCloseCycle): ?>
+            <!-- Close Admissions (SSO / Admin) — bulk-rejects every
+                 unreleased applicant so leftover rows don't sit forever. -->
+            <button type="button" class="btn btn-ghost btn-sm"
+                    onclick="openCloseAdmissionsModal()"
+                    style="display:inline-flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--error);border:1px solid var(--error)">
+                <?= icon('ic_fluent_lock_closed_24_regular', 13) ?>
+                Close Admissions
+            </button>
+        <?php endif; ?>
     </div>
 
     <!-- RIGHT: Bucket tabs (primary + de-emphasized Withdrawn) -->
@@ -532,9 +555,9 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                                 <?= e(RESULT_LABELS[$row['admission_result']] ?? ucfirst($row['admission_result'])) ?>
                             </span>
                         <?php elseif ($bucket === 'ready_accept'): ?>
-                            <span class="badge badge-approved">Ready: Accept</span>
+                            <span class="badge badge-approved" title="Professor recommends: Accept">Recommended: Accept</span>
                         <?php elseif ($bucket === 'ready_reject'): ?>
-                            <span class="badge badge-rejected">Ready: Reject</span>
+                            <span class="badge badge-rejected" title="Professor recommends: Reject">Recommended: Reject</span>
                         <?php else: /* awaiting */ ?>
                             <span style="color:var(--text-tertiary);font-size:var(--text-sm)">Awaiting interview</span>
                         <?php endif; ?>
@@ -572,33 +595,69 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                             <?php endif; ?>
 
                         <?php elseif (($bucket === 'ready_accept' || $bucket === 'ready_reject') && $canRelease): ?>
-                            <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="action" value="release">
-                                <?php
-                                    $isAccept = ($bucket === 'ready_accept');
-                                    $btnLabel = $isAccept ? 'Release as Accept' : 'Release as Reject';
-                                    $btnStyle = $isAccept
-                                        ? 'background:var(--success);color:#fff;border-color:var(--success);font-size:var(--text-xs)'
-                                        : 'background:var(--error);color:#fff;border-color:var(--error);font-size:var(--text-xs)';
-                                    $confirm  = $isAccept
-                                        ? "Release {$fullName} as Accepted? The applicant will be notified by email."
-                                        : "Release {$fullName} as Rejected? The applicant will be notified by email.";
-                                ?>
-                                <button type="submit" class="btn btn-sm" style="<?= $btnStyle ?>"
-                                        onclick="return confirm(<?= htmlspecialchars(json_encode($confirm), ENT_QUOTES) ?>)">
-                                    <?= $isAccept
-                                        ? icon('ic_fluent_checkmark_circle_24_regular', 13)
-                                        : icon('ic_fluent_dismiss_circle_24_regular', 13) ?>
-                                    <?= $btnLabel ?>
+                            <?php
+                                $recAccept   = ($bucket === 'ready_accept');
+                                $nameJson    = htmlspecialchars(json_encode($fullName), ENT_QUOTES);
+                                $bucketJson  = htmlspecialchars(json_encode($bucket), ENT_QUOTES);
+                                // Confirmation text for the "matches recommendation" path.
+                                $confirmAccept = "Release {$fullName} as Accepted? The applicant will be notified by email.";
+                                $confirmReject = "Release {$fullName} as Rejected? The applicant will be notified by email.";
+                            ?>
+                            <!-- Accept button -->
+                            <?php if ($recAccept): ?>
+                                <!-- Matches recommendation: direct release with a confirm. -->
+                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action"   value="release">
+                                    <input type="hidden" name="decision" value="accepted">
+                                    <button type="submit" class="btn btn-sm"
+                                            style="background:var(--success);color:#fff;border-color:var(--success);font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px"
+                                            onclick="return confirm(<?= htmlspecialchars(json_encode($confirmAccept), ENT_QUOTES) ?>)">
+                                        <?= icon('ic_fluent_checkmark_circle_24_regular', 13) ?>
+                                        Accept
+                                    </button>
+                                </form>
+                            <?php else: ?>
+                                <!-- Override: Professor recommended Reject. Demand a reason. -->
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        style="font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px;border:1px dashed var(--success);color:var(--success)"
+                                        title="Override Professor recommendation (reason required)"
+                                        onclick="openReleaseOverrideModal(<?= (int)$row['id'] ?>, <?= $nameJson ?>, 'accepted', <?= $bucketJson ?>)">
+                                    <?= icon('ic_fluent_checkmark_circle_24_regular', 13) ?>
+                                    Accept&hellip;
                                 </button>
-                            </form>
+                            <?php endif; ?>
+
+                            <!-- Reject button -->
+                            <?php if (!$recAccept): ?>
+                                <!-- Matches recommendation: direct release with a confirm. -->
+                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action"   value="release">
+                                    <input type="hidden" name="decision" value="rejected">
+                                    <button type="submit" class="btn btn-sm"
+                                            style="background:var(--error);color:#fff;border-color:var(--error);font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px"
+                                            onclick="return confirm(<?= htmlspecialchars(json_encode($confirmReject), ENT_QUOTES) ?>)">
+                                        <?= icon('ic_fluent_dismiss_circle_24_regular', 13) ?>
+                                        Reject
+                                    </button>
+                                </form>
+                            <?php else: ?>
+                                <!-- Override: Professor recommended Accept. Demand a reason. -->
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                        style="font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px;border:1px dashed var(--error);color:var(--error)"
+                                        title="Override Professor recommendation (reason required)"
+                                        onclick="openReleaseOverrideModal(<?= (int)$row['id'] ?>, <?= $nameJson ?>, 'rejected', <?= $bucketJson ?>)">
+                                    <?= icon('ic_fluent_dismiss_circle_24_regular', 13) ?>
+                                    Reject&hellip;
+                                </button>
+                            <?php endif; ?>
 
                         <?php elseif ($bucket === 'ready_accept'): ?>
-                            <span style="font-size:var(--text-xs);color:var(--success);font-weight:var(--weight-medium)">Ready: Accept</span>
+                            <span style="font-size:var(--text-xs);color:var(--success);font-weight:var(--weight-medium)">Recommended: Accept</span>
 
                         <?php elseif ($bucket === 'ready_reject'): ?>
-                            <span style="font-size:var(--text-xs);color:var(--error);font-weight:var(--weight-medium)">Ready: Reject</span>
+                            <span style="font-size:var(--text-xs);color:var(--error);font-weight:var(--weight-medium)">Recommended: Reject</span>
 
                         <?php else: /* awaiting */ ?>
                             <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Awaiting interview</span>
@@ -679,7 +738,106 @@ $awaitingCount = (int)$countRows['awaiting_count'];
 </div>
 <?php endif; ?>
 
-<!-- ── Suggest course modal (kept) ─────────────────────────── -->
+<?php if ($canRelease): ?>
+<!-- ── Release-with-override modal ─────────────────────────── -->
+<!-- Opens when the releaser picks the option that conflicts with
+     the Professor's recommendation (e.g. Dean accepts a row the
+     Professor flagged Reject). A written reason is mandatory; it
+     gets stored on admission_results.remarks and audited. -->
+<div id="release-override-modal" class="modal-backdrop" style="display:none">
+    <div class="modal" style="max-width:480px">
+        <div class="modal-header">
+            <div class="modal-title">Override Professor recommendation</div>
+            <button class="btn-icon" onclick="document.getElementById('release-override-modal').style.display='none'">
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
+            </button>
+        </div>
+        <form method="POST" id="release-override-form" action=""
+              onsubmit="document.getElementById('release-override-modal').style.display='none'">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action"   value="release">
+            <input type="hidden" name="decision" id="release-override-decision" value="">
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div id="release-override-warning" style="
+                    background:var(--warning-bg,rgba(245,158,11,.08));
+                    border:1px solid var(--warning);
+                    border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);
+                    font-size:var(--text-xs);color:var(--text-secondary)">
+                    <strong style="color:var(--warning)">Heads up.</strong>
+                    The Professor interviewed this applicant face-to-face. Overriding their
+                    recommendation requires a written reason and will be recorded in the audit log.
+                </div>
+                <p id="release-override-name" style="font-weight:var(--weight-medium);margin:0"></p>
+                <div>
+                    <label class="form-label">Result <span style="color:var(--error)">*</span></label>
+                    <div id="release-override-result-label" style="font-size:var(--text-sm);color:var(--text-secondary)"></div>
+                </div>
+                <div>
+                    <label class="form-label" for="release-override-reason">
+                        Reason for override <span style="color:var(--error)">*</span>
+                    </label>
+                    <textarea name="reason" id="release-override-reason" class="form-control"
+                              rows="4" required
+                              placeholder="Why are you overriding the Professor's recommendation?"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('release-override-modal').style.display='none'">Cancel</button>
+                <button type="submit" class="btn btn-primary">Release with Override</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($canCloseCycle): ?>
+<!-- ── Close Admissions modal (SSO / Admin) ─────────────────── -->
+<!-- Bulk-rejects every unreleased applicant for this cycle. A
+     reason is requested for the audit trail; if left blank the
+     server falls back to a generic note. -->
+<div id="close-admissions-modal" class="modal-backdrop" style="display:none">
+    <div class="modal" style="max-width:480px">
+        <div class="modal-header">
+            <div class="modal-title">Close Admissions Cycle</div>
+            <button class="btn-icon" onclick="document.getElementById('close-admissions-modal').style.display='none'">
+                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
+            </button>
+        </div>
+        <form method="POST" action="<?= url('/staff/results/bulk') ?>">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="close_admissions">
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div style="background:var(--error-bg,rgba(220,38,38,.08));
+                            border:1px solid var(--error);
+                            border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);
+                            font-size:var(--text-xs);color:var(--text-secondary)">
+                    <strong style="color:var(--error)">This is irreversible.</strong>
+                    Every applicant who has not yet been released will be marked as
+                    <strong>Rejected</strong> and emailed. Withdrawn applicants and
+                    already-released results are not touched.
+                </div>
+                <div>
+                    <label class="form-label" for="close-admissions-reason">
+                        Reason (optional)
+                    </label>
+                    <textarea name="reason" id="close-admissions-reason" class="form-control"
+                              rows="3"
+                              placeholder="e.g. End of cycle for SY 2024–2025. All remaining applicants rejected."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('close-admissions-modal').style.display='none'">Cancel</button>
+                <button type="submit" class="btn" style="background:var(--error);color:#fff;border-color:var(--error)"
+                        onclick="return confirm('Close admissions and bulk-reject every unreleased applicant? This cannot be undone.')">
+                    Close Admissions
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- ── Suggest course modal (kept) ─────────────────────── -->
 <div id="suggest-modal" class="modal-backdrop" style="display:none">
     <div class="modal" style="max-width:460px">
         <div class="modal-header">
@@ -760,8 +918,9 @@ document.getElementById('suggest-modal').addEventListener('click', function(e){
 <?php if ($canRelease): ?>
 <!-- ============================================================
      BULK ACTION TOOLBAR (floating, appears on selection)
-     Single action: Release Selected. Server picks accepted vs rejected
-     per row based on the applicant's bucket.
+     The Dean / SSO / Admin can release everything they've selected
+     as Accepted OR as Rejected. The server still skips rows that are
+     already released, withdrawn, or still awaiting interview.
 ============================================================ -->
 <div id="res-bulk-toolbar" style="
     display:none;
@@ -785,10 +944,16 @@ document.getElementById('suggest-modal').addEventListener('click', function(e){
 
     <div style="width:1px;height:24px;background:var(--border)"></div>
 
-    <button type="button" class="btn btn-primary btn-sm" onclick="resBulkRelease()"
-            style="display:flex;align-items:center;gap:5px;white-space:nowrap">
-        <?= icon('ic_fluent_ribbon_star_24_regular', 14) ?>
-        Release Selected
+    <button type="button" class="btn btn-sm" onclick="resBulkRelease('accepted')"
+            style="background:var(--success);color:#fff;border-color:var(--success);display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
+        Accept Selected
+    </button>
+
+    <button type="button" class="btn btn-sm" onclick="resBulkRelease('rejected')"
+            style="background:var(--error);color:#fff;border-color:var(--error);display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <?= icon('ic_fluent_dismiss_circle_24_regular', 14) ?>
+        Reject Selected
     </button>
 
     <div style="width:1px;height:24px;background:var(--border)"></div>
@@ -799,10 +964,13 @@ document.getElementById('suggest-modal').addEventListener('click', function(e){
     </button>
 </div>
 
-<!-- Hidden form for bulk release -->
+<!-- Hidden form for bulk release — action is populated by JS to one of
+     'bulk_accept' or 'bulk_reject' depending on which toolbar button was
+     clicked. Optional 'reason' input is added when the selection contains
+     rows that conflict with the Professor's recommendation. -->
 <form id="res-bulk-form" method="POST" action="<?= url('/staff/results/bulk') ?>" style="display:none">
     <?= csrf_field() ?>
-    <input type="hidden" name="action" value="release_selected">
+    <input type="hidden" name="action" id="res-bulk-action" value="bulk_accept">
 </form>
 
 <style>
@@ -924,28 +1092,50 @@ function resClearSelection() {
     resUpdateSelection();
 }
 
-function resBulkRelease() {
+function resBulkRelease(decision) {
     var ids = resGetSelectedIds();
     if (ids.length === 0) return;
+    if (decision !== 'accepted' && decision !== 'rejected') return;
 
-    // Tally accept vs reject from the bucket data attribute on the row.
-    var accept = 0, reject = 0;
+    // Tally how many rows match the chosen decision vs. how many will count
+    // as overrides of the Professor's recommendation.
+    var matchBucket = (decision === 'accepted') ? 'ready_accept' : 'ready_reject';
+    var matches = 0, overrides = 0;
     ids.forEach(function(id) {
         var tr = document.querySelector('tr.res-bulk-row[data-id="' + id + '"]');
         if (!tr) return;
-        if (tr.getAttribute('data-bucket') === 'ready_accept') accept++;
-        else if (tr.getAttribute('data-bucket') === 'ready_reject') reject++;
+        if (tr.getAttribute('data-bucket') === matchBucket) matches++;
+        else overrides++;
     });
 
-    var msg = 'Release ' + ids.length + ' selected applicant(s)?\n\n'
-            + '\u2022 ' + accept + ' will be released as Accepted\n'
-            + '\u2022 ' + reject + ' will be released as Rejected\n\n'
+    var label = (decision === 'accepted') ? 'Accepted' : 'Rejected';
+    var msg = 'Release ' + ids.length + ' selected applicant(s) as ' + label + '?\n\n'
+            + '\u2022 ' + matches   + ' match the Professor\u2019s recommendation\n'
+            + '\u2022 ' + overrides + ' will override the Professor\u2019s recommendation\n\n'
             + 'The applicants will be notified by email.';
 
     if (!confirm(msg)) return;
 
+    // If any rows override the recommendation, ask for a single shared
+    // reason that gets recorded against every override in the audit log.
+    var reason = '';
+    if (overrides > 0) {
+        reason = prompt(
+            overrides + ' of these applicants will be released against the Professor\u2019s '
+            + 'recommendation. Enter a reason for the override (recorded in the audit log):',
+            ''
+        );
+        if (reason === null) return; // cancelled
+        reason = reason.trim();
+    }
+
     var form = document.getElementById('res-bulk-form');
-    form.querySelectorAll('input[name="ids[]"]').forEach(function(el) { el.remove(); });
+    document.getElementById('res-bulk-action').value =
+        (decision === 'accepted') ? 'bulk_accept' : 'bulk_reject';
+
+    // Clear any previous dynamic inputs.
+    form.querySelectorAll('input[name="ids[]"], input[name="reason"]').forEach(function(el) { el.remove(); });
+
     ids.forEach(function(id) {
         var input = document.createElement('input');
         input.type = 'hidden';
@@ -953,13 +1143,56 @@ function resBulkRelease() {
         input.value = id;
         form.appendChild(input);
     });
+    if (reason) {
+        var rInput = document.createElement('input');
+        rInput.type = 'hidden';
+        rInput.name = 'reason';
+        rInput.value = reason;
+        form.appendChild(rInput);
+    }
 
-    // Show undo toast — submits form after 6s unless Undo is clicked
+    // Show undo toast — submits form after 6s unless Undo is clicked.
     showResUndoToast(
-        'Releasing ' + ids.length + ' applicant(s)…',
+        'Releasing ' + ids.length + ' applicant(s) as ' + label + '\u2026',
         function() { form.submit(); }
     );
 }
+
+// ── Single-row override modal opener ────────────────────────
+// Triggered when the releaser clicks Accept on a Recommended:Reject row
+// (or Reject on a Recommended:Accept row). Demands a written reason.
+function openReleaseOverrideModal(appId, name, decision, bucket) {
+    var modal = document.getElementById('release-override-modal');
+    if (!modal) return;
+    var form  = document.getElementById('release-override-form');
+    form.action = '<?= url('/staff/results/') ?>' + appId;
+    document.getElementById('release-override-decision').value = decision;
+    document.getElementById('release-override-name').textContent = name;
+
+    var label = (decision === 'accepted')
+        ? 'Release as \u201cAccepted\u201d (Professor recommended Reject)'
+        : 'Release as \u201cRejected\u201d (Professor recommended Accept)';
+    document.getElementById('release-override-result-label').textContent = label;
+    document.getElementById('release-override-reason').value = '';
+    modal.style.display = 'flex';
+}
+
+// Click-outside-to-close for the override modal + close-admissions modal.
+(function() {
+    var m = document.getElementById('release-override-modal');
+    if (m) m.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+    var c = document.getElementById('close-admissions-modal');
+    if (c) c.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+})();
+
+<?php if ($canCloseCycle): ?>
+function openCloseAdmissionsModal() {
+    var modal = document.getElementById('close-admissions-modal');
+    if (!modal) return;
+    document.getElementById('close-admissions-reason').value = '';
+    modal.style.display = 'flex';
+}
+<?php endif; ?>
 </script>
 <?php endif; ?>
 

@@ -18,6 +18,48 @@ if (!$applicant) { redirect('/student/documents'); }
 $applicantId = $applicant['id'];
 
 $stepperCurrent = 'exam';
+
+// Self-heal: if the applicant is still stuck in a pre-exam stage but all of
+// their required documents are actually approved, advance them now. This
+// covers cases where a document was rejected-then-replaced-then-approved
+// but the auto-advance didn't fire (e.g. a race or a partial state).
+if (in_array($applicant['overall_status'] ?? '', ['submitted', 'documents'], true)) {
+    $requiredDocs = docs_for_type($applicant['applicant_type'] ?? '');
+    if (!empty($requiredDocs)) {
+        $slugs = array_keys($requiredDocs);
+        $placeholders = implode(',', array_fill(0, count($slugs), '?'));
+        $stmt = $db->prepare(
+            "SELECT COUNT(*) FROM documents
+              WHERE applicant_id = ?
+                AND doc_type IN ($placeholders)
+                AND status = 'approved'"
+        );
+        $stmt->execute(array_merge([$applicantId], $slugs));
+        $approvedCount = (int)$stmt->fetchColumn();
+
+        if ($approvedCount === count($requiredDocs)) {
+            $db->prepare(
+                'UPDATE applicants
+                    SET overall_status = "exam",
+                        documents_approved_at = COALESCE(documents_approved_at, NOW())
+                  WHERE id = ?
+                    AND overall_status NOT IN ("exam","interview","result","released","withdrawn")'
+            )->execute([$applicantId]);
+
+            // Refresh the row so the rest of the file sees the new stage.
+            $stmt = $db->prepare('SELECT * FROM applicants WHERE id = ?');
+            $stmt->execute([$applicantId]);
+            $applicant = $stmt->fetch() ?: $applicant;
+
+            // Fire the same automation hooks the normal approve path uses.
+            if (function_exists('notify_stage_transition')) notify_stage_transition($applicantId, 'exam');
+            if (function_exists('auto_assign_exam_slot'))   auto_assign_exam_slot($applicantId);
+
+            audit_log('applicant_advanced_exam_selfheal', "Self-healed advance to exam for applicant {$applicantId}", 'applicant', $applicantId);
+        }
+    }
+}
+
 if ($applicant['overall_status'] !== 'exam') {
     Session::flash('error', 'You are not yet eligible to take the entrance exam.');
     redirect('/student/documents');
