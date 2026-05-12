@@ -454,22 +454,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                               . date('M j, Y', strtotime($slot['exam_date']))
                               . ". Add more slots on another day or increase the daily cap in Exam Config.";
                 } else {
-                    $stmt = $db->prepare('SELECT overall_status FROM applicants WHERE id=?');
+                    $stmt = $db->prepare(
+                        'SELECT a.overall_status, a.course_applied, u.department
+                           FROM applicants a
+                           JOIN users u ON u.id = a.user_id
+                          WHERE a.id = ?'
+                    );
                     $stmt->execute([$applicantId]);
-                    $st = $stmt->fetchColumn();
-                    if ($st !== 'exam') {
-                        $errors[] = "Applicant is not at exam stage (currently: {$st}).";
+                    $applRow = $stmt->fetch();
+                    if (!$applRow) {
+                        $errors[] = 'Applicant not found.';
+                    } elseif ($applRow['overall_status'] !== 'exam') {
+                        $errors[] = "Applicant is not at exam stage (currently: {$applRow['overall_status']}).";
                     } else {
-                        $db->prepare(
-                            'INSERT INTO applicant_exam_slots (applicant_id, slot_id, assigned_at)
-                             VALUES (?, ?, NOW())
-                             ON DUPLICATE KEY UPDATE slot_id=VALUES(slot_id), assigned_at=NOW()'
-                        )->execute([$applicantId, $slotId]);
-                        audit_log('exam_slot_assigned',
-                            "Assigned applicant {$applicantId} → slot {$slotId}",
-                            'applicant', $applicantId);
-                        Session::flash('success', 'Applicant assigned.');
-                        _slots_redirect_back($slot['department'] ?: $ctxCollege, $ctxSlotId);
+                        // Cross-college guard. An applicant must only land in
+                        // a slot for their own college, regardless of how
+                        // they got here (manual assign, auto-assign,
+                        // reschedule). If the slot's department doesn't
+                        // match, refuse with a clear message rather than
+                        // booking them into a foreign room.
+                        $applDept = trim((string)($applRow['department'] ?? ''))
+                                 ?: course_to_department((string)$applRow['course_applied']);
+                        $slotDept = trim((string)($slot['department'] ?? ''));
+                        if ($applDept !== '' && $slotDept !== '' && $applDept !== $slotDept) {
+                            $errors[] = "This slot is for {$slotDept}, but the applicant is in {$applDept}. "
+                                      . "Create a slot for {$applDept} instead.";
+                        } else {
+                            $db->prepare(
+                                'INSERT INTO applicant_exam_slots (applicant_id, slot_id, assigned_at)
+                                 VALUES (?, ?, NOW())
+                                 ON DUPLICATE KEY UPDATE slot_id=VALUES(slot_id), assigned_at=NOW()'
+                            )->execute([$applicantId, $slotId]);
+                            audit_log('exam_slot_assigned',
+                                "Assigned applicant {$applicantId} → slot {$slotId}",
+                                'applicant', $applicantId);
+                            Session::flash('success', 'Applicant assigned.');
+                            _slots_redirect_back($slot['department'] ?: $ctxCollege, $ctxSlotId);
+                        }
                     }
                 }
             }

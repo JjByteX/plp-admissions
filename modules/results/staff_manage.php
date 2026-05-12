@@ -102,6 +102,19 @@ if ($search) {
     $params[':q3'] = $needle;
 }
 
+// ── Default tab (must run BEFORE the listing query so the bucket
+//                filter is baked into the WHERE clause) ───────
+// "All" and "Awaiting interview" are no longer tabs. If somebody
+// lands here without a selection, drop them on Ready: Accept (the
+// SSO worklist) instead of an unfiltered list. The previous
+// version applied this default AFTER the listing query, which
+// caused the table to show every applicant regardless of bucket
+// while the tab badges all read 0 — surfacing not-yet-interviewed
+// applicants on the "Recommended: Accept" tab.
+if ($filterRes === '' || $filterRes === 'awaiting') {
+    $filterRes = 'ready_accept';
+}
+
 $validBuckets = ['awaiting', 'ready_accept', 'ready_reject', 'released', 'withdrawn'];
 if (in_array($filterRes, $validBuckets, true)) {
     $where[]            = "$bucketCase = :bucket";
@@ -217,18 +230,6 @@ $result = paginate(
      ORDER BY $orderCol $orderDir",
     $params, $page, 25
 );
-
-// ── Default tab ───────────────────────────────────────────────
-// "All" and "Awaiting interview" are no longer tabs. If somebody
-// lands here without a selection, drop them on Ready: Accept (the
-// SSO worklist) instead of an unfiltered list.
-if ($filterRes === '' || $filterRes === 'awaiting') {
-    $filterRes = 'ready_accept';
-    // Re-apply the bucket filter we just defaulted to.
-    $where[]            = "$bucketCase = :bucket";
-    $params[':bucket']  = $filterRes;
-    $whereStr           = implode(' AND ', $where);
-}
 
 // ── Filter URL helper ─────────────────────────────────────────
 function filterUrl(array $merge = []): string {

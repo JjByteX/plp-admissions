@@ -218,6 +218,22 @@ function auto_assign_exam_slot(int $applicantId): ?int
     $today   = date('Y-m-d');
     $nowTime = date('H:i:s');
 
+    // ----------------------------------------------------------------
+    // Candidate-slot search.
+    //
+    // HARD RULE: an applicant must NEVER be auto-assigned to a slot in
+    // a different department/college. The old fallback (which booked
+    // the student into "any open slot" if their own college had none)
+    // is what caused BSA/BSIT students to appear in a CAS proctor's
+    // roster. Removing it: if no matching slot exists, the student
+    // stays on "Awaiting Slot Assignment" until SSO creates one for
+    // their college, which is the correct UX.
+    //
+    // The dept-agnostic fallback is kept ONLY when the applicant has
+    // no resolvable department at all (unknown course), so legacy
+    // rows without a course→department mapping still get booked
+    // somewhere instead of being silently stuck.
+    // ----------------------------------------------------------------
     $candidates = [];
     $queries = [];
     if ($dept !== '' && $activeExamId !== null) {
@@ -241,23 +257,27 @@ function auto_assign_exam_slot(int $applicantId): ?int
             'params' => [$dept, $today, $today, $nowTime],
         ];
     }
-    if ($activeExamId !== null) {
+    if ($dept === '' && $activeExamId !== null) {
         $queries[] = [
             'sql' => 'SELECT id FROM exam_slot_schedule
-                       WHERE exam_id = ?
+                       WHERE (department IS NULL OR department = "")
+                         AND exam_id = ?
                          AND filled < capacity
                          AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
                        ORDER BY exam_date ASC, slot_time ASC',
             'params' => [$activeExamId, $today, $today, $nowTime],
         ];
     }
-    $queries[] = [
-        'sql' => 'SELECT id FROM exam_slot_schedule
-                   WHERE filled < capacity
-                     AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
-                   ORDER BY exam_date ASC, slot_time ASC',
-        'params' => [$today, $today, $nowTime],
-    ];
+    if ($dept === '') {
+        $queries[] = [
+            'sql' => 'SELECT id FROM exam_slot_schedule
+                       WHERE (department IS NULL OR department = "")
+                         AND filled < capacity
+                         AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
+                       ORDER BY exam_date ASC, slot_time ASC',
+            'params' => [$today, $today, $nowTime],
+        ];
+    }
 
     foreach ($queries as $q) {
         $stmt = $pdo->prepare($q['sql']);

@@ -1,109 +1,70 @@
-plp-admissions — SSO export-results + Dean reschedule cleanup
-===============================================================
+==============================================
+Cross-college slot leak fix — 3 file replacements
+==============================================
 
-Drop the inner `plp-admissions/` folder onto your project root. Each
-file in this archive matches its original path, so extracting on top
-of plp-admissions/ lands every file where it belongs. No DB migrations
-required.
+PROBLEM
+-------
+Proctor's roster for a College of Arts and Sciences room was showing
+applicants from BS Accountancy and BS Information Technology. Those
+students belong to different colleges and should never have landed in
+that slot.
 
-Files in this archive
----------------------
+ROOT CAUSE
+----------
+`auto_assign_exam_slot()` in `core/automation.php` falls back to
+"any open slot in any college" if the student's own college has no
+matching slot yet. That fallback was meant to be a last-resort safety
+net for legacy applicants without a department mapping, but in
+practice it routes brand-new applicants into foreign colleges
+whenever their own college's slots are created late.
 
-  modules/results/admin_export.php           (modified)
-  views/partials/nav_admin.php               (modified)
-  modules/interview/staff_absent.php         (modified)
-  modules/interview/staff_cancel_slot.php    (modified)
-  modules/exam/staff_reschedule.php          (modified)
+`modules/exam/staff_reschedule.php` had the same fallback on the
+reschedule-approval path. The manual SSO "Assign" action in
+`modules/exam/staff_slots.php` had no dept check at all, so an
+operator could accidentally drop a student into the wrong college's
+room.
 
+FIXES
+-----
+1. core/automation.php — auto_assign_exam_slot()
+   • Department-agnostic candidate queries now only run when the
+     applicant has no resolvable department at all (unknown course
+     mapping). For everyone else: if no matching slot exists in their
+     own department, the applicant stays "Awaiting Slot Assignment"
+     until SSO creates one. No cross-college fallback.
 
-What changed and why
---------------------
+2. modules/exam/staff_reschedule.php — reschedule approval
+   • Removed the "fall back to any open future slot" branch. If no
+     same-department slot exists, surfaces a clear error telling SSO
+     to create one first.
 
-1. SSO can now export results, just like Admin.
-   - /admin/results (the results CSV export + summary view) was
-     previously Admin-only. SSO now passes the requireRole check,
-     because SSO is the office that actually files admissions
-     paperwork with the registrar.
-   - A new sidebar entry "Export Results" is shown to SSO and Admin,
-     pointing at /admin/results. It uses a dedicated nav key
-     (results-export) so it highlights independently of the
-     per-college Results page that Admin and Dean already see.
-   - Dean is intentionally NOT given access to the bulk export
-     because Dean's job is academic oversight of results, not
-     bulk export. Dean keeps their existing per-college Results
-     view at /staff/results.
+3. modules/exam/staff_slots.php — manual `assign` action
+   • Added a guard: refuses the assign when the slot's department
+     doesn't match the applicant's department, with a message
+     pointing to the right college. Pulls dept from `users.department`
+     with a `course_to_department()` fallback.
 
-2. Dean is removed from reschedule flows entirely.
-   Reschedules are a scheduling / registrar action that belongs
-   to SSO. Dean has no real-world role in deciding which student
-   moves to which slot, so:
+DEPLOY
+------
+1. Drag-and-drop the contents of this folder on top of `plp-admissions/`.
+2. Run the cleanup SQL below — this removes already-misrouted
+   assignments and decrements `filled` counters so the new
+   auto-assign can place them correctly into their own colleges.
+3. Re-run `backfill_exam_slot_assignments()` (or just let students
+   refresh `/student/exam` — the page self-heals).
 
-   a. /staff/interviews/absent (the page with the Absent Students
-      tab and the Reschedule Requests tab):
-      - Dean can still see the Absent Students tab read-only
-        (this is useful for an academic who wants to know who in
-        their college didn't show up).
-      - The "Reschedule Requests" tab is hidden from Dean. A
-        bookmark to ?tab=requests is silently snapped back to
-        the Absent tab so navigation feels seamless instead of
-        403-ing.
-      - The "Reschedule" action UI on the Absent tab is hidden
-        from Dean.
-      - canReschedule no longer includes Dean, so even a forged
-        POST is rejected with a clear error.
-
-   b. /staff/interviews/cancel-slot (bulk-cancel an interview
-      slot and move every booked applicant to a replacement):
-      - Dean is dropped from requireRole entirely. Bulk move is
-        a scheduling action, not academic oversight.
-
-   c. /staff/exam/reschedule:
-      - Dean is dropped from requireRole. Previously Dean could
-        view it read-only; now they 403. This matches the
-        interview-side behavior (Dean sees no Reschedule
-        Requests tab at all).
-
-   d. views/partials/nav_admin.php:
-      - The "Interview Reschedules" sidebar entry no longer
-        appears for Dean. The pending-count query is still
-        cheap so it stays in place for the SSO/Admin badge.
-
-3. Dean's slot creation is unchanged (and was already blocked):
-   - modules/interview/staff_setup.php was already SSO+Admin only.
-   - modules/exam/staff_slots.php already gates canManage to
-     SSO+Admin even though Dean can view the page.
-   No new code was needed for this requirement; this archive just
-   makes Dean's removal from reschedule flows consistent with that
-   existing rule.
-
-
-Verification
+SANITY CHECK
 ------------
+After deploying:
 
-Every modified file is php -l clean on PHP 8.1. No new database
-columns or tables. No new routes. The /admin/results route already
-exists in public/index.php — it just now accepts SSO sessions in
-addition to Admin sessions.
-
-
-How to roll it out
-------------------
-
-1. Extract this archive on top of your plp-admissions/ project root.
-2. Reload any in-flight SSO/Dean sessions (or have them re-login)
-   so the nav re-renders with the new sidebar items.
-3. Smoke-check:
-   - Log in as SSO    → sidebar shows "Export Results";
-                        /admin/results opens; CSV export downloads;
-                        /staff/interviews/absent?tab=requests still
-                        works.
-   - Log in as Dean   → sidebar shows no "Interview Reschedules"
-                        and no "Export Results";
-                        /staff/interviews/absent shows only the
-                        Absent tab and no Reschedule action UI;
-                        /staff/interviews/absent?tab=requests
-                        falls back to the Absent tab;
-                        /staff/interviews/cancel-slot → 403;
-                        /staff/exam/reschedule → 403;
-                        /admin/results → 403.
-   - Log in as Admin  → no change in capability.
+  -- Should return 0 rows. If it does, a stale misroute slipped
+  -- through; re-run the cleanup query.
+  SELECT a.id AS applicant_id, u.department AS student_dept,
+         s.department AS slot_dept, s.room_label
+    FROM applicant_exam_slots aes
+    JOIN exam_slot_schedule s ON s.id = aes.slot_id
+    JOIN applicants a         ON a.id = aes.applicant_id
+    JOIN users u              ON u.id = a.user_id
+   WHERE COALESCE(u.department,'') <> ''
+     AND COALESCE(s.department,'') <> ''
+     AND u.department <> s.department;

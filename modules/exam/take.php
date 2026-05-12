@@ -123,8 +123,12 @@ $examId = $exam['id'];
 // As of Chunk 7, the access password lives on the slot row (per-room),
 // so we pull access_password and password_issued_at along with the
 // scheduling fields.
+// end_time is what slot_window() uses to compute the exam-duration
+// timer. Omitting it makes slot_window() fall back to a hardcoded
+// 90-minute window, which silently truncates the student's exam if
+// they enter late or the room's actual window is longer than 90 min.
 $slotStmt = $db->prepare(
-    'SELECT s.id, s.exam_date, s.slot_time, s.room_label,
+    'SELECT s.id, s.exam_date, s.slot_time, s.end_time, s.room_label,
             s.access_password, s.password_issued_at
        FROM applicant_exam_slots aes
        JOIN exam_slot_schedule  s ON s.id = aes.slot_id

@@ -162,24 +162,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->execute($params);
             $candidateSlotId = (int)($st->fetchColumn() ?: 0);
 
-            // If nothing matches the student's department, fall back to
-            // any open future slot — same fallback as auto_assign_exam_slot().
-            if (!$candidateSlotId && $department !== '') {
-                $params2 = [$today, $oldSlotId];
-                $sql2 = 'SELECT id FROM exam_slot_schedule
-                          WHERE exam_date >= ?
-                            AND filled < capacity
-                            AND id <> ?';
-                if ($oldSlotExamId !== null) {
-                    $sql2 .= ' AND (exam_id = ? OR exam_id IS NULL)';
-                    $params2[] = $oldSlotExamId;
-                }
-                $sql2 .= ' ORDER BY exam_date ASC, slot_time ASC LIMIT 1';
-                $st2 = $db->prepare($sql2);
-                $st2->execute($params2);
-                $candidateSlotId = (int)($st2->fetchColumn() ?: 0);
-            }
-
+            // No cross-department fallback. If nothing matches the
+            // applicant's own department/college we surface a clear
+            // error so SSO creates a slot for that college instead of
+            // silently moving the student into a foreign college's
+            // room. (Was previously falling back to "any open slot",
+            // which is how BSA/BSIT applicants ended up in a CAS
+            // proctor's roster.)
             if (!$candidateSlotId) {
                 $deptLabel = $department !== '' ? " for {$department}" : '';
                 $slotErr   = "Cannot approve — there's no open exam slot{$deptLabel} yet. "
