@@ -4,14 +4,18 @@
 //
 // Bulk reschedule (interview side).
 //
-// Lets SSO / Admin / Dean cancel an upcoming interview slot in
-// one click and move every applicant booked into it to a
+// Lets SSO / Admin cancel an upcoming interview slot in one
+// click and move every applicant booked into it to a
 // replacement slot of their choosing. Each affected student
 // gets an in-app notification + branded email letting them
 // know their slot has changed, and the entire move runs inside
 // a single transaction with FOR UPDATE locks on the target
 // slot so capacity can't be over-subscribed by two admins
 // hitting Cancel at the same time.
+//
+// Dean is intentionally excluded — bulk-cancel-and-move is a
+// scheduling action owned by SSO / the registrar, not an
+// academic-oversight one.
 //
 // This is the "typhoon scenario" flow: cancel a room/day, move
 // everyone at once, instead of approving N individual
@@ -23,7 +27,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 
 $db      = db();
 $staffId = Auth::id();

@@ -1,11 +1,17 @@
 <?php
 // ============================================================
 // modules/results/admin_export.php
-// M6 — Admin: export all results as CSV or view summary
+// M6 — Admin / SSO: export all results as CSV or view summary
+//
+// Access: Admin and SSO. SSO is the office that actually files
+// admissions paperwork with the registrar, so they need the same
+// CSV/summary that Admin has. Dean is intentionally excluded —
+// Dean's job is academic oversight of results, not bulk export,
+// and their per-college Results view is at /staff/results.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_ADMIN);
+Auth::requireRole(ROLE_ADMIN, ROLE_SSO);
 
 $db = db();
 
@@ -139,6 +145,6 @@ ob_start();
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Results Export';
-$activeNav = 'results';
+$activeNav = 'results-export';
 $pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

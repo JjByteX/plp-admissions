@@ -8,9 +8,12 @@
 //   1. Absent Students — applicants marked absent by interviewers.
 //   2. Reschedule Requests — student-initiated reschedule requests.
 //
-// Staff/Prof: read-only (can view both tabs, cannot reschedule).
-// SSO/Admin/Dean: can reschedule absent students and approve/deny
-//                 reschedule requests.
+// Staff/Prof: read-only (can view Absent tab, cannot reschedule).
+// Dean:       read-only on the Absent tab. The Reschedule Requests
+//             tab is hidden from Dean entirely — reschedules are an
+//             SSO/registrar action, not an academic-oversight one.
+// SSO/Admin:  can reschedule absent students and approve/deny
+//             reschedule requests.
 //
 // URL:
 //   GET  /staff/interviews/absent
@@ -23,7 +26,8 @@ Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 $db      = db();
 $staffId = Auth::id();
 $role    = Auth::role();
-$canReschedule = in_array($role, [ROLE_SSO, ROLE_ADMIN, ROLE_DEAN], true);
+$isDean  = ($role === ROLE_DEAN);
+$canReschedule = in_array($role, [ROLE_SSO, ROLE_ADMIN], true);
 
 $errors  = [];
 $success = [];
@@ -31,18 +35,24 @@ $success = [];
 // Ensure the reschedule_requests table exists.
 ensure_reschedule_requests_table();
 
-// Active tab: absent (default) or requests
+// Active tab: absent (default) or requests. Dean is forced onto the
+// absent tab — the Reschedule Requests tab is hidden from them and
+// any direct ?tab=requests link from a bookmark is silently snapped
+// back rather than 403'd, so navigation feels seamless.
 $activeTab = ($_GET['tab'] ?? 'absent') === 'requests' ? 'requests' : 'absent';
+if ($isDean) {
+    $activeTab = 'absent';
+}
 
 // ----------------------------------------------------------------
-// POST — only SSO/Admin/Dean may perform scheduling actions
+// POST — only SSO/Admin may perform scheduling actions
 // ----------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
 
     if (!$canReschedule) {
-        $errors[] = 'Only SSO, Admin, and Dean can perform scheduling actions.';
+        $errors[] = 'Only SSO and Admin can perform scheduling actions.';
         $action = '';
     }
 
@@ -462,6 +472,7 @@ ob_start();
                           margin-left:var(--space-1)"><?= count($absent) ?></span>
         <?php endif; ?>
     </a>
+    <?php if (!$isDean): ?>
     <a href="<?= url('/staff/interviews/absent?tab=requests') ?>"
        style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);font-weight:var(--weight-medium);
               text-decoration:none;border-bottom:2px solid <?= $activeTab === 'requests' ? 'var(--accent)' : 'transparent' ?>;
@@ -473,6 +484,7 @@ ob_start();
                           font-size:var(--text-xs);margin-left:var(--space-1)"><?= count($reschedRequests) ?></span>
         <?php endif; ?>
     </a>
+    <?php endif; ?>
 </div>
 
 <?php if ($activeTab === 'absent'): ?>

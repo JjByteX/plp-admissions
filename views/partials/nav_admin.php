@@ -72,7 +72,9 @@ $_navResPending     = false;
 $_navReschedPending     = false;
 $_navExamReschedPending = false;
 
-// Interview reschedule requests — pending count for SSO/Admin/Dean.
+// Interview reschedule requests — pending count for SSO/Admin only.
+// Dean no longer sees the Interview Reschedules entry (reschedules
+// are an SSO/registrar action), so we skip the query for them too.
 try {
     ensure_reschedule_requests_table();
     $_navReschedPending = (int)$_navDb->query(
@@ -160,10 +162,18 @@ $items = [
         'roles' => [ROLE_ADMIN, ROLE_SSO]],
     ['href' => $intHref,             'key' => 'interviews',  'label' => 'Interviews',       'icon' => 'ic_fluent_calendar_ltr_24_regular',  'alert' => !$_navIntReady,
         'roles' => [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN]],
+    // Interview Reschedules — SSO/Admin only. Dean is intentionally
+    // excluded; reschedules are a scheduling/registrar action, not
+    // an academic-oversight one, and SSO owns it end-to-end.
     ['href' => '/staff/interviews/absent?tab=requests', 'key' => 'reschedule', 'label' => 'Interview Reschedules', 'icon' => 'ic_fluent_arrow_sync_24_regular', 'pending' => $_navReschedPending,
-        'roles' => [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN]],
+        'roles' => [ROLE_ADMIN, ROLE_SSO]],
     ['href' => '/staff/results',     'key' => 'results',     'label' => 'Results',          'icon' => 'ic_fluent_ribbon_star_24_regular',   'pending' => $_navResPending,
         'roles' => [ROLE_ADMIN, ROLE_DEAN]],
+    // Export Results — SSO + Admin can pull the CSV / summary that
+    // the registrar files. Dean works the per-college Results page
+    // above, so they don't need a bulk-export entry.
+    ['href' => '/admin/results',     'key' => 'results-export', 'label' => 'Export Results', 'icon' => 'ic_fluent_arrow_download_24_regular', 
+        'roles' => [ROLE_ADMIN, ROLE_SSO]],
 
     ['href' => '/admin/users',       'key' => 'users',       'label' => 'Users',            'icon' => 'ic_fluent_shield_24_regular',
         'roles' => [ROLE_ADMIN]],

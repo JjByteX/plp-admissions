@@ -1,90 +1,109 @@
-plp-admissions — reschedule flow fixes + sidebar / UI cleanup
-==============================================================
+plp-admissions — SSO export-results + Dean reschedule cleanup
+===============================================================
 
-Drop the files in this archive into your project root. The folder
-structure already matches the original repo, so you can extract this
-zip on top of plp-admissions/ and every file lands in the right place.
+Drop the inner `plp-admissions/` folder onto your project root. Each
+file in this archive matches its original path, so extracting on top
+of plp-admissions/ lands every file where it belongs. No DB migrations
+required.
 
 Files in this archive
 ---------------------
 
-  core/automation.php                       (modified)
-  public/index.php                          (modified)
-  views/partials/nav_admin.php              (modified)
-
-  modules/api/reschedule_request.php        (modified — interview)
-  modules/api/exam_reschedule_request.php   (NEW      — exam)
-
-  modules/interview/student_view.php        (modified)
-  modules/interview/staff_absent.php        (modified)
-
-  modules/exam/take.php                     (modified)
-  modules/exam/staff_reschedule.php         (NEW)
-
-  modules/results/student_view.php          (modified — UI cleanup)
+  modules/results/admin_export.php           (modified)
+  views/partials/nav_admin.php               (modified)
+  modules/interview/staff_absent.php         (modified)
+  modules/interview/staff_cancel_slot.php    (modified)
+  modules/exam/staff_reschedule.php          (modified)
 
 
-This round's additional changes
--------------------------------
+What changed and why
+--------------------
 
-A. modules/results/student_view.php
-   • Removed the "Confirm Your Enrollment" / "I Confirm My Enrollment"
-     card on the results page. The matching "You have confirmed your
-     enrollment. Welcome to PLP!" alert is removed too so the page no
-     longer has any reference to confirmation. The withdraw flow is
-     untouched.
-   • The /student/result POST endpoint
-     (modules/results/enrollment_intent.php) still recognizes
-     action=confirm_enrollment, but the UI no longer surfaces it, so
-     no normal user can hit it. Leaving the handler in place keeps
-     any existing admin / scripting paths working without surprise.
+1. SSO can now export results, just like Admin.
+   - /admin/results (the results CSV export + summary view) was
+     previously Admin-only. SSO now passes the requireRole check,
+     because SSO is the office that actually files admissions
+     paperwork with the registrar.
+   - A new sidebar entry "Export Results" is shown to SSO and Admin,
+     pointing at /admin/results. It uses a dedicated nav key
+     (results-export) so it highlights independently of the
+     per-college Results page that Admin and Dean already see.
+   - Dean is intentionally NOT given access to the bulk export
+     because Dean's job is academic oversight of results, not
+     bulk export. Dean keeps their existing per-college Results
+     view at /staff/results.
 
-B. views/partials/nav_admin.php — sidebar order
-   • "Exam Reschedules" now sits directly under "Exam".
-   • "Interview Reschedules" now sits directly under "Interviews".
-     Final order:
-        Documents → Exam → Exam Reschedules →
-        Interviews → Interview Reschedules → Results → Users …
+2. Dean is removed from reschedule flows entirely.
+   Reschedules are a scheduling / registrar action that belongs
+   to SSO. Dean has no real-world role in deciding which student
+   moves to which slot, so:
 
-C. modules/exam/take.php — future-exam screen copy
-   • Removed the "log in here and click Start Exam" instruction.
-     Students just enter the access code the proctor announces, so the
-     copy now reads:
-        "On exam day, log in here. The proctor in your room will
-         announce the access code when the exam opens — you'll have
-         5 minutes to enter it to start."
+   a. /staff/interviews/absent (the page with the Absent Students
+      tab and the Reschedule Requests tab):
+      - Dean can still see the Absent Students tab read-only
+        (this is useful for an academic who wants to know who in
+        their college didn't show up).
+      - The "Reschedule Requests" tab is hidden from Dean. A
+        bookmark to ?tab=requests is silently snapped back to
+        the Absent tab so navigation feels seamless instead of
+        403-ing.
+      - The "Reschedule" action UI on the Absent tab is hidden
+        from Dean.
+      - canReschedule no longer includes Dean, so even a forged
+        POST is rejected with a clear error.
+
+   b. /staff/interviews/cancel-slot (bulk-cancel an interview
+      slot and move every booked applicant to a replacement):
+      - Dean is dropped from requireRole entirely. Bulk move is
+        a scheduling action, not academic oversight.
+
+   c. /staff/exam/reschedule:
+      - Dean is dropped from requireRole. Previously Dean could
+        view it read-only; now they 403. This matches the
+        interview-side behavior (Dean sees no Reschedule
+        Requests tab at all).
+
+   d. views/partials/nav_admin.php:
+      - The "Interview Reschedules" sidebar entry no longer
+        appears for Dean. The pending-count query is still
+        cheap so it stays in place for the SSO/Admin badge.
+
+3. Dean's slot creation is unchanged (and was already blocked):
+   - modules/interview/staff_setup.php was already SSO+Admin only.
+   - modules/exam/staff_slots.php already gates canManage to
+     SSO+Admin even though Dean can view the page.
+   No new code was needed for this requirement; this archive just
+   makes Dean's removal from reschedule flows consistent with that
+   existing rule.
 
 
-What's still in this zip from the earlier rounds
-------------------------------------------------
+Verification
+------------
 
-INTERVIEW reschedule flow:
-  • student_view.php: pending/denied/approved banners; form hides
-    after submit so no duplicates.
-  • staff_absent.php: pre-check for an open slot before doing any
-    destructive work; clear "create a slot first" error when nothing
-    is open; student notification on approve/deny.
-  • api/reschedule_request.php: also notifies SSO + Dean so the
-    request reaches everyone who can approve.
+Every modified file is php -l clean on PHP 8.1. No new database
+columns or tables. No new routes. The /admin/results route already
+exists in public/index.php — it just now accepts SSO sessions in
+addition to Admin sessions.
 
-EXAM reschedule flow (parity with interview):
-  • api/exam_reschedule_request.php: student POST endpoint.
-  • exam/take.php: "Need to reschedule?" form on the future-exam
-    view, "Request a reschedule" form on the missed-exam view
-    (replacing the dead-end "contact admissions office" message).
-    Pending/approved/denied banners; form hides while pending.
-  • exam/staff_reschedule.php: new admin page at
-    /staff/exam/reschedule with the same approve/deny + pre-check +
-    "create a slot first" guard. Approve does an atomic slot swap
-    (FOR UPDATE on the target slot) so two admins can't double-book.
-  • core/automation.php: ensure_exam_reschedule_requests_table().
-  • public/index.php: 2 new routes.
-  • nav_admin.php: new sidebar entry with a pending dot.
 
-Database
---------
-No manual migrations required. Both reschedule_requests and
-exam_reschedule_requests are auto-created on first use by the
-ensure_* helpers.
+How to roll it out
+------------------
 
-php -l reports no syntax errors on any of the changed files.
+1. Extract this archive on top of your plp-admissions/ project root.
+2. Reload any in-flight SSO/Dean sessions (or have them re-login)
+   so the nav re-renders with the new sidebar items.
+3. Smoke-check:
+   - Log in as SSO    → sidebar shows "Export Results";
+                        /admin/results opens; CSV export downloads;
+                        /staff/interviews/absent?tab=requests still
+                        works.
+   - Log in as Dean   → sidebar shows no "Interview Reschedules"
+                        and no "Export Results";
+                        /staff/interviews/absent shows only the
+                        Absent tab and no Reschedule action UI;
+                        /staff/interviews/absent?tab=requests
+                        falls back to the Absent tab;
+                        /staff/interviews/cancel-slot → 403;
+                        /staff/exam/reschedule → 403;
+                        /admin/results → 403.
+   - Log in as Admin  → no change in capability.

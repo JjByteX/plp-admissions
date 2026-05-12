@@ -12,8 +12,14 @@
 // applicant_exam_slots row; if there is no open slot available
 // it refuses cleanly and tells the admin to create one first.
 //
-// Staff / Proctor / Dean: read-only.
-// SSO / Admin: can approve and deny.
+// Staff / Proctor: read-only.
+// SSO / Admin:     can approve and deny.
+// Dean:            no access. Reschedules are a scheduling /
+//                  registrar action owned by SSO, not an
+//                  academic-oversight one. Symmetric with the
+//                  interview-side reschedule page, where the
+//                  "Reschedule Requests" tab is also hidden
+//                  from Dean.
 //
 // URL:
 //   GET  /staff/exam/reschedule
@@ -21,7 +27,7 @@
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
-Auth::requireRole(ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
+Auth::requireRole(ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_ADMIN);
 
 $db      = db();
 $staffId = Auth::id();
