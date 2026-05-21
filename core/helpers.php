@@ -98,6 +98,16 @@ function school_setting(string $key, string $default = ''): string
     return $cache[$key] ?? $default;
 }
 
+// True iff SSO has posted a full enrollment schedule (date + time +
+// venue) in /admin/school-year. Gates "Accept" releases — we don't
+// want a student admitted into limbo with no idea when to show up.
+function enrollment_schedule_posted(): bool
+{
+    return school_setting('enrollment_date',  '') !== ''
+        && school_setting('enrollment_time',  '') !== ''
+        && school_setting('enrollment_venue', '') !== '';
+}
+
 // ================================================================
 // EXAM SCORE TIER SYSTEM
 // ================================================================

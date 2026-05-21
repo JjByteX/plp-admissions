@@ -165,7 +165,12 @@ function send_registration_email(string $email, string $name): void
  */
 function auto_assign_exam_slot(int $applicantId): ?int
 {
-    if (school_setting('auto_assign_exam_slots', '1') !== '1') return null;
+    $debug = [];  // collects reasons for failure — written to error_log if we return null
+
+    if (school_setting('auto_assign_exam_slots', '1') !== '1') {
+        error_log("[auto_assign #{$applicantId}] SKIP: auto_assign_exam_slots setting is OFF");
+        return null;
+    }
     if ($applicantId <= 0) return null;
 
     $pdo = db();
@@ -182,19 +187,30 @@ function auto_assign_exam_slot(int $applicantId): ?int
     );
     $stmt->execute([$applicantId]);
     $appl = $stmt->fetch();
-    if (!$appl) return null;
-    if (($appl['overall_status'] ?? '') === 'withdrawn') return null;
-    // Only assign students who are currently at the exam stage. If a
-    // caller fires this for someone still at documents/submitted we
-    // skip rather than booking them prematurely.
-    if (!in_array($appl['overall_status'] ?? '', ['exam'], true)) return null;
+    if (!$appl) {
+        error_log("[auto_assign #{$applicantId}] SKIP: applicant not found");
+        return null;
+    }
+    if (($appl['overall_status'] ?? '') === 'withdrawn') {
+        error_log("[auto_assign #{$applicantId}] SKIP: status=withdrawn");
+        return null;
+    }
+    if (!in_array($appl['overall_status'] ?? '', ['exam'], true)) {
+        error_log("[auto_assign #{$applicantId}] SKIP: status={$appl['overall_status']} (not exam stage)");
+        return null;
+    }
 
     $stmt = $pdo->prepare('SELECT id FROM applicant_exam_slots WHERE applicant_id = ? LIMIT 1');
     $stmt->execute([$applicantId]);
-    if ($stmt->fetch()) return null;
+    if ($stmt->fetch()) {
+        error_log("[auto_assign #{$applicantId}] SKIP: already has a slot");
+        return null;
+    }
 
     $dept = trim((string)($appl['department'] ?? ''))
           ?: course_to_department((string)($appl['course_applied'] ?? ''));
+
+    error_log("[auto_assign #{$applicantId}] status={$appl['overall_status']} course={$appl['course_applied']} users.department={$appl['department']} resolved_dept={$dept}");
 
     // Active exam (if any) — when multiple exams coexist we prefer
     // slots tied to the active one so applicants don't get booked
@@ -239,10 +255,10 @@ function auto_assign_exam_slot(int $applicantId): ?int
     if ($dept !== '' && $activeExamId !== null) {
         $queries[] = [
             'sql' => 'SELECT id FROM exam_slot_schedule
-                       WHERE department = ?
+                       WHERE LOWER(TRIM(department)) = LOWER(TRIM(?))
                          AND exam_id = ?
                          AND filled < capacity
-                         AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
+                         AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
                        ORDER BY exam_date ASC, slot_time ASC',
             'params' => [$dept, $activeExamId, $today, $today, $nowTime],
         ];
@@ -250,9 +266,9 @@ function auto_assign_exam_slot(int $applicantId): ?int
     if ($dept !== '') {
         $queries[] = [
             'sql' => 'SELECT id FROM exam_slot_schedule
-                       WHERE department = ?
+                       WHERE LOWER(TRIM(department)) = LOWER(TRIM(?))
                          AND filled < capacity
-                         AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
+                         AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
                        ORDER BY exam_date ASC, slot_time ASC',
             'params' => [$dept, $today, $today, $nowTime],
         ];
@@ -263,7 +279,7 @@ function auto_assign_exam_slot(int $applicantId): ?int
                        WHERE (department IS NULL OR department = "")
                          AND exam_id = ?
                          AND filled < capacity
-                         AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
+                         AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
                        ORDER BY exam_date ASC, slot_time ASC',
             'params' => [$activeExamId, $today, $today, $nowTime],
         ];
@@ -273,23 +289,32 @@ function auto_assign_exam_slot(int $applicantId): ?int
             'sql' => 'SELECT id FROM exam_slot_schedule
                        WHERE (department IS NULL OR department = "")
                          AND filled < capacity
-                         AND (exam_date > ? OR (exam_date = ? AND slot_time > ?))
+                         AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
                        ORDER BY exam_date ASC, slot_time ASC',
             'params' => [$today, $today, $nowTime],
         ];
     }
 
-    foreach ($queries as $q) {
+    foreach ($queries as $qi => $q) {
         $stmt = $pdo->prepare($q['sql']);
         $stmt->execute($q['params']);
         $rows = $stmt->fetchAll();
+        error_log("[auto_assign #{$applicantId}] query #{$qi} params=" . json_encode($q['params']) . " found=" . count($rows));
         if ($rows) {
             $candidates = $rows;
             break;
         }
     }
 
-    if (!$candidates) return null;
+    if (!$candidates) {
+        // Log ALL slots in the DB so we can see what's there vs what we searched for
+        $allSlots = $pdo->query(
+            'SELECT id, department, exam_date, slot_time, filled, capacity FROM exam_slot_schedule ORDER BY exam_date ASC LIMIT 20'
+        )->fetchAll();
+        error_log("[auto_assign #{$applicantId}] NO CANDIDATES. All slots in DB: " . json_encode($allSlots));
+        error_log("[auto_assign #{$applicantId}] today=" . date('Y-m-d') . " now=" . date('H:i:s'));
+        return null;
+    }
 
     // ----------------------------------------------------------------
     // Try each candidate inside its own transaction. The FOR UPDATE
@@ -314,8 +339,8 @@ function auto_assign_exam_slot(int $applicantId): ?int
                 || (int)$slot['filled'] >= (int)$slot['capacity']
                 || (string)$slot['exam_date'] < $today
                 || ((string)$slot['exam_date'] === $today
-                    && !empty($slot['slot_time'])
-                    && (string)$slot['slot_time'] <= $nowTime)) {
+                    && !empty($slot['end_time'])
+                    && (string)$slot['end_time'] <= $nowTime)) {
                 $pdo->rollBack();
                 continue;
             }
@@ -1712,5 +1737,3 @@ function send_exam_reminders(): int
 
     return $notified;
 }
-
-

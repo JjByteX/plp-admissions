@@ -43,6 +43,42 @@ $stmt = $db->prepare('SELECT q.* FROM interview_queue q WHERE q.applicant_id=? L
 $stmt->execute([$applicantId]);
 $_interviewSlot = $stmt->fetch() ?: null;
 
+// ----------------------------------------------------------------
+// Admitted-applicant context: pull the enrollment schedule SSO set
+// in /admin/school-year, and the actual approved documents the
+// applicant uploaded so the "bring originals of" list matches what
+// they submitted (no hardcoded labels).
+// ----------------------------------------------------------------
+$enrollmentDate  = school_setting('enrollment_date',  '');
+$enrollmentTime  = school_setting('enrollment_time',  '');
+$enrollmentVenue = school_setting('enrollment_venue', '');
+
+$myDocs = [];
+try {
+    $stmt = $db->prepare(
+        'SELECT doc_type, status FROM documents
+          WHERE applicant_id = ? AND status = "approved"
+          ORDER BY id ASC'
+    );
+    $stmt->execute([$applicantId]);
+    $myDocs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (\Throwable) {}
+
+// Build slug -> label map covering every doc type a student could
+// have uploaded (Freshman / Transferee / Foreign).
+$docLabels = array_merge(
+    defined('DOCS_CORE')       ? DOCS_CORE       : [],
+    defined('DOCS_FRESHMAN')   ? DOCS_FRESHMAN   : [],
+    defined('DOCS_TRANSFEREE') ? DOCS_TRANSFEREE : [],
+    defined('DOCS_FOREIGN')    ? DOCS_FOREIGN    : []
+);
+
+// College name from the applicant's course (e.g. "BS Information
+// Technology (BSIT)" -> "College of Computer Studies").
+$applicantCollege = function_exists('course_to_department')
+    ? course_to_department((string)$applicant['course_applied'])
+    : '';
+
 $stepperCurrent = current_step($applicant, $_examResult, $_interviewSlot, $result);
 
 // Withdrawal state helpers
@@ -112,9 +148,91 @@ ob_start();
         <p style="font-size:var(--text-sm);margin-top:4px">You'll be notified once your result is ready.</p>
     </div>
 
+<?php elseif ($result['result'] === 'accepted'): ?>
+<!-- ── Admitted ─────────────────────────────────────────────── -->
+<!--
+  Replaces the old generic "Accepted" pill. The applicant has been
+  ADMITTED, not yet officially enrolled. They finalize enrollment by
+  bringing originals of every document they uploaded so SSO can
+  verify them against the scans. The schedule below is set by SSO
+  on /admin/school-year (enrollment_date / time / venue).
+-->
+    <div class="card" style="padding:var(--space-6)">
+        <div style="text-align:center;margin-bottom:var(--space-6)">
+            <div class="status-icon-lg" style="background:var(--success-bg);display:inline-flex;align-items:center;justify-content:center;margin-bottom:var(--space-4)">
+                <?= icon('ic_fluent_checkmark_circle_24_regular', 32, 'color:var(--success)') ?>
+            </div>
+            <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">You've been admitted.</h2>
+            <p style="color:var(--text-secondary);margin:0;font-size:var(--text-sm)">
+                <strong><?= e($applicant['course_applied']) ?></strong>
+                <?php if ($applicantCollege): ?>
+                    · <?= e($applicantCollege) ?>
+                <?php endif; ?>
+                · SY <?= e($applicant['school_year']) ?>
+            </p>
+        </div>
+
+        <p style="font-size:var(--text-sm);color:var(--text-secondary);text-align:center;margin-bottom:var(--space-6);max-width:520px;margin-left:auto;margin-right:auto">
+            One step left — bring the <strong>original copies</strong> of your documents on the date below so we can verify them. After that, you're officially enrolled.
+        </p>
+
+        <!-- Enrollment schedule -->
+        <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
+            <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);font-weight:var(--weight-semibold);margin-bottom:var(--space-3)">Enrollment Schedule</div>
+            <?php if ($enrollmentDate && $enrollmentTime && $enrollmentVenue): ?>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-3)">
+                    <div>
+                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:2px">Date</div>
+                        <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(format_date($enrollmentDate, 'l, F j, Y')) ?></div>
+                    </div>
+                    <div>
+                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:2px">Time</div>
+                        <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(date('g:i A', strtotime($enrollmentTime))) ?></div>
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:2px">Venue</div>
+                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($enrollmentVenue) ?></div>
+                </div>
+            <?php else: ?>
+                <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:0">
+                    The admissions office hasn't posted the enrollment schedule yet — check back soon, or watch your email for the announcement.
+                </p>
+            <?php endif; ?>
+        </div>
+
+        <!-- Documents to bring -->
+        <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
+            <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Bring the originals of</div>
+            <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-3);font-style:italic">matches what you uploaded</div>
+            <?php if (!empty($myDocs)): ?>
+                <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--space-2)">
+                    <?php foreach ($myDocs as $d):
+                        $slug  = (string)$d['doc_type'];
+                        $label = $docLabels[$slug] ?? ucwords(str_replace('_', ' ', $slug));
+                    ?>
+                        <li style="display:flex;align-items:flex-start;gap:var(--space-3);background:white;border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--space-2) var(--space-3)">
+                            <?= icon('ic_fluent_document_24_regular', 16, 'color:var(--text-tertiary);flex-shrink:0;margin-top:2px') ?>
+                            <span style="font-size:var(--text-sm);line-height:1.4"><?= e($label) ?></span>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php else: ?>
+                <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:0">
+                    Bring originals of every document you submitted with your application.
+                </p>
+            <?php endif; ?>
+        </div>
+
+        <p style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:center;margin:0">
+            Photocopies and screenshots aren't accepted. Can't make it? Email
+            <a href="mailto:sso@plp.edu.ph" style="color:var(--text-secondary);text-decoration:underline">sso@plp.edu.ph</a>
+            before the date.
+        </p>
+    </div>
+
 <?php else:
     $resultConfig = [
-        'accepted'   => ['class' => 'success', 'title' => 'Congratulations!', 'sub' => 'You have been accepted.'],
         'rejected'   => ['class' => 'error',   'title' => 'Not Accepted',     'sub' => 'Your application was not accepted this cycle.'],
     ];
     $cfg = $resultConfig[$result['result']] ?? $resultConfig['rejected'];

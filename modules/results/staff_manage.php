@@ -264,6 +264,24 @@ ob_start();
     <div class="alert alert-info" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 
+<?php if (!enrollment_schedule_posted()): ?>
+    <!--
+      Banner shown when SSO hasn't posted the enrollment schedule yet.
+      Surfaces the gate up-front so the Dean doesn't click Release
+      Accept and hit a flash error. Reject still works without it.
+    -->
+    <div class="alert alert-warning"
+         style="margin-bottom:var(--space-4);display:flex;align-items:flex-start;gap:var(--space-3)">
+        <?= icon('ic_fluent_warning_24_regular', 18, 'color:var(--warning);flex-shrink:0;margin-top:2px') ?>
+        <div style="flex:1;font-size:var(--text-sm)">
+            <strong>Enrollment schedule not posted yet.</strong>
+            Accept releases are blocked until SSO sets the date, time, and venue in
+            <a href="<?= url('/admin/school-year') ?>" style="text-decoration:underline">School Year → Enrollment Schedule</a>.
+            Reject releases are unaffected.
+        </div>
+    </div>
+<?php endif; ?>
+
 <!-- ============================================================
      TOP BAR: Search + Auto-Release (LEFT) · Tabs (RIGHT)
 

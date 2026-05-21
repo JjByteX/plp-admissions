@@ -1,201 +1,123 @@
-# PLP Admissions — Interview Auto-Assign + Auto-Absent + Wider Reschedule Tables
+# PLP Admissions Management System
 
-Drag-and-drop on top of your existing `plp-admissions/` folder.
-Every file preserves its original path. No DB migrations required.
+A web-based admissions system built with PHP and MySQL, covering the full enrollment flow from application to final result.
 
-This is the combined drop covering the two follow-ups to the original
-exam auto-assign zip:
+---
 
-1. Interview-side auto-assign hardening + wider tables (previous round)
-2. Auto-absent for no-shows (this round)
+## Requirements
 
-## What's new in this round
+- **XAMPP** (PHP 8.x + Apache + MySQL)
+- A **Gmail account** with an App Password for email sending
+- A **hCaptcha** account for the registration form (can be disabled for testing)
 
-### Privacy fix — past reschedule requests leaking across students
+---
 
-A student visiting `/student/interview` or `/student/exam` was
-seeing **past reschedule requests that belonged to other
-students**. Both pages were filtering only by `applicant_id = ?`
-and trusting whatever `applicant_id` was on the
-`reschedule_requests` / `exam_reschedule_requests` rows. If any row
-had been written with a stray `applicant_id` (legacy data, a bad
-migration, a script that bulk-inserted with the wrong id, etc.),
-it would render on someone else's screen.
+## Setup
 
-Hardened both queries to **join through `applicants`** and require
-both:
+### 1. Place the Project
 
-- `applicants.user_id = <logged-in user>` — the request's
-  applicant must belong to the current session user, AND
-- `reschedule_requests.applicant_id = <current applicant>` — keep
-  the existing scope.
-
-A request can now only render if both constraints hold, so no
-amount of data corruption can leak another student's history into
-this view.
-
-Files: `modules/interview/student_view.php`,
-`modules/exam/take.php`.
-
-> If you want to find any actually-corrupted rows in your DB, run:
-> ```sql
-> SELECT rr.id, rr.applicant_id, a.user_id, u.email
->   FROM reschedule_requests rr
->   LEFT JOIN applicants a ON a.id = rr.applicant_id
->   LEFT JOIN users      u ON u.id = a.user_id
->  WHERE a.id IS NULL;          -- orphan rows
-> ```
-> Same query against `exam_reschedule_requests` for the exam side.
-
-### Interview queue — date + slot filter dropdowns
-
-`/staff/interviews/queue` toolbar now has two cascading filter
-dropdowns alongside the existing name/course search:
-
-- **Filter by date** — every distinct interview date the table
-  contains. Each entry shows `{date} (Past) · {N} applicants`
-  (past flag only on dates earlier than today). Selecting a date
-  scopes the table to that date.
-- **Filter by slot** — every distinct slot the table contains,
-  formatted as `{date} · {start–end} (Past) · {dept} · {N}
-  applicants`. The slot dropdown **cascades** off the date
-  dropdown — picking a date hides slots on other dates, and
-  clears the slot selection if it no longer matches.
-
-Both filters are pure client-side (rows already include
-`data-slot` + new `data-date` attributes), so there's no extra DB
-query and switching filters is instant. The "X applicants" badge
-on the right of the toolbar always reflects what's currently
-visible.
-
-### Crash fix — Results search box (PDOException HY093)
-
-`/staff/results` was throwing
-`SQLSTATE[HY093]: Invalid parameter number` whenever the search box
-was used. The WHERE clause reused the same `:q` placeholder three
-times (name / email / course), and the project's PDO connection has
-`PDO::ATTR_EMULATE_PREPARES => false` (`config/db.php`), so MySQL
-native prepared statements need a distinct placeholder per position.
-Replaced with `:q1`, `:q2`, `:q3` — same pattern already used in
-`modules/documents/staff_review.php`.
-
-### Auto-absent for no-shows
-
-Before: a student who didn't show up only got `interview_status='absent'`
-when an interviewer explicitly clicked "Mark Absent" on the queue page.
-Auto-routines (`auto_close_expired_sessions`, staff_queue.php inline
-update, and `mark_no_show` itself) only set `q.status='no_show'` and
-left `interview_status` at `'pending'` — which meant the Absent
-Students tab (which filters `WHERE q.interview_status = 'absent'`)
-never saw those students. They were stranded.
-
-After: any queue row whose slot has fully ended without an evaluation
-is now automatically flipped to the **canonical absent state**:
+Put the `plp-admissions/` folder inside your XAMPP `htdocs/` directory:
 
 ```
-status            = 'no_show'
-interview_status  = 'absent'
-attendance_status = 'absent'
-evaluated_at      = NOW()
+C:/xampp/htdocs/plp-admissions/
 ```
 
-…with these triggers:
+### 2. Create the Database
 
-- **Visiting `/staff/interviews/queue`** — already had an inline
-  auto-no-show update. Now uses the shared helper so all three fields
-  get set, not just `q.status`.
-- **Visiting `/staff/interviews/absent`** (new) — runs the same sweep
-  on page load, so the Absent Students tab is always up to date the
-  moment any SSO / admin / dean opens it.
-- **Dashboard → "Auto-close expired interview sessions"** — already
-  closed the slots; now also marks every unfinished applicant in
-  those slots as absent (the previous code was setting an *invalid
-  enum value* `interview_status='no_show'` which silently dropped on
-  strict MySQL).
-- **Queue → "Mark Absent" button** — manual flip already worked for
-  the queue row, but only set `q.status`; now sets all three fields
-  so the student also lands in the Absent Students tab without a
-  refresh dance.
+1. Open **phpMyAdmin** → create a new database named `plp_admissions`
+2. Import `database/schema.sql` to create all tables
+3. Import `database/seed_users.sql` to create the default accounts
 
-Every auto-flipped row also fires:
+### 3. Configure Environment
 
-- An in-app notification to the applicant: "Marked absent for your
-  interview" → links to `/student/interview` so they can submit a
-  reschedule request.
-- The existing email template via `send_email()` /
-  `email_template()` — same path as the reschedule-decision emails.
-- The existing `notify_staff_no_show()` so the admissions desk sees
-  it too.
-- A full audit log entry (`interview_auto_no_show`).
+Copy `.env.example` to `.env` and fill in your values:
 
-Auto-reschedule for no-shows still runs after the flip (controlled by
-`auto_reschedule_noshows` school setting). The path was retargeted at
-`reschedule_absent_applicant()` since the row is now properly absent —
-this also fixes a latent bug where the previous `auto_reschedule_noshow`
-would leave a stale `interview_status='no_show'` (invalid enum) row
-that violated the `uq_applicant_active` unique constraint when trying
-to insert the new pending row.
+```env
+# hCaptcha — get keys from https://dashboard.hcaptcha.com
+HCAPTCHA_SITE_KEY=your_site_key
+HCAPTCHA_SECRET_KEY=your_secret_key
 
-### What was in the previous round (still included here)
-
-- **Interview auto-assign safety net** on `/student/interview` — every
-  page visit, if the applicant is at the interview stage with no
-  active queue row, retry `assign_interview_slot()`. Mirrors the
-  `modules/exam/take.php` pattern. So the "student sees Waiting →
-  admin creates session → student refreshes → booked" loop works
-  end-to-end with zero staff action.
-- **`backfill_interview_slot_assignments()`** helper in
-  `core/automation.php`, symmetric with the existing exam-side
-  backfill. Walks every applicant at the interview stage without a
-  slot and tries to assign each one, regardless of department
-  matches.
-- **`$pageWide = true;`** on `/staff/exam/reschedule`,
-  `/staff/interviews/absent`, `/staff/exam/cancel-slot`, and
-  `/staff/interviews/cancel-slot` so the tables fill the window
-  instead of being squeezed into the narrow 900px container.
-
-## File list (10 modified)
-
-```
-core/automation.php                          MOD  — auto_close_expired_sessions delegates to auto_detect_interview_no_shows;
-                                                     auto_reschedule_noshow rewired to reschedule_absent_applicant;
-                                                     backfill_interview_slot_assignments() helper.
-core/interview_scheduler.php                 MOD  — new auto_detect_interview_no_shows() + _notify_applicant_marked_absent().
-modules/results/staff_manage.php             MOD  — search box no longer crashes (HY093): :q split into :q1/:q2/:q3.
-modules/interview/staff_queue.php            MOD  — inline auto-no-show update replaced with shared helper (all 3 fields);
-                                                     date + slot cascading filter dropdowns added to toolbar.
-modules/interview/staff_action.php           MOD  — mark_no_show sets full canonical absent state, not just q.status.
-modules/interview/staff_absent.php           MOD  — auto-detect on page load + $pageWide = true.
-modules/interview/staff_cancel_slot.php      MOD  — $pageWide = true so the table fills the window.
-modules/interview/student_view.php           MOD  — page-load auto-assign safety net (mirrors modules/exam/take.php).
-modules/exam/staff_reschedule.php            MOD  — $pageWide = true so the table fills the window.
-modules/exam/staff_cancel_slot.php           MOD  — $pageWide = true so the table fills the window.
+# Gmail SMTP — use an App Password, not your real password
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password
+SMTP_FROM_NAME=PLP Admissions
 ```
 
-Every file passes `php -l` clean. No new migrations or schema changes.
+> **hCaptcha tip:** You can disable hCaptcha during testing by commenting it out in the login/register pages.
 
-## Quick smoke test
+> **Gmail App Password:** Go to your Google Account → Security → 2-Step Verification → App Passwords → generate one for "Mail".
 
-1. **Auto-absent:**
-   - Find an interview slot whose `end_time` has passed today.
-   - Confirm at least one queue row for that slot is still
-     `status='scheduled'`.
-   - Open `/staff/interviews/absent` as SSO / Admin.
-   - The student should now appear in the Absent Students table
-     immediately, even though no one clicked Mark Absent.
-   - The student should also have an in-app + email notification
-     about being marked absent.
+### 4. Run the Project
 
-2. **Auto-assign retry (interview side):**
-   - Make a student pass the exam in a department with no interview
-     session — they should land on `/student/interview` with the
-     Waiting card.
-   - Create an interview session for that department.
-   - The student refreshes `/student/interview` — slot appears
-     immediately, no staff action needed.
+Start **Apache** and **MySQL** in XAMPP, then open:
 
-3. **Wider tables:**
-   - `/staff/exam/reschedule` and
-     `/staff/interviews/absent?tab=requests` should stretch full
-     width on a wide monitor instead of squeezing the table into the
-     middle.
+```
+http://localhost/plp-admissions/
+```
+
+---
+
+## Default Accounts
+
+After importing `seed_users.sql`, the following accounts are available:
+
+### Admin & SSO
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@plp.edu.ph | Admin@123 |
+| SSO | sso@plp.edu.ph | SSO@123 |
+
+### Deans
+| College | Email | Password |
+|---------|-------|----------|
+| College of Computer Studies | dean.ccs@plp.edu.ph | Dean@123 |
+| College of Nursing | dean.con@plp.edu.ph | Dean@123 |
+| College of Business and Accountancy | dean.cba@plp.edu.ph | Dean@123 |
+| College of Education | dean.coe@plp.edu.ph | Dean@123 |
+| College of Arts and Sciences | dean.cas@plp.edu.ph | Dean@123 |
+| College of Engineering | dean.cen@plp.edu.ph | Dean@123 |
+
+### Professors (Staff)
+| College | Email | Password |
+|---------|-------|----------|
+| College of Computer Studies | staff.ccs@plp.edu.ph | Staff@123 |
+| College of Nursing | staff.con@plp.edu.ph | Staff@123 |
+| College of Business and Accountancy | staff.cba@plp.edu.ph | Staff@123 |
+| College of Education | staff.coe@plp.edu.ph | Staff@123 |
+| College of Arts and Sciences | staff.cas@plp.edu.ph | Staff@123 |
+| College of Engineering | staff.cen@plp.edu.ph | Staff@123 |
+
+### Proctors
+| College | Email | Password |
+|---------|-------|----------|
+| College of Computer Studies | proctor.ccs@plp.edu.ph | Proctor@123 |
+| College of Nursing | proctor.con@plp.edu.ph | Proctor@123 |
+| College of Business and Accountancy | proctor.cba@plp.edu.ph | Proctor@123 |
+| College of Education | proctor.coe@plp.edu.ph | Proctor@123 |
+| College of Arts and Sciences | proctor.cas@plp.edu.ph | Proctor@123 |
+| College of Engineering | proctor.cen@plp.edu.ph | Proctor@123 |
+
+> Change all passwords after first login.
+
+---
+
+## Roles Overview
+
+| Role | What they do |
+|------|-------------|
+| **Admin** | Full system access, manages users and school setup |
+| **SSO** | Sets up admissions schedule, exam, interview slots, reviews documents, exports results |
+| **Dean** | Sets course slots and passing tiers, releases final admission results |
+| **Professor** | Conducts interviews and submits pass/reject recommendations |
+| **Proctor** | Manages exam rooms and generates exam access codes |
+| **Student** | Applies, uploads documents, takes exam, attends interview, views result |
+
+---
+
+## Notes
+
+- `DB_HOST`, `DB_NAME`, `DB_USER`, and `DB_PASS` default to XAMPP's standard values (`localhost`, `plp_admissions`, `root`, no password). No changes needed unless your setup differs.
+- Do **not** commit `.env` to Git — it contains your credentials.
+- The `database/` folder contains the schema and seed files only. Do not delete them.

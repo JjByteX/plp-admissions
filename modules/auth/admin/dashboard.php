@@ -6,8 +6,20 @@
 require_once CORE_PATH . '/bootstrap.php';
 Auth::requireRole(ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 
-$pdo        = db();
-$schoolYear = school_setting('current_school_year');
+$pdo            = db();
+$currentSY      = school_setting('current_school_year');
+
+// ── School year switcher ──────────────────────────────────────────
+// Build list: current SY + any historical ones saved by legacy import
+$histRaw        = school_setting('historical_school_years', '');
+$historicalSYs  = $histRaw ? array_filter(array_map('trim', explode(',', $histRaw))) : [];
+$allSYs         = array_unique(array_merge([$currentSY], $historicalSYs));
+rsort($allSYs); // newest first
+
+$schoolYear = $_GET['sy'] ?? $currentSY;
+if (!in_array($schoolYear, $allSYs, true)) {
+    $schoolYear = $currentSY; // fallback to current if invalid
+}
 
 // ── Dean dept scope ───────────────────────────────────────────────
 // Dean sees only applicants whose course maps to their own college.
@@ -186,7 +198,7 @@ $rangeLabels = [
 ];
 $rangeLabel  = $rangeLabels[$range] ?? 'This year';
 $exportUrl   = url('/admin/dashboard').'?'.http_build_query(array_filter([
-    'range' => $range, 'from' => $fromDate, 'to' => $toDate, 'export' => 'csv'
+    'sy' => $schoolYear, 'range' => $range, 'from' => $fromDate, 'to' => $toDate, 'export' => 'csv'
 ]));
 
 // Donut ring math  r=24, cx=cy=29, viewBox 58×58
@@ -328,6 +340,30 @@ ob_start();
     <!-- ── Header ───────────────────────────────────────────────── -->
     <div class="db-header">
         <div class="db-controls">
+
+            <?php if (count($allSYs) > 1): ?>
+            <div style="display:flex;align-items:center;gap:var(--space-2);">
+                <label style="font-size:var(--text-sm);color:var(--text-secondary);white-space:nowrap;">School Year</label>
+                <select onchange="location.href=this.value" style="
+                    height:32px;padding:0 var(--space-3);
+                    border:1px solid var(--border);border-radius:var(--radius-sm);
+                    background:var(--bg-elevated);color:var(--text-primary);
+                    font-size:var(--text-sm);cursor:pointer;
+                ">
+                    <?php foreach ($allSYs as $sy): ?>
+                        <?php
+                        $params = $_GET;
+                        $params['sy'] = $sy;
+                        $url = '?' . http_build_query($params);
+                        $label = 'SY ' . e($sy) . ($sy === $currentSY ? ' (current)' : '');
+                        ?>
+                        <option value="<?= $url ?>" <?= $sy === $schoolYear ? 'selected' : '' ?>>
+                            <?= $label ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php endif; ?>
 
             <div class="dp-wrap" id="dpWrap">
                 <button class="db-pill-btn" onclick="dpToggle(event)" type="button" style="

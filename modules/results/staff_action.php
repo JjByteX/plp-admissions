@@ -55,6 +55,16 @@ if ($action === 'override') {
         redirect('/staff/results');
     }
 
+    // Same gate as a fresh release — an Admin override to "accepted"
+    // still surfaces the admitted-student view, which needs the
+    // schedule posted.
+    if ($decision === 'accepted' && !enrollment_schedule_posted()) {
+        Session::flash('error',
+            'Cannot override to Accept — the enrollment schedule isn\'t posted yet. '
+            . 'SSO needs to set it in School Year → Enrollment Schedule first.');
+        redirect('/staff/results');
+    }
+
     // Must already be released (override only edits existing rows).
     $exists = $db->prepare('SELECT result FROM admission_results WHERE applicant_id = ?');
     $exists->execute([$applicantId]);
@@ -122,6 +132,18 @@ $reason   = trim($_POST['reason'] ?? '');
 
 if (!in_array($decision, ['accepted', 'rejected'], true)) {
     Session::flash('error', 'Pick a result: Accept or Decline.');
+    redirect('/staff/results');
+}
+
+// Gate every Accept release on SSO having posted the enrollment
+// schedule. The admitted-student view renders the date / time /
+// venue + their uploaded docs — without the schedule the page tells
+// the student "schedule not posted yet" which is bad UX. Force the
+// schedule to exist before any acceptance is released.
+if ($decision === 'accepted' && !enrollment_schedule_posted()) {
+    Session::flash('error',
+        'Cannot release Accept — the enrollment schedule isn\'t posted yet. '
+        . 'SSO needs to set it in School Year → Enrollment Schedule first.');
     redirect('/staff/results');
 }
 

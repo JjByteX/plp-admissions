@@ -62,6 +62,22 @@ try {
 
 $schoolYear   = school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
 $activeExam   = $db->query('SELECT * FROM exams WHERE is_active=1 LIMIT 1')->fetch();
+
+// ── One-time filled resync ────────────────────────────────────────
+// Recalculate filled from actual applicant_exam_slots rows to fix
+// any drift caused by manual DB edits, old bugs, or import scripts.
+// This is cheap (one UPDATE) and idempotent — safe to run on every page load.
+try {
+    $db->exec(
+        'UPDATE exam_slot_schedule ess
+            SET ess.filled = (
+                SELECT COUNT(*) FROM applicant_exam_slots aes WHERE aes.slot_id = ess.id
+            )'
+    );
+} catch (\Throwable $e) {
+    // Non-fatal — log and continue
+    error_log('filled resync failed: ' . $e->getMessage());
+}
 $activeExamId = $activeExam ? (int)$activeExam['id'] : null;
 
 $examRoomCap  = (int) school_setting('exam_room_capacity', defined('EXAM_ROOM_CAPACITY') ? EXAM_ROOM_CAPACITY : 35);
@@ -476,7 +492,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $applDept = trim((string)($applRow['department'] ?? ''))
                                  ?: course_to_department((string)$applRow['course_applied']);
                         $slotDept = trim((string)($slot['department'] ?? ''));
-                        if ($applDept !== '' && $slotDept !== '' && $applDept !== $slotDept) {
+                        if ($applDept !== '' && $slotDept !== '' && strtolower(trim($applDept)) !== strtolower(trim($slotDept))) {
                             $errors[] = "This slot is for {$slotDept}, but the applicant is in {$applDept}. "
                                       . "Create a slot for {$applDept} instead.";
                         } else {
@@ -485,6 +501,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                  VALUES (?, ?, NOW())
                                  ON DUPLICATE KEY UPDATE slot_id=VALUES(slot_id), assigned_at=NOW()'
                             )->execute([$applicantId, $slotId]);
+                            // Keep filled in sync so auto-assign queries stay accurate
+                            $db->prepare('UPDATE exam_slot_schedule SET filled = filled + 1 WHERE id = ?')
+                               ->execute([$slotId]);
                             audit_log('exam_slot_assigned',
                                 "Assigned applicant {$applicantId} → slot {$slotId}",
                                 'applicant', $applicantId);
@@ -542,8 +561,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'unassign') {
         $applicantId = (int)($_POST['applicant_id'] ?? 0);
         if ($applicantId) {
+            // Get the slot_id before deleting so we can decrement filled
+            $slotLookup = $db->prepare('SELECT slot_id FROM applicant_exam_slots WHERE applicant_id = ? LIMIT 1');
+            $slotLookup->execute([$applicantId]);
+            $unassignSlotId = $slotLookup->fetchColumn();
+
             $db->prepare('DELETE FROM applicant_exam_slots WHERE applicant_id=?')
                ->execute([$applicantId]);
+
+            // Keep filled in sync so auto-assign can find this freed seat
+            if ($unassignSlotId) {
+                $db->prepare('UPDATE exam_slot_schedule SET filled = GREATEST(filled - 1, 0) WHERE id = ?')
+                   ->execute([$unassignSlotId]);
+            }
+
             audit_log('exam_slot_unassigned', "Unassigned applicant {$applicantId} from their slot",
                 'applicant', $applicantId);
             Session::flash('success', 'Applicant unassigned.');

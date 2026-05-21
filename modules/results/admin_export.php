@@ -17,7 +17,7 @@ $db = db();
 
 // -- CSV export -------------------------------------------------
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
-    $schoolYear = school_setting('current_school_year', '');
+    $schoolYear = $_GET['sy'] ?? school_setting('current_school_year', '');
     $stmt = $db->prepare(
         'SELECT u.name, u.email, a.applicant_type, a.course_applied,
                 a.school_year, a.overall_status,

@@ -271,7 +271,6 @@ define('COURSE_PASSING_SCORES', [
 // -- hCaptcha ----------------------------------------------------
 define('HCAPTCHA_SITE_KEY',   getenv('HCAPTCHA_SITE_KEY')   ?: '');
 define('HCAPTCHA_SECRET_KEY', getenv('HCAPTCHA_SECRET_KEY') ?: '');
-// Defense-day: hCaptcha turned OFF to remove demo friction.
 // Original: !empty(HCAPTCHA_SITE_KEY) && !empty(HCAPTCHA_SECRET_KEY)
 define('HCAPTCHA_ENABLED',    false);
 

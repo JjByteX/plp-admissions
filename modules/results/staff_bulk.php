@@ -99,6 +99,19 @@ if (empty($ids) || !in_array($action, ['release_selected', 'bulk_accept', 'bulk_
     redirect('/staff/results');
 }
 
+// Gate any path that could produce an "accepted" release on SSO
+// having posted the enrollment schedule. bulk_accept is obvious;
+// release_selected derives the decision from the Professor's
+// recommendation and may also accept rows. bulk_reject is safe
+// (rejection never needs a schedule).
+if (in_array($action, ['bulk_accept', 'release_selected'], true)
+    && !enrollment_schedule_posted()) {
+    Session::flash('error',
+        'Cannot release Accept — the enrollment schedule isn\'t posted yet. '
+        . 'SSO needs to set it in School Year → Enrollment Schedule first.');
+    redirect('/staff/results');
+}
+
 // Pull bucket inputs for every selected applicant in one shot.
 $placeholders = implode(',', array_fill(0, count($ids), '?'));
 $stmt = $db->prepare(
