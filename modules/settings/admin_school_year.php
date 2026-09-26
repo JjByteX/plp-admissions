@@ -709,45 +709,51 @@ ob_start();
 if (typeof puterLoaded === 'undefined') {
     var puterLoaded = false;
 }
-function loadPuterIfNeeded() {
+
+// Shared "load this script once" helper. checkFn reports whether the
+// library is already present (skips loading entirely); onLoaded runs
+// once the script tag fires its load event, before the promise
+// resolves, for libraries that need a bit of post-load setup (e.g.
+// pdf.js's worker path). Each specific loader below is a thin wrapper
+// so every existing call site (await loadXIfNeeded()) keeps working
+// unchanged.
+function loadScriptOnce(src, checkFn, onLoaded) {
     return new Promise(res => {
-        if (puterLoaded || window.puter) { puterLoaded = true; res(); return; }
+        if (checkFn()) { res(); return; }
         const s = document.createElement('script');
-        s.src = 'https://js.puter.com/v2/';
-        s.onload = () => { puterLoaded = true; res(); };
+        s.src = src;
+        s.onload = () => { if (onLoaded) onLoaded(); res(); };
         document.head.appendChild(s);
     });
+}
+function loadPuterIfNeeded() {
+    return loadScriptOnce(
+        'https://js.puter.com/v2/',
+        () => puterLoaded || window.puter,
+        () => { puterLoaded = true; }
+    );
 }
 function loadPdfJsIfNeeded() {
-    return new Promise(res => {
-        if (window.pdfjsLib) { res(); return; }
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-        s.onload = () => {
+    return loadScriptOnce(
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+        () => !!window.pdfjsLib,
+        () => {
             pdfjsLib.GlobalWorkerOptions.workerSrc =
                 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            res();
-        };
-        document.head.appendChild(s);
-    });
+        }
+    );
 }
 function loadMammothIfNeeded() {
-    return new Promise(res => {
-        if (window.mammoth) { res(); return; }
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
-        s.onload = res;
-        document.head.appendChild(s);
-    });
+    return loadScriptOnce(
+        'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
+        () => !!window.mammoth
+    );
 }
 function loadSheetJs() {
-    return new Promise(res => {
-        if (window.XLSX) { res(); return; }
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-        s.onload = res;
-        document.head.appendChild(s);
-    });
+    return loadScriptOnce(
+        'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+        () => !!window.XLSX
+    );
 }
 
 // ── Puter status for legacy modal ──

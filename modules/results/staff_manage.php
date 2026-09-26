@@ -238,18 +238,9 @@ function filterUrl(array $merge = []): string {
     return '?' . http_build_query(array_merge($base, $merge));
 }
 
-function results_sortable_th(string $col, string $label, string $currentCol, string $currentDir, string $search, string $filterRes): string {
-    $isActive = ($currentCol === $col);
-    $nextDir  = ($isActive && $currentDir === 'asc') ? 'desc' : 'asc';
-    $base = ['q' => $search, 'result' => $filterRes, 'sort_col' => $col, 'sort_dir' => $isActive ? $nextDir : 'asc', 'page' => 1];
-    $url = '?' . http_build_query($base);
-    $sortIcon  = icon('ic_fluent_chevron_up_down_24_filled', 13);
-    $sortColor = $isActive ? 'var(--accent)' : 'var(--text-tertiary)';
-    return '<th><a href="' . $url . '" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;color:inherit;white-space:nowrap;">'
-         . htmlspecialchars($label)
-         . '<span style="color:' . $sortColor . ';display:flex;align-items:center;margin-left:2px;">' . $sortIcon . '</span>'
-         . '</a></th>';
-}
+// Sortable header for this page's filters (search + result status),
+// always resetting to page 1 on a sort change. Shared implementation
+// lives in core/helpers.php as sortable_th().
 
 ob_start();
 ?>
@@ -489,12 +480,12 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                            style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
                 </th>
                 <?php endif; ?>
-                <?= results_sortable_th('applicant', 'Applicant',   $sortCol, $sortDir, $search, $filterRes) ?>
-                <?= results_sortable_th('course',    'Course',      $sortCol, $sortDir, $search, $filterRes) ?>
+                <?= sortable_th('applicant', 'Applicant',   $sortCol, $sortDir, ['q' => $search, 'result' => $filterRes, 'page' => 1]) ?>
+                <?= sortable_th('course',    'Course',      $sortCol, $sortDir, ['q' => $search, 'result' => $filterRes, 'page' => 1]) ?>
                 <th>Exam Score</th>
                 <th>Interview</th>
-                <?= results_sortable_th('result',    'Result',      $sortCol, $sortDir, $search, $filterRes) ?>
-                <?= results_sortable_th('released',  'Released',    $sortCol, $sortDir, $search, $filterRes) ?>
+                <?= sortable_th('result',    'Result',      $sortCol, $sortDir, ['q' => $search, 'result' => $filterRes, 'page' => 1]) ?>
+                <?= sortable_th('released',  'Released',    $sortCol, $sortDir, ['q' => $search, 'result' => $filterRes, 'page' => 1]) ?>
                 <th style="width:160px">Actions</th>
             </tr>
         </thead>

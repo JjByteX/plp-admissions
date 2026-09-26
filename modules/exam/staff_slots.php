@@ -115,6 +115,21 @@ function _slots_redirect_back(string $college = '', int $slotId = 0): void {
     redirect('/staff/exam/slots');
 }
 
+// Shared ajax-or-flash-redirect responder. On AJAX requests, sends a
+// JSON body and exits. Otherwise flashes a message and redirects back
+// to the calling page. Used by every slot mutator below so the
+// response pattern isn't retyped per action.
+function _slots_respond(bool $ok, string $msg, string $college, int $slotId, array $extra = []): void {
+    if (is_ajax_request()) {
+        while (ob_get_level()) ob_end_clean();
+        header('Content-Type: application/json');
+        echo json_encode(array_merge(['ok' => $ok, 'error' => $ok ? null : $msg], $extra));
+        exit;
+    }
+    Session::flash($ok ? 'success' : 'error', $msg);
+    _slots_redirect_back($college, $slotId);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
@@ -142,16 +157,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $slotRow = $stmt->fetch();
 
         $isAjax = is_ajax_request();
-        $respond = function (bool $ok, string $msg = '', array $extra = []) use ($isAjax, $ctxCollege, $ctxSlotId) {
-            if ($isAjax) {
-                while (ob_get_level()) ob_end_clean();
-                header('Content-Type: application/json');
-                echo json_encode(array_merge(['ok' => $ok, 'error' => $ok ? null : $msg], $extra));
-                exit;
-            }
-            Session::flash($ok ? 'success' : 'error', $msg);
-            _slots_redirect_back($ctxCollege, $ctxSlotId);
-        };
+        $respond = fn(bool $ok, string $msg = '', array $extra = []) =>
+            _slots_respond($ok, $msg, $ctxCollege, $ctxSlotId, $extra);
 
         if (!$slotRow) {
             $respond(false, 'Slot not found.');
@@ -192,37 +199,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // (Admin/SSO only — same as the rest of the slot mutators.)
     if ($action === 'update_room_label') {
         if (!$canManage) {
-            if (is_ajax_request()) {
-                while (ob_get_level()) ob_end_clean();
-                header('Content-Type: application/json');
-                echo json_encode(['ok' => false, 'error' => 'Read-only access.']);
-                exit;
-            }
-            Session::flash('error', 'Read-only access — only SSO and Admin can rename rooms.');
-            _slots_redirect_back($ctxCollege, $ctxSlotId);
+            _slots_respond(false, 'Read-only access — only SSO and Admin can rename rooms.', $ctxCollege, $ctxSlotId);
         }
         $slotId  = (int)($_POST['slot_id']    ?? 0);
         $newRoom = trim((string)($_POST['room_label'] ?? ''));
         if (!$slotId || $newRoom === '') {
             if (is_ajax_request()) {
-                while (ob_get_level()) ob_end_clean();
-                header('Content-Type: application/json');
-                echo json_encode(['ok' => false, 'error' => 'Room label cannot be empty.']);
-                exit;
+                _slots_respond(false, 'Room label cannot be empty.', $ctxCollege, $ctxSlotId);
             }
             $errors[] = 'Room label cannot be empty.';
         } else {
             $db->prepare('UPDATE exam_slot_schedule SET room_label = ? WHERE id = ?')
                ->execute([$newRoom, $slotId]);
             audit_log('exam_slot_room_renamed', "Slot {$slotId} room label → {$newRoom}");
-            if (is_ajax_request()) {
-                while (ob_get_level()) ob_end_clean();
-                header('Content-Type: application/json');
-                echo json_encode(['ok' => true, 'room_label' => $newRoom]);
-                exit;
-            }
-            Session::flash('success', 'Room label updated.');
-            _slots_redirect_back($ctxCollege, $ctxSlotId);
+            _slots_respond(true, 'Room label updated.', $ctxCollege, $ctxSlotId, ['room_label' => $newRoom]);
         }
     }
 
@@ -1769,42 +1759,35 @@ ob_start();
 })();
 
 // ── Bulk select mode for exam slot cards ─────────────────────
-function _esGrid()  { return document.querySelector('.es-slot-grid'); }
-function _esBar()   { return document.getElementById('es-bulk-bar'); }
-function _esTBtn()  { return document.getElementById('es-select-toggle'); }
-
-function toggleEsSelectMode() {
-    var grid = _esGrid(); if (!grid) return;
-    if (grid.classList.contains('is-selecting')) {
-        cancelEsSelectMode();
-    } else {
-        grid.classList.add('is-selecting');
-        var btn = _esTBtn();  if (btn) btn.textContent = 'Done';
-        var bar = _esBar();   if (bar) bar.classList.add('is-visible');
-        updateEsBulkCount();
+// Shared "select mode" logic lives in createCardBulkSelector()
+// (public/assets/js/app.js), which loads after this inline block.
+// _esSelector() builds it lazily on first call instead of at parse
+// time, so load order doesn't matter. These wrappers keep the same
+// global names the markup already calls via onclick=, so no HTML
+// changed.
+var __esSelectorInstance = null;
+function _esSelector() {
+    if (!__esSelectorInstance) {
+        __esSelectorInstance = createCardBulkSelector({
+            gridSel:     '.es-slot-grid',
+            cardSel:     '.es-slot-card',
+            checkboxSel: '.es-select-checkbox',
+            barId:       'es-bulk-bar',
+            toggleBtnId: 'es-select-toggle',
+            countId:     'es-bulk-count',
+            deleteBtnId: 'es-bulk-delete-btn',
+            idsInputId:  'es-bulk-ids',
+            confirmMsg:  function (n) { return 'Remove ' + n + ' slot(s)? This cannot be undone.'; },
+        });
     }
+    return __esSelectorInstance;
 }
-function cancelEsSelectMode() {
-    var grid = _esGrid(); if (!grid) return;
-    grid.classList.remove('is-selecting');
-    grid.querySelectorAll('.es-select-checkbox').forEach(function(cb){ cb.checked = false; });
-    grid.querySelectorAll('.es-slot-card').forEach(function(c){ c.classList.remove('is-selected'); });
-    var btn = _esTBtn(); if (btn) btn.textContent = 'Select';
-    var bar = _esBar();  if (bar) bar.classList.remove('is-visible');
-}
-function onEsCheckboxChange(cb) {
-    var card = cb.closest('.es-slot-card');
-    if (card) card.classList.toggle('is-selected', cb.checked);
-    updateEsBulkCount();
-}
-function updateEsBulkCount() {
-    var grid = _esGrid(); if (!grid) return;
-    var n = grid.querySelectorAll('.es-select-checkbox:checked').length;
-    var c = document.getElementById('es-bulk-count');
-    if (c) c.textContent = n + ' selected';
-    var btn = document.getElementById('es-bulk-delete-btn');
-    if (btn) btn.disabled = (n === 0);
-}
+function _esGrid()              { return document.querySelector('.es-slot-grid'); }
+function toggleEsSelectMode()   { _esSelector().toggleSelectMode(); }
+function cancelEsSelectMode()   { _esSelector().cancelSelectMode(); }
+function onEsCheckboxChange(cb) { _esSelector().onCheckboxChange(cb); }
+function updateEsBulkCount()    { _esSelector().updateCount(); }
+function confirmEsBulkDelete()  { return _esSelector().confirmBulkDelete(); }
 function onEsCardClick(event, link) {
     var grid = _esGrid();
     if (grid && grid.classList.contains('is-selecting')) {
@@ -1818,15 +1801,6 @@ function onEsCardClick(event, link) {
         }
         return false;
     }
-    return true;
-}
-function confirmEsBulkDelete() {
-    var grid = _esGrid(); if (!grid) return false;
-    var ids = Array.from(grid.querySelectorAll('.es-select-checkbox:checked'))
-                  .map(function(cb){ return cb.value; });
-    if (ids.length === 0) return false;
-    if (!confirm('Remove ' + ids.length + ' slot(s)? This cannot be undone.')) return false;
-    document.getElementById('es-bulk-ids').value = ids.join(',');
     return true;
 }
 

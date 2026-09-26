@@ -719,3 +719,25 @@ function exam_late_cutoff_minutes(): int
     $v = (int) school_setting('exam_late_cutoff_minutes', '15');
     return max(0, $v);
 }
+
+/**
+ * Sortable table header link, shared by any staff listing page with
+ * click-to-sort columns (results, documents, etc). $extraParams carries
+ * whatever filters that page needs to preserve in the URL (search term,
+ * status filter, page number, ...) alongside the sort change itself.
+ */
+function sortable_th(string $col, string $label, string $currentCol, string $currentDir, array $extraParams = []): string
+{
+    $isActive = ($currentCol === $col);
+    $nextDir  = ($isActive && $currentDir === 'asc') ? 'desc' : 'asc';
+    $params   = array_merge($extraParams, ['sort_col' => $col, 'sort_dir' => $isActive ? $nextDir : 'asc']);
+    $url      = '?' . http_build_query($params);
+
+    $sortIcon  = icon('ic_fluent_chevron_up_down_24_filled', 13);
+    $sortColor = $isActive ? 'var(--accent)' : 'var(--text-tertiary)';
+
+    return '<th><a href="' . $url . '" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;color:inherit;white-space:nowrap;">'
+         . htmlspecialchars($label)
+         . '<span style="color:' . $sortColor . ';display:flex;align-items:center;margin-left:2px;">' . $sortIcon . '</span>'
+         . '</a></th>';
+}

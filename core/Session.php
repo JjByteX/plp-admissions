@@ -92,14 +92,20 @@ class Session
         ini_set('session.gc_maxlifetime', (string) max(SESSION_LIFETIME_STAFF, SESSION_LIFETIME_STUDENT));
     }
 
+    // -- Role-aware session time limit (shared by timeout + countdown) --
+    private static function sessionTimeLimit(): int
+    {
+        $role = $_SESSION['user_role'] ?? 'student';
+        return in_array($role, ['staff', 'admin'], true)
+            ? SESSION_LIFETIME_STAFF
+            : SESSION_LIFETIME_STUDENT;
+    }
+
     // -- Inactivity timeout — role-aware ----------------------------
     private static function enforceTimeout(): void
     {
         if (isset($_SESSION['_last_activity'])) {
-            $role    = $_SESSION['user_role'] ?? 'student';
-            $limit   = in_array($role, ['staff', 'admin'], true)
-                ? SESSION_LIFETIME_STAFF
-                : SESSION_LIFETIME_STUDENT;
+            $limit   = self::sessionTimeLimit();
             $elapsed = time() - $_SESSION['_last_activity'];
             if ($elapsed > $limit) {
                 self::flash('timeout', '1');
@@ -114,11 +120,7 @@ class Session
     public static function secondsRemaining(): int
     {
         if (!isset($_SESSION['_last_activity'])) return 0;
-        $role  = $_SESSION['user_role'] ?? 'student';
-        $limit = in_array($role, ['staff', 'admin'], true)
-            ? SESSION_LIFETIME_STAFF
-            : SESSION_LIFETIME_STUDENT;
-        return max(0, $limit - (time() - $_SESSION['_last_activity']));
+        return max(0, self::sessionTimeLimit() - (time() - $_SESSION['_last_activity']));
     }
 
     // -- Regenerate ID periodically to limit fixation attacks --------

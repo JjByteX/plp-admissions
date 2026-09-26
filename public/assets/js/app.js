@@ -329,3 +329,73 @@ window.Theme       = Theme;
 window.initExamTimer = initExamTimer;
 window.setAccentColor = setAccentColor;
 window.markAllRead = markAllRead;
+
+// ── Shared "select mode" widget for card-grid bulk delete ──────
+// Used by exam slot cards and interview session cards: a toggle
+// button puts the grid into select mode, clicking a card checks it,
+// a bulk bar shows the running count, and a confirm dialog gates
+// the delete submit. Each page keeps its own thin wrapper functions
+// (same global names as before) so no HTML/CSS/onclick markup has
+// to change; the wrappers just delegate here.
+function createCardBulkSelector(cfg) {
+    // cfg: { gridSel, cardSel, checkboxSel, barId, toggleBtnId,
+    //        countId, deleteBtnId, idsInputId, confirmMsg(count) }
+    function grid()  { return document.querySelector(cfg.gridSel); }
+    function bar()   { return document.getElementById(cfg.barId); }
+    function tBtn()  { return document.getElementById(cfg.toggleBtnId); }
+
+    function updateCount() {
+        var g = grid(); if (!g) return;
+        var n = g.querySelectorAll(cfg.checkboxSel + ':checked').length;
+        var c = document.getElementById(cfg.countId);
+        if (c) c.textContent = n + ' selected';
+        var btn = document.getElementById(cfg.deleteBtnId);
+        if (btn) btn.disabled = (n === 0);
+    }
+
+    function cancelSelectMode() {
+        var g = grid(); if (!g) return;
+        g.classList.remove('is-selecting');
+        g.querySelectorAll(cfg.checkboxSel).forEach(function (cb) { cb.checked = false; });
+        g.querySelectorAll(cfg.cardSel).forEach(function (c) { c.classList.remove('is-selected'); });
+        var btn = tBtn(); if (btn) btn.textContent = 'Select';
+        var b = bar(); if (b) b.classList.remove('is-visible');
+    }
+
+    function toggleSelectMode() {
+        var g = grid(); if (!g) return;
+        if (g.classList.contains('is-selecting')) {
+            cancelSelectMode();
+        } else {
+            g.classList.add('is-selecting');
+            var btn = tBtn(); if (btn) btn.textContent = 'Done';
+            var b = bar(); if (b) b.classList.add('is-visible');
+            updateCount();
+        }
+    }
+
+    function onCheckboxChange(cb) {
+        var card = cb.closest(cfg.cardSel);
+        if (card) card.classList.toggle('is-selected', cb.checked);
+        updateCount();
+    }
+
+    function confirmBulkDelete() {
+        var g = grid(); if (!g) return false;
+        var ids = Array.from(g.querySelectorAll(cfg.checkboxSel + ':checked'))
+            .map(function (cb) { return cb.value; });
+        if (ids.length === 0) return false;
+        if (!confirm(cfg.confirmMsg(ids.length))) return false;
+        document.getElementById(cfg.idsInputId).value = ids.join(',');
+        return true;
+    }
+
+    return {
+        toggleSelectMode: toggleSelectMode,
+        cancelSelectMode: cancelSelectMode,
+        onCheckboxChange: onCheckboxChange,
+        confirmBulkDelete: confirmBulkDelete,
+        updateCount: updateCount,
+    };
+}
+window.createCardBulkSelector = createCardBulkSelector;

@@ -564,42 +564,36 @@ foreach ($byDate as $date => $dateSlots) {
 })();
 
 // ── Bulk select mode for session cards ───────────────────────
-function _sessGrid()  { return document.querySelector('.sess-dir-grid'); }
-function _sessBar()   { return document.getElementById('sess-bulk-bar'); }
-function _sessTBtn()  { return document.getElementById('sess-select-toggle'); }
-
-function toggleSessSelectMode() {
-    var grid = _sessGrid(); if (!grid) return;
-    if (grid.classList.contains('is-selecting')) {
-        cancelSessSelectMode();
-    } else {
-        grid.classList.add('is-selecting');
-        var btn = _sessTBtn();   if (btn) btn.textContent = 'Done';
-        var bar = _sessBar();    if (bar) bar.classList.add('is-visible');
-        updateSessBulkCount();
+// ── Bulk select mode for interview session cards ──────────────
+// Shared "select mode" logic lives in createCardBulkSelector()
+// (public/assets/js/app.js), which loads after this inline block.
+// _sessSelector() builds it lazily on first call instead of at parse
+// time, so load order doesn't matter. These wrappers keep the same
+// global names the markup already calls via onclick=, so no HTML
+// changed.
+var __sessSelectorInstance = null;
+function _sessSelector() {
+    if (!__sessSelectorInstance) {
+        __sessSelectorInstance = createCardBulkSelector({
+            gridSel:     '.sess-dir-grid',
+            cardSel:     '.sess-dir-card',
+            checkboxSel: '.sess-select-checkbox',
+            barId:       'sess-bulk-bar',
+            toggleBtnId: 'sess-select-toggle',
+            countId:     'sess-bulk-count',
+            deleteBtnId: 'sess-bulk-delete-btn',
+            idsInputId:  'sess-bulk-ids',
+            confirmMsg:  function (n) { return 'Remove ' + n + ' session(s)? This cannot be undone.'; },
+        });
     }
+    return __sessSelectorInstance;
 }
-function cancelSessSelectMode() {
-    var grid = _sessGrid(); if (!grid) return;
-    grid.classList.remove('is-selecting');
-    grid.querySelectorAll('.sess-select-checkbox').forEach(function(cb){ cb.checked = false; });
-    grid.querySelectorAll('.sess-dir-card').forEach(function(c){ c.classList.remove('is-selected'); });
-    var btn = _sessTBtn(); if (btn) btn.textContent = 'Select';
-    var bar = _sessBar();  if (bar) bar.classList.remove('is-visible');
-}
-function onSessCheckboxChange(cb) {
-    var card = cb.closest('.sess-dir-card');
-    if (card) card.classList.toggle('is-selected', cb.checked);
-    updateSessBulkCount();
-}
-function updateSessBulkCount() {
-    var grid = _sessGrid(); if (!grid) return;
-    var n = grid.querySelectorAll('.sess-select-checkbox:checked').length;
-    var c = document.getElementById('sess-bulk-count');
-    if (c) c.textContent = n + ' selected';
-    var btn = document.getElementById('sess-bulk-delete-btn');
-    if (btn) btn.disabled = (n === 0);
-}
+function _sessGrid()              { return document.querySelector('.sess-dir-grid'); }
+function toggleSessSelectMode()   { _sessSelector().toggleSelectMode(); }
+function cancelSessSelectMode()   { _sessSelector().cancelSelectMode(); }
+function onSessCheckboxChange(cb) { _sessSelector().onCheckboxChange(cb); }
+function updateSessBulkCount()    { _sessSelector().updateCount(); }
+function confirmSessBulkDelete()  { return _sessSelector().confirmBulkDelete(); }
 function handleSessCardClick(event, payload) {
     var grid = _sessGrid();
     if (grid && grid.classList.contains('is-selecting')) {
@@ -613,15 +607,6 @@ function handleSessCardClick(event, payload) {
         return;
     }
     openEditSession(payload);
-}
-function confirmSessBulkDelete() {
-    var grid = _sessGrid(); if (!grid) return false;
-    var ids = Array.from(grid.querySelectorAll('.sess-select-checkbox:checked'))
-                  .map(function(cb){ return cb.value; });
-    if (ids.length === 0) return false;
-    if (!confirm('Remove ' + ids.length + ' session(s)? This cannot be undone.')) return false;
-    document.getElementById('sess-bulk-ids').value = ids.join(',');
-    return true;
 }
 
 // ── Add modal: switch between Single and Recurring fields ─────

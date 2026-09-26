@@ -44,6 +44,13 @@ $SECTION_COLORS = [
 // to avoid "Cannot redeclare is_ajax_request()" fatals once helpers.php
 // is loaded (bootstrap.php already pulls it in).
 
+// Auto-derive the exam title from the active school year. Shared by
+// create_exam and edit_exam so both stay in sync.
+function buildExamTitle(): string {
+    $autoYear = (string) school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
+    return 'PLP Admissions Test (' . $autoYear . ')';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
@@ -59,8 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $description    = trim($_POST['description'] ?? '');
             $shuffleQ       = isset($_POST['shuffle_questions']) ? 1 : 0;
             $shuffleC       = isset($_POST['shuffle_choices'])   ? 1 : 0;
-            $autoYear       = (string) school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
-            $title          = 'PLP Admissions Test (' . $autoYear . ')';
+            $title          = buildExamTitle();
             $db->prepare('UPDATE exams SET is_active=0')->execute();
             $db->prepare(
                 'INSERT INTO exams (title, description, shuffle_questions, shuffle_choices, is_active)
@@ -78,9 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $description = trim($_POST['description'] ?? '');
             $shuffleQ    = isset($_POST['shuffle_questions']) ? 1 : 0;
             $shuffleC    = isset($_POST['shuffle_choices'])   ? 1 : 0;
-            // Auto-derived from the active school year.
-            $autoYear    = (string) school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
-            $title       = 'PLP Admissions Test (' . $autoYear . ')';
+            $title       = buildExamTitle();
             $db->prepare(
                 'UPDATE exams SET title=?, description=?, shuffle_questions=?, shuffle_choices=? WHERE id=?'
             )->execute([$title, $description ?: null, $shuffleQ, $shuffleC, $examId]);

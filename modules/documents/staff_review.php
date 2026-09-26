@@ -924,23 +924,8 @@ $docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $c
 
 <?php
 // Helper: render a sortable column header
-function sortable_th(string $col, string $label, string $currentCol, string $currentDir, string $statusFilter, string $search, string $typeFilter = ''): string {
-    $isActive  = ($currentCol === $col);
-    $nextDir   = ($isActive && $currentDir === 'asc') ? 'desc' : 'asc';
-    $url = '?status=' . urlencode($statusFilter)
-         . '&type='     . urlencode($typeFilter)
-         . '&q='        . urlencode($search)
-         . '&sort_col=' . urlencode($col)
-         . '&sort_dir=' . urlencode($isActive ? $nextDir : 'asc');
-
-    $sortIcon = icon('ic_fluent_chevron_up_down_24_filled', 13);
-    $sortColor = $isActive ? 'var(--accent)' : 'var(--text-tertiary)';
-
-    return '<th><a href="' . $url . '" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;color:inherit;white-space:nowrap;">'
-         . htmlspecialchars($label)
-         . '<span style="color:' . $sortColor . ';display:flex;align-items:center;margin-left:2px;">' . $sortIcon . '</span>'
-         . '</a></th>';
-}
+// Sortable header for this page's filters (status, type, search).
+// Shared implementation lives in core/helpers.php as sortable_th().
 ?>
 
 <style>
@@ -959,12 +944,12 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
                     <input type="checkbox" id="bulk-select-all" onchange="bulkToggleAll(this)"
                            style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
                 </th>
-                <?= sortable_th('applicant',    'Applicant',    $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
-                <?= sortable_th('type',         'Type',         $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
-                <?= sortable_th('course',       'Course',       $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
-                <?= sortable_th('status',       'Status',       $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
-                <?= sortable_th('docs_pending', 'Docs Pending', $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
-                <?= sortable_th('applied',      'Applied',      $sortCol, $sortDir, $statusFilter, $search, $typeFilter) ?>
+                <?= sortable_th('applicant',    'Applicant',    $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
+                <?= sortable_th('type',         'Type',         $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
+                <?= sortable_th('course',       'Course',       $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
+                <?= sortable_th('status',       'Status',       $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
+                <?= sortable_th('docs_pending', 'Docs Pending', $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
+                <?= sortable_th('applied',      'Applied',      $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
                 <th style="width:80px">Actions</th>
             </tr>
         </thead>
