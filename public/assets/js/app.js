@@ -307,6 +307,115 @@ function pollNotifications() {
 }
 
 // ============================================================
+// Auto page size — viewport-fit pagination for server-rendered
+// list tables (audit log, and any future page opting in).
+//
+// Ported from lakbay-pasig's src/hooks/use-auto-page-size.ts: a
+// table's rows are forced to a fixed height (--height-table-row /
+// --height-table-header, section 1 of app.css), so the number of
+// rows that fit a bounded container can be computed from the
+// container's own height alone, without measuring a live row (a
+// live-row measurement breaks pagination — a new page size changes
+// which row sits first on the page, that row can be a different
+// height, which recomputes the page size again, flipping forever).
+//
+// This app has no client-side router or in-memory row array —
+// every list page here is a full server render with GET-based
+// LIMIT/OFFSET pagination (core/helpers.php's paginate()). So
+// unlike the React original (which just re-slices an array already
+// in memory), "auto" here means: measure once on load, and if the
+// computed size doesn't match what the server actually rendered
+// with (?per_page=), reload with the corrected value. A ResizeObserver
+// keeps it in sync with real window resizes after that.
+const AutoPageSize = (() => {
+    const MIN_ROWS = 3;
+    const MAX_ROWS = 200;
+    const FALLBACK_ROW_HEIGHT = 44;
+    const FALLBACK_HEADER_HEIGHT = 40;
+    // Pagination bar (32px buttons) plus its own top padding.
+    const PAGINATION_BAR_HEIGHT = 44;
+    const STORAGE_KEY_PREFIX = 'plp_auto_page_size:';
+
+    function cssVar(name, fallback) {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        const n = parseInt(raw, 10);
+        return Number.isNaN(n) ? fallback : n;
+    }
+
+    function computeRows(container, toolbar, hasPagination) {
+        const availableH = container.getBoundingClientRect().height;
+        const toolbarH = toolbar ? toolbar.getBoundingClientRect().height : 0;
+        const rowH = cssVar('--height-table-row', FALLBACK_ROW_HEIGHT);
+        const headerH = cssVar('--height-table-header', FALLBACK_HEADER_HEIGHT);
+        const paginationH = hasPagination ? PAGINATION_BAR_HEIGHT : 0;
+
+        const usable = availableH - toolbarH - headerH - paginationH;
+        const rows = Math.floor(usable / rowH);
+        return Math.max(MIN_ROWS, Math.min(MAX_ROWS, rows));
+    }
+
+    // One table per page uses this (the audit log today), so a single
+    // active binding is enough; init() is a no-op if the markup isn't there.
+    function init() {
+        const root = document.querySelector('[data-auto-page-size]');
+        if (!root) return;
+
+        const container = root.querySelector('.auto-table-body');
+        const toolbar   = root.querySelector('.auto-table-toolbar');
+        const pagination = document.querySelector('.auto-table-pagination');
+        if (!container) return;
+
+        const storageKey = STORAGE_KEY_PREFIX + (root.dataset.autoPageSize || 'default');
+        const reloadCountKey = storageKey + ':reloads';
+        const currentPerPage = parseInt(root.dataset.currentPerPage || '0', 10);
+        // Safety valve: if layout hasn't settled yet (fonts, first paint)
+        // the computed size can be off on the very first render. Allow a
+        // couple of auto-corrections per page load, then stop — never
+        // reload forever even if the measurement keeps disagreeing.
+        const MAX_AUTO_RELOADS = 3;
+
+        function reloadWithPerPage(perPage) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('per_page', String(perPage));
+            url.searchParams.set('page', '1'); // row count changed, page numbers no longer line up
+            sessionStorage.setItem(storageKey, String(perPage));
+            window.location.href = url.toString();
+        }
+
+        function measureAndMaybeReload() {
+            const reloadsSoFar = parseInt(sessionStorage.getItem(reloadCountKey) || '0', 10);
+            if (reloadsSoFar >= MAX_AUTO_RELOADS) return false;
+
+            const rows = computeRows(container, toolbar, !!pagination);
+            // Avoid a reload loop: only navigate if the computed size is
+            // meaningfully different from what the server already rendered.
+            if (Math.abs(rows - currentPerPage) >= 2) {
+                sessionStorage.setItem(reloadCountKey, String(reloadsSoFar + 1));
+                reloadWithPerPage(rows);
+                return true;
+            }
+            sessionStorage.removeItem(reloadCountKey); // settled — reset for next time
+            return false;
+        }
+
+        if (measureAndMaybeReload()) return; // navigating away
+
+        // Keep it in sync with real resizes (sidebar collapse, window
+        // resize, orientation change) without reloading on every pixel —
+        // debounced, and only acts once the size has settled.
+        let resizeTimer = null;
+        const observer = new ResizeObserver(() => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(measureAndMaybeReload, 400);
+        });
+        observer.observe(container);
+    }
+
+    return { init };
+})();
+window.AutoPageSize = AutoPageSize;
+
+// ============================================================
 // Bootstrap
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -317,6 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initAlerts();
     initForms();
     initConfirm();
+    AutoPageSize.init();
 
     // Poll for new notifications every 30 seconds
     if (document.getElementById('notif-dropdown')) {

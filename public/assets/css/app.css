@@ -106,6 +106,14 @@
     --header-height:    60px;
     --content-max-width:900px;
 
+    /* Auto-paginated data table geometry (audit log, and any future list
+       that opts into JS-computed page sizing). Every row in such a table
+       is forced to exactly this height so the row count that fits a given
+       viewport can be computed from the container height alone, without
+       measuring a live row — see AutoPageSize in app.js. */
+    --height-table-row:    44px;
+    --height-table-header: 40px;
+
     /* Transitions */
     --transition-fast:   150ms ease;
     --transition-normal: 200ms ease;
@@ -3057,3 +3065,197 @@ body.ap-drawer-locked { overflow: hidden; }
     color: var(--text-secondary);
 }
 .iq-view-btn:hover { color: var(--accent); }
+
+/* ============================================================
+   Auto-paginated data table (ported from lakbay-pasig's
+   AdminDataTable + AdminFilterBar + useAutoPageSize)
+   ------------------------------------------------------------
+   Shape: search row + filters fused into the SAME bordered card
+   as the table (one toolbar strip, border-bottom, no separate
+   filter card above it), a scrollable body with a sticky header,
+   and a "Showing X–Y of Z" + Prev/Next footer OUTSIDE the card.
+   Rows are forced to --height-table-row so AutoPageSize (app.js)
+   can compute how many rows fit the viewport without measuring a
+   live row — see the comment on that var in section 1.
+   ============================================================ */
+
+/* Stretch the card to fill the remaining page height, same trick
+   already used by .results-table-card / .sa-table-card / etc. */
+.page:has(.auto-table-card) { display: flex; flex-direction: column; }
+
+.auto-table-card {
+    flex: 1;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+/* Toolbar strip — search input + filter selects, all one row,
+   living inside the card itself (not a separate .card above it). */
+.auto-table-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--border);
+}
+
+.auto-table-search {
+    position: relative;
+    flex: 1 1 220px;
+    min-width: 180px;
+}
+
+.auto-table-search svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    pointer-events: none;
+}
+
+.auto-table-search input {
+    padding-left: 32px;
+    width: 100%;
+}
+
+.auto-table-toolbar select,
+.auto-table-toolbar input[type="date"] {
+    flex: 0 0 auto;
+}
+
+/* Scrollable body region — this is what AutoPageSize measures
+   (minus the toolbar and header heights) to work out row count. */
+.auto-table-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+.auto-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: var(--text-sm);
+}
+
+.auto-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg-elevated);
+}
+
+.auto-table th {
+    height: var(--height-table-header);
+    padding: 0 var(--space-3);
+    text-align: left;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+}
+
+.auto-table th a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+}
+
+/* Fixed row height — every row is exactly this tall, and a cell's
+   content clips rather than growing the row (see .auto-table-clip). */
+.auto-table td {
+    height: var(--height-table-row);
+    padding: 0 var(--space-3);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    overflow: hidden;
+}
+
+.auto-table tbody tr:last-child td { border-bottom: none; }
+.auto-table tbody tr:hover td { background: var(--bg-overlay); }
+
+.auto-table-clip {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.auto-table-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    flex: 1;
+    padding: var(--space-12);
+    text-align: center;
+    color: var(--text-tertiary);
+}
+
+/* Pagination footer — OUTSIDE the card, "Showing X–Y of Z" left,
+   Prev / Page N of M / Next right. Matches AdminDataTable's footer. */
+.auto-table-pagination {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-1) 0;
+    flex-wrap: wrap;
+}
+
+.auto-table-pagination-info {
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
+}
+
+.auto-table-pagination-info strong {
+    color: var(--text-primary);
+    font-weight: var(--weight-semibold);
+}
+
+.auto-table-pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.auto-table-page-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.auto-table-page-btn:hover:not([aria-disabled="true"]) {
+    background: var(--bg-overlay);
+    color: var(--text-primary);
+}
+
+.auto-table-page-btn[aria-disabled="true"] {
+    color: var(--text-placeholder);
+    cursor: default;
+    pointer-events: none;
+}
+
+.auto-table-page-btn svg { width: 16px; height: 16px; }
