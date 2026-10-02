@@ -1,7 +1,5 @@
 # PLP Admissions Management System
 
-TEST
-
 A web-based admissions system built with PHP and MySQL, covering the full enrollment flow from application to final result.
 
 ---
