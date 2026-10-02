@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: PHP lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # XAMPP ships PHP 8.x (see README), so lint against 8.2.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          coverage: none
+
+      # No build or typecheck step exists for plain PHP, so the syntax check
+      # is the equivalent gate. lib/ is vendored PHPMailer and not ours to
+      # lint. Every file is checked before failing so one run lists all
+      # broken files, not just the first.
+      - name: Lint PHP syntax
+        run: |
+          status=0
+          while IFS= read -r -d '' file; do
+            out=$(php -l "$file" 2>&1) || { echo "$out"; status=1; }
+          done < <(find . -name '*.php' -not -path './lib/*' -not -path './.git/*' -print0)
+          exit $status
+
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  schema-check:
+    name: Validate schema
+    runs-on: ubuntu-latest
+    services:
+      # Throwaway MariaDB, the engine XAMPP ships and the app actually runs
+      # on. Not MySQL 8.0: schema.sql gives a TEXT column a literal default
+      # (custom_courses.strands), which MariaDB 10.2+ accepts and MySQL 8.0
+      # rejects. The container lives only for this job, so the check is safe
+      # on any PR and needs no shared credentials.
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: plp_admissions
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      MYSQL_PWD: root
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mariadb-client
+
+      # schema.sql drops and recreates every table, which is why it is only
+      # ever applied here, against the disposable service container.
+      - name: Apply schema
+        run: mariadb -h 127.0.0.1 -P 3306 -uroot plp_admissions < database/schema.sql
+
+      # The file claims to be idempotent. Running it a second time over the
+      # tables the first run created proves that claim on every change.
+      - name: Re-apply schema (idempotency)
+        run: mariadb -h 127.0.0.1 -P 3306 -uroot plp_admissions < database/schema.sql
