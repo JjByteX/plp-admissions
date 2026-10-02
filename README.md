@@ -4,11 +4,39 @@ A web-based admissions system built with PHP and MySQL, covering the full enroll
 
 ---
 
+## Quick Start
+
+Already set up? From the project folder:
+
+```bash
+php -S localhost:8000
+```
+
+Then open **http://localhost:8000/public/** and log in (see [Default Accounts](#default-accounts)). Press `Ctrl+C` to stop.
+
+You still need MySQL/MariaDB running (start **MySQL** in the XAMPP control panel).
+
+**First time only**, create and load the database (run from the project folder; use Command Prompt or Git Bash, not PowerShell):
+
+```bash
+mysql -u root -e "CREATE DATABASE IF NOT EXISTS plp_admissions"
+mysql -u root plp_admissions < database/schema.sql
+mysql -u root plp_admissions < database/seed_users.sql
+```
+
+> If `php` or `mysql` isn't found, add `C:\xampp\php` and `C:\xampp\mysql\bin` to your PATH, or run them by full path (e.g. `C:\xampp\php\php.exe -S localhost:8000`).
+>
+> Running `schema.sql` **wipes all existing data**. Only do it for a fresh database or an intentional reset.
+
+Prefer XAMPP's Apache instead? See [Setup](#setup) below.
+
+---
+
 ## Requirements
 
 - **XAMPP** (PHP 8.x + Apache + MySQL)
-- A **Gmail account** with an App Password for email sending
-- A **hCaptcha** account for the registration form (can be disabled for testing)
+- A **Gmail account** with an App Password for email sending (needed for student registration, since new students must verify their email with a code)
+- *(Optional)* A **hCaptcha** account. hCaptcha is currently switched off in `config/app.php` (`HCAPTCHA_ENABLED` is `false`)
 
 ---
 
@@ -45,7 +73,9 @@ SMTP_PASS=your_app_password
 SMTP_FROM_NAME=PLP Admissions
 ```
 
-> **hCaptcha tip:** You can disable hCaptcha during testing by commenting it out in the login/register pages.
+> **hCaptcha:** Currently disabled in code (`HCAPTCHA_ENABLED` is `false` in `config/app.php`), so the keys can stay empty.
+>
+> **No SMTP set up?** The app still runs, but emails (including student verification codes) are skipped and only logged. You can still log in with the seeded staff accounts.
 
 > **Gmail App Password:** Go to your Google Account → Security → 2-Step Verification → App Passwords → generate one for "Mail".
 
@@ -54,8 +84,10 @@ SMTP_FROM_NAME=PLP Admissions
 Start **Apache** and **MySQL** in XAMPP, then open:
 
 ```
-http://localhost/plp-admissions/
+http://localhost/plp-admissions/public/
 ```
+
+Or skip Apache and use PHP's built-in server (see [Quick Start](#quick-start)).
 
 ---
 
