@@ -18,21 +18,21 @@ $staffId = Auth::id();
 $today   = date('Y-m-d');
 
 $stmt = $db->prepare(
-    'SELECT q.id FROM interview_queue q
+    "SELECT q.id FROM interview_queue q
      JOIN   interview_slots s ON s.id = q.slot_id
      WHERE  s.slot_date = ?
        AND  COALESCE(s.assigned_to, s.created_by) = ?
-       AND  q.status = "checked_in"
-     ORDER BY q.queue_number ASC
-     LIMIT 1'
+       AND  q.status = 'checked_in'
+     ORDER BY q.queue_number ASC NULLS FIRST
+     LIMIT 1"
 );
 $stmt->execute([$today, $staffId]);
 $nextId = $stmt->fetchColumn();
 
 if ($nextId) {
     $db->prepare(
-        'UPDATE interview_queue SET status="in_progress"
-         WHERE id=? AND status="checked_in"'
+        "UPDATE interview_queue SET status='in_progress'
+         WHERE id=? AND status='checked_in'"
     )->execute([$nextId]);
     Session::flash('success', 'Next applicant called in.');
 } else {

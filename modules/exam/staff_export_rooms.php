@@ -51,7 +51,7 @@ if ($filterDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterDate)) {
     $params[] = $filterDate;
 } else {
     // Default: today + future. Past dates are useless for posting.
-    $where[]  = 's.exam_date >= CURDATE()';
+    $where[]  = 's.exam_date >= CURRENT_DATE';
 }
 
 if ($filterDept !== '') {
@@ -180,7 +180,7 @@ $datesAvail = [];
 $deptsAvail = [];
 $datesStmt  = $db->prepare(
     'SELECT DISTINCT exam_date FROM exam_slot_schedule
-      WHERE school_year = ? AND exam_date >= CURDATE()
+      WHERE school_year = ? AND exam_date >= CURRENT_DATE
       ORDER BY exam_date ASC'
 );
 $datesStmt->execute([$schoolYear]);

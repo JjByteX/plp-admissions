@@ -22,21 +22,6 @@ $staffId = Auth::id();
 $isAdmin = Auth::role() === ROLE_ADMIN;
 $today   = date('Y-m-d');
 
-// Graceful schema upgrade: ensure new columns exist on interview_slots.
-// (Desks have been merged into sessions — assigned_to/location_label/location_notes
-// live directly on interview_slots now.)
-foreach ([
-    ['assigned_to',    'INT(10) UNSIGNED DEFAULT NULL AFTER created_by'],
-    ['location_label', 'VARCHAR(120) NOT NULL DEFAULT "" AFTER assigned_to'],
-    ['location_notes', 'TEXT DEFAULT NULL AFTER location_label'],
-] as $col) {
-    try { $db->query("SELECT {$col[0]} FROM interview_slots LIMIT 0"); }
-    catch (\Throwable $e) {
-        try { $db->exec("ALTER TABLE interview_slots ADD COLUMN {$col[0]} {$col[1]}"); }
-        catch (\Throwable $e2) {}
-    }
-}
-
 // Stats for landing cards
 $upcomingStmt = $db->prepare(
     'SELECT COUNT(*) FROM interview_slots WHERE slot_date >= ?'
@@ -53,12 +38,12 @@ $totalSessions = (int)$totalSessionsStmt->fetchColumn();
 $todayWaiting = 0;
 $todayInProgress = 0;
 $todayStmt = $db->prepare(
-    'SELECT SUM(q.status = "checked_in") AS waiting,
-            SUM(q.status = "in_progress") AS in_progress
+    "SELECT SUM(CASE WHEN q.status = 'checked_in'  THEN 1 ELSE 0 END) AS waiting,
+            SUM(CASE WHEN q.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress
      FROM   interview_queue q
      JOIN   interview_slots s ON s.id = q.slot_id
      WHERE  s.slot_date = ?
-       AND  COALESCE(s.assigned_to, s.created_by) = ?'
+       AND  COALESCE(s.assigned_to, s.created_by) = ?"
 );
 $todayStmt->execute([$today, $staffId]);
 $todayRow = $todayStmt->fetch();

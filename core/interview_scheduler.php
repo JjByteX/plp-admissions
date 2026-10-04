@@ -223,7 +223,7 @@ function assign_interview_slot(int $applicantId, ?int $actorUserId = null, ?int 
         // Opportunistically backfill the user row so future queries are fast.
         if ($department !== '') {
             try {
-                $pdo->prepare('UPDATE users SET department = ? WHERE id = ? AND (department = "" OR department IS NULL)')
+                $pdo->prepare('UPDATE users SET department = ? WHERE id = ? AND (department = \'\' OR department IS NULL)')
                     ->execute([$department, (int)$applicant['user_id']]);
             } catch (\Throwable) {}
         }
@@ -235,7 +235,7 @@ function assign_interview_slot(int $applicantId, ?int $actorUserId = null, ?int 
         $dup = $pdo->prepare(
             'SELECT id FROM interview_queue
               WHERE applicant_id = ?
-                AND interview_status IN ("pending","completed")
+                AND interview_status IN (\'pending\',\'completed\')
               LIMIT 1 FOR UPDATE'
         );
         $dup->execute([$applicantId]);
@@ -250,17 +250,26 @@ function assign_interview_slot(int $applicantId, ?int $actorUserId = null, ?int 
         if ($forceSlotId !== null && $forceSlotId > 0) {
             // Staff-directed reschedule to a specific slot — still
             // verify availability and capacity under FOR UPDATE.
+            // Lock the slot row first, then count bookings in a second
+            // query so the count includes anything committed while we
+            // waited for the lock.
             $q = $pdo->prepare(
-                'SELECT s.id, s.capacity, s.department, s.status, s.slot_date, s.end_time,
-                        (SELECT COUNT(*) FROM interview_queue q
-                          WHERE q.slot_id = s.id
-                            AND q.interview_status IN ("pending","completed")) AS booked
+                'SELECT s.id, s.capacity, s.department, s.status, s.slot_date, s.end_time
                    FROM interview_slots s
                   WHERE s.id = ?
                   LIMIT 1 FOR UPDATE'
             );
             $q->execute([$forceSlotId]);
             $candidate = $q->fetch();
+            if ($candidate) {
+                $bk = $pdo->prepare(
+                    'SELECT COUNT(*) FROM interview_queue
+                      WHERE slot_id = ?
+                        AND interview_status IN (\'pending\',\'completed\')'
+                );
+                $bk->execute([(int)$candidate['id']]);
+                $candidate['booked'] = (int)$bk->fetchColumn();
+            }
             if (!$candidate
                 || $candidate['status'] !== 'open'
                 || (int)$candidate['booked'] >= (int)$candidate['capacity']
@@ -276,25 +285,38 @@ function assign_interview_slot(int $applicantId, ?int $actorUserId = null, ?int 
             // We MATCH the applicant's department; if they have none we
             // allow any department (backward compatibility).
             $params = [$today, $today, $nowTime];
-            $sql = 'SELECT s.id, s.capacity,
-                           (SELECT COUNT(*) FROM interview_queue q
-                              WHERE q.slot_id = s.id
-                                AND q.interview_status IN ("pending","completed")) AS booked
+            $sql = 'SELECT s.id, s.capacity
                       FROM interview_slots s
-                     WHERE s.status = "open"
+                     WHERE s.status = \'open\'
                        AND s.slot_date >= ?
                        AND NOT (s.slot_date = ? AND s.end_time IS NOT NULL AND s.end_time <= ?)';
             if ($department !== '') {
-                $sql .= ' AND (s.department = ? OR s.department = "")';
+                $sql .= ' AND (s.department = ? OR s.department = \'\')';
                 $params[] = $department;
             }
-            $sql .= ' ORDER BY booked ASC, s.slot_date ASC, s.slot_time ASC, s.id ASC
+            $sql .= ' ORDER BY s.slot_date ASC, s.slot_time ASC NULLS FIRST, s.id ASC
                       FOR UPDATE';
 
             $q = $pdo->prepare($sql);
             $q->execute($params);
+            $locked = $q->fetchAll();
+
+            // Count bookings only after the slot rows are locked, then
+            // keep the original "least booked first" rule. usort is
+            // stable, so ties stay in date / time / id order.
+            $bk = $pdo->prepare(
+                'SELECT COUNT(*) FROM interview_queue
+                  WHERE slot_id = ?
+                    AND interview_status IN (\'pending\',\'completed\')'
+            );
+            foreach ($locked as $i => $row) {
+                $bk->execute([(int)$row['id']]);
+                $locked[$i]['booked'] = (int)$bk->fetchColumn();
+            }
+            usort($locked, fn($a, $b) => $a['booked'] <=> $b['booked']);
+
             $candidate = null;
-            while ($row = $q->fetch()) {
+            foreach ($locked as $row) {
                 if ((int)$row['booked'] < (int)$row['capacity']) {
                     $candidate = $row;
                     break;
@@ -334,11 +356,11 @@ function assign_interview_slot(int $applicantId, ?int $actorUserId = null, ?int 
             'INSERT INTO interview_queue
                 (slot_id, applicant_id, status, interview_status,
                  queue_number, checked_in_at)
-             VALUES (?, ?, "checked_in", "pending", ?, NOW())'
+             VALUES (?, ?, \'checked_in\', \'pending\', ?, NOW())'
         )->execute([$slotId, $applicantId, $nextNum]);
 
         $pdo->prepare(
-            'UPDATE applicants SET overall_status = "interview" WHERE id = ?'
+            'UPDATE applicants SET overall_status = \'interview\' WHERE id = ?'
         )->execute([$applicantId]);
 
         $pdo->commit();
@@ -379,8 +401,8 @@ function bulk_assign_pending_applicants(?string $department = null, ?int $actorU
               JOIN users u ON u.id = a.user_id
               LEFT JOIN interview_queue q
                      ON q.applicant_id = a.id
-                    AND q.interview_status IN ("pending","completed")
-             WHERE a.overall_status = "interview"
+                    AND q.interview_status IN (\'pending\',\'completed\')
+             WHERE a.overall_status = \'interview\'
                AND q.id IS NULL';
     $params = [];
     if ($department !== '') {
@@ -388,7 +410,7 @@ function bulk_assign_pending_applicants(?string $department = null, ?int $actorU
         // so freshly-registered applicants without a backfilled column
         // still get picked up.
         $sql .= ' AND (u.department = ?
-                       OR (u.department = ""
+                       OR (u.department = \'\'
                            AND a.course_applied IN (
                                SELECT cd.course_name FROM course_departments cd
                                JOIN departments d ON d.id = cd.department_id
@@ -498,8 +520,8 @@ function record_interview_evaluation(
         if (!$absent) {
             // Present + graded → let the results step unlock.
             $pdo->prepare(
-                'UPDATE applicants SET overall_status = "released"
-                  WHERE id = ? AND overall_status = "interview"'
+                'UPDATE applicants SET overall_status = \'released\'
+                  WHERE id = ? AND overall_status = \'interview\''
             )->execute([$applicantId]);
         }
 
@@ -558,7 +580,7 @@ function reschedule_absent_applicant(int $applicantId, ?int $targetSlotId, int $
            FROM interview_queue q
       LEFT JOIN interview_slots s ON s.id = q.slot_id
           WHERE q.applicant_id = ?
-            AND q.interview_status = "absent"
+            AND q.interview_status = \'absent\'
           LIMIT 1'
     );
     $stmt->execute([$applicantId]);
@@ -572,12 +594,14 @@ function reschedule_absent_applicant(int $applicantId, ?int $targetSlotId, int $
 
     $pdo->beginTransaction();
     try {
-        $pdo->prepare(
+        $logStmt = $pdo->prepare(
             'INSERT INTO reschedule_logs
                 (applicant_id, from_slot_id, to_slot_id, from_slot_date, from_slot_time, reason, rescheduled_by)
-             VALUES (?, ?, NULL, ?, ?, "absent", ?)'
-        )->execute([$applicantId, $fromSlotId, $fromSlotDate, $fromSlotTime, $actorUserId]);
-        $logId = (int)$pdo->lastInsertId();
+             VALUES (?, ?, NULL, ?, ?, \'absent\', ?)
+             RETURNING id'
+        );
+        $logStmt->execute([$applicantId, $fromSlotId, $fromSlotDate, $fromSlotTime, $actorUserId]);
+        $logId = (int)$logStmt->fetchColumn();
 
         // Remove the old absent row so assign_interview_slot can insert
         // a fresh one (uq_applicant_active is a UNIQUE index).
@@ -586,8 +610,8 @@ function reschedule_absent_applicant(int $applicantId, ?int $targetSlotId, int $
 
         // Reset applicant state so the pending-queue filter picks them up.
         $pdo->prepare(
-            'UPDATE applicants SET overall_status = "interview"
-              WHERE id = ? AND overall_status IN ("interview","released")'
+            'UPDATE applicants SET overall_status = \'interview\'
+              WHERE id = ? AND overall_status IN (\'interview\',\'released\')'
         )->execute([$applicantId]);
 
         $pdo->commit();
@@ -667,17 +691,17 @@ function auto_detect_interview_no_shows(?int $slotId = null, ?int $actorUserId =
                       s.department
                  FROM interview_queue q
                  JOIN interview_slots s ON s.id = q.slot_id
-                WHERE q.status IN ("scheduled","checked_in","in_progress")
-                  AND q.interview_status = "pending"
+                WHERE q.status IN (\'scheduled\',\'checked_in\',\'in_progress\')
+                  AND q.interview_status = \'pending\'
                   AND (
-                        s.slot_date < CURDATE()
-                     OR (s.slot_date = CURDATE()
+                        s.slot_date < CURRENT_DATE
+                     OR (s.slot_date = CURRENT_DATE
                          AND s.end_time IS NOT NULL
-                         AND s.end_time <= CURTIME())
-                     OR (s.slot_date = CURDATE()
+                         AND s.end_time <= LOCALTIME)
+                     OR (s.slot_date = CURRENT_DATE
                          AND s.end_time IS NULL
                          AND s.slot_time IS NOT NULL
-                         AND ADDTIME(s.slot_time, "01:00:00") <= CURTIME())
+                         AND (s.slot_date + s.slot_time + INTERVAL \'1 hour\') <= LOCALTIMESTAMP)
                   )';
     $params = [];
     if ($slotId !== null && $slotId > 0) {
@@ -698,12 +722,12 @@ function auto_detect_interview_no_shows(?int $slotId = null, ?int $actorUserId =
     $flipped = 0;
     $update = $pdo->prepare(
         'UPDATE interview_queue
-            SET status            = "no_show",
-                interview_status  = "absent",
-                attendance_status = "absent",
+            SET status            = \'no_show\',
+                interview_status  = \'absent\',
+                attendance_status = \'absent\',
                 evaluated_at      = NOW()
           WHERE id = ?
-            AND interview_status = "pending"'
+            AND interview_status = \'pending\''
     );
 
     foreach ($rows as $r) {
@@ -846,8 +870,8 @@ function reschedule_interview(int $applicantId, ?int $actorUserId = null): ?int
         $pdo->prepare(
             'DELETE FROM interview_queue
               WHERE id = ?
-                AND interview_status = "pending"
-                AND status = "scheduled"'
+                AND interview_status = \'pending\'
+                AND status = \'scheduled\''
         )->execute([(int)$row['id']]);
     }
 
@@ -877,15 +901,15 @@ function cancel_interview_slot(int $slotId, int $actorUserId): int
 
     $pdo->beginTransaction();
     try {
-        $pdo->prepare('UPDATE interview_slots SET status = "closed" WHERE id = ?')
+        $pdo->prepare('UPDATE interview_slots SET status = \'closed\' WHERE id = ?')
             ->execute([$slotId]);
 
         // Only reschedule people who have not been evaluated yet.
         $stmt = $pdo->prepare(
             'SELECT applicant_id FROM interview_queue
               WHERE slot_id = ?
-                AND interview_status = "pending"
-                AND status = "scheduled"'
+                AND interview_status = \'pending\'
+                AND status = \'scheduled\''
         );
         $stmt->execute([$slotId]);
         $applicants = array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN) ?: []);
@@ -894,8 +918,8 @@ function cancel_interview_slot(int $slotId, int $actorUserId): int
         $pdo->prepare(
             'DELETE FROM interview_queue
               WHERE slot_id = ?
-                AND interview_status = "pending"
-                AND status = "scheduled"'
+                AND interview_status = \'pending\'
+                AND status = \'scheduled\''
         )->execute([$slotId]);
 
         $pdo->commit();

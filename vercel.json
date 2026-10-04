@@ -1,0 +1,23 @@
+{
+  "outputDirectory": "public",
+  "regions": ["sin1"],
+  "functions": {
+    "api/index.php": {
+      "runtime": "vercel-php@0.7.4"
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "SAMEORIGIN",
+        "X-XSS-Protection": "1; mode=block",
+        "Referrer-Policy": "strict-origin-when-cross-origin"
+      },
+      "continue": true
+    },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/api/index.php" }
+  ]
+}

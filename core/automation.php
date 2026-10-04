@@ -14,9 +14,6 @@
 function create_notification(int $userId, string $type, string $title, string $message = '', string $link = ''): void
 {
     try {
-        // Ensure table exists (graceful upgrade)
-        ensure_notifications_table();
-
         db()->prepare(
             'INSERT INTO notifications (user_id, type, title, message, link)
              VALUES (?, ?, ?, ?, ?)'
@@ -32,7 +29,6 @@ function create_notification(int $userId, string $type, string $title, string $m
 function notification_count(int $userId): int
 {
     try {
-        ensure_notifications_table();
         $stmt = db()->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0');
         $stmt->execute([$userId]);
         return (int) $stmt->fetchColumn();
@@ -47,7 +43,6 @@ function notification_count(int $userId): int
 function get_notifications(int $userId, int $limit = 20): array
 {
     try {
-        ensure_notifications_table();
         $stmt = db()->prepare(
             'SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
         );
@@ -64,7 +59,6 @@ function get_notifications(int $userId, int $limit = 20): array
 function mark_notifications_read(int $userId): void
 {
     try {
-        ensure_notifications_table();
         db()->prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0')
             ->execute([$userId]);
     } catch (\Throwable) {}
@@ -276,7 +270,7 @@ function auto_assign_exam_slot(int $applicantId): ?int
     if ($dept === '' && $activeExamId !== null) {
         $queries[] = [
             'sql' => 'SELECT id FROM exam_slot_schedule
-                       WHERE (department IS NULL OR department = "")
+                       WHERE (department IS NULL OR department = \'\')
                          AND exam_id = ?
                          AND filled < capacity
                          AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
@@ -287,7 +281,7 @@ function auto_assign_exam_slot(int $applicantId): ?int
     if ($dept === '') {
         $queries[] = [
             'sql' => 'SELECT id FROM exam_slot_schedule
-                       WHERE (department IS NULL OR department = "")
+                       WHERE (department IS NULL OR department = \'\')
                          AND filled < capacity
                          AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
                        ORDER BY exam_date ASC, slot_time ASC',
@@ -431,9 +425,9 @@ function backfill_exam_slot_assignments(): int
             'SELECT a.id
                FROM applicants a
           LEFT JOIN applicant_exam_slots aes ON aes.applicant_id = a.id
-              WHERE a.overall_status = "exam"
+              WHERE a.overall_status = \'exam\'
                 AND aes.id IS NULL
-              ORDER BY a.documents_approved_at ASC, a.id ASC'
+              ORDER BY a.documents_approved_at ASC NULLS FIRST, a.id ASC'
         );
         $waiting = $stmt->fetchAll();
     } catch (\Throwable $e) {
@@ -477,8 +471,8 @@ function backfill_interview_slot_assignments(?int $actorUserId = null): int
             'SELECT a.id
                FROM applicants a
           LEFT JOIN interview_queue q ON q.applicant_id = a.id
-                                   AND q.interview_status IN ("pending","completed")
-              WHERE a.overall_status = "interview"
+                                   AND q.interview_status IN (\'pending\',\'completed\')
+              WHERE a.overall_status = \'interview\'
                 AND q.id IS NULL
               ORDER BY a.id ASC'
         );
@@ -523,7 +517,7 @@ function get_system_user_id(): int
     static $id = null;
     if ($id !== null) return $id;
     try {
-        $stmt = db()->prepare('SELECT id FROM users WHERE role = "admin" ORDER BY id ASC LIMIT 1');
+        $stmt = db()->prepare('SELECT id FROM users WHERE role = \'admin\' ORDER BY id ASC LIMIT 1');
         $stmt->execute();
         $id = (int) $stmt->fetchColumn();
     } catch (\Throwable) {
@@ -567,7 +561,7 @@ function auto_release_results(): array
          LEFT JOIN exam_results       er ON er.applicant_id = a.id
          LEFT JOIN interview_queue    iq ON iq.applicant_id = a.id
          LEFT JOIN admission_results  ar ON ar.applicant_id = a.id
-         WHERE a.overall_status IN ("exam","interview","released")
+         WHERE a.overall_status IN (\'exam\',\'interview\',\'released\')
            AND ar.id IS NULL'
     );
     $applicants = $stmt->fetchAll();
@@ -587,14 +581,15 @@ function auto_release_results(): array
 
         $pdo->prepare(
             'INSERT INTO admission_results (applicant_id, result, remarks, released_by, released_at)
-             VALUES (?, ?, "Auto-released", ?, NOW())
-             ON DUPLICATE KEY UPDATE result      = VALUES(result),
-                                     remarks     = VALUES(remarks),
-                                     released_by = VALUES(released_by),
+             VALUES (?, ?, \'Auto-released\', ?, NOW())
+             ON CONFLICT (applicant_id) DO UPDATE SET
+                                     result      = EXCLUDED.result,
+                                     remarks     = EXCLUDED.remarks,
+                                     released_by = EXCLUDED.released_by,
                                      released_at = NOW()'
         )->execute([(int) $appl['applicant_id'], $decision, $systemUserId]);
 
-        $pdo->prepare('UPDATE applicants SET overall_status = "released" WHERE id = ?')
+        $pdo->prepare('UPDATE applicants SET overall_status = \'released\' WHERE id = ?')
             ->execute([(int) $appl['applicant_id']]);
 
         notify_stage_transition((int) $appl['applicant_id'], 'released', 'Result: ' . (RESULT_LABELS[$decision] ?? ucfirst($decision)));
@@ -643,15 +638,6 @@ function batch_create_interview_sessions(array $config, string $department, int 
 
     $departments = $department ? [$department] : departments_list();
 
-    // Detect which optional columns exist on interview_slots so this works
-    // before *and* after the merge migration is run.
-    $hasAssignedTo = false;
-    $hasLocLabel   = false;
-    $hasLocNotes   = false;
-    try { $pdo->query("SELECT assigned_to    FROM interview_slots LIMIT 0"); $hasAssignedTo = true; } catch (\Throwable $e) {}
-    try { $pdo->query("SELECT location_label FROM interview_slots LIMIT 0"); $hasLocLabel   = true; } catch (\Throwable $e) {}
-    try { $pdo->query("SELECT location_notes FROM interview_slots LIMIT 0"); $hasLocNotes   = true; } catch (\Throwable $e) {}
-
     $current = clone $startDate;
     while ($current <= $endDate) {
         $dayOfWeek = (int) $current->format('N'); // 1=Mon, 7=Sun
@@ -669,22 +655,10 @@ function batch_create_interview_sessions(array $config, string $department, int 
                 $stmt->execute([$dateStr, $dept]);
                 if ($stmt->fetch()) continue;
 
-                // Build INSERT dynamically so we only reference columns that exist.
-                $cols   = ['slot_date', 'slot_time', 'end_time', 'capacity', 'department', 'created_by'];
-                $values = [$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId];
-
-                if ($hasAssignedTo) {
-                    $cols[]   = 'assigned_to';
-                    $values[] = $assignedTo;
-                }
-                if ($hasLocLabel) {
-                    $cols[]   = 'location_label';
-                    $values[] = $locationLabel;
-                }
-                if ($hasLocNotes) {
-                    $cols[]   = 'location_notes';
-                    $values[] = $locationNotes;
-                }
+                $cols   = ['slot_date', 'slot_time', 'end_time', 'capacity', 'department', 'created_by',
+                           'assigned_to', 'location_label', 'location_notes'];
+                $values = [$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId,
+                           $assignedTo, $locationLabel, $locationNotes];
 
                 $placeholders = implode(', ', array_fill(0, count($cols), '?'));
                 $colsSql      = implode(', ', $cols);
@@ -725,10 +699,10 @@ function get_idle_summary(int $days = 7): array
     $stmt = $pdo->prepare(
         'SELECT a.overall_status AS stage,
                 COUNT(*) AS count,
-                MAX(DATEDIFF(NOW(), a.updated_at)) AS max_days
+                MAX(CURRENT_DATE - CAST(a.updated_at AS date)) AS max_days
          FROM applicants a
-         WHERE a.overall_status NOT IN ("released", "withdrawn")
-           AND DATEDIFF(NOW(), a.updated_at) >= ?
+         WHERE a.overall_status NOT IN (\'released\', \'withdrawn\')
+           AND (CURRENT_DATE - CAST(a.updated_at AS date)) >= ?
          GROUP BY a.overall_status
          ORDER BY count DESC'
     );
@@ -737,74 +711,17 @@ function get_idle_summary(int $days = 7): array
 }
 
 // ----------------------------------------------------------------
-// TABLE CREATION HELPERS (graceful upgrades)
-// ----------------------------------------------------------------
-
-function ensure_notifications_table(): void
-{
-    static $checked = false;
-    if ($checked) return;
-    $checked = true;
-
-    try {
-        db()->query('SELECT 1 FROM notifications LIMIT 0');
-    } catch (\Throwable) {
-        db()->exec('CREATE TABLE IF NOT EXISTS `notifications` (
-            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-            `user_id` INT(10) UNSIGNED NOT NULL,
-            `type` VARCHAR(80) NOT NULL,
-            `title` VARCHAR(255) NOT NULL,
-            `message` TEXT DEFAULT NULL,
-            `link` VARCHAR(500) DEFAULT NULL,
-            `is_read` TINYINT(1) NOT NULL DEFAULT 0,
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_notif_user` (`user_id`, `is_read`),
-            KEY `idx_notif_created` (`created_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    }
-}
-
-// ----------------------------------------------------------------
 // EMAIL VERIFICATION
 // ----------------------------------------------------------------
 
-function ensure_email_verification_columns(): void
-{
-    static $checked = false;
-    if ($checked) return;
-    $checked = true;
+// Schema now lives in database/schema.sql. The ensure_* functions below
+// do nothing. They only exist so files that still call them keep working,
+// and each call is removed when its file is next edited.
 
-    $pdo = db();
-
-    // Base columns (legacy installs may not have these yet).
-    try {
-        $pdo->query('SELECT email_verified FROM users LIMIT 0');
-    } catch (\Throwable) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN `email_verified` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_active`");
-        $pdo->exec("ALTER TABLE users ADD COLUMN `email_verify_token` VARCHAR(64) DEFAULT NULL AFTER `email_verified`");
-        // Mark existing users as verified so they're not locked out
-        $pdo->exec("UPDATE users SET email_verified = 1 WHERE id > 0");
-    }
-
-    // Newer columns used by the 6-digit code + cooldown flow.
-    foreach ([
-        ['email_verify_code',             "VARCHAR(8) DEFAULT NULL AFTER `email_verify_token`"],
-        ['email_verify_code_expires_at',  "DATETIME DEFAULT NULL AFTER `email_verify_code`"],
-        ['email_verify_attempts',         "TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER `email_verify_code_expires_at`"],
-        ['email_verify_last_sent_at',     "DATETIME DEFAULT NULL AFTER `email_verify_attempts`"],
-    ] as [$col, $def]) {
-        try { $pdo->query("SELECT `{$col}` FROM users LIMIT 0"); }
-        catch (\Throwable) {
-            try { $pdo->exec("ALTER TABLE users ADD COLUMN `{$col}` {$def}"); }
-            catch (\Throwable) {}
-        }
-    }
-}
+function ensure_email_verification_columns(): void {}
 
 function generate_verify_token(int $userId): string
 {
-    ensure_email_verification_columns();
     $token = bin2hex(random_bytes(16));
     db()->prepare('UPDATE users SET email_verify_token = ? WHERE id = ?')->execute([$token, $userId]);
     return $token;
@@ -816,7 +733,6 @@ function generate_verify_token(int $userId): string
  */
 function generate_verify_credentials(int $userId): array
 {
-    ensure_email_verification_columns();
     $token = bin2hex(random_bytes(16));
     $code  = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
@@ -824,7 +740,7 @@ function generate_verify_credentials(int $userId): array
         'UPDATE users
             SET email_verify_token            = ?,
                 email_verify_code             = ?,
-                email_verify_code_expires_at  = DATE_ADD(NOW(), INTERVAL ? SECOND),
+                email_verify_code_expires_at  = NOW() + (CAST(? AS integer) * INTERVAL \'1 second\'),
                 email_verify_attempts         = 0,
                 email_verify_last_sent_at     = NOW()
           WHERE id = ?'
@@ -840,9 +756,8 @@ function generate_verify_credentials(int $userId): array
  */
 function can_resend_verification(int $userId): array
 {
-    ensure_email_verification_columns();
     $stmt = db()->prepare(
-        'SELECT GREATEST(0, ? - TIMESTAMPDIFF(SECOND, email_verify_last_sent_at, NOW()))
+        'SELECT GREATEST(0, CAST(? AS integer) - TRUNC(EXTRACT(EPOCH FROM (NOW() - email_verify_last_sent_at))))
            FROM users
           WHERE id = ?
           LIMIT 1'
@@ -855,7 +770,6 @@ function can_resend_verification(int $userId): array
 function find_user_by_verify_token(string $token): ?array
 {
     if ($token === '') return null;
-    ensure_email_verification_columns();
     $stmt = db()->prepare('SELECT * FROM users WHERE email_verify_token = ? AND is_active = 1 LIMIT 1');
     $stmt->execute([$token]);
     $row = $stmt->fetch();
@@ -864,7 +778,6 @@ function find_user_by_verify_token(string $token): ?array
 
 function mark_user_email_verified(int $userId): void
 {
-    ensure_email_verification_columns();
     db()->prepare(
         'UPDATE users
             SET email_verified                = 1,
@@ -883,8 +796,6 @@ function mark_user_email_verified(int $userId): void
  */
 function verify_user_by_code(string $email, string $code): array
 {
-    ensure_email_verification_columns();
-
     $email = strtolower(trim($email));
     $code  = preg_replace('/\D/', '', $code);
     if ($email === '' || strlen($code) !== 6) {
@@ -957,28 +868,8 @@ function send_verification_email(string $email, string $name, string $token, ?st
 // LOGIN RATE LIMITING
 // ----------------------------------------------------------------
 
-function ensure_login_attempts_table(): void
-{
-    static $checked = false;
-    if ($checked) return;
-    $checked = true;
-    try {
-        db()->query('SELECT 1 FROM login_attempts LIMIT 0');
-    } catch (\Throwable) {
-        db()->exec('CREATE TABLE IF NOT EXISTS `login_attempts` (
-            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-            `email` VARCHAR(180) NOT NULL,
-            `ip_address` VARCHAR(45) NOT NULL,
-            `attempted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_la_email` (`email`, `attempted_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    }
-}
-
 function record_failed_login(string $email): void
 {
-    ensure_login_attempts_table();
     $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
     if (str_contains($ip, ',')) $ip = trim(explode(',', $ip)[0]);
     db()->prepare('INSERT INTO login_attempts (email, ip_address) VALUES (?, ?)')->execute([$email, $ip]);
@@ -986,14 +877,12 @@ function record_failed_login(string $email): void
 
 function clear_login_attempts(string $email): void
 {
-    ensure_login_attempts_table();
     db()->prepare('DELETE FROM login_attempts WHERE email = ?')->execute([$email]);
 }
 
 function is_login_locked(string $email): bool
 {
-    ensure_login_attempts_table();
-    $stmt = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE email = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)');
+    $stmt = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE email = ? AND attempted_at > NOW() - INTERVAL \'15 minutes\'');
     $stmt->execute([$email]);
     return (int) $stmt->fetchColumn() >= 5;
 }
@@ -1002,42 +891,13 @@ function is_login_locked(string $email): bool
 // EXAM AUTO-SAVE
 // ----------------------------------------------------------------
 
-function ensure_exam_drafts_table(): void
-{
-    static $checked = false;
-    if ($checked) return;
-    $checked = true;
-    try {
-        db()->query('SELECT 1 FROM exam_drafts LIMIT 0');
-    } catch (\Throwable) {
-        db()->exec('CREATE TABLE IF NOT EXISTS `exam_drafts` (
-            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-            `applicant_id` INT(10) UNSIGNED NOT NULL,
-            `exam_id` INT(10) UNSIGNED NOT NULL,
-            `answers` LONGTEXT NOT NULL,
-            `saved_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            UNIQUE KEY `uq_draft` (`applicant_id`, `exam_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    }
-}
+function ensure_exam_drafts_table(): void {}
 
 // ----------------------------------------------------------------
 // INTERVIEW CHECK-IN CODES
 // ----------------------------------------------------------------
 
-function ensure_checkin_code_column(): void
-{
-    static $checked = false;
-    if ($checked) return;
-    $checked = true;
-    try {
-        db()->query('SELECT checkin_code FROM interview_queue LIMIT 0');
-    } catch (\Throwable) {
-        db()->exec("ALTER TABLE interview_queue ADD COLUMN `checkin_code` VARCHAR(20) DEFAULT NULL AFTER `status`");
-        db()->exec("ALTER TABLE interview_queue ADD UNIQUE KEY `uq_checkin_code` (`checkin_code`)");
-    }
-}
+function ensure_checkin_code_column(): void {}
 
 /**
  * Generate a memorable check-in code like PLP-STAR-42
@@ -1055,7 +915,6 @@ function generate_checkin_code(): string
         'SAGE','SNOW','SAND','LUSH','CREST','DRIFT','FLAME','GROVE'
     ];
 
-    ensure_checkin_code_column();
     $maxAttempts = 20;
     for ($i = 0; $i < $maxAttempts; $i++) {
         $word = $words[array_rand($words)];
@@ -1076,77 +935,15 @@ function generate_checkin_code(): string
 // INTERVIEW RESCHEDULE REQUESTS
 // ----------------------------------------------------------------
 
-function ensure_reschedule_requests_table(): void
-{
-    static $checked = false;
-    if ($checked) return;
-    $checked = true;
-    try {
-        db()->query('SELECT 1 FROM reschedule_requests LIMIT 0');
-    } catch (\Throwable) {
-        db()->exec('CREATE TABLE IF NOT EXISTS `reschedule_requests` (
-            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-            `applicant_id` INT(10) UNSIGNED NOT NULL,
-            `queue_id` BIGINT(20) UNSIGNED NOT NULL,
-            `reason` TEXT NOT NULL,
-            `status` ENUM("pending","approved","denied") NOT NULL DEFAULT "pending",
-            `reviewed_by` INT(10) UNSIGNED DEFAULT NULL,
-            `reviewed_at` DATETIME DEFAULT NULL,
-            `deny_reason` TEXT DEFAULT NULL,
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_rr_applicant` (`applicant_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    }
-    // Add deny_reason on existing installs without a manual migration.
-    try {
-        db()->query('SELECT deny_reason FROM reschedule_requests LIMIT 0');
-    } catch (\Throwable) {
-        try {
-            db()->exec('ALTER TABLE `reschedule_requests` ADD COLUMN `deny_reason` TEXT NULL AFTER `reviewed_at`');
-        } catch (\Throwable) {}
-    }
-}
+function ensure_reschedule_requests_table(): void {}
 
 // ----------------------------------------------------------------
 // EXAM RESCHEDULE REQUESTS
 // ----------------------------------------------------------------
 //
-// Mirror of reschedule_requests but for exam slots. Created on-demand
-// the first time a student submits an exam-reschedule request, so
-// existing installs don't need a manual migration.
+// Mirror of reschedule_requests but for exam slots.
 //
-function ensure_exam_reschedule_requests_table(): void
-{
-    static $checked = false;
-    if ($checked) return;
-    $checked = true;
-    try {
-        db()->query('SELECT 1 FROM exam_reschedule_requests LIMIT 0');
-    } catch (\Throwable) {
-        db()->exec('CREATE TABLE IF NOT EXISTS `exam_reschedule_requests` (
-            `id` BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-            `applicant_id` INT(10) UNSIGNED NOT NULL,
-            `slot_id` INT(10) UNSIGNED NOT NULL,
-            `reason` TEXT NOT NULL,
-            `status` ENUM("pending","approved","denied") NOT NULL DEFAULT "pending",
-            `reviewed_by` INT(10) UNSIGNED DEFAULT NULL,
-            `reviewed_at` DATETIME DEFAULT NULL,
-            `deny_reason` TEXT DEFAULT NULL,
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`),
-            KEY `idx_err_applicant` (`applicant_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    }
-    // Add deny_reason on existing installs without a manual migration.
-    try {
-        db()->query('SELECT deny_reason FROM exam_reschedule_requests LIMIT 0');
-    } catch (\Throwable) {
-        try {
-            db()->exec('ALTER TABLE `exam_reschedule_requests` ADD COLUMN `deny_reason` TEXT NULL AFTER `reviewed_at`');
-        } catch (\Throwable) {}
-    }
-}
+function ensure_exam_reschedule_requests_table(): void {}
 
 // ----------------------------------------------------------------
 // RESCHEDULE: shared decision notification (in-app + email)
@@ -1315,17 +1112,17 @@ function auto_reschedule_noshow(int $applicantId, ?int $actorUserId = null): ?in
     // did it.
     $pdo->prepare(
         'UPDATE interview_queue
-            SET status            = "no_show",
-                interview_status  = "absent",
-                attendance_status = "absent",
+            SET status            = \'no_show\',
+                interview_status  = \'absent\',
+                attendance_status = \'absent\',
                 evaluated_at      = COALESCE(evaluated_at, NOW())
           WHERE applicant_id = ?
-            AND interview_status = "pending"'
+            AND interview_status = \'pending\''
     )->execute([$applicantId]);
 
     // Ensure applicant stays in interview stage
     $pdo->prepare(
-        'UPDATE applicants SET overall_status = "interview" WHERE id = ? AND overall_status IN ("interview","result")'
+        'UPDATE applicants SET overall_status = \'interview\' WHERE id = ? AND overall_status IN (\'interview\',\'result\')'
     )->execute([$applicantId]);
 
     // Try to reschedule via the absent-aware path (which deletes the
@@ -1392,12 +1189,12 @@ function send_document_reminders(): int
          FROM applicants a
          JOIN users u ON u.id = a.user_id
          WHERE a.overall_status IN ('pending','documents')
-           AND DATEDIFF(NOW(), a.updated_at) >= ?
+           AND (CURRENT_DATE - CAST(a.updated_at AS date)) >= ?
            AND NOT EXISTS (
                SELECT 1 FROM notifications n
                WHERE n.user_id = a.user_id
                  AND n.type = 'doc_reminder'
-                 AND n.created_at > DATE_SUB(NOW(), INTERVAL ? DAY)
+                 AND n.created_at > NOW() - (CAST(? AS integer) * INTERVAL '1 day')
            )"
     );
     $stmt->execute([$reminderDays, $reminderDays]);
@@ -1505,8 +1302,8 @@ function auto_close_expired_sessions(): int
          FROM interview_slots s
          WHERE s.status = 'open'
            AND (
-               s.slot_date < CURDATE()
-               OR (s.slot_date = CURDATE() AND s.end_time IS NOT NULL AND s.end_time < CURTIME())
+               s.slot_date < CURRENT_DATE
+               OR (s.slot_date = CURRENT_DATE AND s.end_time IS NOT NULL AND s.end_time < LOCALTIME)
            )"
     );
     $expired = $stmt->fetchAll();
@@ -1527,7 +1324,7 @@ function auto_close_expired_sessions(): int
         }
 
         // Close the slot
-        $pdo->prepare('UPDATE interview_slots SET status = "closed" WHERE id = ?')
+        $pdo->prepare('UPDATE interview_slots SET status = \'closed\' WHERE id = ?')
             ->execute([$slot['id']]);
 
         audit_log('auto_close_session',
@@ -1564,7 +1361,7 @@ function auto_expire_accepted(): int
          WHERE ar.result = 'accepted'
            AND a.overall_status = 'released'
            AND ar.released_at IS NOT NULL
-           AND DATEDIFF(NOW(), ar.released_at) > ?"
+           AND (CURRENT_DATE - CAST(ar.released_at AS date)) > ?"
     );
     $stmt->execute([$deadlineDays]);
     $stale = $stmt->fetchAll();
@@ -1635,19 +1432,21 @@ function smart_assign_exam_slot(int $applicantId): ?int
 
     // Find the LEAST FILLED slot (smart load balancing) instead of first available
     $params = [$dept];
-    $sql = 'SELECT ess.id, ess.capacity,
-                   (SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id = ess.id) AS filled
-            FROM exam_slot_schedule ess
-            WHERE ess.exam_date >= CURDATE()';
+    $sql = 'SELECT t.id, t.capacity, t.filled FROM (
+                SELECT ess.id, ess.capacity, ess.exam_date, ess.slot_time,
+                       (SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id = ess.id) AS filled
+                FROM exam_slot_schedule ess
+                WHERE ess.exam_date >= CURRENT_DATE';
 
     if ($dept) {
-        $sql .= ' AND (ess.department = ? OR ess.department = "")';
+        $sql .= ' AND (ess.department = ? OR ess.department = \'\')';
     } else {
         $sql .= ' AND 1=1';
         $params = [];
     }
-    $sql .= ' HAVING filled < ess.capacity
-              ORDER BY (filled / ess.capacity) ASC, ess.exam_date ASC, ess.slot_time ASC
+    $sql .= ') t
+              WHERE t.filled < t.capacity
+              ORDER BY (CAST(t.filled AS numeric) / t.capacity) ASC, t.exam_date ASC, t.slot_time ASC
               LIMIT 1';
 
     $stmt = $pdo->prepare($sql);
@@ -1717,7 +1516,7 @@ function send_exam_reminders(): int
                SELECT 1 FROM notifications n
                WHERE n.user_id = a.user_id
                  AND n.type = 'exam_reminder'
-                 AND n.created_at > DATE_SUB(NOW(), INTERVAL 1 DAY)
+                 AND n.created_at > NOW() - INTERVAL '1 day'
            )"
     );
     $stmt->execute([$tomorrow]);

@@ -63,12 +63,12 @@ if ($filterAction) {
 }
 
 if ($filterUser && $isAdmin) {
-    $where[]  = 'user_name LIKE ?';
+    $where[]  = 'user_name ILIKE ?';
     $params[] = '%' . $filterUser . '%';
 }
 
 if ($filterDate) {
-    $where[]  = 'DATE(created_at) = ?';
+    $where[]  = 'created_at::date = ?';
     $params[] = $filterDate;
 }
 

@@ -17,7 +17,8 @@ class Session
         session_set_cookie_params([
             'lifetime' => 0,             // browser session only
             'path'     => '/',
-            'secure'   => isset($_SERVER['HTTPS']),
+            'secure'   => isset($_SERVER['HTTPS'])
+                          || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https',
             'httponly' => true,
             'samesite' => 'Lax',
         ]);
@@ -59,9 +60,9 @@ class Session
                     db()->prepare('
                         INSERT INTO sessions (id, payload, last_activity)
                         VALUES (?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            payload       = VALUES(payload),
-                            last_activity = VALUES(last_activity)
+                        ON CONFLICT (id) DO UPDATE SET
+                            payload       = EXCLUDED.payload,
+                            last_activity = EXCLUDED.last_activity
                     ')->execute([$id, $data, time()]);
                     return true;
                 } catch (\Throwable) {

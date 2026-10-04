@@ -69,39 +69,39 @@ jobs:
     name: Validate schema
     runs-on: ubuntu-latest
     services:
-      # Throwaway MariaDB, the engine XAMPP ships and the app actually runs
-      # on. Not MySQL 8.0: schema.sql gives a TEXT column a literal default
-      # (custom_courses.strands), which MariaDB 10.2+ accepts and MySQL 8.0
-      # rejects. The container lives only for this job, so the check is safe
-      # on any PR and needs no shared credentials.
-      mariadb:
-        image: mariadb:10.11
+      # Throwaway Postgres, the engine Supabase runs. The container lives
+      # only for this job, so the check is safe on any PR and needs no
+      # shared credentials. The official image ships the contrib modules,
+      # so schema.sql can create the citext extension.
+      postgres:
+        image: postgres:17
         env:
-          MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: plp_admissions
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: plp_admissions
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-cmd="pg_isready -U postgres -d plp_admissions"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
     env:
-      MYSQL_PWD: root
+      PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install MariaDB client
+      - name: Install Postgres client
         run: |
           sudo apt-get update
-          sudo apt-get install -y mariadb-client
+          sudo apt-get install -y postgresql-client
 
       # schema.sql drops and recreates every table, which is why it is only
       # ever applied here, against the disposable service container.
+      # ON_ERROR_STOP makes psql exit non-zero on the first SQL error.
       - name: Apply schema
-        run: mariadb -h 127.0.0.1 -P 3306 -uroot plp_admissions < database/schema.sql
+        run: psql -h 127.0.0.1 -p 5432 -U postgres -d plp_admissions -v ON_ERROR_STOP=1 -f database/schema.sql
 
       # The file claims to be idempotent. Running it a second time over the
       # tables the first run created proves that claim on every change.
       - name: Re-apply schema (idempotency)
-        run: mariadb -h 127.0.0.1 -P 3306 -uroot plp_admissions < database/schema.sql
+        run: psql -h 127.0.0.1 -p 5432 -U postgres -d plp_admissions -v ON_ERROR_STOP=1 -f database/schema.sql

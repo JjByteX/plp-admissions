@@ -39,7 +39,7 @@ switch ($action) {
             redirect('/staff/interviews/queue');
         }
 
-        $db->prepare('UPDATE interview_queue SET status="completed" WHERE id=?')
+        $db->prepare("UPDATE interview_queue SET status='completed' WHERE id=?")
            ->execute([$id]);
 
         // Interview completion no longer auto-creates an admission_results
@@ -74,14 +74,14 @@ switch ($action) {
 
         // Update queue: status, notes, evaluation, attendance
         $db->prepare(
-            'UPDATE interview_queue
-             SET status = "completed",
+            "UPDATE interview_queue
+             SET status = 'completed',
                  interview_notes = ?,
                  evaluation_result = ?,
-                 interview_status = "completed",
-                 attendance_status = "present",
+                 interview_status = 'completed',
+                 attendance_status = 'present',
                  evaluated_at = NOW()
-             WHERE id = ?'
+             WHERE id = ?"
         )->execute([$evalNotes ?: null, $evalResult, $id]);
 
         // Two-gate flow: the Pass/Reject evaluation here is Gate 1 (the
@@ -90,8 +90,8 @@ switch ($action) {
         // on the Results page — the final confirmation that actually
         // creates an admission_results row and emails the applicant.
         $db->prepare(
-            'UPDATE applicants SET overall_status = "released"
-              WHERE id = ? AND overall_status IN ("interview","exam")'
+            "UPDATE applicants SET overall_status = 'released'
+              WHERE id = ? AND overall_status IN ('interview','exam')"
         )->execute([$row['applicant_id']]);
 
         audit_log('interview_completed_with_eval',
@@ -115,13 +115,14 @@ switch ($action) {
         // absent_tab query (WHERE q.interview_status='absent') missing
         // this row.
         $db->prepare(
-            'UPDATE interview_queue q
-             JOIN   interview_slots s ON s.id = q.slot_id
-             SET    q.status            = "no_show",
-                    q.interview_status  = "absent",
-                    q.attendance_status = "absent",
-                    q.evaluated_at      = NOW()
-             WHERE  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?'
+            "UPDATE interview_queue q
+             SET    status            = 'no_show',
+                    interview_status  = 'absent',
+                    attendance_status = 'absent',
+                    evaluated_at      = NOW()
+             FROM   interview_slots s
+             WHERE  s.id = q.slot_id
+               AND  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?"
         )->execute([$id, $staffId]);
         audit_log('interview_no_show', "Marked interview queue ID {$id} as no-show", 'interview_queue', $id);
 
@@ -158,11 +159,12 @@ switch ($action) {
     // ----------------------------------------------------------------
     case 'start_interview':
         $db->prepare(
-            'UPDATE interview_queue q
-             JOIN   interview_slots s ON s.id = q.slot_id
-             SET    q.status = "in_progress"
-             WHERE  q.id = ? AND q.status = "checked_in"
-               AND  COALESCE(s.assigned_to, s.created_by) = ?'
+            "UPDATE interview_queue q
+             SET    status = 'in_progress'
+             FROM   interview_slots s
+             WHERE  s.id = q.slot_id
+               AND  q.id = ? AND q.status = 'checked_in'
+               AND  COALESCE(s.assigned_to, s.created_by) = ?"
         )->execute([$id, $staffId]);
         audit_log('interview_started', "Started interview for queue ID {$id}", 'interview_queue', $id);
         Session::flash('success', 'Interview started.');
@@ -176,9 +178,10 @@ switch ($action) {
         $notes = trim($_POST['interview_notes'] ?? '');
         $db->prepare(
             'UPDATE interview_queue q
-             JOIN   interview_slots s ON s.id = q.slot_id
-             SET    q.interview_notes = ?
-             WHERE  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?'
+             SET    interview_notes = ?
+             FROM   interview_slots s
+             WHERE  s.id = q.slot_id
+               AND  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?'
         )->execute([$notes ?: null, $id, $staffId]);
         audit_log('interview_notes_saved', "Saved notes for interview queue ID {$id}", 'interview_queue', $id);
         Session::flash('success', 'Notes saved.');
@@ -246,8 +249,8 @@ switch ($action) {
     // ----------------------------------------------------------------
     case 'open_slot':
         $db->prepare(
-            'UPDATE interview_slots SET status="open"
-             WHERE id=? AND COALESCE(assigned_to, created_by) = ?'
+            "UPDATE interview_slots SET status='open'
+             WHERE id=? AND COALESCE(assigned_to, created_by) = ?"
         )->execute([$id, $staffId]);
         audit_log('interview_slot_reopened', "Reopened interview slot ID {$id}", 'interview_slot', $id);
         Session::flash('success', 'Session reopened.');
@@ -270,9 +273,9 @@ switch ($action) {
 
         // Load queue entry
         $qStmt = $db->prepare(
-            'SELECT q.*, s.department FROM interview_queue q
+            "SELECT q.*, s.department FROM interview_queue q
              JOIN interview_slots s ON s.id = q.slot_id
-             WHERE q.id = ? AND q.status IN ("scheduled","checked_in")'
+             WHERE q.id = ? AND q.status IN ('scheduled','checked_in')"
         );
         $qStmt->execute([$id]);
         $qEntry = $qStmt->fetch();
@@ -284,10 +287,10 @@ switch ($action) {
 
         // Verify target slot is in the same department and has capacity
         $tStmt = $db->prepare(
-            'SELECT s.id, s.department, s.capacity,
+            "SELECT s.id, s.department, s.capacity,
                     (SELECT COUNT(*) FROM interview_queue q2 WHERE q2.slot_id = s.id
-                     AND q2.interview_status IN ("pending","completed")) AS booked
-             FROM interview_slots s WHERE s.id = ? AND s.status = "open"'
+                     AND q2.interview_status IN ('pending','completed')) AS booked
+             FROM interview_slots s WHERE s.id = ? AND s.status = 'open'"
         );
         $tStmt->execute([$targetSlotId]);
         $target = $tStmt->fetch();

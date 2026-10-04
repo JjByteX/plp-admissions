@@ -68,11 +68,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $shuffleC       = isset($_POST['shuffle_choices'])   ? 1 : 0;
             $title          = buildExamTitle();
             $db->prepare('UPDATE exams SET is_active=0')->execute();
-            $db->prepare(
+            $insExam = $db->prepare(
                 'INSERT INTO exams (title, description, shuffle_questions, shuffle_choices, is_active)
-                 VALUES (?,?,?,?,1)'
-            )->execute([$title, $description ?: null, $shuffleQ, $shuffleC]);
-            $newExamId = (int)$db->lastInsertId();
+                 VALUES (?,?,?,?,1)
+                 RETURNING id'
+            );
+            $insExam->execute([$title, $description ?: null, $shuffleQ, $shuffleC]);
+            $newExamId = (int)$insExam->fetchColumn();
             $success[] = 'Exam created and set as active.';
             audit_log('exam_created', "Created exam: {$title}", 'exam', $newExamId);
             // Redirect to this exam's explicit URL so the page always has ?exam=ID
@@ -126,10 +128,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!array_key_exists($secType, $QUESTION_TYPES)) $secType = 'multiple_choice';
             $maxOrd = $db->prepare('SELECT COALESCE(MAX(sort_order),0) FROM exam_sections WHERE exam_id=?');
             $maxOrd->execute([$examId]);
-            $db->prepare(
-                'INSERT INTO exam_sections (exam_id, title, description, question_type, sort_order) VALUES (?,?,?,?,?)'
-            )->execute([$examId, $secTitle, $secDesc ?: null, $secType, (int)$maxOrd->fetchColumn() + 1]);
-            $newSecId = (int)$db->lastInsertId();
+            $insSec = $db->prepare(
+                'INSERT INTO exam_sections (exam_id, title, description, question_type, sort_order) VALUES (?,?,?,?,?) RETURNING id'
+            );
+            $insSec->execute([$examId, $secTitle, $secDesc ?: null, $secType, (int)$maxOrd->fetchColumn() + 1]);
+            $newSecId = (int)$insSec->fetchColumn();
             if (is_ajax_request()) {
                 header('Content-Type: application/json');
                 echo json_encode(['ok' => true, 'section_id' => $newSecId]);
@@ -222,12 +225,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $maxOrder = $db->prepare('SELECT COALESCE(MAX(sort_order),0) FROM questions WHERE exam_id=?');
                 $maxOrder->execute([$examId]);
-                $db->prepare(
+                $insQ = $db->prepare(
                     'INSERT INTO questions (exam_id, question_text, question_type, description, points,
                      is_required, choices, correct_index, correct_answer, scale_min, scale_max,
                      scale_min_label, scale_max_label, section_id, sort_order)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-                )->execute([
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                     RETURNING id'
+                );
+                $insQ->execute([
                     $examId, $qText, $qType, $qDesc ?: null, $points, $required,
                     $choices, $correctIndex, $correctAnswer,
                     $scaleMin, $scaleMax, $scaleMinLabel, $scaleMaxLabel,
@@ -235,7 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 if (is_ajax_request()) {
                     header('Content-Type: application/json');
-                    echo json_encode(['ok' => true, 'id' => (int)$db->lastInsertId()]);
+                    echo json_encode(['ok' => true, 'id' => (int)$insQ->fetchColumn()]);
                     exit;
                 }
                 $success[] = 'Question added.';

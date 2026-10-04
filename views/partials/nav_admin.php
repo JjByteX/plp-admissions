@@ -31,7 +31,7 @@ $_navExamReady = (int)$_navDb->query('SELECT COUNT(*) FROM exams WHERE is_active
 $_navSlotStmt  = $_navDb->prepare('SELECT COUNT(*) FROM exam_slot_schedule WHERE school_year=?');
 $_navSlotStmt->execute([$_navSY]);
 $_navExamReady = $_navExamReady && (int)$_navSlotStmt->fetchColumn() > 0;
-$_navIntReady  = (int)$_navDb->query("SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURDATE()")->fetchColumn() > 0;
+$_navIntReady  = (int)$_navDb->query("SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURRENT_DATE")->fetchColumn() > 0;
 
 // School-year window check — red dot if any of the three window
 // fields (open, close, document deadline) hasn't been filled in yet.

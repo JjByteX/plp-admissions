@@ -33,7 +33,7 @@ if ($action === 'confirm_enrollment') {
     } elseif ($row['enrollment_intent'] === 'confirmed') {
         Session::flash('error', 'Your enrollment is already confirmed.');
     } else {
-        $db->prepare('UPDATE admission_results SET enrollment_intent = "confirmed" WHERE id = ?')
+        $db->prepare("UPDATE admission_results SET enrollment_intent = 'confirmed' WHERE id = ?")
             ->execute([$row['result_id']]);
         audit_log('enrollment_confirmed', "Applicant {$row['id']} confirmed enrollment", 'applicant', $row['id']);
         notify_stage_transition($row['id'], 'enrollment_confirmed');

@@ -51,9 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($check->fetch()) { $errors[] = 'Email already exists.'; break; }
 
             $hash = password_hash($pass, PASSWORD_BCRYPT, ['cost' => 12]);
-            $db->prepare('INSERT INTO users (name, email, password_hash, role, department) VALUES (?,?,?,?,?)')
-               ->execute([$name, $email, $hash, $role, $dept]);
-            $newId = (int)$db->lastInsertId();
+            $insUser = $db->prepare('INSERT INTO users (name, email, password_hash, role, department) VALUES (?,?,?,?,?) RETURNING id');
+            $insUser->execute([$name, $email, $hash, $role, $dept]);
+            $newId = (int)$insUser->fetchColumn();
             audit_log(
                 'user_created',
                 "Created {$role} account for {$name} ({$email})"
@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'delete_user':
             $uid = (int)($_POST['user_id'] ?? 0);
             if ($uid === $adminId) { $errors[] = 'You cannot delete your own account.'; break; }
-            $db->prepare('DELETE FROM users WHERE id=? AND role != "student"')->execute([$uid]);
+            $db->prepare('DELETE FROM users WHERE id=? AND role != \'student\'')->execute([$uid]);
             audit_log('user_deleted', "Deleted user ID {$uid}", 'user', $uid);
             $success[] = 'User deleted.';
             break;
@@ -116,13 +116,13 @@ if ($filterDept !== '' && !in_array($filterDept, $availableDepts, true)) {
     $filterDept = '';
 }
 
-$sql     = 'SELECT * FROM users WHERE role IN ("staff","proctor","sso","dean","admin")';
+$sql     = 'SELECT * FROM users WHERE role IN (\'staff\',\'proctor\',\'sso\',\'dean\',\'admin\')';
 $params  = [];
 if ($filterDept !== '') {
     $sql    .= ' AND department = ?';
     $params[] = $filterDept;
 }
-$sql    .= ' ORDER BY role, name';
+$sql    .= ' ORDER BY CASE role WHEN \'student\' THEN 1 WHEN \'staff\' THEN 2 WHEN \'proctor\' THEN 3 WHEN \'sso\' THEN 4 WHEN \'dean\' THEN 5 ELSE 6 END, name';
 
 $stmt = $db->prepare($sql);
 $stmt->execute($params);

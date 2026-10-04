@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($errors)) {
             $ups = fn($k,$v) => $db->prepare(
                 'INSERT INTO school_settings (setting_key,setting_value) VALUES (?,?)
-                 ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)'
+                 ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value'
             )->execute([$k,$v]);
             $ups('school_name', $schoolName);
             $ups('accent_color', $accentColor);

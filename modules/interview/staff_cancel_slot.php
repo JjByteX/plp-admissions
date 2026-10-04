@@ -74,11 +74,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lockStmt->fetchAll();
 
             $src = $db->prepare(
-                'SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label, s.status,
+                "SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label, s.status,
                         (SELECT COUNT(*) FROM interview_queue q
                            WHERE q.slot_id = s.id
-                             AND q.interview_status IN ("pending","completed")) AS booked
-                   FROM interview_slots s WHERE s.id = ? LIMIT 1'
+                             AND q.interview_status IN ('pending','completed')) AS booked
+                   FROM interview_slots s WHERE s.id = ? LIMIT 1"
             );
             $src->execute([$sourceId]);
             $oldSlot = $src->fetch();
@@ -88,11 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $tgt = $db->prepare(
-                'SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label, s.status, s.capacity,
+                "SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label, s.status, s.capacity,
                         (SELECT COUNT(*) FROM interview_queue q
                            WHERE q.slot_id = s.id
-                             AND q.interview_status IN ("pending","completed")) AS booked
-                   FROM interview_slots s WHERE s.id = ? LIMIT 1'
+                             AND q.interview_status IN ('pending','completed')) AS booked
+                   FROM interview_slots s WHERE s.id = ? LIMIT 1"
             );
             $tgt->execute([$targetId]);
             $newSlot = $tgt->fetch();
@@ -119,11 +119,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Collect the queue rows we need to migrate.
             $qStmt = $db->prepare(
-                'SELECT id, applicant_id
+                "SELECT id, applicant_id
                    FROM interview_queue
                   WHERE slot_id = ?
-                    AND interview_status IN ("pending","completed")
-                  FOR UPDATE'
+                    AND interview_status IN ('pending','completed')
+                  FOR UPDATE"
             );
             $qStmt->execute([$sourceId]);
             $rows = $qStmt->fetchAll();
@@ -156,16 +156,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Close the cancelled slot so future auto-assigns skip it.
             $db->prepare(
-                'UPDATE interview_slots SET status = "closed" WHERE id = ?'
+                "UPDATE interview_slots SET status = 'closed' WHERE id = ?"
             )->execute([$sourceId]);
 
             // Log a bulk reschedule_requests row per applicant so the
             // student-facing history block shows what happened.
             ensure_reschedule_requests_table();
             $logStmt = $db->prepare(
-                'INSERT INTO reschedule_requests
+                "INSERT INTO reschedule_requests
                     (applicant_id, queue_id, reason, status, reviewed_by, reviewed_at)
-                  VALUES (?, 0, ?, "approved", ?, NOW())'
+                  VALUES (?, 0, ?, 'approved', ?, NOW())"
             );
             foreach ($rows as $r) {
                 try {
@@ -227,16 +227,16 @@ $today   = date('Y-m-d');
 $nowTime = date('H:i:s');
 
 $stmt = $db->prepare(
-    'SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.capacity, s.location_label, s.status,
-            COALESCE(u.name, "") AS interviewer_name,
+    "SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.capacity, s.location_label, s.status,
+            COALESCE(u.name, '') AS interviewer_name,
             (SELECT COUNT(*) FROM interview_queue q
                WHERE q.slot_id = s.id
-                 AND q.interview_status IN ("pending","completed")) AS booked
+                 AND q.interview_status IN ('pending','completed')) AS booked
        FROM interview_slots s
   LEFT JOIN users u ON u.id = COALESCE(s.assigned_to, s.created_by)
       WHERE s.slot_date >= ?
         AND NOT (s.slot_date = ? AND s.end_time IS NOT NULL AND s.end_time <= ?)
-      ORDER BY s.status ASC, s.slot_date ASC, s.slot_time ASC'
+      ORDER BY s.status ASC, s.slot_date ASC, s.slot_time ASC NULLS FIRST"
 );
 $stmt->execute([$today, $today, $nowTime]);
 $slots = $stmt->fetchAll();

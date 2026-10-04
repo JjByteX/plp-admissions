@@ -46,20 +46,6 @@ $canGenerateCodeFor = function (string $slotDept) use ($isAdmin, $isSSO, $isProc
 $errors    = [];
 $success   = [];
 
-// Auto-add department column if missing (graceful upgrade)
-try {
-    $db->query("SELECT department FROM exam_slot_schedule LIMIT 0");
-} catch (\Throwable $e) {
-    $db->exec("ALTER TABLE exam_slot_schedule ADD COLUMN department VARCHAR(120) NOT NULL DEFAULT '' COMMENT 'College/department this slot is for' AFTER room_label");
-}
-// Auto-add end_time column if missing (graceful upgrade for older DBs;
-// fresh installs get it from schema.sql).
-try {
-    $db->query("SELECT end_time FROM exam_slot_schedule LIMIT 0");
-} catch (\Throwable $e) {
-    $db->exec("ALTER TABLE exam_slot_schedule ADD COLUMN end_time TIME NOT NULL DEFAULT '09:30:00' COMMENT 'When this slot closes' AFTER slot_time");
-}
-
 $schoolYear   = school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
 $activeExam   = $db->query('SELECT * FROM exams WHERE is_active=1 LIMIT 1')->fetch();
 
@@ -70,7 +56,7 @@ $activeExam   = $db->query('SELECT * FROM exams WHERE is_active=1 LIMIT 1')->fet
 try {
     $db->exec(
         'UPDATE exam_slot_schedule ess
-            SET ess.filled = (
+            SET filled = (
                 SELECT COUNT(*) FROM applicant_exam_slots aes WHERE aes.slot_id = ess.id
             )'
     );
@@ -227,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Update exam config (room default + daily cap) ────────────
     if ($action === 'update_exam_config') {
         $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
-                   ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)';
+                   ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value';
         $roomCap  = max(1, (int)($_POST['exam_room_capacity'] ?? 35));
         $dailyCap = max(1, (int)($_POST['exam_daily_cap']     ?? 3000));
         $db->prepare($upsert)->execute(['exam_room_capacity', $roomCap]);
@@ -489,7 +475,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $db->prepare(
                                 'INSERT INTO applicant_exam_slots (applicant_id, slot_id, assigned_at)
                                  VALUES (?, ?, NOW())
-                                 ON DUPLICATE KEY UPDATE slot_id=VALUES(slot_id), assigned_at=NOW()'
+                                 ON CONFLICT (applicant_id) DO UPDATE SET slot_id=EXCLUDED.slot_id, assigned_at=NOW()'
                             )->execute([$applicantId, $slotId]);
                             // Keep filled in sync so auto-assign queries stay accurate
                             $db->prepare('UPDATE exam_slot_schedule SET filled = filled + 1 WHERE id = ?')
@@ -598,7 +584,7 @@ if ($mode === 'slots') {
     }
 
     // Slots in this college for the active school year. The
-    // pw_secs_left is computed in MySQL so PHP / MySQL timezone
+    // pw_secs_left is computed in the database so PHP / DB timezone
     // differences can't skew the countdown.
     $stmt = $db->prepare(
         "SELECT s.id, s.exam_date, s.slot_time, s.end_time,
@@ -607,7 +593,7 @@ if ($mode === 'slots') {
                 GREATEST(
                     0,
                     " . (int) EXAM_PASSWORD_EXPIRY_SECONDS . "
-                        - TIMESTAMPDIFF(SECOND, COALESCE(s.password_issued_at, '1970-01-01 00:00:00'), NOW())
+                        - TRUNC(EXTRACT(EPOCH FROM (NOW() - COALESCE(s.password_issued_at, TIMESTAMP '1970-01-01 00:00:00'))))
                 ) AS pw_secs_left,
                 (SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id = s.id) AS filled
            FROM exam_slot_schedule s
@@ -626,7 +612,7 @@ if ($mode === 'roster') {
                 GREATEST(
                     0,
                     " . (int) EXAM_PASSWORD_EXPIRY_SECONDS . "
-                        - TIMESTAMPDIFF(SECOND, COALESCE(s.password_issued_at, '1970-01-01 00:00:00'), NOW())
+                        - TRUNC(EXTRACT(EPOCH FROM (NOW() - COALESCE(s.password_issued_at, TIMESTAMP '1970-01-01 00:00:00'))))
                 ) AS pw_secs_left,
                 (SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id = s.id) AS filled
            FROM exam_slot_schedule s
@@ -710,7 +696,7 @@ if ($mode === 'colleges') {
         $stmt = $db->prepare(
             "SELECT
                  COUNT(*)                                     AS total_slots,
-                 SUM(s.exam_date >= CURDATE())                AS upcoming_slots,
+                 SUM(CASE WHEN s.exam_date >= CURRENT_DATE THEN 1 ELSE 0 END) AS upcoming_slots,
                  COALESCE(SUM(s.capacity), 0)                 AS total_seats,
                  COALESCE(SUM(
                      (SELECT COUNT(*) FROM applicant_exam_slots

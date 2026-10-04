@@ -42,12 +42,10 @@ if ($stmt->fetch()) {
     exit;
 }
 
-ensure_exam_drafts_table();
-
 $db->prepare(
     'INSERT INTO exam_drafts (applicant_id, exam_id, answers)
      VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE answers = VALUES(answers), saved_at = NOW()'
+     ON CONFLICT (applicant_id, exam_id) DO UPDATE SET answers = EXCLUDED.answers, saved_at = NOW()'
 )->execute([$applicant['id'], $examId, $answers]);
 
 echo json_encode(['ok' => true, 'saved_at' => date('H:i:s')]);

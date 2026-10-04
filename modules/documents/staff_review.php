@@ -25,19 +25,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
     $approved = 0;
     $advanced = 0;
     foreach ($ids as $aid) {
-        $db->prepare(
-            'UPDATE documents SET status="approved", staff_remarks=NULL, reviewed_by=?
-              WHERE applicant_id=? AND status IN ("uploaded","under_review")'
-        )->execute([$staffId, $aid]);
-        $cnt = (int)($db->query('SELECT ROW_COUNT()')->fetchColumn() ?: 0);
+        $apprStmt = $db->prepare(
+            'UPDATE documents SET status=\'approved\', staff_remarks=NULL, reviewed_by=?
+              WHERE applicant_id=? AND status IN (\'uploaded\',\'under_review\')'
+        );
+        $apprStmt->execute([$staffId, $aid]);
+        $cnt = $apprStmt->rowCount();
         if ($cnt > 0) $approved++;
 
-        $rem = $db->prepare('SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != "approved"');
+        $rem = $db->prepare('SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\'');
         $rem->execute([$aid]);
         if ((int)$rem->fetchColumn() === 0) {
             $db->prepare(
-                'UPDATE applicants SET overall_status="exam", documents_approved_at=COALESCE(documents_approved_at,NOW())
-                  WHERE id=? AND overall_status NOT IN ("exam","interview","result")'
+                'UPDATE applicants SET overall_status=\'exam\', documents_approved_at=COALESCE(documents_approved_at,NOW())
+                  WHERE id=? AND overall_status NOT IN (\'exam\',\'interview\',\'result\')'
             )->execute([$aid]);
             $advanced++;
             notify_stage_transition($aid, 'exam');
@@ -730,7 +731,7 @@ if ($courseFilter) {
     $params[':course'] = $courseFilter;
 }
 if ($search) {
-    $where[]        = '(u.name LIKE :q1 OR u.email LIKE :q2 OR a.course_applied LIKE :q3)';
+    $where[]        = '(u.name ILIKE :q1 OR u.email ILIKE :q2 OR a.course_applied ILIKE :q3)';
     $params[':q1']  = '%' . $search . '%';
     $params[':q2']  = '%' . $search . '%';
     $params[':q3']  = '%' . $search . '%';
@@ -739,7 +740,7 @@ $whereStr = implode(' AND ', $where);
 
 $colMap = [
     'applicant'    => 'u.name',
-    'type'         => 'a.applicant_type',
+    'type'         => 'CASE a.applicant_type WHEN \'freshman\' THEN 1 WHEN \'transferee\' THEN 2 ELSE 3 END',
     'course'       => 'a.course_applied',
     'status'       => 'a.overall_status',
     'docs_pending' => 'pending_review',

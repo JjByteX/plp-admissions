@@ -36,27 +36,27 @@ $dateFilter = '';
 $dateExtra  = [];
 switch ($range) {
     case 'today':
-        $dateFilter = 'AND DATE(a.created_at) = CURDATE()'; break;
+        $dateFilter = 'AND CAST(a.created_at AS date) = CURRENT_DATE'; break;
     case 'yesterday':
-        $dateFilter = 'AND DATE(a.created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)'; break;
+        $dateFilter = 'AND CAST(a.created_at AS date) = CURRENT_DATE - 1'; break;
     case 'this-week':
-        $dateFilter = 'AND YEARWEEK(a.created_at, 1) = YEARWEEK(CURDATE(), 1)'; break;
+        $dateFilter = 'AND date_trunc(\'week\', a.created_at) = date_trunc(\'week\', LOCALTIMESTAMP)'; break;
     case 'last-week':
-        $dateFilter = 'AND YEARWEEK(a.created_at, 1) = YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK), 1)'; break;
+        $dateFilter = 'AND date_trunc(\'week\', a.created_at) = date_trunc(\'week\', LOCALTIMESTAMP - INTERVAL \'1 week\')'; break;
     case 'this-month':
-        $dateFilter = 'AND YEAR(a.created_at) = YEAR(CURDATE()) AND MONTH(a.created_at) = MONTH(CURDATE())'; break;
+        $dateFilter = 'AND date_trunc(\'month\', a.created_at) = date_trunc(\'month\', LOCALTIMESTAMP)'; break;
     case 'last-month':
-        $dateFilter = 'AND YEAR(a.created_at) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(a.created_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))'; break;
+        $dateFilter = 'AND date_trunc(\'month\', a.created_at) = date_trunc(\'month\', LOCALTIMESTAMP - INTERVAL \'1 month\')'; break;
     case 'last-year':
-        $dateFilter = 'AND YEAR(a.created_at) = YEAR(CURDATE()) - 1'; break;
+        $dateFilter = 'AND EXTRACT(YEAR FROM a.created_at) = EXTRACT(YEAR FROM CURRENT_DATE) - 1'; break;
     case 'custom':
         if ($fromDate && $toDate) {
-            $dateFilter = 'AND DATE(a.created_at) BETWEEN ? AND ?';
+            $dateFilter = 'AND CAST(a.created_at AS date) BETWEEN ? AND ?';
             $dateExtra  = [$fromDate, $toDate];
         }
         break;
     default:
-        $dateFilter = 'AND YEAR(a.created_at) = YEAR(CURDATE())';
+        $dateFilter = 'AND EXTRACT(YEAR FROM a.created_at) = EXTRACT(YEAR FROM CURRENT_DATE)';
 }
 
 // ── CSV export (early exit) ────────────────────────────────────────
@@ -66,8 +66,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             u.name,
             u.email,
             u.sex,
-            TIMESTAMPDIFF(YEAR, u.birthdate, CURDATE())                                      AS age,
-            TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(u.address, 'Brgy. ', -1), ',', 1))         AS barangay,
+            CAST(EXTRACT(YEAR FROM AGE(CURRENT_DATE, u.birthdate)) AS integer)               AS age,
+            TRIM(split_part(COALESCE(substring(u.address from '.*Brgy[.] (.*)$'), u.address), ',', 1)) AS barangay,
             a.applicant_type,
             a.course_applied,
             a.overall_status,
@@ -99,10 +99,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 $statsStmt = $pdo->prepare("
     SELECT
         COUNT(*)                              AS total,
-        SUM(ar.result = 'accepted')           AS accepted,
-        SUM(ar.result = 'rejected')           AS rejected,
-        SUM(a.overall_status = 'withdrawn')   AS withdrawn,
-        SUM(a.overall_status = 'released')    AS released
+        SUM(CASE WHEN ar.result = 'accepted'         THEN 1 ELSE 0 END) AS accepted,
+        SUM(CASE WHEN ar.result = 'rejected'         THEN 1 ELSE 0 END) AS rejected,
+        SUM(CASE WHEN a.overall_status = 'withdrawn' THEN 1 ELSE 0 END) AS withdrawn,
+        SUM(CASE WHEN a.overall_status = 'released'  THEN 1 ELSE 0 END) AS released
     FROM applicants a
     LEFT JOIN admission_results ar ON ar.applicant_id = a.id
     WHERE a.school_year = ? $dateFilter $deptFilter

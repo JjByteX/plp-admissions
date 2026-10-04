@@ -1,0 +1,9 @@
+.env
+.git
+.github
+database/
+ponytail-skills/
+sonar-project.properties
+public/index.php
+public/.htaccess
+public/uploads/.htaccess

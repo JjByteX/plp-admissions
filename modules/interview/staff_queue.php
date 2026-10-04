@@ -73,12 +73,12 @@ $deskNotes = '';
 if (!$isAdmin && !$isSSO && !$isDean) {
     try {
         $deskStmt = $db->prepare(
-            'SELECT location_label, location_notes
+            "SELECT location_label, location_notes
                FROM interview_slots
               WHERE COALESCE(assigned_to, created_by) = ?
-                AND location_label != ""
-              ORDER BY ABS(DATEDIFF(slot_date, ?)) ASC, slot_time ASC
-              LIMIT 1'
+                AND location_label != ''
+              ORDER BY ABS(slot_date - CAST(? AS date)) ASC, slot_time ASC NULLS FIRST
+              LIMIT 1"
         );
         $deskStmt->execute([$staffId, $today]);
         $deskRow = $deskStmt->fetch();
@@ -98,22 +98,6 @@ if (!$isAdmin && !$isSSO && !$isDean) {
         } catch (\Throwable $e) {}
     }
 }
-
-// ----------------------------------------------------------------
-// Schema upgrades — evaluation columns
-// ----------------------------------------------------------------
-try { $db->query("SELECT evaluation_result FROM interview_queue LIMIT 0"); }
-catch (\Throwable $e) {
-    $db->exec("ALTER TABLE interview_queue ADD COLUMN evaluation_result VARCHAR(10) DEFAULT NULL AFTER interview_notes");
-}
-try { $db->query("SELECT evaluated_at FROM interview_queue LIMIT 0"); }
-catch (\Throwable $e) {
-    $db->exec("ALTER TABLE interview_queue ADD COLUMN evaluated_at DATETIME DEFAULT NULL AFTER evaluation_result");
-}
-// Migrate 'fail' → 'reject' for existing data
-try {
-    $db->exec("UPDATE interview_queue SET evaluation_result='reject' WHERE evaluation_result='fail'");
-} catch (\Throwable $e) {}
 
 // ----------------------------------------------------------------
 // AUTO NO-SHOW
@@ -185,10 +169,17 @@ $selectCols =
      LEFT JOIN exam_results er ON er.applicant_id = a.id ';
 
 $orderTail =
-    ' ORDER BY
-         FIELD(q.status, "in_progress", "checked_in", "scheduled", "completed", "no_show"),
-         q.queue_number ASC,
-         q.created_at   ASC';
+    " ORDER BY
+         CASE q.status
+             WHEN 'in_progress' THEN 1
+             WHEN 'checked_in'  THEN 2
+             WHEN 'scheduled'   THEN 3
+             WHEN 'completed'   THEN 4
+             WHEN 'no_show'     THEN 5
+             ELSE 0
+         END,
+         q.queue_number ASC NULLS FIRST,
+         q.created_at   ASC";
 
 if ($canSeeAll && !$showAll) {
     // Admin / SSO with a specific college picked - scope by slot department.

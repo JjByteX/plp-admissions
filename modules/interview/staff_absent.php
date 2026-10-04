@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $requestId    = (int)($_POST['request_id'] ?? 0);
         $targetSlotId = (int)($_POST['target_slot_id'] ?? 0);
 
-        $rr = $db->prepare('SELECT * FROM reschedule_requests WHERE id = ? AND status = "pending" LIMIT 1');
+        $rr = $db->prepare("SELECT * FROM reschedule_requests WHERE id = ? AND status = 'pending' LIMIT 1");
         $rr->execute([$requestId]);
         $req = $rr->fetch();
 
@@ -117,17 +117,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // accurate even with concurrent admin approvals.
             $candidate = null;
             if ($targetSlotId > 0) {
+                // Lock the slot row first, then count bookings in a second
+                // query (Postgres: lock base row, count separately).
                 $q = $db->prepare(
-                    'SELECT s.id, s.capacity, s.status, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label,
-                            (SELECT COUNT(*) FROM interview_queue q
-                               WHERE q.slot_id = s.id
-                                 AND q.interview_status IN ("pending","completed")) AS booked
+                    "SELECT s.id, s.capacity, s.status, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label
                        FROM interview_slots s
                       WHERE s.id = ?
-                      LIMIT 1 FOR UPDATE'
+                      LIMIT 1 FOR UPDATE"
                 );
                 $q->execute([$targetSlotId]);
                 $cand = $q->fetch();
+                if ($cand) {
+                    $bk = $db->prepare(
+                        "SELECT COUNT(*) FROM interview_queue
+                          WHERE slot_id = ?
+                            AND interview_status IN ('pending','completed')"
+                    );
+                    $bk->execute([(int)$cand['id']]);
+                    $cand['booked'] = (int)$bk->fetchColumn();
+                }
                 $valid = $cand
                       && $cand['status'] === 'open'
                       && (int)$cand['booked'] < (int)$cand['capacity']
@@ -142,23 +150,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $candidate = $cand;
             } else {
                 $params = [$today, $today, $nowTime];
-                $sql = 'SELECT s.id, s.capacity, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label,
-                               (SELECT COUNT(*) FROM interview_queue q
-                                  WHERE q.slot_id = s.id
-                                    AND q.interview_status IN ("pending","completed")) AS booked
+                $sql = "SELECT s.id, s.capacity, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label
                           FROM interview_slots s
-                         WHERE s.status = "open"
+                         WHERE s.status = 'open'
                            AND s.slot_date >= ?
-                           AND NOT (s.slot_date = ? AND s.end_time IS NOT NULL AND s.end_time <= ?)';
+                           AND NOT (s.slot_date = ? AND s.end_time IS NOT NULL AND s.end_time <= ?)";
                 if ($department !== '') {
-                    $sql .= ' AND (s.department = ? OR s.department = "")';
+                    $sql .= " AND (s.department = ? OR s.department = '')";
                     $params[] = $department;
                 }
-                $sql .= ' ORDER BY s.slot_date ASC, s.slot_time ASC, s.id ASC
+                $sql .= ' ORDER BY s.slot_date ASC, s.slot_time ASC NULLS FIRST, s.id ASC
                           FOR UPDATE';
                 $st = $db->prepare($sql);
                 $st->execute($params);
-                while ($row = $st->fetch()) {
+                $bkAuto = $db->prepare(
+                    "SELECT COUNT(*) FROM interview_queue
+                      WHERE slot_id = ?
+                        AND interview_status IN ('pending','completed')"
+                );
+                foreach ($st->fetchAll() as $row) {
+                    $bkAuto->execute([(int)$row['id']]);
+                    $row['booked'] = (int)$bkAuto->fetchColumn();
                     if ((int)$row['booked'] < (int)$row['capacity']) {
                         $candidate = $row;
                         break;
@@ -197,19 +209,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nextNum = (int)$nextNumStmt->fetchColumn();
 
             $db->prepare(
-                'INSERT INTO interview_queue
+                "INSERT INTO interview_queue
                     (slot_id, applicant_id, status, interview_status, queue_number, checked_in_at)
-                 VALUES (?, ?, "checked_in", "pending", ?, NOW())'
+                 VALUES (?, ?, 'checked_in', 'pending', ?, NOW())"
             )->execute([$newSlotId, $applicantId, $nextNum]);
 
             $db->prepare(
-                'UPDATE applicants SET overall_status = "interview" WHERE id = ?'
+                "UPDATE applicants SET overall_status = 'interview' WHERE id = ?"
             )->execute([$applicantId]);
 
             $db->prepare(
-                'UPDATE reschedule_requests
-                    SET status = "approved", reviewed_by = ?, reviewed_at = NOW()
-                  WHERE id = ?'
+                "UPDATE reschedule_requests
+                    SET status = 'approved', reviewed_by = ?, reviewed_at = NOW()
+                  WHERE id = ?"
             )->execute([$staffId, $requestId]);
 
             $db->commit();
@@ -252,7 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $requestId  = (int)($_POST['request_id'] ?? 0);
         $denyReason = trim($_POST['deny_reason'] ?? '');
 
-        $rr = $db->prepare('SELECT * FROM reschedule_requests WHERE id = ? AND status = "pending" LIMIT 1');
+        $rr = $db->prepare("SELECT * FROM reschedule_requests WHERE id = ? AND status = 'pending' LIMIT 1");
         $rr->execute([$requestId]);
         $req = $rr->fetch();
 
@@ -260,9 +272,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             Session::flash('error', 'Reschedule request not found or already processed.');
         } else {
             $db->prepare(
-                'UPDATE reschedule_requests
-                    SET status = "denied", reviewed_by = ?, reviewed_at = NOW(), deny_reason = ?
-                  WHERE id = ?'
+                "UPDATE reschedule_requests
+                    SET status = 'denied', reviewed_by = ?, reviewed_at = NOW(), deny_reason = ?
+                  WHERE id = ?"
             )->execute([$staffId, $denyReason !== '' ? $denyReason : null, $requestId]);
 
             audit_log('reschedule_request_denied',
@@ -326,7 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Load pending reschedule requests
 // ----------------------------------------------------------------
 $reschedRequests = $db->query(
-    'SELECT rr.*, a.course_applied,
+    "SELECT rr.*, a.course_applied,
             u.name AS student_name, u.email AS student_email,
             u.first_name, u.middle_name, u.last_name, u.suffix,
             u.department AS student_department,
@@ -339,9 +351,9 @@ $reschedRequests = $db->query(
        JOIN applicants a      ON a.id = rr.applicant_id
        JOIN users u           ON u.id = a.user_id
   LEFT JOIN interview_slots s ON s.id = q.slot_id
-      WHERE rr.status = "pending"
-        AND COALESCE(a.overall_status, "") <> "withdrawn"
-      ORDER BY rr.created_at ASC'
+      WHERE rr.status = 'pending'
+        AND COALESCE(a.overall_status, '') <> 'withdrawn'
+      ORDER BY rr.created_at ASC"
 )->fetchAll();
 
 // ----------------------------------------------------------------
@@ -362,7 +374,7 @@ if (function_exists('auto_detect_interview_no_shows')) {
 }
 
 $absent = $db->query(
-    'SELECT q.id            AS queue_id,
+    "SELECT q.id            AS queue_id,
             q.applicant_id,
             q.evaluated_at,
             s.id             AS slot_id,
@@ -378,8 +390,8 @@ $absent = $db->query(
        JOIN applicants a ON a.id = q.applicant_id
        JOIN users u      ON u.id = a.user_id
   LEFT JOIN interview_slots s ON s.id = q.slot_id
-      WHERE q.interview_status = "absent"
-      ORDER BY q.evaluated_at DESC, q.id DESC'
+      WHERE q.interview_status = 'absent'
+      ORDER BY q.evaluated_at DESC NULLS LAST, q.id DESC"
 )->fetchAll();
 
 // ----------------------------------------------------------------
@@ -388,15 +400,15 @@ $absent = $db->query(
 $today   = date('Y-m-d');
 $nowTime = date('H:i:s');
 $stmt = $db->prepare(
-    'SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.capacity,
+    "SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.capacity,
             (SELECT COUNT(*) FROM interview_queue q
               WHERE q.slot_id = s.id
-                AND q.interview_status IN ("pending","completed")) AS booked
+                AND q.interview_status IN ('pending','completed')) AS booked
        FROM interview_slots s
-      WHERE s.status = "open"
+      WHERE s.status = 'open'
         AND s.slot_date >= ?
         AND NOT (s.slot_date = ? AND s.end_time IS NOT NULL AND s.end_time <= ?)
-      ORDER BY s.slot_date ASC, s.slot_time ASC'
+      ORDER BY s.slot_date ASC, s.slot_time ASC NULLS FIRST"
 );
 $stmt->execute([$today, $today, $nowTime]);
 $openSlots = array_filter(

@@ -7,22 +7,22 @@
 // ============================================================
 
 $stmt = $db->prepare(
-    'SELECT s.id, s.slot_date, s.slot_time, s.end_time,
+    "SELECT s.id, s.slot_date, s.slot_time, s.end_time,
             s.location_label, s.location_notes, s.capacity, s.status,
             u.name AS interviewer_name,
             COUNT(q.id) AS queue_total,
-            SUM(CASE WHEN q.status = "in_progress" THEN 1 ELSE 0 END) AS in_progress,
-            SUM(CASE WHEN q.status = "checked_in"  THEN 1 ELSE 0 END) AS waiting,
-            SUM(CASE WHEN q.status = "scheduled"   THEN 1 ELSE 0 END) AS scheduled,
-            SUM(CASE WHEN q.status = "completed"   THEN 1 ELSE 0 END) AS completed,
-            SUM(CASE WHEN q.status = "no_show"     THEN 1 ELSE 0 END) AS no_show
+            SUM(CASE WHEN q.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+            SUM(CASE WHEN q.status = 'checked_in'  THEN 1 ELSE 0 END) AS waiting,
+            SUM(CASE WHEN q.status = 'scheduled'   THEN 1 ELSE 0 END) AS scheduled,
+            SUM(CASE WHEN q.status = 'completed'   THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN q.status = 'no_show'     THEN 1 ELSE 0 END) AS no_show
        FROM interview_slots s
        LEFT JOIN users u           ON u.id = s.assigned_to
        LEFT JOIN interview_queue q ON q.slot_id = s.id
       WHERE s.department = ?
         AND s.slot_date  = ?
-      GROUP BY s.id
-      ORDER BY s.slot_time ASC'
+      GROUP BY s.id, u.name
+      ORDER BY s.slot_time ASC NULLS FIRST"
 );
 $stmt->execute([$selectedCollege, $today]);
 $sessions = $stmt->fetchAll();

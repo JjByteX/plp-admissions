@@ -43,10 +43,10 @@ if ($applicant['overall_status'] === 'interview'
     && function_exists('assign_interview_slot')) {
     try {
         $hasActive = $db->prepare(
-            'SELECT id FROM interview_queue
+            "SELECT id FROM interview_queue
               WHERE applicant_id = ?
-                AND interview_status IN ("pending","completed")
-              LIMIT 1'
+                AND interview_status IN ('pending','completed')
+              LIMIT 1"
         );
         $hasActive->execute([$applicantId]);
         if (!$hasActive->fetch()) {
@@ -73,13 +73,13 @@ $_admissionResult = $stmt->fetch() ?: null;
 // The interviewer is whoever the session is assigned_to (with created_by as
 // fallback for legacy rows).
 $stmt = $db->prepare(
-    'SELECT q.*,
+    "SELECT q.*,
             s.slot_date,
             s.slot_time,
             s.end_time,
             s.capacity,
             s.department                              AS slot_department,
-            COALESCE(NULLIF(s.location_label, ""), u.desk_label) AS desk_label,
+            COALESCE(NULLIF(s.location_label, ''), u.desk_label) AS desk_label,
             COALESCE(s.location_notes, u.desk_notes)            AS desk_notes,
             COALESCE(au.name, cu.name)                AS staff_name
      FROM   interview_queue q
@@ -89,7 +89,7 @@ $stmt = $db->prepare(
      LEFT JOIN users        u  ON u.id  = COALESCE(s.assigned_to, s.created_by)
      WHERE  q.applicant_id = ?
      ORDER BY q.id DESC
-     LIMIT 1'
+     LIMIT 1"
 );
 $stmt->execute([$applicantId]);
 $myEntry = $stmt->fetch() ?: null;
@@ -164,13 +164,13 @@ $studentDept = user_department($userId)
 $queuePosition = null;
 if ($myEntry && $myEntry['status'] === 'checked_in') {
     $stmt = $db->prepare(
-        'SELECT COUNT(*) FROM interview_queue q
+        "SELECT COUNT(*) FROM interview_queue q
          JOIN   interview_slots s ON s.id = q.slot_id
          WHERE  s.slot_date = ? AND COALESCE(s.assigned_to, s.created_by) = (
              SELECT COALESCE(assigned_to, created_by) FROM interview_slots WHERE id = ?
          )
-         AND q.status = "checked_in"
-         AND q.queue_number < ?'
+         AND q.status = 'checked_in'
+         AND q.queue_number < ?"
     );
     $stmt->execute([$today, $myEntry['slot_id'], $myEntry['queue_number']]);
     $ahead         = (int)$stmt->fetchColumn();

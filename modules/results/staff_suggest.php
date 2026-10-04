@@ -48,15 +48,15 @@ if ($rank < $threshold) {
 
 // Upsert course suggestion record
 $db->prepare(
-    'INSERT INTO course_suggestions
+    "INSERT INTO course_suggestions
         (applicant_id, original_course, suggested_course, suggested_by, note, status)
-     VALUES (?,?,?,?,?, "pending")
-     ON DUPLICATE KEY UPDATE
-        suggested_course=VALUES(suggested_course),
-        suggested_by=VALUES(suggested_by),
-        note=VALUES(note),
-        status="pending",
-        updated_at=NOW()'
+     VALUES (?,?,?,?,?, 'pending')
+     ON CONFLICT (applicant_id) DO UPDATE SET
+        suggested_course=EXCLUDED.suggested_course,
+        suggested_by=EXCLUDED.suggested_by,
+        note=EXCLUDED.note,
+        status='pending',
+        updated_at=NOW()"
 )->execute([
     $applicantId,
     $app['course_applied'],

@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Document deadline must be on or before the admissions close date.';
         } else {
             $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
-                       ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)';
+                       ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value';
             $db->prepare($upsert)->execute(['admissions_open',  $open]);
             $db->prepare($upsert)->execute(['admissions_close', $close]);
             $db->prepare($upsert)->execute(['document_deadline', $docDeadline]);
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Enrollment date, time, and venue are all required.';
         } else {
             $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
-                       ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)';
+                       ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value';
             $db->prepare($upsert)->execute(['enrollment_date',  $eDate]);
             $db->prepare($upsert)->execute(['enrollment_time',  $eTime]);
             $db->prepare($upsert)->execute(['enrollment_venue', $eVenue]);
@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($targetSY, $existingHist, true)) {
             $existingHist[] = $targetSY;
             $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
-                       ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)';
+                       ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value';
             $db->prepare($upsert)->execute(['historical_school_years', implode(',', $existingHist)]);
         }
 
@@ -166,12 +166,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userStmt = $db->prepare(
                 'INSERT INTO users
                  (name, first_name, middle_name, last_name, email, password_hash, role, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 1)'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                 RETURNING id'
             );
             $appStmt = $db->prepare(
                 'INSERT INTO applicants
                  (user_id, applicant_type, course_applied, overall_status, school_year)
-                 VALUES (?, ?, ?, ?, ?)'
+                 VALUES (?, ?, ?, ?, ?)
+                 RETURNING id'
             );
             $resStmt = $db->prepare(
                 'INSERT INTO admission_results
@@ -238,10 +240,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $userStmt->execute([$name, $firstName, $middleName, $lastName, $email, $sharedPwHash, 'student']);
-                $userId = (int)$db->lastInsertId();
+                $userId = (int)$userStmt->fetchColumn();
 
                 $appStmt->execute([$userId, $typeNorm, $courseMatched, 'released', $targetSY]);
-                $applicantId = (int)$db->lastInsertId();
+                $applicantId = (int)$appStmt->fetchColumn();
 
                 // Build remarks — stash exam score here since we skip exam_results
                 $remarkParts = [];

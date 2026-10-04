@@ -95,7 +95,7 @@ if ($search) {
     // the same statement (MySQL native prepared statements bind by
     // position). Use distinct names for each LIKE so execute(...) finds
     // exactly one value per placeholder.
-    $where[]       = '(u.name LIKE :q1 OR u.email LIKE :q2 OR a.course_applied LIKE :q3)';
+    $where[]       = '(u.name ILIKE :q1 OR u.email ILIKE :q2 OR a.course_applied ILIKE :q3)';
     $needle        = '%' . $search . '%';
     $params[':q1'] = $needle;
     $params[':q2'] = $needle;
@@ -176,7 +176,7 @@ if ($role === ROLE_DEAN && !empty($scopedCourses)) {
 $slotCapStmt = $db->prepare(
     "SELECT cc.course_name,
             cc.max_slots,
-            COALESCE(SUM(ar.result = 'accepted'), 0) AS accepted_count,
+            COALESCE(SUM(CASE WHEN ar.result = 'accepted' THEN 1 ELSE 0 END), 0) AS accepted_count,
             SUM(CASE WHEN $bucketCase = 'ready_accept' THEN 1 ELSE 0 END) AS pending_accept_count
      FROM course_caps cc
      LEFT JOIN applicants a   ON a.course_applied = cc.course_name AND a.school_year = cc.school_year
@@ -202,6 +202,8 @@ $colMap   = [
 ];
 $orderCol = $colMap[$sortCol] ?? 'a.updated_at';
 $orderDir = strtoupper($sortDir);
+// MySQL sorts NULLs first on ASC and last on DESC; Postgres is the reverse.
+$orderDir .= ($orderDir === 'ASC') ? ' NULLS FIRST' : ' NULLS LAST';
 
 // ── Paginate ──────────────────────────────────────────────────
 $result = paginate(

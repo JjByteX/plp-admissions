@@ -53,10 +53,8 @@ if (!$reason) {
     redirect('/student/exam');
 }
 
-ensure_exam_reschedule_requests_table();
-
 // Reject duplicate pending requests so the student can't queue up two.
-$stmt = $db->prepare('SELECT id FROM exam_reschedule_requests WHERE applicant_id = ? AND status = "pending" LIMIT 1');
+$stmt = $db->prepare('SELECT id FROM exam_reschedule_requests WHERE applicant_id = ? AND status = \'pending\' LIMIT 1');
 $stmt->execute([$applicant['id']]);
 if ($stmt->fetch()) {
     Session::flash('error', 'You already have a pending exam reschedule request.');

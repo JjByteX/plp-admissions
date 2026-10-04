@@ -49,18 +49,18 @@ $match = $stmt->fetch();
 // If no code match, try name search
 if (!$match) {
     $stmt = $db->prepare(
-        'SELECT q.id AS queue_id, q.status, q.applicant_id, q.checkin_code,
+        "SELECT q.id AS queue_id, q.status, q.applicant_id, q.checkin_code,
                 u.name AS student_name, a.course_applied
          FROM   interview_queue q
          JOIN   interview_slots s ON s.id = q.slot_id
          JOIN   applicants a      ON a.id = q.applicant_id
          JOIN   users u           ON u.id = a.user_id
          WHERE  s.slot_date = ?
-           AND  ' . $slotScopeSql . '
-           AND  (u.name LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)
-           AND  q.status = "scheduled"
+           AND  " . $slotScopeSql . "
+           AND  (u.name ILIKE ? OR u.first_name ILIKE ? OR u.last_name ILIKE ?)
+           AND  q.status = 'scheduled'
          ORDER BY u.name ASC
-         LIMIT 1'
+         LIMIT 1"
     );
     $like = '%' . $search . '%';
     $stmt->execute(array_merge([$today], $slotScopeParams, [$like, $like, $like]));
@@ -93,11 +93,11 @@ try {
     $nextNum = (int) $stmt->fetchColumn();
 
     $db->prepare(
-        'UPDATE interview_queue
-         SET    status        = "checked_in",
+        "UPDATE interview_queue
+         SET    status        = 'checked_in',
                 queue_number  = ?,
                 checked_in_at = NOW()
-         WHERE  id = ? AND status = "scheduled"'
+         WHERE  id = ? AND status = 'scheduled'"
     )->execute([$nextNum, $match['queue_id']]);
 
     $db->commit();

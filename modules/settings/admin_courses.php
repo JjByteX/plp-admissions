@@ -58,18 +58,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($dup->fetch()) {
                 $errors[] = "A custom course named '{$name}' already exists.";
             } else {
-                $db->prepare(
+                $insCourse = $db->prepare(
                     'INSERT INTO custom_courses (course_name, strands, is_active, created_by)
-                     VALUES (?,?,1,?)'
-                )->execute([$name, json_encode($strands), $adminId]);
-                $newId = (int)$db->lastInsertId();
+                     VALUES (?,?,1,?)
+                     RETURNING id'
+                );
+                $insCourse->execute([$name, json_encode($strands), $adminId]);
+                $newId = (int)$insCourse->fetchColumn();
 
                 // Auto-create a tier-thresholds row with sensible defaults so
                 // the new course shows up immediately in the tier table.
                 $db->prepare(
-                    'INSERT IGNORE INTO course_passing_scores
+                    'INSERT INTO course_passing_scores
                         (course_name, pass_from, high_from, avg_from, confirmed)
-                     VALUES (?, 4, 7, 4, 0)'
+                     VALUES (?, 4, 7, 4, 0)
+                     ON CONFLICT DO NOTHING'
                 )->execute([$name]);
 
                 audit_log('course_added', "Added custom course: {$name}", 'custom_courses', $newId);
@@ -148,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare(
                 'INSERT INTO course_caps (course_name, school_year, max_slots)
                  VALUES (?, ?, ?)
-                 ON DUPLICATE KEY UPDATE max_slots = VALUES(max_slots)'
+                 ON CONFLICT (course_name, school_year) DO UPDATE SET max_slots = EXCLUDED.max_slots'
             )->execute([$courseName, $schoolYear, $max]);
             $written++;
         }
@@ -174,10 +177,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'INSERT INTO course_passing_scores
                     (course_name, pass_from, high_from, avg_from, confirmed)
                  VALUES (?, ?, ?, ?, 1)
-                 ON DUPLICATE KEY UPDATE
-                    pass_from = VALUES(pass_from),
-                    high_from = VALUES(high_from),
-                    avg_from  = VALUES(avg_from),
+                 ON CONFLICT (course_name) DO UPDATE SET
+                    pass_from = EXCLUDED.pass_from,
+                    high_from = EXCLUDED.high_from,
+                    avg_from  = EXCLUDED.avg_from,
                     confirmed = 1'
             )->execute([$courseName, $passFrom, $highFrom, $avgFrom]);
             $written++;

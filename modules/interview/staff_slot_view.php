@@ -28,14 +28,14 @@ if ($slotId <= 0) { redirect('/staff/interviews'); }
 // separate desks table is needed.
 // ----------------------------------------------------------------
 $stmt = $db->prepare(
-    'SELECT s.*,
+    "SELECT s.*,
             COALESCE(au.name, cu.name)                           AS staff_name,
-            COALESCE(NULLIF(s.location_label, ""), cu.desk_label) AS desk_label
+            COALESCE(NULLIF(s.location_label, ''), cu.desk_label) AS desk_label
        FROM interview_slots s
        JOIN users           cu ON cu.id = s.created_by
        LEFT JOIN users      au ON au.id = s.assigned_to
       WHERE s.id = ?
-      LIMIT 1'
+      LIMIT 1"
 );
 $stmt->execute([$slotId]);
 $slot = $stmt->fetch();

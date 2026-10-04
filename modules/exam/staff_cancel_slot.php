@@ -22,8 +22,6 @@ Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 $db      = db();
 $staffId = Auth::id();
 
-ensure_exam_reschedule_requests_table();
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = $_POST['action'] ?? '';
@@ -143,9 +141,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $logStmt = $db->prepare(
                     'INSERT INTO exam_reschedule_requests
                         (applicant_id, slot_id, reason, status, reviewed_by, reviewed_at)
-                      VALUES (?, ?, ?, "approved", ?, NOW())'
+                      VALUES (?, ?, ?, \'approved\', ?, NOW())'
                 );
                 foreach ($rows as $r) {
+                    // Postgres aborts the whole transaction on any error, so a
+                    // savepoint keeps this log insert non-fatal like it was in MySQL.
+                    $db->exec('SAVEPOINT bulk_log');
                     try {
                         $logStmt->execute([
                             (int)$r['applicant_id'],
@@ -153,8 +154,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             '[Bulk reschedule by staff] ' . $reason,
                             $staffId,
                         ]);
+                        $db->exec('RELEASE SAVEPOINT bulk_log');
                     } catch (\Throwable) {
                         // Non-fatal.
+                        $db->exec('ROLLBACK TO SAVEPOINT bulk_log');
                     }
                 }
             }

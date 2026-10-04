@@ -41,12 +41,12 @@ switch ($action) {
         }
 
         $db->prepare(
-            'UPDATE documents SET status="uploaded", staff_remarks=NULL, reviewed_by=NULL WHERE id=?'
+            'UPDATE documents SET status=\'uploaded\', staff_remarks=NULL, reviewed_by=NULL WHERE id=?'
         )->execute([$id]);
 
         // Roll back overall_status to submitted if it was auto-advanced
         $db->prepare(
-            'UPDATE applicants SET overall_status="submitted" WHERE id=? AND overall_status="exam"'
+            'UPDATE applicants SET overall_status=\'submitted\' WHERE id=? AND overall_status=\'exam\''
         )->execute([$applicantId]);
 
         audit_log('document_unapproved', "Undid approval for document ID {$id} (applicant {$applicantId})", 'document', $id);
@@ -58,15 +58,15 @@ switch ($action) {
         // Approve all uploaded/under_review documents for this applicant in one shot.
         // $id here is the applicant ID (passed via the form action URL).
         $stmt = $db->prepare(
-            'UPDATE documents SET status="approved", staff_remarks=NULL, reviewed_by=?
-              WHERE applicant_id=? AND status IN ("uploaded","under_review")'
+            'UPDATE documents SET status=\'approved\', staff_remarks=NULL, reviewed_by=?
+              WHERE applicant_id=? AND status IN (\'uploaded\',\'under_review\')'
         );
         $stmt->execute([$staffId, $id]);
         $affected = $stmt->rowCount();
 
         // Auto-advance to exam if all docs are now approved
         $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != "approved"'
+            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\''
         );
         $stmt->execute([$id]);
         $remaining = (int)$stmt->fetchColumn();
@@ -74,10 +74,10 @@ switch ($action) {
         if ($remaining === 0) {
             $db->prepare(
                 'UPDATE applicants
-                    SET overall_status = "exam",
+                    SET overall_status = \'exam\',
                         documents_approved_at = COALESCE(documents_approved_at, NOW())
                   WHERE id = ?
-                    AND overall_status NOT IN ("exam","interview","result")'
+                    AND overall_status NOT IN (\'exam\',\'interview\',\'result\')'
             )->execute([$id]);
 
             // Automation: notify student & auto-assign exam slot
@@ -100,16 +100,16 @@ switch ($action) {
     case 'undo_approve_all':
         // Revert all docs that were just approved back to uploaded
         $stmt = $db->prepare(
-            'UPDATE documents SET status="uploaded", staff_remarks=NULL, reviewed_by=NULL
-              WHERE applicant_id=? AND status="approved"'
+            'UPDATE documents SET status=\'uploaded\', staff_remarks=NULL, reviewed_by=NULL
+              WHERE applicant_id=? AND status=\'approved\''
         );
         $stmt->execute([$id]);
         $reverted = $stmt->rowCount();
 
         // Roll back applicant status if it was auto-advanced
         $db->prepare(
-            'UPDATE applicants SET overall_status="submitted", documents_approved_at=NULL
-              WHERE id=? AND overall_status="exam"'
+            'UPDATE applicants SET overall_status=\'submitted\', documents_approved_at=NULL
+              WHERE id=? AND overall_status=\'exam\''
         )->execute([$id]);
 
         audit_log('undo_approve_all', "Undid bulk approval for applicant {$id} ({$reverted} docs reverted)", 'applicant', $id);
@@ -126,7 +126,7 @@ switch ($action) {
 
     case 'approve':
         $stmt = $db->prepare(
-            'UPDATE documents SET status="approved", staff_remarks=NULL, reviewed_by=? WHERE id=?'
+            'UPDATE documents SET status=\'approved\', staff_remarks=NULL, reviewed_by=? WHERE id=?'
         );
         $stmt->execute([$staffId, $id]);
 
@@ -138,7 +138,7 @@ switch ($action) {
 
         // Auto-advance to exam stage if all documents are now approved
         $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != "approved"'
+            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\''
         );
         $stmt->execute([$applicantId]);
         $pendingCount = $stmt->fetchColumn();
@@ -146,10 +146,10 @@ switch ($action) {
         if ($pendingCount == 0) {
             $db->prepare(
                 'UPDATE applicants
-                    SET overall_status = "exam",
+                    SET overall_status = \'exam\',
                         documents_approved_at = COALESCE(documents_approved_at, NOW())
                   WHERE id = ?
-                    AND overall_status NOT IN ("exam","interview","result")'
+                    AND overall_status NOT IN (\'exam\',\'interview\',\'result\')'
             )->execute([$applicantId]);
 
             // Automation: notify student & auto-assign exam slot
@@ -173,7 +173,7 @@ switch ($action) {
         $totalDocs = (int)$stmt->fetchColumn();
 
         $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != "approved"'
+            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\''
         );
         $stmt->execute([$id]);
         $pendingCount = (int)$stmt->fetchColumn();
@@ -185,10 +185,10 @@ switch ($action) {
 
         $stmt = $db->prepare(
             'UPDATE applicants
-                SET overall_status = "exam",
+                SET overall_status = \'exam\',
                     documents_approved_at = COALESCE(documents_approved_at, NOW())
               WHERE id = ?
-                AND overall_status IN ("pending","documents")'
+                AND overall_status IN (\'pending\',\'documents\')'
         );
         $stmt->execute([$id]);
 
@@ -218,7 +218,7 @@ switch ($action) {
         // latent bug, not a real ENUM member). The notify_* call below is what
         // distinguishes this from a silent rejection.
         $stmt = $db->prepare(
-            'UPDATE documents SET status="rejected", staff_remarks=?, reviewed_by=? WHERE id=?'
+            'UPDATE documents SET status=\'rejected\', staff_remarks=?, reviewed_by=? WHERE id=?'
         );
         $stmt->execute([$remarks, $staffId, $id]);
 
@@ -229,8 +229,8 @@ switch ($action) {
 
         // Reset to documents stage
         $db->prepare(
-            'UPDATE applicants SET overall_status = "documents"
-              WHERE id = ? AND overall_status = "submitted"'
+            'UPDATE applicants SET overall_status = \'documents\'
+              WHERE id = ? AND overall_status = \'submitted\''
         )->execute([$applicantId]);
 
         // Notify student

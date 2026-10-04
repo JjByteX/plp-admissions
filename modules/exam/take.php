@@ -40,10 +40,10 @@ if (in_array($applicant['overall_status'] ?? '', ['submitted', 'documents'], tru
         if ($approvedCount === count($requiredDocs)) {
             $db->prepare(
                 'UPDATE applicants
-                    SET overall_status = "exam",
+                    SET overall_status = \'exam\',
                         documents_approved_at = COALESCE(documents_approved_at, NOW())
                   WHERE id = ?
-                    AND overall_status NOT IN ("exam","interview","result","released","withdrawn")'
+                    AND overall_status NOT IN (\'exam\',\'interview\',\'result\',\'released\',\'withdrawn\')'
             )->execute([$applicantId]);
 
             // Refresh the row so the rest of the file sees the new stage.
@@ -580,7 +580,6 @@ if ($needsPwGate && !$isUnlocked) {
 // but rendering this page never reads it back.
 $savedDraft = [];
 try {
-    ensure_exam_drafts_table();
     db()->prepare('DELETE FROM exam_drafts WHERE applicant_id = ? AND exam_id = ?')
         ->execute([$applicantId, $examId]);
 } catch (\Throwable $e) {

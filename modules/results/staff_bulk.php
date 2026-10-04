@@ -62,14 +62,14 @@ if ($action === 'close_admissions') {
     $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 
     $upsert = $db->prepare(
-        'INSERT INTO admission_results (applicant_id, result, remarks, released_by, released_at)
-         VALUES (?, "rejected", ?, ?, NOW())
-         ON DUPLICATE KEY UPDATE result      = VALUES(result),
-                                 remarks     = VALUES(remarks),
-                                 released_by = VALUES(released_by),
-                                 released_at = NOW()'
+        "INSERT INTO admission_results (applicant_id, result, remarks, released_by, released_at)
+         VALUES (?, 'rejected', ?, ?, NOW())
+         ON CONFLICT (applicant_id) DO UPDATE SET result      = EXCLUDED.result,
+                                                  remarks     = EXCLUDED.remarks,
+                                                  released_by = EXCLUDED.released_by,
+                                                  released_at = NOW()"
     );
-    $upStatus = $db->prepare('UPDATE applicants SET overall_status = "released" WHERE id = ?');
+    $upStatus = $db->prepare("UPDATE applicants SET overall_status = 'released' WHERE id = ?");
 
     $count = 0;
     foreach ($ids as $appId) {
@@ -131,12 +131,12 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $upsert = $db->prepare(
     'INSERT INTO admission_results (applicant_id, result, remarks, released_by, released_at)
      VALUES (?, ?, ?, ?, NOW())
-     ON DUPLICATE KEY UPDATE result      = VALUES(result),
-                             remarks     = VALUES(remarks),
-                             released_by = VALUES(released_by),
-                             released_at = NOW()'
+     ON CONFLICT (applicant_id) DO UPDATE SET result      = EXCLUDED.result,
+                                              remarks     = EXCLUDED.remarks,
+                                              released_by = EXCLUDED.released_by,
+                                              released_at = NOW()'
 );
-$upStatus = $db->prepare('UPDATE applicants SET overall_status = "released" WHERE id = ?');
+$upStatus = $db->prepare("UPDATE applicants SET overall_status = 'released' WHERE id = ?");
 
 $counts  = ['accepted' => 0, 'rejected' => 0];
 $skipped = 0;

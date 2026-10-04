@@ -36,9 +36,6 @@ $canReschedule = in_array($role, [ROLE_SSO, ROLE_ADMIN], true);
 
 $errors  = [];
 
-// Ensure the exam_reschedule_requests table exists.
-ensure_exam_reschedule_requests_table();
-
 // ----------------------------------------------------------------
 // POST — only SSO / Admin may approve or deny
 // ----------------------------------------------------------------
@@ -56,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $requestId    = (int)($_POST['request_id'] ?? 0);
         $targetSlotId = (int)($_POST['target_slot_id'] ?? 0);
 
-        $rr = $db->prepare('SELECT * FROM exam_reschedule_requests WHERE id = ? AND status = "pending" LIMIT 1');
+        $rr = $db->prepare('SELECT * FROM exam_reschedule_requests WHERE id = ? AND status = \'pending\' LIMIT 1');
         $rr->execute([$requestId]);
         $req = $rr->fetch();
 
@@ -218,7 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Mark the request approved.
             $db->prepare(
                 'UPDATE exam_reschedule_requests
-                    SET status = "approved", reviewed_by = ?, reviewed_at = NOW()
+                    SET status = \'approved\', reviewed_by = ?, reviewed_at = NOW()
                   WHERE id = ?'
             )->execute([$staffId, $requestId]);
 
@@ -295,7 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $requestId  = (int)($_POST['request_id'] ?? 0);
         $denyReason = trim($_POST['deny_reason'] ?? '');
 
-        $rr = $db->prepare('SELECT * FROM exam_reschedule_requests WHERE id = ? AND status = "pending" LIMIT 1');
+        $rr = $db->prepare('SELECT * FROM exam_reschedule_requests WHERE id = ? AND status = \'pending\' LIMIT 1');
         $rr->execute([$requestId]);
         $req = $rr->fetch();
 
@@ -304,7 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $db->prepare(
                 'UPDATE exam_reschedule_requests
-                    SET status = "denied", reviewed_by = ?, reviewed_at = NOW(), deny_reason = ?
+                    SET status = \'denied\', reviewed_by = ?, reviewed_at = NOW(), deny_reason = ?
                   WHERE id = ?'
             )->execute([$staffId, $denyReason !== '' ? $denyReason : null, $requestId]);
             audit_log(
@@ -343,8 +340,8 @@ $reschedRequests = $db->query(
        JOIN applicants a ON a.id = rr.applicant_id
        JOIN users u      ON u.id = a.user_id
   LEFT JOIN exam_slot_schedule s ON s.id = rr.slot_id
-      WHERE rr.status = "pending"
-        AND COALESCE(a.overall_status, "") <> "withdrawn"
+      WHERE rr.status = \'pending\'
+        AND COALESCE(a.overall_status, \'\') <> \'withdrawn\'
       ORDER BY rr.created_at ASC'
 )->fetchAll();
 

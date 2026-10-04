@@ -80,7 +80,7 @@ if ($action === 'override') {
          WHERE applicant_id = ?'
     )->execute([$decision, $remarks, $staffId, $applicantId]);
 
-    $db->prepare('UPDATE applicants SET overall_status = "released" WHERE id = ?')
+    $db->prepare("UPDATE applicants SET overall_status = 'released' WHERE id = ?")
        ->execute([$applicantId]);
 
     notify_stage_transition($applicantId, 'released', 'Result updated: ' . ucfirst($decision));
@@ -177,13 +177,13 @@ $remarks = $isOverride ? $reason : null;
 $db->prepare(
     'INSERT INTO admission_results (applicant_id, result, remarks, released_by, released_at)
      VALUES (?, ?, ?, ?, NOW())
-     ON DUPLICATE KEY UPDATE result      = VALUES(result),
-                             remarks     = VALUES(remarks),
-                             released_by = VALUES(released_by),
-                             released_at = NOW()'
+     ON CONFLICT (applicant_id) DO UPDATE SET result      = EXCLUDED.result,
+                                              remarks     = EXCLUDED.remarks,
+                                              released_by = EXCLUDED.released_by,
+                                              released_at = NOW()'
 )->execute([$applicantId, $decision, $remarks, $staffId]);
 
-$db->prepare('UPDATE applicants SET overall_status = "released" WHERE id = ?')
+$db->prepare("UPDATE applicants SET overall_status = 'released' WHERE id = ?")
    ->execute([$applicantId]);
 
 notify_stage_transition($applicantId, 'released', 'Result: ' . (RESULT_LABELS[$decision] ?? ucfirst($decision)));

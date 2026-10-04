@@ -45,7 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($user && password_verify($password, $user['password_hash'])) {
             // Check email verification for students
-            ensure_email_verification_columns();
             if ($user['role'] === 'student' && empty($user['email_verified'])) {
                 // Don't lock the user out — send them to the verify page where they
                 // can enter a fresh code or request a resend.

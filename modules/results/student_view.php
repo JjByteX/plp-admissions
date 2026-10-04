@@ -56,9 +56,9 @@ $enrollmentVenue = school_setting('enrollment_venue', '');
 $myDocs = [];
 try {
     $stmt = $db->prepare(
-        'SELECT doc_type, status FROM documents
-          WHERE applicant_id = ? AND status = "approved"
-          ORDER BY id ASC'
+        "SELECT doc_type, status FROM documents
+          WHERE applicant_id = ? AND status = 'approved'
+          ORDER BY id ASC"
     );
     $stmt->execute([$applicantId]);
     $myDocs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];

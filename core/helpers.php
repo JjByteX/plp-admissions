@@ -197,7 +197,7 @@ function suggest_alt_courses(int $score, int $total, string $appliedCourse): arr
             'SELECT cc.course_name
              FROM course_caps cc
              LEFT JOIN applicants a      ON a.course_applied = cc.course_name AND a.school_year = cc.school_year
-             LEFT JOIN admission_results r ON r.applicant_id = a.id AND r.result = "accepted"
+             LEFT JOIN admission_results r ON r.applicant_id = a.id AND r.result = \'accepted\'
              WHERE cc.school_year = ? AND cc.max_slots IS NOT NULL
              GROUP BY cc.course_name, cc.max_slots
              HAVING COUNT(r.id) >= cc.max_slots'
@@ -300,18 +300,49 @@ function current_step(array $applicant, ?array $examResult, ?array $interviewSlo
     return 'documents';
 }
 
-// -- Local file upload ------------------------------------------
+// -- File upload (Supabase Storage) -----------------------------
+// Function name and signature are unchanged so every caller stays as is.
+// Logos (school_logo_*) go to the branding bucket, everything else to
+// the documents bucket. Returns the full public URL, or null on failure.
 function uploadcare_upload(string $tmpPath, string $filename, string $mimeType): ?string
 {
-    $destDir = PUBLIC_PATH . '/uploads/documents';
-    if (!is_dir($destDir)) {
-        mkdir($destDir, 0755, true);
-    }
-    $dest = $destDir . '/' . $filename;
-    if (!move_uploaded_file($tmpPath, $dest) && !copy($tmpPath, $dest)) {
+    if (SUPABASE_URL === '' || SUPABASE_SERVICE_KEY === '') {
+        error_log('Supabase upload failed: SUPABASE_URL or SUPABASE_SERVICE_KEY is not set');
         return null;
     }
-    return '/uploads/documents/' . $filename;
+
+    $bucket  = str_starts_with($filename, 'school_logo_') ? SUPABASE_BUCKET_BRANDING : SUPABASE_BUCKET_DOCUMENTS;
+    $base    = rtrim(SUPABASE_URL, '/') . '/storage/v1/object';
+    $encName = rawurlencode($filename);
+
+    $body = file_get_contents($tmpPath);
+    if ($body === false) {
+        error_log('Supabase upload failed: could not read temp file');
+        return null;
+    }
+
+    $ch = curl_init($base . '/' . $bucket . '/' . $encName);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Content-Type: ' . $mimeType,
+        ],
+    ]);
+    $response = curl_exec($ch);
+    $status   = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
+
+    if ($response === false || $status < 200 || $status >= 300) {
+        error_log('Supabase upload failed: HTTP ' . $status . ' ' . $curlErr . ' ' . (is_string($response) ? $response : ''));
+        return null;
+    }
+
+    return $base . '/public/' . $bucket . '/' . $encName;
 }
 
 /**
@@ -637,8 +668,10 @@ function exam_password_is_valid(array $row): bool
 {
     if (empty($row['access_password']))    return false;
     if (empty($row['password_issued_at'])) return false;
-    // Compute age in MySQL so PHP/MySQL timezone differences don't skew the result.
-    $stmt = db()->prepare('SELECT TIMESTAMPDIFF(SECOND, ?, NOW())');
+    // Compute age in the database so PHP/DB timezone differences don't skew the result.
+    $stmt = db()->prepare(
+        'SELECT TRUNC(EXTRACT(EPOCH FROM (NOW() - CAST(? AS timestamp))))'
+    );
     $stmt->execute([$row['password_issued_at']]);
     $age = (int) $stmt->fetchColumn();
     return $age >= 0 && $age <= EXAM_PASSWORD_EXPIRY_SECONDS;
@@ -653,10 +686,10 @@ function exam_password_is_valid(array $row): bool
 function exam_password_seconds_remaining(array $row): int
 {
     if (empty($row['password_issued_at'])) return 0;
-    // Compute in MySQL so PHP/MySQL timezone differences don't skew the result.
+    // Compute in the database so PHP/DB timezone differences don't skew the result.
     $stmt = db()->prepare(
         'SELECT GREATEST(0, ' . (int) EXAM_PASSWORD_EXPIRY_SECONDS
-        . ' - TIMESTAMPDIFF(SECOND, ?, NOW()))'
+        . ' - TRUNC(EXTRACT(EPOCH FROM (NOW() - CAST(? AS timestamp)))))'
     );
     $stmt->execute([$row['password_issued_at']]);
     return (int) $stmt->fetchColumn();

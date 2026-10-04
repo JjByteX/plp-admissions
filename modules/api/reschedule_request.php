@@ -33,10 +33,8 @@ if (!$reason) {
     redirect('/student/interview');
 }
 
-ensure_reschedule_requests_table();
-
 // Check for existing pending request
-$stmt = $db->prepare('SELECT id FROM reschedule_requests WHERE applicant_id = ? AND status = "pending" LIMIT 1');
+$stmt = $db->prepare('SELECT id FROM reschedule_requests WHERE applicant_id = ? AND status = \'pending\' LIMIT 1');
 $stmt->execute([$applicant['id']]);
 if ($stmt->fetch()) {
     Session::flash('error', 'You already have a pending reschedule request.');

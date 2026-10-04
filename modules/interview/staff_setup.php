@@ -27,33 +27,6 @@ $isSSO   = $role === ROLE_SSO;
 $canManage = $isAdmin || $isSSO;
 $errors  = [];
 
-// ── Graceful schema upgrade: ensure new columns exist on interview_slots ──
-foreach ([
-    ['assigned_to',    'INT(10) UNSIGNED DEFAULT NULL AFTER created_by'],
-    ['location_label', 'VARCHAR(120) NOT NULL DEFAULT "" AFTER assigned_to'],
-    ['location_notes', 'TEXT DEFAULT NULL AFTER location_label'],
-] as $col) {
-    try { $db->query("SELECT {$col[0]} FROM interview_slots LIMIT 0"); }
-    catch (\Throwable $e) {
-        try { $db->exec("ALTER TABLE interview_slots ADD COLUMN {$col[0]} {$col[1]}"); }
-        catch (\Throwable $e2) {}
-    }
-}
-
-// One-time backfill from legacy interview_desks if it still exists.
-try {
-    $db->query("SELECT id FROM interview_desks LIMIT 0");
-    $db->exec(
-        'UPDATE interview_slots s
-            LEFT JOIN interview_desks d
-              ON d.id = s.desk_id OR (s.desk_id IS NULL AND d.department = s.department)
-            SET s.assigned_to    = COALESCE(s.assigned_to, d.assigned_to, d.created_by, s.created_by),
-                s.location_label = IF(s.location_label = "" AND d.desk_label IS NOT NULL,
-                                      d.desk_label, s.location_label),
-                s.location_notes = COALESCE(s.location_notes, d.desk_notes)'
-    );
-} catch (\Throwable $e) {}
-
 $staffDept   = user_department($staffId);
 $departments = departments_list();
 $today       = date('Y-m-d');
@@ -109,16 +82,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$errors) {
             try {
-                $db->prepare(
+                $insSlot = $db->prepare(
                     'INSERT INTO interview_slots
                         (slot_date, slot_time, end_time, capacity, department,
                          created_by, assigned_to, location_label, location_notes)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-                )->execute([
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     RETURNING id'
+                );
+                $insSlot->execute([
                     $date, $time, $endTime, $capacity, $dept,
                     $staffId, $assignedTo, $label, ($notes ?: null),
                 ]);
-                $newSlotId = (int)$db->lastInsertId();
+                $newSlotId = (int)$insSlot->fetchColumn();
                 audit_log(
                     'interview_slot_created',
                     "Created session #{$newSlotId} on {$date} for {$dept} (assigned to user #{$assignedTo})",
@@ -320,8 +295,8 @@ if ($college !== '') {
            LEFT JOIN interview_queue q ON q.slot_id = s.id
           WHERE s.department = ?
             AND s.slot_date >= ?
-          GROUP BY s.id
-          ORDER BY s.slot_date ASC, s.slot_time ASC
+          GROUP BY s.id, u.name
+          ORDER BY s.slot_date ASC, s.slot_time ASC NULLS FIRST
           LIMIT 400'
     );
     $slotsStmt->execute([$college, $today]);
@@ -357,7 +332,7 @@ $collegeCounts = [];
 foreach ($departments as $dept) {
     $cStmt = $db->prepare(
         'SELECT
-             SUM(slot_date >= ?) AS upcoming,
+             SUM(CASE WHEN slot_date >= ? THEN 1 ELSE 0 END) AS upcoming,
              COUNT(*)             AS total
            FROM interview_slots
           WHERE department = ?'

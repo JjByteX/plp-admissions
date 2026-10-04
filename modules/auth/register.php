@@ -109,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $regYear2 = school_setting('current_school_year', date('Y').'-'.(date('Y')+1));
             $capChk = db()->prepare(
                 'SELECT cc.max_slots,
-                        COUNT(DISTINCT CASE WHEN r.result="accepted" THEN a.id END) AS accepted
+                        COUNT(DISTINCT CASE WHEN r.result=\'accepted\' THEN a.id END) AS accepted
                  FROM course_caps cc
                  LEFT JOIN applicants a      ON a.course_applied = cc.course_name AND a.school_year = cc.school_year
                  LEFT JOIN admission_results r ON r.applicant_id = a.id
@@ -190,7 +190,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'INSERT INTO users
                     (name, first_name, middle_name, last_name, suffix,
                      birthdate, sex, address, phone, email, password_hash, role, department)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 RETURNING id'
             );
             $stmt->execute([
                 $displayName,
@@ -207,12 +208,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ROLE_STUDENT,
                 $department,
             ]);
-            $userId = (int) $pdo->lastInsertId();
+            $userId = (int) $stmt->fetchColumn();
 
             $schoolYear = school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
             $stmt = $pdo->prepare(
                 'INSERT INTO applicants (user_id, applicant_type, course_applied, shs_strand, overall_status, school_year)
-                 VALUES (?, ?, ?, ?, ?, ?)'
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 RETURNING id'
             );
             $stmt->execute([
                 $userId,
@@ -222,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'pending',
                 $schoolYear,
             ]);
-            $applicantId = (int) $pdo->lastInsertId();
+            $applicantId = (int) $stmt->fetchColumn();
 
             $docs    = docs_for_type($old['applicant_type']);
             $docStmt = $pdo->prepare(
@@ -277,7 +279,7 @@ $fullCourses   = [];   // courses that have hit their cap
 try {
     $capData = db()->prepare(
         'SELECT cc.course_name, cc.max_slots,
-                COUNT(DISTINCT CASE WHEN r.result="accepted" THEN a.id END) AS accepted
+                COUNT(DISTINCT CASE WHEN r.result=\'accepted\' THEN a.id END) AS accepted
          FROM course_caps cc
          LEFT JOIN applicants a      ON a.course_applied = cc.course_name AND a.school_year = cc.school_year
          LEFT JOIN admission_results r ON r.applicant_id = a.id

@@ -14,15 +14,15 @@ foreach ($departments as $d) {
 }
 try {
     $stmt = $db->prepare(
-        'SELECT s.department,
+        "SELECT s.department,
                 COUNT(DISTINCT s.id) AS sessions,
                 COUNT(q.id)          AS queue_total,
-                SUM(CASE WHEN q.status = "in_progress" THEN 1 ELSE 0 END) AS in_progress,
-                SUM(CASE WHEN q.status = "checked_in"  THEN 1 ELSE 0 END) AS waiting
+                SUM(CASE WHEN q.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+                SUM(CASE WHEN q.status = 'checked_in'  THEN 1 ELSE 0 END) AS waiting
            FROM interview_slots s
            LEFT JOIN interview_queue q ON q.slot_id = s.id
           WHERE s.slot_date = ?
-          GROUP BY s.department'
+          GROUP BY s.department"
     );
     $stmt->execute([$today]);
     foreach ($stmt->fetchAll() as $row) {

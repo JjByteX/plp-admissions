@@ -56,8 +56,15 @@ define('SESSION_LIFETIME_STAFF',   7200);   // 2 hours
 define('SESSION_WARN_BEFORE',       300);   // warn 5 min before expiry
 
 // -- File uploads ------------------------------------------------
-define('MAX_UPLOAD_BYTES', 5 * 1024 * 1024);
+// Vercel caps request bodies at 4.5 MB, so the document limit is 4 MB.
+define('MAX_UPLOAD_BYTES', 4 * 1024 * 1024);
 define('ALLOWED_MIME_TYPES', ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+
+// -- Supabase Storage --------------------------------------------
+define('SUPABASE_URL',              getenv('SUPABASE_URL')              ?: '');
+define('SUPABASE_SERVICE_KEY',      getenv('SUPABASE_SERVICE_KEY')      ?: '');
+define('SUPABASE_BUCKET_DOCUMENTS', getenv('SUPABASE_BUCKET_DOCUMENTS') ?: 'documents');
+define('SUPABASE_BUCKET_BRANDING',  getenv('SUPABASE_BUCKET_BRANDING')  ?: 'branding');
 
 // -- Roles -------------------------------------------------------
 // DB enum values stored on users.role:

@@ -10,8 +10,6 @@
 
 require_once CORE_PATH . '/bootstrap.php';
 
-ensure_email_verification_columns();
-
 $token = trim($_GET['token'] ?? '');
 
 // No token at all → send them to login.

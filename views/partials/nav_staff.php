@@ -17,7 +17,7 @@ $nav = $activeNav ?? '';
 // nothing is scheduled yet.
 $_navDb       = db();
 $_navIntReady = (int)$_navDb->query(
-    "SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURDATE()"
+    "SELECT COUNT(*) FROM interview_slots WHERE slot_date >= CURRENT_DATE"
 )->fetchColumn() > 0;
 
 // Flat list — only Interview Queue now. Dashboard removed;

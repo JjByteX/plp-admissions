@@ -14,8 +14,6 @@ require_once CORE_PATH . '/bootstrap.php';
 
 if (Auth::check()) { header('Location: ' . Auth::homeUrl()); exit; }
 
-ensure_email_verification_columns();
-
 // ── Email resolution ────────────────────────────────────────
 // Session is set by register.php right after creating the account.
 // Falling back to ?email= lets users verify across devices.
@@ -94,7 +92,7 @@ $resendIn = 0;
 if ($email !== '') {
     $stmt = db()->prepare(
         'SELECT GREATEST(0, ' . (int) VERIFY_RESEND_COOLDOWN_SECS
-        . ' - TIMESTAMPDIFF(SECOND, email_verify_last_sent_at, NOW()))
+        . ' - TRUNC(EXTRACT(EPOCH FROM (NOW() - email_verify_last_sent_at))))
          FROM users WHERE LOWER(email) = ? LIMIT 1'
     );
     $stmt->execute([$email]);

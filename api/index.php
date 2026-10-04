@@ -20,6 +20,9 @@ $router->get( '/forgot-password', 'auth/forgot_password');
 $router->post('/forgot-password', 'auth/forgot_password');
 $router->get( '/reset-password',  'auth/reset_password');
 $router->post('/reset-password',  'auth/reset_password');
+$router->get( '/verify-email',    'auth/verify_email');
+$router->get( '/verify-pending',  'auth/verify_pending');
+$router->post('/verify-pending',  'auth/verify_pending');
 
 // -- Student -----------------------------------------------------
 $router->get('/student/documents',  'documents/student_upload');
@@ -36,22 +39,32 @@ $router->post('/student/settings',  'settings/student');
 // -- API (AJAX) --------------------------------------------------
 $router->get( '/api/notifications',      'api/notifications');
 $router->post('/api/notifications',      'api/notifications');
+$router->post('/api/exam-autosave',      'api/exam_autosave');
+$router->post('/api/reschedule-request', 'api/reschedule_request');
+$router->post('/api/exam-reschedule-request', 'api/exam_reschedule_request');
 $router->get( '/api/applicant-panel',    'api/applicant_panel');
 
 // -- Staff -------------------------------------------------------
 $router->get( '/staff/dashboard',           'auth/staff/dashboard');
+$router->post('/staff/dashboard',           'auth/staff/dashboard');
 $router->get( '/staff/applicants',          'documents/staff_review');
 $router->post('/staff/applicants',          'documents/staff_review');
 $router->get( '/staff/applicants/{id}',     'documents/staff_review');
 $router->post('/staff/documents/{id}',      'documents/staff_action');
 $router->get( '/staff/interviews',              'interview/staff_manage');
 $router->post('/staff/interviews',              'interview/staff_manage');
-$router->get( '/staff/interviews/desks',        'interview/staff_desks');
-$router->post('/staff/interviews/desks',        'interview/staff_desks');
+$router->get( '/staff/interviews/setup',        'interview/staff_setup');
+$router->post('/staff/interviews/setup',        'interview/staff_setup');
+$router->get( '/staff/interviews/desks',        'interview/staff_setup');
+$router->post('/staff/interviews/desks',        'interview/staff_setup');
 $router->get( '/staff/interviews/queue',        'interview/staff_queue');
 $router->post('/staff/interviews/call-next',    'interview/staff_call_next');
+// /staff/interviews/manual-checkin route removed — students are now
+// auto-checked-in at slot assignment time (interview_scheduler.php).
 $router->get( '/staff/interviews/absent',       'interview/staff_absent');
 $router->post('/staff/interviews/absent',       'interview/staff_absent');
+$router->get( '/staff/interviews/cancel-slot',  'interview/staff_cancel_slot');
+$router->post('/staff/interviews/cancel-slot',  'interview/staff_cancel_slot');
 // Roster routes removed — the roster is now baked into the live queue
 // page itself (modules/interview/staff_queue.php), so a per-session
 // view is no longer needed.
@@ -66,6 +79,11 @@ $router->get( '/staff/exam',                'exam/staff_manage');
 $router->post('/staff/exam',                'exam/staff_manage');
 $router->get( '/staff/exam/slots',          'exam/staff_slots');
 $router->post('/staff/exam/slots',          'exam/staff_slots');
+$router->get( '/staff/exam/reschedule',     'exam/staff_reschedule');
+$router->post('/staff/exam/reschedule',     'exam/staff_reschedule');
+$router->get( '/staff/exam/cancel-slot',    'exam/staff_cancel_slot');
+$router->post('/staff/exam/cancel-slot',    'exam/staff_cancel_slot');
+$router->get( '/staff/exam/export-rooms',   'exam/staff_export_rooms');
 $router->get( '/staff/settings',            'settings/staff');
 $router->post('/staff/settings',            'settings/staff');
 

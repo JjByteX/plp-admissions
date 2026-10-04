@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $count = $stmt->rowCount();
         // Advance applicants whose docs are all approved
         $db->query(
-            "UPDATE applicants a SET a.overall_status = 'exam', a.documents_approved_at = NOW()
+            "UPDATE applicants a SET overall_status = 'exam', documents_approved_at = NOW()
              WHERE a.overall_status IN ('submitted','documents','pending')
                AND NOT EXISTS (
                    SELECT 1 FROM documents d WHERE d.applicant_id = a.id AND d.status NOT IN ('approved','pending')
@@ -103,34 +103,34 @@ $statsStmt = db()->prepare(
        COUNT(*)                                                              AS total,
 
        /* pipeline steps — derived from overall_status + related tables */
-       SUM(a.overall_status IN ('submitted','exam','interview','released'))  AS docs_submitted,
-       SUM(a.overall_status IN ('exam','interview','released'))              AS docs_approved,
-       SUM(EXISTS (
+       SUM(CASE WHEN a.overall_status IN ('submitted','exam','interview','released') THEN 1 ELSE 0 END) AS docs_submitted,
+       SUM(CASE WHEN a.overall_status IN ('exam','interview','released') THEN 1 ELSE 0 END)             AS docs_approved,
+       SUM(CASE WHEN EXISTS (
            SELECT 1 FROM exam_results er WHERE er.applicant_id = a.id
-       ))                                                                    AS exam_taken,
-       SUM(EXISTS (
+       ) THEN 1 ELSE 0 END)                                                  AS exam_taken,
+       SUM(CASE WHEN EXISTS (
            SELECT 1 FROM interview_queue iq
             WHERE iq.applicant_id = a.id
               AND iq.interview_status IN ('pending','completed')
-       ))                                                                    AS interviewed,
-       SUM(EXISTS (
+       ) THEN 1 ELSE 0 END)                                                  AS interviewed,
+       SUM(CASE WHEN EXISTS (
            SELECT 1 FROM admission_results ar WHERE ar.applicant_id = a.id
-       ))                                                                    AS results_released,
+       ) THEN 1 ELSE 0 END)                                                  AS results_released,
 
        /* applicant types */
-       SUM(a.applicant_type = 'freshman')                                    AS cnt_freshman,
-       SUM(a.applicant_type = 'transferee')                                  AS cnt_transferee,
-       SUM(a.applicant_type = 'foreign')                                     AS cnt_foreign,
+       SUM(CASE WHEN a.applicant_type = 'freshman'   THEN 1 ELSE 0 END)     AS cnt_freshman,
+       SUM(CASE WHEN a.applicant_type = 'transferee' THEN 1 ELSE 0 END)     AS cnt_transferee,
+       SUM(CASE WHEN a.applicant_type = 'foreign'    THEN 1 ELSE 0 END)     AS cnt_foreign,
 
        /* result breakdown from admission_results */
-       SUM((SELECT ar2.result FROM admission_results ar2
-             WHERE ar2.applicant_id = a.id LIMIT 1) = 'accepted')            AS cnt_accepted,
+       SUM(CASE WHEN (SELECT ar2.result FROM admission_results ar2
+             WHERE ar2.applicant_id = a.id LIMIT 1) = 'accepted' THEN 1 ELSE 0 END) AS cnt_accepted,
        /* Withdrawn is tracked on applicants.overall_status, not admission_results.
           The legacy 'waitlisted' tier was retired in the role redesign, so the
           third KPI tile now shows Withdrawn — a live operational signal. */
-       SUM(a.overall_status = 'withdrawn')                                    AS cnt_withdrawn,
-       SUM((SELECT ar2.result FROM admission_results ar2
-             WHERE ar2.applicant_id = a.id LIMIT 1) = 'rejected')            AS cnt_rejected
+       SUM(CASE WHEN a.overall_status = 'withdrawn' THEN 1 ELSE 0 END)       AS cnt_withdrawn,
+       SUM(CASE WHEN (SELECT ar2.result FROM admission_results ar2
+             WHERE ar2.applicant_id = a.id LIMIT 1) = 'rejected' THEN 1 ELSE 0 END) AS cnt_rejected
      FROM applicants a $deptWhere"
 );
 $statsStmt->execute($deptParams);
@@ -141,9 +141,9 @@ $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
 // applied to the pipeline numbers also narrows this side card.
 $docStmt = db()->prepare(
     "SELECT
-        SUM(d.status = 'approved')     AS approved,
-        SUM(d.status = 'under_review') AS under_review,
-        SUM(d.status = 'rejected')     AS rejected
+        SUM(CASE WHEN d.status = 'approved'     THEN 1 ELSE 0 END) AS approved,
+        SUM(CASE WHEN d.status = 'under_review' THEN 1 ELSE 0 END) AS under_review,
+        SUM(CASE WHEN d.status = 'rejected'     THEN 1 ELSE 0 END) AS rejected
      FROM documents d
      JOIN applicants a ON a.id = d.applicant_id
      $deptWhere"
@@ -193,20 +193,20 @@ $idleDays = (int) school_setting('idle_applicant_days', '7');
 $idleStmt = db()->prepare(
     "SELECT a.overall_status AS stage,
             COUNT(*) AS count,
-            MAX(DATEDIFF(NOW(), a.updated_at)) AS max_days
+            MAX(CURRENT_DATE - CAST(a.updated_at AS date)) AS max_days
      FROM applicants a
      WHERE a.overall_status NOT IN ('released','withdrawn')
-       AND DATEDIFF(NOW(), a.updated_at) >= ?
+       AND (CURRENT_DATE - CAST(a.updated_at AS date)) >= ?
        $deptFilter
      GROUP BY a.overall_status
-     ORDER BY count DESC"
+     ORDER BY COUNT(*) DESC"
 );
 $idleStmt->execute(array_merge([$idleDays], $deptParams));
 $idleSummary = $idleStmt->fetchAll(PDO::FETCH_ASSOC);
 $totalIdle   = array_sum(array_column($idleSummary, 'count'));
 
 // B6: Check if there are interview sessions today
-$hasTodayStmt = db()->prepare('SELECT COUNT(*) FROM interview_slots WHERE slot_date = ? AND status = "open"');
+$hasTodayStmt = db()->prepare('SELECT COUNT(*) FROM interview_slots WHERE slot_date = ? AND status = \'open\'');
 $hasTodayStmt->execute([date('Y-m-d')]);
 $hasToday = (int)$hasTodayStmt->fetchColumn() > 0;
 

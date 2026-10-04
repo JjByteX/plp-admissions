@@ -41,10 +41,10 @@ if (in_array($applicant['overall_status'] ?? '', ['submitted', 'documents'], tru
     if ((int)$stmt->fetchColumn() === count($requiredDocs)) {
         $db->prepare(
             'UPDATE applicants
-                SET overall_status = "exam",
+                SET overall_status = \'exam\',
                     documents_approved_at = COALESCE(documents_approved_at, NOW())
               WHERE id = ?
-                AND overall_status NOT IN ("exam","interview","result","released","withdrawn")'
+                AND overall_status NOT IN (\'exam\',\'interview\',\'result\',\'released\',\'withdrawn\')'
         )->execute([$applicantId]);
 
         $stmt = $db->prepare('SELECT * FROM applicants WHERE id = ?');
@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $readyToSubmit = $uploadedCount === count($requiredDocs);
 
             if ($readyToSubmit && !$isSubmitted) {
-                $db->prepare('UPDATE applicants SET overall_status = "submitted" WHERE id = ?')
+                $db->prepare('UPDATE applicants SET overall_status = \'submitted\' WHERE id = ?')
                    ->execute([$applicantId]);
                 $isSubmitted = true;
             } elseif ($isSubmitted) {
@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'withdraw_submission') {
         try {
             if ($isSubmitted) {
-                $db->prepare('UPDATE applicants SET overall_status = "documents" WHERE id = ?')
+                $db->prepare('UPDATE applicants SET overall_status = \'documents\' WHERE id = ?')
                    ->execute([$applicantId]);
                 $isSubmitted = false;
             }
@@ -185,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tmpPath  = $file['tmp_name'];
 
         if ($fileSize > MAX_UPLOAD_BYTES) {
-            $errors[] = 'File size exceeds the 5 MB limit.';
+            $errors[] = 'File size exceeds the 4 MB limit.';
         }
 
         // Check MIME via finfo
@@ -210,13 +210,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (isset($docRows[$docSlug])) {
                 $stmt = $db->prepare(
-                    'UPDATE documents SET file_path=?, status="uploaded", staff_remarks=NULL, reviewed_by=NULL
+                    'UPDATE documents SET file_path=?, status=\'uploaded\', staff_remarks=NULL, reviewed_by=NULL
                      WHERE applicant_id=? AND doc_type=?'
                 );
                 $stmt->execute([$filePath, $applicantId, $docSlug]);
             } else {
                 $stmt = $db->prepare(
-                    'INSERT INTO documents (applicant_id, doc_type, file_path, status) VALUES (?,?,?,"uploaded")'
+                    'INSERT INTO documents (applicant_id, doc_type, file_path, status) VALUES (?,?,?,\'uploaded\')'
                 );
                 $stmt->execute([$applicantId, $docSlug, $filePath]);
             }
@@ -288,7 +288,7 @@ if ($_examResult) {
         'SELECT q.*,
                 s.slot_date, s.slot_time, s.end_time, s.capacity,
                 COALESCE(au.name, cu.name)                           AS staff_name,
-                COALESCE(NULLIF(s.location_label, ""), cu.desk_label) AS desk_label,
+                COALESCE(NULLIF(s.location_label, \'\'), cu.desk_label) AS desk_label,
                 COALESCE(s.location_notes, cu.desk_notes)            AS desk_notes
          FROM   interview_queue q
          JOIN   interview_slots s ON s.id = q.slot_id
@@ -310,24 +310,28 @@ if ($_examResult) {
             $db->beginTransaction();
             try {
                 $stmt = $db->prepare(
-                    'SELECT s.id, s.capacity, COUNT(q.id) AS booked
+                    'SELECT s.id, s.capacity
                      FROM   interview_slots s
-                     LEFT JOIN interview_queue q ON q.slot_id = s.id
-                     WHERE  s.id = ? AND s.status = "open"
-                     GROUP BY s.id FOR UPDATE'
+                     WHERE  s.id = ? AND s.status = \'open\'
+                     FOR UPDATE'
                 );
                 $stmt->execute([$slotId]);
                 $slot = $stmt->fetch();
+                if ($slot) {
+                    $bookedStmt = $db->prepare('SELECT COUNT(*) FROM interview_queue WHERE slot_id = ?');
+                    $bookedStmt->execute([$slotId]);
+                    $slot['booked'] = (int)$bookedStmt->fetchColumn();
+                }
 
                 if (!$slot || (int)$slot['booked'] >= (int)$slot['capacity']) {
                     $db->rollBack();
                     $interviewErrors[] = 'That session is no longer available or is full.';
                 } else {
                     $db->prepare(
-                        'INSERT INTO interview_queue (slot_id, applicant_id, status) VALUES (?, ?, "scheduled")'
+                        'INSERT INTO interview_queue (slot_id, applicant_id, status) VALUES (?, ?, \'scheduled\')'
                     )->execute([$slotId, $applicantId]);
                     $db->prepare(
-                        'UPDATE applicants SET overall_status="interview" WHERE id=?'
+                        'UPDATE applicants SET overall_status=\'interview\' WHERE id=?'
                     )->execute([$applicantId]);
                     $db->commit();
                     Session::flash('success', 'Your interview session has been booked!');
@@ -357,8 +361,8 @@ if ($_examResult) {
 
                 $db->prepare(
                     'UPDATE interview_queue
-                     SET    status = "checked_in", queue_number = ?, checked_in_at = NOW()
-                     WHERE  id = ? AND status = "scheduled"'
+                     SET    status = \'checked_in\', queue_number = ?, checked_in_at = NOW()
+                     WHERE  id = ? AND status = \'scheduled\''
                 )->execute([$nextNum, $myEntry['id']]);
                 $db->commit();
                 Session::flash('success', 'You are now in the queue!');
@@ -370,7 +374,7 @@ if ($_examResult) {
             $stmt = $db->prepare(
                 'SELECT q.*, s.slot_date, s.slot_time, s.end_time, s.capacity,
                         COALESCE(au.name, cu.name)                           AS staff_name,
-                        COALESCE(NULLIF(s.location_label, ""), cu.desk_label) AS desk_label,
+                        COALESCE(NULLIF(s.location_label, \'\'), cu.desk_label) AS desk_label,
                         COALESCE(s.location_notes, cu.desk_notes)            AS desk_notes
                  FROM   interview_queue q
                  JOIN   interview_slots s ON s.id = q.slot_id
@@ -390,17 +394,16 @@ if ($_examResult) {
         $stmt = $db->prepare(
             'SELECT s.*,
                     COALESCE(au.name, cu.name)                           AS staff_name,
-                    COALESCE(NULLIF(s.location_label, ""), cu.desk_label) AS desk_label,
+                    COALESCE(NULLIF(s.location_label, \'\'), cu.desk_label) AS desk_label,
                     COALESCE(s.location_notes, cu.desk_notes)            AS desk_notes,
-                    COUNT(q.id) AS booked
+                    (SELECT COUNT(*) FROM interview_queue q WHERE q.slot_id = s.id) AS booked
              FROM   interview_slots s
              JOIN   users           cu ON cu.id = s.created_by
              LEFT JOIN users        au ON au.id = s.assigned_to
-             LEFT JOIN interview_queue q ON q.slot_id = s.id
-             WHERE  s.slot_date >= ? AND s.status = "open"
+             WHERE  s.slot_date >= ? AND s.status = \'open\'
                AND  NOT (s.slot_date = ? AND s.end_time IS NOT NULL AND s.end_time <= ?)
-             GROUP BY s.id HAVING booked < s.capacity
-             ORDER BY s.slot_date ASC, s.slot_time ASC'
+               AND  (SELECT COUNT(*) FROM interview_queue q2 WHERE q2.slot_id = s.id) < s.capacity
+             ORDER BY s.slot_date ASC, s.slot_time ASC NULLS FIRST'
         );
         $stmt->execute([date('Y-m-d'), date('Y-m-d'), $nowTime]);
         $openSessions = $stmt->fetchAll();
@@ -414,7 +417,7 @@ if ($_examResult) {
              JOIN   interview_slots s ON s.id = q.slot_id
              WHERE  s.slot_date = ? AND COALESCE(s.assigned_to, s.created_by) = (
                  SELECT COALESCE(assigned_to, created_by) FROM interview_slots WHERE id = ?
-             ) AND q.status = "checked_in" AND q.queue_number < ?'
+             ) AND q.status = \'checked_in\' AND q.queue_number < ?'
         );
         $stmt->execute([date('Y-m-d'), $myEntry['slot_id'], $myEntry['queue_number']]);
         $queuePosition = (int)$stmt->fetchColumn() + 1;
@@ -615,7 +618,7 @@ ob_start();
                         <svg width="32" height="32" fill="none" viewBox="0 0 24 24" style="color:var(--text-tertiary);margin-bottom:var(--space-3)"><path stroke="currentColor" stroke-width="1.5" d="M4 16l4-4 4 4 4-8 4 4"/><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 20h16"/></svg>
                         <p style="font-weight:var(--weight-medium)">Drop your file here</p>
                         <p style="font-size:var(--text-sm);color:var(--text-tertiary)">or <span style="color:var(--accent)">browse</span></p>
-                        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">PDF, JPG, PNG or WEBP · max 5 MB</p>
+                        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">PDF, JPG, PNG or WEBP · max 4 MB</p>
                     </div>
                 </div>
             </div>
@@ -660,7 +663,7 @@ function openUploadModal(slug, label) {
         '<svg width="32" height="32" fill="none" viewBox="0 0 24 24" style="color:var(--text-tertiary);margin-bottom:var(--space-3)"><path stroke="currentColor" stroke-width="1.5" d="M4 16l4-4 4 4 4-8 4 4"/><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 20h16"/></svg>' +
         '<p style="font-weight:var(--weight-medium)">Drop your file here</p>' +
         '<p style="font-size:var(--text-sm);color:var(--text-tertiary)">or <span style="color:var(--accent)">browse</span></p>' +
-        '<p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">PDF, JPG, PNG or WEBP · max 5 MB</p>';
+        '<p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">PDF, JPG, PNG or WEBP · max 4 MB</p>';
     const modal = document.getElementById('upload-modal');
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
