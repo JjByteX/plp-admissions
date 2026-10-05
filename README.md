@@ -1,99 +1,67 @@
 # PLP Admissions Management System
 
-A web-based admissions system built with PHP and MySQL, covering the full enrollment flow from application to final result.
+A web-based admissions system built with PHP and PostgreSQL (Supabase), covering the full enrollment flow from application to final result.
 
 ---
 
-## Quick Start
+## Local Setup (Windows)
 
-Already set up? From the project folder:
+**You need:** PHP 8.2+ in your PATH (XAMPP's PHP works) and the `.env` file from the team lead.
 
-```bash
-php -S localhost:8000
-```
+1. Clone the repo.
+2. Drop the **`.env`** file the team lead sent you into the project folder, next to `setup.bat`.
+3. Double-click **`setup.bat`** (or run `.\setup.ps1`). It enables the PostgreSQL extensions in your `php.ini` and checks that your `.env` is there. Safe to re-run.
+4. Start the app:
+   ```bash
+   php -S localhost:8000
+   ```
+5. Open **http://localhost:8000/public/** and log in with a [default account](#default-accounts). Press `Ctrl+C` to stop.
 
-Then open **http://localhost:8000/public/** and log in (see [Default Accounts](#default-accounts)). Press `Ctrl+C` to stop.
-
-You still need MySQL/MariaDB running (start **MySQL** in the XAMPP control panel).
-
-**First time only**, create and load the database (run from the project folder; use Command Prompt or Git Bash, not PowerShell):
-
-```bash
-mysql -u root -e "CREATE DATABASE IF NOT EXISTS plp_admissions"
-mysql -u root plp_admissions < database/schema.sql
-mysql -u root plp_admissions < database/seed_users.sql
-```
-
-> If `php` or `mysql` isn't found, add `C:\xampp\php` and `C:\xampp\mysql\bin` to your PATH, or run them by full path (e.g. `C:\xampp\php\php.exe -S localhost:8000`).
+> If you change `php.ini` or `.env`, restart the server.
 >
-> Running `schema.sql` **wipes all existing data**. Only do it for a fresh database or an intentional reset.
+> Not on Windows? Enable `pdo_pgsql` and `pgsql` in your `php.ini` yourself. The `.env` step is the same.
 
-Prefer XAMPP's Apache instead? See [Setup](#setup) below.
+### About the `.env` file
+
+This repo is public, so the database credentials are **never committed**. `.env` is gitignored and shared privately (direct message, not a public channel).
+
+- Never paste its contents into an issue, a pull request, or a chat that isn't private.
+- It holds **development-project credentials only**, with fake data. Never put production keys in it.
+- The real deployment uses a new Supabase project, with its keys set in Vercel's environment variables only. Never reuse the dev keys.
+- If it leaks, tell the team lead. The database password and service key get rotated in Supabase and a new `.env` is sent out.
+
+### Database
+
+The development database is shared and already loaded. You don't need to set anything up.
+
+- `database/schema.sql` **drops and recreates every table**. Only run it for a fresh database or an agreed reset, never casually.
+- `database/seed_users.sql` creates the default accounts. Run it once after the schema.
+- Everyone shares the same test data, so use fake email addresses for test applicants. If SMTP is configured, real emails are sent.
+
+### Optional `.env` values
+
+| Setting | When you need it |
+|---------|------------------|
+| `SMTP_*` (Gmail App Password) | Email sending, such as student verification codes. Without it, emails are skipped and logged, and you can still log in with the seeded accounts. |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Document uploads and branding images (Supabase Storage). |
+| `HCAPTCHA_*` | Not needed. hCaptcha is off (`HCAPTCHA_ENABLED` is `false` in `config/app.php`). |
 
 ---
 
-## Requirements
+## Troubleshooting
 
-- **XAMPP** (PHP 8.x + Apache + MySQL)
-- A **Gmail account** with an App Password for email sending (needed for student registration, since new students must verify their email with a code)
-- *(Optional)* A **hCaptcha** account. hCaptcha is currently switched off in `config/app.php` (`HCAPTCHA_ENABLED` is `false`)
-
----
-
-## Setup
-
-### 1. Place the Project
-
-Put the `plp-admissions/` folder inside your XAMPP `htdocs/` directory:
-
-```
-C:/xampp/htdocs/plp-admissions/
-```
-
-### 2. Create the Database
-
-1. Open **phpMyAdmin** → create a new database named `plp_admissions`
-2. Import `database/schema.sql` to create all tables
-3. Import `database/seed_users.sql` to create the default accounts
-
-### 3. Configure Environment
-
-Copy `.env.example` to `.env` and fill in your values:
-
-```env
-# hCaptcha — get keys from https://dashboard.hcaptcha.com
-HCAPTCHA_SITE_KEY=your_site_key
-HCAPTCHA_SECRET_KEY=your_secret_key
-
-# Gmail SMTP — use an App Password, not your real password
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_app_password
-SMTP_FROM_NAME=PLP Admissions
-```
-
-> **hCaptcha:** Currently disabled in code (`HCAPTCHA_ENABLED` is `false` in `config/app.php`), so the keys can stay empty.
->
-> **No SMTP set up?** The app still runs, but emails (including student verification codes) are skipped and only logged. You can still log in with the seeded staff accounts.
-
-> **Gmail App Password:** Go to your Google Account → Security → 2-Step Verification → App Passwords → generate one for "Mail".
-
-### 4. Run the Project
-
-Start **Apache** and **MySQL** in XAMPP, then open:
-
-```
-http://localhost/plp-admissions/public/
-```
-
-Or skip Apache and use PHP's built-in server (see [Quick Start](#quick-start)).
+| What you see | Fix |
+|--------------|-----|
+| "PHP extension pdo_pgsql is not enabled" | Run `setup.bat`, then restart the server. |
+| "Database connection error" | Check the terminal. `could not find driver` means run `setup.bat`. A password or host error means re-check `DB_*` in `.env`. |
+| `setup.bat` can't edit `php.ini` | Right-click it and choose Run as administrator. |
+| `favicon.ico` 404 in the terminal | Harmless. |
 
 ---
 
 ## Default Accounts
 
-After importing `seed_users.sql`, the following accounts are available:
+Created by `seed_users.sql`. Change all passwords after first login.
 
 ### Admin & SSO
 | Role | Email | Password |
@@ -131,25 +99,21 @@ After importing `seed_users.sql`, the following accounts are available:
 | College of Arts and Sciences | proctor.cas@plp.edu.ph | Proctor@123 |
 | College of Engineering | proctor.cen@plp.edu.ph | Proctor@123 |
 
-> Change all passwords after first login.
-
 ---
 
-## Roles Overview
+## Roles
 
 | Role | What they do |
-|------|-------------|
+|------|--------------|
 | **Admin** | Full system access, manages users and school setup |
-| **SSO** | Sets up admissions schedule, exam, interview slots, reviews documents, exports results |
+| **SSO** | Sets up the admissions schedule, exam and interview slots, reviews documents, exports results |
 | **Dean** | Sets course slots and passing tiers, releases final admission results |
 | **Professor** | Conducts interviews and submits pass/reject recommendations |
 | **Proctor** | Manages exam rooms and generates exam access codes |
-| **Student** | Applies, uploads documents, takes exam, attends interview, views result |
+| **Student** | Applies, uploads documents, takes the exam, attends the interview, views the result |
 
 ---
 
-## Notes
+## CI
 
-- `DB_HOST`, `DB_NAME`, `DB_USER`, and `DB_PASS` default to XAMPP's standard values (`localhost`, `plp_admissions`, `root`, no password). No changes needed unless your setup differs.
-- Do **not** commit `.env` to Git — it contains your credentials.
-- The `database/` folder contains the schema and seed files only. Do not delete them.
+GitHub Actions runs on every pull request: PHP lint, SonarQube, a secret scan, a schema check, and an app smoke test. CI uses its own throwaway Postgres and never touches the shared Supabase database.

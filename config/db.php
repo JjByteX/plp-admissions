@@ -28,6 +28,16 @@ function db(): PDO
         return $pdo;
     }
 
+    // Clear message for the most common local-setup problem: the PHP
+    // extension for PostgreSQL is not enabled. Run setup.ps1 to fix it.
+    if (!extension_loaded('pdo_pgsql')) {
+        error_log('pdo_pgsql extension is not enabled. Run setup.ps1 (see README).');
+        http_response_code(500);
+        exit(APP_DEBUG
+            ? 'PHP extension pdo_pgsql is not enabled. Run setup.ps1, then restart the server. See README: Local setup.'
+            : 'Database connection error. Please contact the system administrator.');
+    }
+
     $dsn = sprintf(
         'pgsql:host=%s;port=%s;dbname=%s;sslmode=%s',
         DB_HOST,

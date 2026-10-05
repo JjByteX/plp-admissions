@@ -105,3 +105,92 @@ jobs:
       # tables the first run created proves that claim on every change.
       - name: Re-apply schema (idempotency)
         run: psql -h 127.0.0.1 -p 5432 -U postgres -d plp_admissions -v ON_ERROR_STOP=1 -f database/schema.sql
+
+  smoke-test:
+    name: App smoke test
+    runs-on: ubuntu-latest
+    services:
+      # Same throwaway Postgres as schema-check. CI never touches the shared
+      # Supabase project used for local development and Vercel, and needs
+      # none of its credentials. Everything below points at this container.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: plp_admissions
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d plp_admissions"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      PGPASSWORD: postgres
+      APP_ENV: development
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: plp_admissions
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_SSLMODE: disable
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: pdo_pgsql, pgsql, mbstring, curl
+          coverage: none
+
+      - name: Install Postgres client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Apply schema
+        run: psql -h 127.0.0.1 -p 5432 -U postgres -d plp_admissions -v ON_ERROR_STOP=1 -f database/schema.sql
+
+      # Same command developers use locally (php -S from the project root).
+      # php -l cannot catch an empty class file or a missing include; booting
+      # the app and requesting real pages can.
+      - name: Start app
+        run: |
+          php -S 127.0.0.1:8000 > server.log 2>&1 &
+          for i in $(seq 1 20); do
+            if curl -s -o /dev/null http://127.0.0.1:8000/public/login; then exit 0; fi
+            sleep 1
+          done
+          echo "Server did not start"
+          cat server.log
+          exit 1
+
+      # Logged-out requests. Pages may answer 200 or redirect to login; what
+      # fails the job is a 5xx or a PHP fatal in the body (APP_ENV=development
+      # prints errors into the page).
+      - name: Request pages
+        run: |
+          fail=0
+          check() {
+            code=$(curl -s -o body.txt -w '%{http_code}' "http://127.0.0.1:8000$1")
+            if [ "$code" -ge 500 ] || grep -qE 'Fatal error|Parse error|Uncaught' body.txt; then
+              echo "FAIL $1 (HTTP $code)"
+              head -c 1500 body.txt
+              echo
+              fail=1
+            else
+              echo "ok   $1 (HTTP $code)"
+            fi
+          }
+          check /public/
+          check /public/login
+          check /public/register
+          check /public/forgot-password
+          check /public/student/documents
+          check /public/staff/dashboard
+          check /public/admin/dashboard
+          if [ "$fail" -ne 0 ]; then
+            echo "--- server log"
+            cat server.log
+          fi
+          exit "$fail"
