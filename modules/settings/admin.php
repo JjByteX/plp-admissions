@@ -95,6 +95,12 @@ ob_start();
 
 <div style="display:flex;flex-direction:column;gap:var(--space-6);max-width:560px;margin:0 auto">
 
+       <!-- Appearance (per-device text size) -->
+    <div class="card" style="padding:var(--space-6)">
+        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-4)">Appearance</div>
+        <?php include VIEWS_PATH . '/partials/font_size_setting.php'; ?>
+    </div>
+
     <!-- Branding -->
     <div class="card" style="padding:var(--space-6)">
         <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-5)">School Branding</div>

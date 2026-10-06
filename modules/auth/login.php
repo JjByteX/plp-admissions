@@ -2,6 +2,11 @@
 // ============================================================
 // modules/auth/login.php
 // M2 — Authentication: Login
+//
+// Standalone page (does not use views/layouts/auth.php).
+// Images expected in public/assets/img/:
+//   plp logo.png   — school seal
+//   PLP PICTURE.jpg   — campus photo for the hero background
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -67,123 +72,298 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // -- View --------------------------------------------------------
-$schoolLogo = school_setting('school_logo', '');
-ob_start();
+$logoUrl  = asset('img/' . rawurlencode('plp logo.png'));
+$photoUrl = asset('img/' . rawurlencode('schol blg.jpg'));
+
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; frame-src https://newassets.hcaptcha.com https://*.hcaptcha.com; connect-src 'self' https://*.hcaptcha.com;");
+header("X-Content-Type-Options: nosniff");
+header("X-Frame-Options: SAMEORIGIN");
+header("Referrer-Policy: strict-origin-when-cross-origin");
 ?>
-<div class="auth-card animate-fade-in">
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In — PLP Admissions</title>
+    <meta name="robots" content="noindex, nofollow">
 
-    <button class="auth-theme-toggle" onclick="Theme.toggle()" aria-label="Toggle theme">
-        <?= icon('ic_fluent_weather_sunny_24_regular', 16, '', 'data-theme-icon="dark" class="hidden"') ?>
-        <?= icon('ic_fluent_weather_moon_24_regular', 16, '', 'data-theme-icon="light"') ?>
-    </button>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <div class="auth-header">
-        <?php if ($schoolLogo): ?>
-            <img src="<?= e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url($schoolLogo)) ?>" alt="School Logo" class="auth-logo-img">
-        <?php else: ?>
-            <div class="auth-logo">
-                <?php include VIEWS_PATH . '/partials/icons/ic_fluent_building_bank_24_regular.svg'; ?>
+    <style>
+    :root {
+        --lg-green-950: #0c2a1a;
+        --lg-green-800: #14532d;
+        --lg-green-700: #1b6b3a;
+        --lg-green-600: #1f7a3f;
+        --lg-ink: #1a2420;
+        --lg-muted: #5d6b63;
+        --lg-field: #e8eefc;
+        --lg-paper: #ffffff;
+        --lg-link: #1d6b3b;
+        --lg-danger: #b3261e;
+        --lg-font-display: "Anton", "Arial Narrow", Impact, sans-serif;
+        --lg-font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+        color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body { background: var(--lg-green-950); color: #fff; font-family: var(--lg-font-body); }
+    [hidden] { display: none !important; }
+
+    .lg-page { min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* top bar */
+    .lg-bar { background: var(--lg-paper); color: var(--lg-ink); padding: 12px clamp(16px, 8vw, 150px); display: flex; align-items: center; gap: 14px; }
+    .lg-logo { width: 52px; height: 52px; object-fit: contain; flex: none; display: block; }
+    .lg-bar-name { min-width: 0; }
+    .lg-bar-title { margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--lg-green-700); line-height: 1.1; }
+    .lg-bar-sub { margin: 2px 0 0; font-size: .72rem; letter-spacing: .06em; color: var(--lg-muted); text-transform: uppercase; }
+
+    /* hero */
+    .lg-hero {
+        flex: 1; position: relative; overflow: hidden;
+        padding: clamp(32px, 6vw, 72px) clamp(16px, 8vw, 150px);
+        display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: clamp(24px, 5vw, 80px); align-items: center;
+        background:
+            linear-gradient(90deg, rgba(10,38,22,.92) 0%, rgba(10,38,22,.72) 55%, rgba(10,38,22,.55) 100%),
+            url("<?= e($photoUrl) ?>") center / cover no-repeat,
+            #0c2a1a;
+    }
+    .lg-hero > * { position: relative; z-index: 1; }
+
+    .lg-intro { min-width: 0; }
+    .lg-school { margin: 0 0 14px; font-size: .95rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.9); }
+    .lg-big { margin: 0 0 32px; font-family: var(--lg-font-display); font-weight: 400; font-size: clamp(3rem, 7.2vw, 5.4rem); line-height: .98; text-transform: uppercase; letter-spacing: .005em; text-wrap: balance; }
+
+    .lg-tabs { display: flex; gap: 28px; border-bottom: 1px solid rgba(255,255,255,.28); margin-bottom: 18px; }
+    .lg-tab { background: none; border: 0; padding: 0 0 10px; margin-bottom: -1px; font: inherit; font-size: 1.02rem; font-weight: 600; color: rgba(255,255,255,.7); cursor: pointer; border-bottom: 3px solid transparent; }
+    .lg-tab[aria-selected="true"] { color: #fff; border-bottom-color: #3fbf6e; }
+    .lg-tab:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+
+    .lg-notice { margin: 0 0 18px; padding: 10px 14px; background: var(--lg-green-600); border-radius: 4px; font-size: .92rem; max-width: 640px; }
+
+    .lg-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; max-width: 640px; }
+    .lg-info { background: rgba(8,22,14,.72); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; padding: 16px 16px 16px 18px; display: flex; gap: 12px; justify-content: space-between; min-width: 0; }
+    .lg-info h3 { margin: 0 0 8px; font-size: 1.05rem; font-weight: 700; }
+    .lg-info p { margin: 0; font-size: .8rem; line-height: 1.5; color: rgba(255,255,255,.78); }
+    .lg-info svg { width: 52px; height: 52px; flex: none; fill: none; stroke: #fff; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: .92; }
+
+    /* login card */
+    .lg-card { background: var(--lg-paper); color: var(--lg-ink); border-radius: 12px; padding: 34px 32px 28px; box-shadow: 0 24px 60px rgba(0,0,0,.38); }
+    .lg-lead { margin: 0 0 24px; text-align: center; font-size: 1.3rem; font-weight: 700; color: var(--lg-green-700); }
+
+    .lg-alert { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 16px; padding: 10px 12px; border-radius: 6px; font-size: .86rem; line-height: 1.4; }
+    .lg-alert-error { background: #fdecea; color: var(--lg-danger); border: 1px solid #f3c1bc; }
+    .lg-alert-info  { background: #e8f3ec; color: var(--lg-green-800); border: 1px solid #bfdcc9; }
+
+    .lg-field { margin-bottom: 16px; }
+    .lg-field label { display: block; margin-bottom: 6px; font-size: .82rem; font-weight: 700; }
+    .lg-input-wrap { position: relative; }
+    .lg-field input { width: 100%; height: 48px; padding: 0 14px; border: 2px solid transparent; border-radius: 6px; background: var(--lg-field); font: inherit; font-size: .95rem; color: var(--lg-ink); }
+    .lg-field input::placeholder { color: #8b97a0; }
+    .lg-field input:focus { outline: none; border-color: var(--lg-green-600); background: #fff; box-shadow: 0 0 0 3px rgba(31,122,63,.18); }
+    .lg-field input.lg-bad { border-color: var(--lg-danger); background: #fdecea; }
+    .lg-err { display: block; margin-top: 5px; font-size: .78rem; color: var(--lg-danger); }
+    .lg-has-eye input { padding-right: 48px; }
+    .lg-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border: 0; background: none; border-radius: 6px; cursor: pointer; display: grid; place-items: center; color: var(--lg-muted); }
+    .lg-eye:hover { background: rgba(0,0,0,.06); }
+    .lg-eye:focus-visible { outline: 2px solid var(--lg-green-600); }
+    .lg-eye svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .lg-eye.on { color: var(--lg-green-700); }
+
+    .lg-forgot { text-align: right; margin: -4px 0 20px; }
+    .lg-forgot a, .lg-signup a { color: var(--lg-link); font-size: .86rem; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+    .lg-go { width: 100%; height: 50px; border: 0; border-radius: 6px; background: var(--lg-green-700); color: #fff; font: inherit; font-size: 1rem; font-weight: 700; cursor: pointer; transition: background .15s; }
+    .lg-go:hover { background: var(--lg-green-800); }
+    .lg-go:disabled { opacity: .7; cursor: wait; }
+    .lg-go:focus-visible { outline: 3px solid rgba(31,122,63,.4); outline-offset: 2px; }
+    .lg-signup { margin: 18px 0 0; text-align: center; font-size: .86rem; color: var(--lg-muted); }
+
+    @media (max-width: 880px) {
+        .lg-hero { grid-template-columns: minmax(0, 1fr); }
+        .lg-card { order: -1; max-width: 460px; width: 100%; justify-self: center; }
+        .lg-big { font-size: clamp(2.6rem, 13vw, 4rem); margin-bottom: 24px; }
+    }
+    @media (max-width: 520px) {
+        .lg-cards { grid-template-columns: minmax(0, 1fr); }
+        .lg-card { padding: 26px 20px 22px; }
+        .lg-bar-title { font-size: 1.2rem; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+    </style>
+</head>
+<body>
+
+<div class="lg-page">
+
+    <header class="lg-bar">
+        <img class="lg-logo" src="<?= e($logoUrl) ?>" alt="PLP seal">
+        <div class="lg-bar-name">
+            <p class="lg-bar-title">PLP Admissions</p>
+            <p class="lg-bar-sub">Pamantasan ng Lungsod ng Pasig</p>
+        </div>
+    </header>
+
+    <main class="lg-hero">
+
+        <!-- Left: intro -->
+        <section class="lg-intro" aria-labelledby="lg-hero-title">
+            <p class="lg-school">Pamantasan ng Lungsod ng Pasig</p>
+            <h1 class="lg-big" id="lg-hero-title">Admissions<br>Office</h1>
+
+            <div class="lg-tabs" role="tablist" aria-label="Admissions information">
+                <button type="button" class="lg-tab" role="tab" id="lg-t1" aria-selected="true"  aria-controls="lg-p1">Apply Online</button>
+                <button type="button" class="lg-tab" role="tab" id="lg-t2" aria-selected="false" aria-controls="lg-p2">Advisory</button>
             </div>
-        <?php endif; ?>
-        <div class="auth-header-text">
-            <h1 class="auth-title">PLP Admissions</h1>
-            <p class="auth-subtitle">Pamantasan ng Lungsod ng Pasig</p>
-        </div>
-    </div>
 
-    <?php if (!empty($errors['general'])): ?>
-        <div class="alert alert-error" style="margin-bottom:var(--space-5)">
-            <?= icon('ic_fluent_info_24_regular', 16) ?>
-            <?= e($errors['general']) ?>
-        </div>
-    <?php endif; ?>
+            <div id="lg-p1" role="tabpanel" aria-labelledby="lg-t1">
+                <p class="lg-notice">Create an account, upload your requirements, and track your application from one place.</p>
+                <div class="lg-cards">
+                    <article class="lg-info">
+                        <div>
+                            <h3>Submit Documents</h3>
+                            <p>Upload your PSA birth certificate, Form 137 or 138, IDs, and other requirements.</p>
+                        </div>
+                        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 5h17l9 9v29H12z"/><path d="M29 5v9h9M18 24h14M18 30h14M18 36h9"/></svg>
+                    </article>
+                    <article class="lg-info">
+                        <div>
+                            <h3>Exam &amp; Interview</h3>
+                            <p>See your entrance exam schedule, interview slot, and final result as they are released.</p>
+                        </div>
+                        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="7" y="9" width="34" height="32" rx="3"/><path d="M7 19h34M16 5v8M32 5v8M16 27h6M26 27h6M16 34h6"/></svg>
+                    </article>
+                </div>
+            </div>
 
-    <form method="POST" action="<?= url('/login') ?>" data-once novalidate>
-        <?= csrf_field() ?>
+            <div id="lg-p2" role="tabpanel" aria-labelledby="lg-t2" hidden>
+                <p class="lg-notice">Advisory: documents must be uploaded as PDF, JPG, PNG or WEBP, 4 MB or smaller.</p>
+                <div class="lg-cards">
+                    <article class="lg-info">
+                        <div>
+                            <h3>Check your email</h3>
+                            <p>New accounts must verify their email with the code we send before signing in.</p>
+                        </div>
+                        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="11" width="36" height="26" rx="3"/><path d="M7 14l17 13 17-13"/></svg>
+                    </article>
+                    <article class="lg-info">
+                        <div>
+                            <h3>Account lock</h3>
+                            <p>Too many failed sign-ins lock your account for 15 minutes.</p>
+                        </div>
+                        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="10" y="21" width="28" height="20" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v5"/></svg>
+                    </article>
+                </div>
+            </div>
+        </section>
 
-        <div class="form-group">
-            <label class="form-label" for="email">Email address</label>
-            <input
-                type="email"
-                id="email"
-                name="email"
-                class="form-input <?= isset($errors['email']) ? 'error' : '' ?>"
-                value="<?= e($email) ?>"
-                placeholder="you@example.com"
-                autocomplete="email"
-                required
-            >
-            <?php if (!empty($errors['email'])): ?>
-                <span class="form-error"><?= e($errors['email']) ?></span>
+        <!-- Right: login card -->
+        <section class="lg-card animate-fade-in" aria-labelledby="lg-login-h">
+            <p class="lg-lead" id="lg-login-h">Sign in to continue your application</p>
+
+            <?php if ($didTimeout): ?>
+                <div class="lg-alert lg-alert-info" role="status">Your session expired. Please sign in again.</div>
             <?php endif; ?>
-        </div>
 
-        <div class="form-group">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <label class="form-label" for="password">Password</label>
-                <a href="<?= url('/forgot-password') ?>" style="font-size:var(--text-xs);color:var(--accent)">
-                    Forgot password?
-                </a>
-            </div>
-            <div class="input-wrapper has-suffix">
-                <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    class="form-input <?= isset($errors['password']) ? 'error' : '' ?>"
-                    placeholder="••••••••"
-                    autocomplete="current-password"
-                    required
-                >
-                <button type="button" class="input-suffix-icon btn-pw-toggle" onclick="togglePw('password',this)" tabindex="-1" aria-label="Show password">
-                    <?= icon('ic_fluent_eye_show_24_regular', 16, '', 'id="eye-password"') ?>
-                </button>
-            </div>
-            <?php if (!empty($errors['password'])): ?>
-                <span class="form-error"><?= e($errors['password']) ?></span>
+            <?php if (!empty($errors['general'])): ?>
+                <div class="lg-alert lg-alert-error" role="alert"><?= e($errors['general']) ?></div>
             <?php endif; ?>
-        </div>
 
-        <?php if (!empty($errors['captcha'])): ?>
-            <div class="alert alert-error" style="margin-bottom:var(--space-4)">
-                <?= icon('ic_fluent_info_24_regular', 16) ?>
-                <?= e($errors['captcha']) ?>
-            </div>
-        <?php endif; ?>
+            <form method="POST" action="<?= url('/login') ?>" data-once novalidate>
+                <?= csrf_field() ?>
 
-        <?php if (HCAPTCHA_ENABLED): ?>
-            <div class="h-captcha" data-sitekey="<?= e(HCAPTCHA_SITE_KEY) ?>" style="margin-bottom:var(--space-4)"></div>
-        <?php endif; ?>
+                <div class="lg-field">
+                    <label for="email">Email</label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        class="<?= isset($errors['email']) ? 'lg-bad' : '' ?>"
+                        value="<?= e($email) ?>"
+                        placeholder="you@example.com"
+                        autocomplete="email"
+                        required
+                    >
+                    <?php if (!empty($errors['email'])): ?>
+                        <span class="lg-err"><?= e($errors['email']) ?></span>
+                    <?php endif; ?>
+                </div>
 
-        <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top:var(--space-2)">
-            Sign in
-        </button>
-    </form>
+                <div class="lg-field">
+                    <label for="password">Password</label>
+                    <div class="lg-input-wrap lg-has-eye">
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="<?= isset($errors['password']) ? 'lg-bad' : '' ?>"
+                            placeholder="Password"
+                            autocomplete="current-password"
+                            required
+                        >
+                        <button type="button" class="lg-eye" id="lg-eye" aria-label="Show password">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                    </div>
+                    <?php if (!empty($errors['password'])): ?>
+                        <span class="lg-err"><?= e($errors['password']) ?></span>
+                    <?php endif; ?>
+                </div>
 
-    <div class="auth-footer">
-        New applicant?
-        <a href="<?= url('/register') ?>">Create an account</a>
-    </div>
+                <div class="lg-forgot"><a href="<?= url('/forgot-password') ?>">Forgot password?</a></div>
 
+                <?php if (!empty($errors['captcha'])): ?>
+                    <div class="lg-alert lg-alert-error" role="alert"><?= e($errors['captcha']) ?></div>
+                <?php endif; ?>
+
+                <?php if (HCAPTCHA_ENABLED): ?>
+                    <div class="h-captcha" data-sitekey="<?= e(HCAPTCHA_SITE_KEY) ?>" style="margin-bottom:16px"></div>
+                <?php endif; ?>
+
+                <button type="submit" class="lg-go">Login</button>
+            </form>
+
+            <p class="lg-signup">
+                New applicant?
+                <a href="<?= url('/register') ?>">Create an account</a>
+            </p>
+        </section>
+
+    </main>
 </div>
-<script>
-function togglePw(id, btn) {
-    const inp = document.getElementById(id);
-    const isText = inp.type === 'text';
-    inp.type = isText ? 'password' : 'text';
-    btn.querySelector('svg').style.opacity = isText ? '1' : '0.5';
-}
-</script>
 
-<?php if ($didTimeout): ?>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    showTimeoutModal();
-});
-</script>
+<script src="<?= asset('js/app.js') ?>"></script>
+<?php if (HCAPTCHA_ENABLED): ?>
+<script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 <?php endif; ?>
+<script>
+(function () {
+    // Info tabs
+    var tabs = document.querySelectorAll('.lg-tab');
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function () {
+            tabs.forEach(function (o) {
+                var on = o === t;
+                o.setAttribute('aria-selected', on ? 'true' : 'false');
+                document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+            });
+        });
+    });
 
-<?php
-$content   = ob_get_clean();
-$pageTitle = 'Sign In';
-include VIEWS_PATH . '/layouts/auth.php';
+    // Show / hide password
+    var pw  = document.getElementById('password');
+    var eye = document.getElementById('lg-eye');
+    eye.addEventListener('click', function () {
+        var show = pw.type === 'password';
+        pw.type = show ? 'text' : 'password';
+        eye.classList.toggle('on', show);
+        eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    });
+})();
+</script>
+
+</body>
+</html>

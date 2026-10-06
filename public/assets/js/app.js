@@ -42,6 +42,7 @@ const Dropdown = (() => {
     function init() {
         document.addEventListener('click', (e) => {
             const trigger = e.target.closest('[data-dropdown]');
+            const insideMenu = e.target.closest('.dropdown-menu');
             const openDropdown = document.querySelector('.dropdown.open');
 
             if (trigger) {
@@ -49,7 +50,7 @@ const Dropdown = (() => {
                 const isOpen = dropdown.classList.contains('open');
                 closeAll();
                 if (!isOpen) dropdown.classList.add('open');
-            } else {
+            } else if (!insideMenu) {
                 closeAll();
             }
         });
@@ -307,6 +308,60 @@ function pollNotifications() {
 }
 
 // ============================================================
+// Font size preference — small / medium (default) / large / xlarge.
+// ============================================================
+const FontSize = (() => {
+    const KEY = 'plp_font_size';
+    const SIZES = ['small', 'medium', 'large', 'xlarge'];
+    const LABELS = {
+        small: 'Small',
+        medium: 'Medium',
+        large: 'Large',
+        xlarge: 'Extra Large',
+    };
+    const DEFAULT = 'medium';
+
+    function get() {
+        let v = null;
+        try { v = localStorage.getItem(KEY); } catch (e) {}
+        return SIZES.includes(v) ? v : DEFAULT;
+    }
+
+    function apply(size) {
+        if (!SIZES.includes(size)) size = DEFAULT;
+        document.documentElement.dataset.fontSize = size;
+        try { localStorage.setItem(KEY, size); } catch (e) {}
+        document.querySelectorAll('.font-size-btn').forEach(btn => {
+            btn.setAttribute('aria-pressed', btn.dataset.size === size ? 'true' : 'false');
+        });
+        document.querySelectorAll('[data-font-size-slider]').forEach(slider => {
+            const index = SIZES.indexOf(size);
+            const max = parseInt(slider.max || String(SIZES.length - 1), 10) || SIZES.length - 1;
+            const pct = max === 0 ? 0 : (index / max) * 100;
+            slider.value = String(index);
+            slider.style.setProperty('--font-slider-progress', `${pct}%`);
+        });
+        document.querySelectorAll('[data-font-size-label]').forEach(label => {
+            label.textContent = LABELS[size] || LABELS[DEFAULT];
+        });
+        if (window.AutoPageSize && AutoPageSize.recheck) AutoPageSize.recheck();
+    }
+
+    function init() {
+        document.querySelectorAll('[data-font-size-slider]').forEach(slider => {
+            slider.addEventListener('input', () => {
+                const index = Math.max(0, Math.min(SIZES.length - 1, parseInt(slider.value, 10) || 0));
+                apply(SIZES[index]);
+            });
+        });
+        apply(get());
+    }
+
+    return { init, apply, get };
+})();
+window.FontSize = FontSize;
+
+// ============================================================
 // Auto page size — viewport-fit pagination for server-rendered
 // list tables (audit log, and any future page opting in).
 //
@@ -332,8 +387,7 @@ const AutoPageSize = (() => {
     const MAX_ROWS = 200;
     const FALLBACK_ROW_HEIGHT = 44;
     const FALLBACK_HEADER_HEIGHT = 40;
-    // Pagination bar (32px buttons) plus its own top padding.
-    const PAGINATION_BAR_HEIGHT = 44;
+    const FALLBACK_FOOTER_HEIGHT = 52;
     const STORAGE_KEY_PREFIX = 'plp_auto_page_size:';
 
     function cssVar(name, fallback) {
@@ -342,43 +396,47 @@ const AutoPageSize = (() => {
         return Number.isNaN(n) ? fallback : n;
     }
 
-    function computeRows(container, toolbar, hasPagination) {
-        const availableH = container.getBoundingClientRect().height;
+    // Rows that fit = card height - toolbar - header - footer, divided by the
+    // fixed row height. The card is measured because the toolbar and the
+    // pagination footer are siblings of the body inside it.
+    function computeRows(card, toolbar, footer) {
+        const availableH = card.getBoundingClientRect().height;
         const toolbarH = toolbar ? toolbar.getBoundingClientRect().height : 0;
         const rowH = cssVar('--height-table-row', FALLBACK_ROW_HEIGHT);
         const headerH = cssVar('--height-table-header', FALLBACK_HEADER_HEIGHT);
-        const paginationH = hasPagination ? PAGINATION_BAR_HEIGHT : 0;
+        const footerH = footer
+            ? footer.getBoundingClientRect().height
+            : cssVar('--height-table-footer', FALLBACK_FOOTER_HEIGHT);
 
-        const usable = availableH - toolbarH - headerH - paginationH;
+        const usable = availableH - toolbarH - headerH - footerH;
         const rows = Math.floor(usable / rowH);
         return Math.max(MIN_ROWS, Math.min(MAX_ROWS, rows));
     }
 
-    // One table per page uses this (the audit log today), so a single
-    // active binding is enough; init() is a no-op if the markup isn't there.
     function init() {
         const root = document.querySelector('[data-auto-page-size]');
         if (!root) return;
 
         const container = root.querySelector('.auto-table-body');
         const toolbar   = root.querySelector('.auto-table-toolbar');
-        const pagination = document.querySelector('.auto-table-pagination');
+        const footer    = root.querySelector('.auto-table-pagination');
         if (!container) return;
 
         const storageKey = STORAGE_KEY_PREFIX + (root.dataset.autoPageSize || 'default');
+        const cookieKey = storageKey.replace(/[^a-zA-Z0-9_]/g, '_');
         const reloadCountKey = storageKey + ':reloads';
         const currentPerPage = parseInt(root.dataset.currentPerPage || '0', 10);
-        // Safety valve: if layout hasn't settled yet (fonts, first paint)
-        // the computed size can be off on the very first render. Allow a
-        // couple of auto-corrections per page load, then stop — never
-        // reload forever even if the measurement keeps disagreeing.
+        // Safety valve: allow a couple of auto-corrections per page load,
+        // then stop — never reload forever.
         const MAX_AUTO_RELOADS = 3;
 
         function reloadWithPerPage(perPage) {
             const url = new URL(window.location.href);
             url.searchParams.set('per_page', String(perPage));
-            url.searchParams.set('page', '1'); // row count changed, page numbers no longer line up
+            // Preserve pagination clicks. If the resized page number is no
+            // longer valid, the server clamps it to the last available page.
             sessionStorage.setItem(storageKey, String(perPage));
+            document.cookie = `${cookieKey}=${perPage}; path=/; max-age=31536000; samesite=lax`;
             window.location.href = url.toString();
         }
 
@@ -386,7 +444,7 @@ const AutoPageSize = (() => {
             const reloadsSoFar = parseInt(sessionStorage.getItem(reloadCountKey) || '0', 10);
             if (reloadsSoFar >= MAX_AUTO_RELOADS) return false;
 
-            const rows = computeRows(container, toolbar, !!pagination);
+            const rows = computeRows(root, toolbar, footer);
             // Avoid a reload loop: only navigate if the computed size is
             // meaningfully different from what the server already rendered.
             if (Math.abs(rows - currentPerPage) >= 2) {
@@ -394,6 +452,7 @@ const AutoPageSize = (() => {
                 reloadWithPerPage(rows);
                 return true;
             }
+            document.cookie = `${cookieKey}=${rows}; path=/; max-age=31536000; samesite=lax`;
             sessionStorage.removeItem(reloadCountKey); // settled — reset for next time
             return false;
         }
@@ -401,17 +460,21 @@ const AutoPageSize = (() => {
         if (measureAndMaybeReload()) return; // navigating away
 
         // Keep it in sync with real resizes (sidebar collapse, window
-        // resize, orientation change) without reloading on every pixel —
-        // debounced, and only acts once the size has settled.
+        // resize, orientation change) — debounced.
         let resizeTimer = null;
         const observer = new ResizeObserver(() => {
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(measureAndMaybeReload, 400);
         });
-        observer.observe(container);
+        observer.observe(root);
+
+        recheckFn = () => { sessionStorage.removeItem(reloadCountKey); measureAndMaybeReload(); };
     }
 
-    return { init };
+    let recheckFn = null;
+    function recheck() { if (recheckFn) recheckFn(); }
+
+    return { init, recheck };
 })();
 window.AutoPageSize = AutoPageSize;
 
@@ -420,6 +483,7 @@ window.AutoPageSize = AutoPageSize;
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
     Theme.init();
+    FontSize.init();
     Dropdown.init();
     Sidebar.init();
     FileDropZone.init();

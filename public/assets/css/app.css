@@ -111,8 +111,9 @@
        is forced to exactly this height so the row count that fits a given
        viewport can be computed from the container height alone, without
        measuring a live row — see AutoPageSize in app.js. */
-    --height-table-row:    44px;
-    --height-table-header: 40px;
+   --height-table-row:    48px;
+    --height-table-header: 44px;
+    --height-table-footer: 52px;
 
     /* Transitions */
     --transition-fast:   150ms ease;
@@ -185,7 +186,7 @@
 .hidden { display: none !important; }
 
 html {
-    font-size: 16px;
+    font-size: 18px;
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
 }
@@ -3104,6 +3105,8 @@ body.ap-drawer-locked { overflow: hidden; }
     gap: var(--space-2);
     padding: var(--space-3);
     border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    z-index: 3;
 }
 
 .auto-table-search {
@@ -3214,8 +3217,10 @@ body.ap-drawer-locked { overflow: hidden; }
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
-    padding: var(--space-3) var(--space-1) 0;
-    flex-wrap: wrap;
+    height: var(--height-table-footer);
+    padding: 0 var(--space-3);
+    border-top: 1px solid var(--border);
+    background: var(--bg-elevated);
 }
 
 .auto-table-pagination-info {
@@ -3259,3 +3264,147 @@ body.ap-drawer-locked { overflow: hidden; }
 }
 
 .auto-table-page-btn svg { width: 16px; height: 16px; }
+/* Table helpers shared by every auto-table page */
+.auto-table th.col-check, .auto-table td.col-check { width: 44px; padding-left: var(--space-3); padding-right: 0; }
+.auto-table td .btn-sm { white-space: nowrap; }
+.auto-table tbody tr.bulk-selected td { background: var(--accent-muted); }
+.auto-table tbody tr.bulk-selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.auto-table-toolbar .toolbar-spacer { flex: 1 1 auto; }
+.auto-table-toolbar .form-input {
+    height: 44px;
+    min-height: 44px;
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 1.2;
+}
+.auto-table-toolbar .auto-table-search .form-input { padding-left: 32px; }
+
+/* Font size presets (Settings > Appearance) */
+html[data-font-size="small"]  { font-size: 16px; --height-table-row: 44px; --height-table-header: 40px; --height-table-footer: 48px; }
+html[data-font-size="medium"] { font-size: 18px; --height-table-row: 48px; --height-table-header: 44px; --height-table-footer: 52px; }
+html[data-font-size="large"]  { font-size: 20px; --height-table-row: 54px; --height-table-header: 48px; --height-table-footer: 56px; }
+html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 60px; --height-table-header: 52px; --height-table-footer: 60px; }
+
+.font-size-slider-wrap {
+    margin-top: var(--space-3);
+    max-width: 420px;
+}
+
+.font-size-current {
+    margin-bottom: var(--space-2);
+    text-align: center;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--text-secondary);
+}
+
+.font-size-slider-row {
+    display: grid;
+    grid-template-columns: 32px 1fr 40px;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.font-size-a {
+    line-height: 1;
+    font-weight: var(--weight-medium);
+    color: var(--text-secondary);
+}
+
+.font-size-a-sm { font-size: 22px; }
+.font-size-a-lg { font-size: 34px; text-align: right; }
+
+.font-size-slider-track-wrap {
+    position: relative;
+    min-width: 0;
+}
+
+.font-size-slider {
+    --font-slider-progress: 33.333%;
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: 28px;
+    background: transparent;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.font-size-slider:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: var(--radius-full);
+}
+
+.font-size-slider::-webkit-slider-runnable-track {
+    height: 8px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(
+        to right,
+        var(--accent) 0,
+        var(--accent) var(--font-slider-progress),
+        var(--bg-subtle) var(--font-slider-progress),
+        var(--bg-subtle) 100%
+    );
+}
+
+.font-size-slider::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+    margin-top: -8px;
+    border: 2px solid var(--bg-elevated);
+    border-radius: var(--radius-full);
+    background: var(--accent);
+    box-shadow: var(--shadow-sm);
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.font-size-slider::-moz-range-track {
+    height: 8px;
+    border-radius: var(--radius-full);
+    background: var(--bg-subtle);
+}
+
+.font-size-slider::-moz-range-progress {
+    height: 8px;
+    border-radius: var(--radius-full);
+    background: var(--accent);
+}
+
+.font-size-slider::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--bg-elevated);
+    border-radius: var(--radius-full);
+    background: var(--accent);
+    box-shadow: var(--shadow-sm);
+}
+
+.font-size-ticks {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: 10px;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+}
+
+.font-size-ticks span {
+    width: 4px;
+    height: 4px;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--text-tertiary) 45%, transparent);
+    box-shadow: 0 0 0 2px var(--bg-elevated);
+}
+/* Pin auto-table pages to the viewport so the card has a fixed height
+   (AutoPageSize needs a bounded card to count rows against) */
+.main:has(.auto-table-card) { height: 100vh; overflow: hidden; }
+.page:has(.auto-table-card) { flex: 1; min-height: 0; overflow: hidden; }
+.auto-table-card { min-height: 0; height: 100%; }
+
+/* Keep every row one line tall: clip instead of wrapping */
+.auto-table td { white-space: nowrap; text-overflow: ellipsis; }
