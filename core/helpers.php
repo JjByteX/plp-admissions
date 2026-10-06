@@ -759,7 +759,7 @@ function exam_late_cutoff_minutes(): int
  * whatever filters that page needs to preserve in the URL (search term,
  * status filter, page number, ...) alongside the sort change itself.
  */
-function sortable_th(string $col, string $label, string $currentCol, string $currentDir, array $extraParams = []): string
+function sortable_th(string $col, string $label, string $currentCol, string $currentDir, array $extraParams = [], string $thStyle = ''): string
 {
     $isActive = ($currentCol === $col);
     $nextDir  = ($isActive && $currentDir === 'asc') ? 'desc' : 'asc';
@@ -769,8 +769,53 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
     $sortIcon  = icon('ic_fluent_chevron_up_down_24_filled', 13);
     $sortColor = $isActive ? 'var(--accent)' : 'var(--text-tertiary)';
 
-    return '<th><a href="' . $url . '" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;color:inherit;white-space:nowrap;">'
+    return '<th' . ($thStyle !== '' ? ' style="' . htmlspecialchars($thStyle) . '"' : '') . '><a href="' . $url . '" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;color:inherit;white-space:nowrap;">'
          . htmlspecialchars($label)
          . '<span style="color:' . $sortColor . ';display:flex;align-items:center;margin-left:2px;">' . $sortIcon . '</span>'
          . '</a></th>';
+}
+
+// ================================================================
+// Auto-paginated tables (.auto-table-*): shared helpers
+// ================================================================
+
+/**
+ * Rows per page. AutoPageSize (app.js) reloads once with ?per_page=<rows that fit>.
+ * Clamped to [3, 200] so a hand-edited URL can't request an unbounded row count.
+ */
+function auto_per_page(int $fallback = 25): int
+{
+    $n = isset($_GET['per_page']) ? (int) $_GET['per_page'] : $fallback;
+    return max(3, min(200, $n));
+}
+
+/**
+ * Pagination footer rendered INSIDE the .auto-table-card.
+ * $result = paginate()'s return value. $urlFor = fn(int $page): string.
+ */
+function auto_table_footer(array $result, callable $urlFor, string $noun = 'records'): string
+{
+    $total = (int) $result['total'];
+    $page  = (int) $result['current_page'];
+    $pages = max(1, (int) $result['last_page']);
+    $per   = (int) $result['per_page'];
+    $from  = $total === 0 ? 0 : ($page - 1) * $per + 1;
+    $to    = min($page * $per, $total);
+
+    $btn = function (bool $enabled, int $target, string $iconName, string $label) use ($urlFor): string {
+        $ic = icon($iconName, 16);
+        return $enabled
+            ? '<a href="' . htmlspecialchars($urlFor($target)) . '" class="auto-table-page-btn" aria-label="' . $label . '">' . $ic . '</a>'
+            : '<span class="auto-table-page-btn" aria-disabled="true" aria-label="' . $label . '">' . $ic . '</span>';
+    };
+
+    $strong = 'style="color:var(--text-primary);font-weight:var(--weight-semibold)"';
+    return '<div class="auto-table-pagination">'
+         . '<p class="auto-table-pagination-info" style="margin:0">Showing <strong>' . number_format($from) . '–' . number_format($to)
+         . '</strong> of <strong>' . number_format($total) . '</strong> ' . htmlspecialchars($noun) . '</p>'
+         . '<div class="auto-table-pagination-controls">'
+         . $btn($page > 1, $page - 1, 'ic_fluent_chevron_left_24_regular', 'Previous page')
+         . '<span style="padding:0 var(--space-1);font-size:var(--text-sm);color:var(--text-tertiary);white-space:nowrap">Page <strong ' . $strong . '>' . $page . '</strong> of <strong ' . $strong . '>' . $pages . '</strong></span>'
+         . $btn($page < $pages, $page + 1, 'ic_fluent_chevron_right_24_regular', 'Next page')
+         . '</div></div>';
 }
