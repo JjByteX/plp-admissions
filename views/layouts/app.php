@@ -325,6 +325,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 </div><!-- /.layout -->
 
 <script>window.__baseUrl = '<?= rtrim(BASE_URL, '/') ?>';</script>
+<script src="<?= asset('js/jquery.min.js') ?>"></script>
 <script src="<?= asset('js/app.js') ?>"></script>
 <script>
     // Inject accent from DB

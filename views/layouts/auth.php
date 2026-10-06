@@ -41,6 +41,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 
 
 
+<script src="<?= asset('js/jquery.min.js') ?>"></script>
 <script src="<?= asset('js/app.js') ?>"></script>
 <script>setAccentColor('<?= e($accentColor) ?>');</script>
 <?php if (HCAPTCHA_ENABLED): ?>
