@@ -65,13 +65,7 @@ switch ($action) {
         $affected = $stmt->rowCount();
 
         // Auto-advance to exam if all docs are now approved
-        $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\''
-        );
-        $stmt->execute([$id]);
-        $remaining = (int)$stmt->fetchColumn();
-
-        if ($remaining === 0) {
+        if (required_docs_all_approved($db, (int)$id)) {
             $db->prepare(
                 'UPDATE applicants
                     SET overall_status = \'exam\',
@@ -137,13 +131,7 @@ switch ($action) {
         $applicantId = $row['applicant_id'] ?? 0;
 
         // Auto-advance to exam stage if all documents are now approved
-        $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\''
-        );
-        $stmt->execute([$applicantId]);
-        $pendingCount = $stmt->fetchColumn();
-
-        if ($pendingCount == 0) {
+        if (required_docs_all_approved($db, (int)$applicantId)) {
             $db->prepare(
                 'UPDATE applicants
                     SET overall_status = \'exam\',
@@ -168,17 +156,7 @@ switch ($action) {
 
     case 'advance_to_exam':
         // Guard: all documents must exist and be approved before advancing
-        $stmt = $db->prepare('SELECT COUNT(*) FROM documents WHERE applicant_id=?');
-        $stmt->execute([$id]);
-        $totalDocs = (int)$stmt->fetchColumn();
-
-        $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\''
-        );
-        $stmt->execute([$id]);
-        $pendingCount = (int)$stmt->fetchColumn();
-
-        if ($totalDocs === 0 || $pendingCount > 0) {
+        if (!required_docs_all_approved($db, (int)$id)) {
             Session::flash('error', 'Approve all documents before advancing.');
             redirect('/staff/applicants/' . $id);
         }

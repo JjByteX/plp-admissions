@@ -80,7 +80,7 @@ if ($applicantId) {
     $stmt = $db->prepare('SELECT * FROM documents WHERE applicant_id = ?');
     $stmt->execute([$applicantId]);
     $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
-    $requiredDocs = docs_for_type($applicant['applicant_type']);
+    $requiredDocs = docs_for_type($applicant['applicant_type'], $applicant['doc_flags'] ?? null);
 
     // Staff can only review docs after applicant has submitted
     $isSubmitted = in_array($applicant['overall_status'], ['submitted','exam','interview','released'], true);

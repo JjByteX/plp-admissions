@@ -23,7 +23,10 @@ $stmt = $db->prepare('SELECT * FROM documents WHERE applicant_id = ?');
 $stmt->execute([$applicantId]);
 $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
 
-$requiredDocs = docs_for_type($applicant['applicant_type']);
+$requiredDocs = docs_for_type($applicant['applicant_type'], $applicant['doc_flags'] ?? null);
+
+// Applicant can change the conditional ticks until they submit.
+$canEditFlags = in_array($applicant['overall_status'] ?? '', ['pending', 'documents'], true);
 
 // Self-heal: if every required doc is approved but overall_status didn't
 // auto-advance (rejected-then-replaced-then-approved edge case), fix it
@@ -142,6 +145,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/student/documents');
     }
 
+    // ---- Change conditional ticks (married / guardian / Grade 12 / SHS grad) ----
+    if ($action === 'update_flags') {
+        if (!$canEditFlags) {
+            $errors[] = 'You can only change these before submitting your documents.';
+        } else {
+            $newFlags = doc_flags_from_input($applicant['applicant_type'], $_POST['flags'] ?? []);
+            $blocked  = doc_flags_blocked_slots($db, $applicantId, $newFlags);
+            if ($blocked) {
+                $errors[] = 'Cannot remove an approved document: ' . implode(', ', $blocked) . '.';
+            } else {
+                $db->prepare('UPDATE applicants SET doc_flags = ?::jsonb WHERE id = ?')
+                   ->execute([json_encode($newFlags), $applicantId]);
+                $applicant['doc_flags'] = json_encode($newFlags);
+                $requiredDocs = docs_for_type($applicant['applicant_type'], $applicant['doc_flags']);
+                sync_doc_rows($db, $applicantId, $requiredDocs);
+                audit_log('doc_flags_changed', "Applicant {$applicantId} updated document ticks", 'applicant', $applicantId);
+            }
+        }
+
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => empty($errors), 'message' => empty($errors) ? 'Requirements updated.' : implode(' ', $errors)]);
+            exit;
+        }
+        if ($errors) Session::flash('error', implode(' ', $errors));
+        redirect('/student/documents');
+    }
+
     // ---- Change applicant type ----
     if ($action === 'change_type') {
         $newType = trim($_POST['applicant_type'] ?? '');
@@ -151,10 +182,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($isSubmitted || !in_array($applicant['overall_status'], ['documents'], true)) {
             $errors[] = 'You can only change your applicant type before submitting documents.';
         } else {
-            $db->prepare('UPDATE applicants SET applicant_type = ? WHERE id = ?')
-                ->execute([$newType, $applicantId]);
+            $typeFlags = doc_flags_from_input($newType, doc_flags_decode($applicant['doc_flags'] ?? null));
+            $db->prepare('UPDATE applicants SET applicant_type = ?, doc_flags = ?::jsonb WHERE id = ?')
+                ->execute([$newType, json_encode($typeFlags), $applicantId]);
             $applicant['applicant_type'] = $newType;
-            $requiredDocs = docs_for_type($newType);
+            $applicant['doc_flags']      = json_encode($typeFlags);
+            $requiredDocs = docs_for_type($newType, $applicant['doc_flags']);
+            sync_doc_rows($db, $applicantId, $requiredDocs);
             audit_log('type_changed', "Applicant {$applicantId} changed type to {$newType}", 'applicant', $applicantId);
             Session::flash('success', 'Applicant type updated. Please review the updated document requirements.');
         }
@@ -245,14 +279,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Count statuses
-$statusCounts = array_count_values(array_column($docRows, 'status'));
-$allApproved  = count($docRows) === count($requiredDocs)
+// Count statuses (only slots that apply; old or extra rows are ignored)
+$reqRows      = array_intersect_key($docRows, $requiredDocs);
+$statusCounts = array_count_values(array_column($reqRows, 'status'));
+$allApproved  = count($reqRows) === count($requiredDocs)
     && ($statusCounts['approved'] ?? 0) === count($requiredDocs);
 
 // Submission state helpers
 $uploadedOrApproved = ($statusCounts['uploaded'] ?? 0) + ($statusCounts['approved'] ?? 0);
-$allUploaded  = count($docRows) === count($requiredDocs) && $uploadedOrApproved === count($requiredDocs);
+$allUploaded  = count($reqRows) === count($requiredDocs) && $uploadedOrApproved === count($requiredDocs);
 $pastDocuments = in_array($applicant['overall_status'] ?? '', ['exam', 'interview', 'released'], true);
 $hasRejected   = ($statusCounts['rejected'] ?? 0) > 0;
 $canSubmit     = $allUploaded && !$isSubmitted && !$pastDocuments;
@@ -493,6 +528,13 @@ ob_start();
 
 
 
+<!-- Client notice -->
+<div class="alert alert-info" style="margin-bottom:var(--space-4);display:block;line-height:1.6">
+    <p style="margin:0 0 var(--space-2)">When uploading the REQUIRED DOCUMENTS, please ensure that the scanned copies or screenshots are CLEAR, LEGIBLE, and FREE FROM ANY ALTERATIONS or DIGITAL MANIPULATION.</p>
+    <p style="margin:0 0 var(--space-2)">Applicants are reminded that ONLY THOSE with COMPLETE REQUIREMENTS will be entertained and scheduled for VALIDATION.</p>
+    <p style="margin:0">Qualifying applicants shall take the admission exam. The schedule of examination will be posted on the PLP Official Facebook Page.</p>
+</div>
+
 <?php if (!$isSubmitted && $applicant['overall_status'] === 'documents'): ?>
 <!-- Applicant type selector -->
 <div class="card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
@@ -513,8 +555,41 @@ ob_start();
 </div>
 <?php endif; ?>
 
+<?php if ($canEditFlags && !$isSubmitted): ?>
+<!-- Conditional ticks: change until submit; jQuery refreshes the slot list below -->
+<div class="card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)">
+    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-2)">Which of these apply to you?</div>
+    <form id="flags-form">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="update_flags">
+        <?php $_ticks = doc_flags_decode($applicant['doc_flags'] ?? null); ?>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+            <label class="form-check">
+                <input type="checkbox" name="flags[married]" value="1" <?= $_ticks['married'] ? 'checked' : '' ?>>
+                <span>I am married</span>
+            </label>
+            <label class="form-check">
+                <input type="checkbox" name="flags[guardian]" value="1" <?= $_ticks['guardian'] ? 'checked' : '' ?>>
+                <span>I am not living with my parents</span>
+            </label>
+            <?php if ($applicant['applicant_type'] === 'freshman'): ?>
+            <label class="form-check">
+                <input type="checkbox" name="flags[grade12]" value="1" <?= $_ticks['grade12'] ? 'checked' : '' ?>>
+                <span>I am currently in Grade 12</span>
+            </label>
+            <label class="form-check">
+                <input type="checkbox" name="flags[shs_grad]" value="1" <?= $_ticks['shs_grad'] ? 'checked' : '' ?>>
+                <span>I am a Senior High School graduate</span>
+            </label>
+            <?php endif; ?>
+        </div>
+    </form>
+    <div id="flags-msg" style="font-size:var(--text-xs);margin-top:var(--space-2);display:none"></div>
+</div>
+<?php endif; ?>
+
 <!-- Document list -->
-<div style="display:flex;flex-direction:column;gap:var(--space-3)">
+<div id="doc-list" style="display:flex;flex-direction:column;gap:var(--space-3)">
 <?php foreach ($requiredDocs as $slug => $label):
     $doc    = $docRows[$slug] ?? null;
     $status = $doc['status'] ?? 'pending';
@@ -1057,6 +1132,7 @@ function updateDropLabel(name) {
 </script>
 
 <!-- Submit / Withdraw panel -->
+<div id="doc-submit">
 <?php if ($canSubmit): ?>
 <div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4)">
     <div style="flex:1">
@@ -1085,6 +1161,50 @@ function updateDropLabel(name) {
     <button class="btn btn-primary" disabled style="cursor:not-allowed">Submit Application</button>
 </div>
 <?php endif; ?>
+</div>
+
+<script>
+// 1D: save ticks with $.ajax, then refresh the slot list and submit panel without a reload.
+// jQuery loads after page content, so wait for DOMContentLoaded.
+document.addEventListener('DOMContentLoaded', function () {
+    var $ = window.jQuery;
+    if (!$ || !$('#flags-form').length) return;
+
+    // Reusable: re-fetch this page and swap in the fresh slot list + submit panel.
+    window.refreshSlotList = function () {
+        return $.get(window.location.href).done(function (html) {
+            var $page = $('<div>').append($.parseHTML(html));
+            $('#doc-list').html($page.find('#doc-list').html());
+            $('#doc-submit').html($page.find('#doc-submit').html());
+        });
+    };
+
+    function say(ok, msg) {
+        $('#flags-msg').text(msg).css('color', ok ? 'var(--success)' : 'var(--error)').show();
+    }
+
+    $('#flags-form').on('change', 'input[type=checkbox]', function () {
+        var $box = $(this);
+        $.ajax({
+            url: $('#flags-form').attr('action') || window.location.href,
+            method: 'POST',
+            data: $('#flags-form').serialize(),
+            dataType: 'json'
+        }).done(function (res) {
+            if (res.ok) {
+                say(true, res.message);
+                window.refreshSlotList();
+            } else {
+                $box.prop('checked', !$box.prop('checked')); // put it back
+                say(false, res.message);
+            }
+        }).fail(function () {
+            $box.prop('checked', !$box.prop('checked'));
+            say(false, 'Could not save. Please try again.');
+        });
+    });
+});
+</script>
 
 <!-- Step navigation -->
 <div class="step-nav">

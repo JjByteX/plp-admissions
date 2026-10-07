@@ -217,7 +217,24 @@ function suggest_alt_courses(int $score, int $total, string $appliedCourse): arr
 }
 
 // -- Document helpers -------------------------------------------
-function docs_for_type(string $applicantType): array
+// Decode applicants.doc_flags (jsonb string from PDO, array, or null) into
+// a clean ['married'=>bool,'guardian'=>bool,'grade12'=>bool,'shs_grad'=>bool].
+function doc_flags_decode(array|string|null $flags): array
+{
+    if (is_string($flags)) {
+        $flags = json_decode($flags, true);
+    }
+    if (!is_array($flags)) $flags = [];
+    $out = [];
+    foreach (array_unique(array_values(DOCS_CONDITIONAL)) as $key) {
+        $out[$key] = !empty($flags[$key]);
+    }
+    return $out;
+}
+
+// Slots that apply to an applicant: type slots minus conditional slots
+// whose flag is not ticked. Pass applicants.doc_flags as $flags.
+function docs_for_type(string $applicantType, array|string|null $flags = null): array
 {
     $docs = DOCS_CORE;
     if ($applicantType === TYPE_FRESHMAN) {
@@ -227,7 +244,90 @@ function docs_for_type(string $applicantType): array
     } elseif ($applicantType === TYPE_FOREIGN) {
         $docs = array_merge($docs, DOCS_FOREIGN);
     }
+    $on = doc_flags_decode($flags);
+    foreach (DOCS_CONDITIONAL as $slug => $flag) {
+        if (empty($on[$flag])) unset($docs[$slug]);
+    }
     return $docs;
+}
+
+// Normalise ticked boxes from a form (e.g. $_POST['flags']) for an applicant type.
+// Grade 12 / SHS graduate only apply to freshmen.
+function doc_flags_from_input(string $applicantType, mixed $input): array
+{
+    $flags = doc_flags_decode(is_array($input) ? $input : []);
+    if ($applicantType !== TYPE_FRESHMAN) {
+        $flags['grade12']  = false;
+        $flags['shs_grad'] = false;
+    }
+    return $flags;
+}
+
+// Make the documents rows match the slots that apply: add missing pending
+// rows, remove rows for slots that no longer apply. Approved rows are kept.
+// ponytail: an uploaded (not approved) file on a removed slot is dropped from
+// the row but stays in storage; upgrade path is a storage cleanup job.
+function sync_doc_rows(PDO $db, int $applicantId, array $required): void
+{
+    $slugs = array_keys($required);
+    $stmt = $db->prepare('SELECT doc_type FROM documents WHERE applicant_id = ?');
+    $stmt->execute([$applicantId]);
+    $have = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $ins = $db->prepare('INSERT INTO documents (applicant_id, doc_type, status) VALUES (?, ?, \'pending\')');
+    foreach (array_diff($slugs, $have) as $slug) {
+        $ins->execute([$applicantId, $slug]);
+    }
+    if ($slugs) {
+        $in = implode(',', array_fill(0, count($slugs), '?'));
+        $db->prepare(
+            "DELETE FROM documents
+              WHERE applicant_id = ? AND status <> 'approved' AND doc_type NOT IN ($in)"
+        )->execute(array_merge([$applicantId], $slugs));
+    }
+}
+
+// True when every slot that applies to the applicant has an approved file.
+// Used by approve / approve-all / advance so extra or old rows never block.
+function required_docs_all_approved(PDO $db, int $applicantId): bool
+{
+    $stmt = $db->prepare('SELECT applicant_type, doc_flags FROM applicants WHERE id = ?');
+    $stmt->execute([$applicantId]);
+    $a = $stmt->fetch();
+    if (!$a) return false;
+    $slugs = array_keys(docs_for_type($a['applicant_type'], $a['doc_flags'] ?? null));
+    if (!$slugs) return false;
+    $in = implode(',', array_fill(0, count($slugs), '?'));
+    $stmt = $db->prepare(
+        "SELECT COUNT(DISTINCT doc_type) FROM documents
+          WHERE applicant_id = ? AND status = 'approved' AND doc_type IN ($in)"
+    );
+    $stmt->execute(array_merge([$applicantId], $slugs));
+    return (int)$stmt->fetchColumn() === count($slugs);
+}
+
+// Slots that would be dropped by $newFlags but already hold an approved file.
+// Returns their labels; empty array means the flag change is allowed.
+function doc_flags_blocked_slots(PDO $db, int $applicantId, array $newFlags): array
+{
+    $stmt = $db->prepare('SELECT applicant_type, doc_flags FROM applicants WHERE id = ?');
+    $stmt->execute([$applicantId]);
+    $a = $stmt->fetch();
+    if (!$a) return [];
+    $dropped = array_diff_key(
+        docs_for_type($a['applicant_type'], $a['doc_flags'] ?? null),
+        docs_for_type($a['applicant_type'], $newFlags)
+    );
+    if (!$dropped) return [];
+    $in = implode(',', array_fill(0, count($dropped), '?'));
+    $stmt = $db->prepare(
+        "SELECT doc_type FROM documents
+          WHERE applicant_id = ? AND status = 'approved' AND doc_type IN ($in)"
+    );
+    $stmt->execute(array_merge([$applicantId], array_keys($dropped)));
+    $blocked = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $slug) $blocked[] = $dropped[$slug];
+    return $blocked;
 }
 
 // -- Formatting -------------------------------------------------
