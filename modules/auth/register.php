@@ -98,6 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors['barangay'] = 'Select a valid barangay in Pasig City.';
     if (!$old['phone'])
         $errors['phone']      = 'Phone number is required.';
+    elseif (!preg_match('/^\d{11}$/', $old['phone']))
+        $errors['phone']      = 'Enter a valid 11-digit mobile number (e.g. 09123456789).';
     if (!filter_var($old['email'], FILTER_VALIDATE_EMAIL))
         $errors['email']      = 'Enter a valid email address.';
     if (!in_array($old['applicant_type'], [TYPE_FRESHMAN, TYPE_TRANSFEREE, TYPE_FOREIGN], true))
@@ -297,7 +299,7 @@ try {
 } catch (\Throwable $e) { /* table may not exist yet */ }
 ob_start();
 ?>
-<div class="auth-card animate-fade-in" style="max-width:560px">
+<div class="auth-card auth-card-wide animate-fade-in">
 
     <button class="auth-theme-toggle" onclick="Theme.toggle()" aria-label="Toggle theme">
         <?= icon('ic_fluent_weather_sunny_24_regular', 16, '', 'data-theme-icon="dark" class="hidden"') ?>
@@ -313,8 +315,8 @@ ob_start();
             </div>
         <?php endif; ?>
         <div class="auth-header-text">
-            <h1 class="auth-title">PLP Admissions</h1>
-            <p class="auth-subtitle">Pamantasan ng Lungsod ng Pasig</p>
+            <h1 class="auth-title">Create your account</h1>
+            <p class="auth-subtitle">Start your PLP admission application.</p>
         </div>
     </div>
 
@@ -559,10 +561,11 @@ ob_start();
                 <input type="tel" id="phone" name="phone"
                     class="form-input <?= isset($errors['phone']) ? 'error' : '' ?>"
                     value="<?= e($old['phone'] ?? '') ?>"
-                    placeholder=""
                     autocomplete="tel"
-                    maxlength="10"
-                    oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"
+                    maxlength="11"
+                    inputmode="numeric"
+                    placeholder="09123456789"
+                    oninput="this.value=this.value.replace(/\D/g,'').slice(0,11)"
                     required>
                 <?php if (!empty($errors['phone'])): ?>
                     <span class="form-error"><?= e($errors['phone']) ?></span>
@@ -731,6 +734,36 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     $('#applicant_type').on('change', syncFlags);
     syncFlags();
+
+    // Live password checks (same rules as the server): 8+ chars, and both match.
+    function pwMsg($in, msg) {
+        var $box = $in.closest('.input-wrapper');
+        $box.siblings('.form-error').remove();
+        $in.toggleClass('error', !!msg);
+        if (msg) $('<span class="form-error"></span>').text(msg).insertAfter($box);
+    }
+    function checkPw() { pwMsg($('#password'), $('#password').val().length < 8 ? 'Password must be at least 8 characters.' : ''); }
+    function checkConfirm() { pwMsg($('#password_confirm'), $('#password_confirm').val() !== $('#password').val() ? 'Passwords do not match.' : ''); }
+    $('#password').on('blur', function () {
+        checkPw();
+        if ($('#password_confirm').val() !== '') checkConfirm();
+    }).on('input', function () {
+        if ($(this).hasClass('error')) checkPw();
+        if ($('#password_confirm').val() !== '') checkConfirm();
+    });
+    $('#password_confirm').on('blur', checkConfirm).on('input', function () {
+        if ($(this).hasClass('error')) checkConfirm();
+    });
+
+    // Live phone check: must be 11 digits.
+    $('#phone').on('blur input', function (ev) {
+        var $in = $(this), v = $in.val();
+        if (ev.type === 'input' && !$in.hasClass('error')) return; // wait for blur first
+        var bad = !/^\d{11}$/.test(v);
+        $in.siblings('.form-error').remove();
+        $in.toggleClass('error', bad);
+        if (bad) $('<span class="form-error">Enter a valid 11-digit mobile number (e.g. 09123456789).</span>').insertAfter($in);
+    });
 });
 </script>
 

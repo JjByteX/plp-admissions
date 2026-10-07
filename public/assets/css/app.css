@@ -1226,22 +1226,65 @@ tbody tr:hover { background: var(--bg-overlay); }
 
 .auth-page {
     min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #0c2a1a;
+}
+
+/* Top bar (matches the login page) */
+.auth-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px clamp(16px, 8vw, 150px);
+    background: #fff;
+    color: #1a2420;
+}
+.auth-bar-logo { width: 52px; height: 52px; object-fit: contain; flex: none; }
+.auth-bar-title { margin: 0; font-size: 1.5rem; font-weight: 700; line-height: 1.1; color: var(--accent); }
+.auth-bar-sub { margin: 2px 0 0; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: #5d6b63; }
+
+/* Campus photo under a green wash, card centered on top */
+.auth-main {
+    flex: 1;
     display: grid;
     place-items: center;
-    padding: var(--space-6);
-    background: var(--bg);
+    padding: clamp(24px, 5vw, 64px) var(--space-4);
+    background:
+        linear-gradient(90deg, rgba(10,38,22,.92) 0%, rgba(10,38,22,.72) 55%, rgba(10,38,22,.55) 100%),
+        var(--auth-photo) center / cover no-repeat,
+        #0c2a1a;
 }
 
 .auth-card {
     width: 100%;
-    max-width: 420px;
+    max-width: 440px;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    padding: var(--space-8);
-    box-shadow: var(--shadow-md);
+    border-radius: 12px;
+    padding: 34px 32px 28px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.38);
     position: relative;
 }
+.auth-card-wide { max-width: 580px; }
+
+/* Card heading: the bar already carries logo and school name */
+.auth-header .auth-logo,
+.auth-header .auth-logo-img { display: none; }
+.auth-header { margin-bottom: var(--space-6); padding-right: 32px; }
+.auth-header .auth-title { color: var(--accent); font-size: 1.3rem; font-weight: 700; letter-spacing: 0; }
+
+/* Show-password button injected by jQuery */
+.auth-pw { position: relative; }
+.auth-pw .form-input { padding-right: 46px; }
+.auth-pw-eye {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: 34px; height: 34px; border: 0; background: none; border-radius: 6px;
+    display: grid; place-items: center; cursor: pointer; color: var(--text-tertiary);
+}
+.auth-pw-eye:hover { background: var(--bg-overlay); }
+.auth-pw-eye:focus-visible { outline: 2px solid var(--accent); }
+.auth-pw-eye.on { color: var(--accent); }
 
 /* Tiny blurred theme toggle inside the auth card */
 .auth-theme-toggle {
@@ -1839,9 +1882,10 @@ textarea:focus-visible {
 
 @media (max-width: 480px) {
     .auth-card {
-        padding: var(--space-6);
+        padding: var(--space-6) var(--space-5);
         border-radius: var(--radius-lg);
     }
+    .auth-bar-title { font-size: 1.2rem; }
 
     .metrics-row {
         grid-template-columns: 1fr 1fr;
