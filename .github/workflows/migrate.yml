@@ -1,0 +1,164 @@
+name: Database migrations
+
+# Pull requests: prove the migrations are valid on a throwaway Postgres.
+# Merge to main: apply pending migrations to the Supabase dev project.
+#
+# One-time setup: create a GitHub environment named "supabase-dev" with the
+# secrets SUPABASE_DB_HOST, SUPABASE_DB_PORT, SUPABASE_DB_USER and
+# SUPABASE_DB_PASSWORD (Supabase > Connect > Session pooler, port 5432).
+#
+# Migration files: database/migrations/YYYYMMDDHHMM_short_description.sql.
+# Change database/schema.sql the same way, write the SQL so it can run twice
+# (IF NOT EXISTS), and never edit a merged migration.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    # Only touch Supabase when a migration (or the runner) changed.
+    paths:
+      - "database/migrations/**"
+      - "database/migrate.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify migrations
+    runs-on: ubuntu-latest
+    services:
+      # Disposable Postgres, same as ci.yml. No shared credentials.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: plp_admissions
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d plp_admissions"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGSSLMODE: disable
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the guard below diffs against the base branch
+
+      # A migration that was already applied is tracked by checksum. Editing
+      # or renaming it would fail the deploy after merge, so fail the PR now.
+      # Deleting an old migration is fine.
+      - name: Guard against edited migrations
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          changed=$(git diff --name-status --diff-filter=MR \
+            "origin/$BASE_REF...HEAD" -- database/migrations)
+          if [ -n "$changed" ]; then
+            echo "These merged migrations were modified or renamed:"
+            echo "$changed"
+            echo "Never change a merged migration. Add a new one instead."
+            exit 1
+          fi
+
+      - name: Install Postgres client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      # Two databases: A has schema.sql only, B gets schema.sql plus the
+      # migrations. Comparing them catches a migration that schema.sql
+      # does not know about.
+      - name: Create baseline database (schema.sql only)
+        run: |
+          createdb plp_baseline
+          psql -d plp_baseline -v ON_ERROR_STOP=1 -q -f database/schema.sql
+
+      - name: Create migrated database (schema.sql + migrations)
+        run: psql -d plp_admissions -v ON_ERROR_STOP=1 -q -f database/schema.sql
+
+      - name: Apply migrations
+        run: bash database/migrate.sh
+        env:
+          PGDATABASE: plp_admissions
+
+      # Second run must find nothing left to apply.
+      - name: Re-run migrations (nothing pending)
+        run: |
+          out=$(bash database/migrate.sh)
+          echo "$out"
+          case "$out" in
+            *"Done: 0 applied"*|*"Nothing to do"*) ;;
+            *) echo "Second run applied something. The runner is not idempotent."; exit 1 ;;
+          esac
+        env:
+          PGDATABASE: plp_admissions
+
+      - name: Check schema.sql matches the migrations
+        run: |
+          psql -d plp_baseline   -X -t -A -v ON_ERROR_STOP=1 -f database/schema_fingerprint.sql > baseline.txt
+          psql -d plp_admissions -X -t -A -v ON_ERROR_STOP=1 -f database/schema_fingerprint.sql > migrated.txt
+          # An empty fingerprint would make the diff pass for the wrong reason.
+          if [ ! -s baseline.txt ]; then
+            echo "Fingerprint came back empty. The check itself is broken."
+            exit 1
+          fi
+          if ! diff -u baseline.txt migrated.txt; then
+            echo
+            echo "schema.sql and the migrations disagree (diff above)."
+            echo "Lines starting with + exist only after the migrations ran."
+            echo "Update database/schema.sql so a fresh setup gets the same change,"
+            echo "and make the migration safe to run on top of it (IF NOT EXISTS)."
+            exit 1
+          fi
+          echo "schema.sql and migrations agree."
+
+  apply:
+    name: Apply to Supabase (dev)
+    needs: verify
+    # Never on pull requests, and only from main.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Holds the Supabase secrets. In repo Settings > Environments you can
+    # also require an approval click before this job runs.
+    environment: supabase-dev
+    # One run at a time. Queue instead of cancelling, so a half-applied
+    # migration is never interrupted.
+    concurrency:
+      group: migrate-supabase-dev
+      cancel-in-progress: false
+    env:
+      # Use the Supabase SESSION pooler (port 5432), not the transaction
+      # pooler the app uses (6543). GitHub runners are IPv4 only, and the
+      # direct db.<ref>.supabase.co host is IPv6 only.
+      PGHOST: ${{ secrets.SUPABASE_DB_HOST }}
+      PGPORT: ${{ secrets.SUPABASE_DB_PORT }}
+      PGUSER: ${{ secrets.SUPABASE_DB_USER }}
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PGDATABASE: postgres
+      PGSSLMODE: require
+      PGCONNECT_TIMEOUT: "15"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Postgres client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      # This repo is public, so the log is public. Migrations must not
+      # SELECT data. Secret values are masked by GitHub automatically.
+      - name: Pending migrations
+        run: bash database/migrate.sh --dry-run
+
+      - name: Apply migrations
+        run: bash database/migrate.sh
