@@ -508,19 +508,11 @@ function doc_ai_flags(PDO $db, int $applicantId): array
 // $moveToDocId re-points the validation row to the slot the file moved to.
 function doc_ai_confirm(PDO $db, int $validationId, string $result, int $staffId, ?int $moveToDocId = null): void
 {
-    if ($moveToDocId !== null) {
-        $db->prepare(
-            'UPDATE document_validations
-                SET review_result = ?, reviewed_by = ?, reviewed_at = NOW(), document_id = ?
-              WHERE id = ? AND review_result IS NULL'
-        )->execute([$result, $staffId, $moveToDocId, $validationId]);
-        return;
-    }
     $db->prepare(
         'UPDATE document_validations
-            SET review_result = ?, reviewed_by = ?, reviewed_at = NOW()
+            SET review_result = ?, reviewed_by = ?, reviewed_at = NOW(), document_id = COALESCE(?, document_id)
           WHERE id = ? AND review_result IS NULL'
-    )->execute([$result, $staffId, $validationId]);
+    )->execute([$result, $staffId, $moveToDocId, $validationId]);
 }
 
 // Approve every uploaded / under review document of an applicant except the
