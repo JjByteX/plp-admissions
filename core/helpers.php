@@ -462,6 +462,93 @@ function classify_upload(string $path, string $mime, array $applicant): array
     ];
 }
 
+// -- AI flag review (Phase 6) -----------------------------------
+// A document is flagged when the newest validation row of a document that
+// has a file is ai + uncertain and no reviewer has set review_result yet.
+// Pure: turns one validation row into flag info, or null when not flagged.
+// source is applicant_pick (dropdown pick) or low_confidence (anything else).
+function doc_ai_flag_from_row(array $row): ?array
+{
+    if (($row['validation_type'] ?? '') !== 'ai' || ($row['status'] ?? '') !== 'uncertain') return null;
+    if (!empty($row['review_result'])) return null;
+    $d = json_decode((string)($row['details'] ?? ''), true);
+    if (!is_array($d)) $d = [];
+    $pick  = isset($d['applicant_pick']) && $d['applicant_pick'] !== '' ? (string)$d['applicant_pick'] : null;
+    $guess = $d['ai_guess'] ?? $d['category'] ?? null;
+    return [
+        'validation_id' => (int)($row['id'] ?? 0),
+        'source'        => $pick !== null ? 'applicant_pick' : 'low_confidence',
+        'pick'          => $pick,
+        'guess'         => $guess !== null && $guess !== '' ? (string)$guess : null,
+        'confidence'    => isset($row['confidence']) ? (float)$row['confidence'] : null,
+    ];
+}
+
+// Flagged documents of one applicant: [document_id => flag info].
+function doc_ai_flags(PDO $db, int $applicantId): array
+{
+    $stmt = $db->prepare(
+        'SELECT DISTINCT ON (v.document_id)
+                v.id, v.document_id, v.validation_type, v.status, v.confidence, v.details, v.review_result
+           FROM document_validations v
+           JOIN documents d ON d.id = v.document_id
+          WHERE d.applicant_id = ? AND d.file_path IS NOT NULL
+          ORDER BY v.document_id, v.id DESC'
+    );
+    $stmt->execute([$applicantId]);
+    $out = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $flag = doc_ai_flag_from_row($row);
+        if ($flag) $out[(int)$row['document_id']] = $flag;
+    }
+    return $out;
+}
+
+// Mark a flag reviewed: 'approved' (category OK) or 'corrected' (type changed).
+// $moveToDocId re-points the validation row to the slot the file moved to.
+function doc_ai_confirm(PDO $db, int $validationId, string $result, int $staffId, ?int $moveToDocId = null): void
+{
+    if ($moveToDocId !== null) {
+        $db->prepare(
+            'UPDATE document_validations
+                SET review_result = ?, reviewed_by = ?, reviewed_at = NOW(), document_id = ?
+              WHERE id = ? AND review_result IS NULL'
+        )->execute([$result, $staffId, $moveToDocId, $validationId]);
+        return;
+    }
+    $db->prepare(
+        'UPDATE document_validations
+            SET review_result = ?, reviewed_by = ?, reviewed_at = NOW()
+          WHERE id = ? AND review_result IS NULL'
+    )->execute([$result, $staffId, $validationId]);
+}
+
+// Approve every uploaded / under review document of an applicant except the
+// flagged ones. Returns ['approved' => n, 'skipped' => n]. AI never approves:
+// this only runs from a staff action.
+function doc_approve_unflagged(PDO $db, int $applicantId, int $staffId): array
+{
+    $skip    = array_keys(doc_ai_flags($db, $applicantId));
+    $sql     = "UPDATE documents SET status = 'approved', staff_remarks = NULL, reviewed_by = ?
+                 WHERE applicant_id = ? AND status IN ('uploaded','under_review')";
+    $params  = [$staffId, $applicantId];
+    $skipped = 0;
+    if ($skip) {
+        $in = implode(',', array_fill(0, count($skip), '?'));
+        $c  = $db->prepare(
+            "SELECT COUNT(*) FROM documents
+              WHERE applicant_id = ? AND status IN ('uploaded','under_review') AND id IN ($in)"
+        );
+        $c->execute(array_merge([$applicantId], $skip));
+        $skipped = (int)$c->fetchColumn();
+        $sql    .= " AND id NOT IN ($in)";
+        $params  = array_merge($params, $skip);
+    }
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    return ['approved' => $stmt->rowCount(), 'skipped' => $skipped];
+}
+
 // -- Formatting -------------------------------------------------
 function format_date(string $date, string $format = 'F j, Y'): string
 {

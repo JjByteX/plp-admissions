@@ -24,14 +24,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
 
     $approved = 0;
     $advanced = 0;
+    $skipped  = 0;
     foreach ($ids as $aid) {
-        $apprStmt = $db->prepare(
-            'UPDATE documents SET status=\'approved\', staff_remarks=NULL, reviewed_by=?
-              WHERE applicant_id=? AND status IN (\'uploaded\',\'under_review\')'
-        );
-        $apprStmt->execute([$staffId, $aid]);
-        $cnt = $apprStmt->rowCount();
-        if ($cnt > 0) $approved++;
+        // AI-flagged documents are skipped until staff confirm the category.
+        $res = doc_approve_unflagged($db, (int)$aid, $staffId);
+        if ($res['approved'] > 0) $approved++;
+        $skipped += $res['skipped'];
 
         $rem = $db->prepare('SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\'');
         $rem->execute([$aid]);
@@ -45,8 +43,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
             auto_assign_exam_slot($aid);
         }
     }
-    audit_log('bulk_approve_selected', "Bulk-approved docs for {$approved} applicant(s), {$advanced} advanced to exam");
-    Session::flash('success', "Approved documents for {$approved} applicant(s). {$advanced} advanced to exam.");
+    audit_log('bulk_approve_selected', "Bulk-approved docs for {$approved} applicant(s), {$advanced} advanced to exam, {$skipped} AI-flagged skipped");
+    $flashMsg = "Approved documents for {$approved} applicant(s). {$advanced} advanced to exam.";
+    if ($skipped > 0) {
+        $flashMsg .= " {$skipped} AI-flagged document" . ($skipped != 1 ? 's were' : ' was') . ' skipped. Open the applicant to confirm the category.';
+    }
+    Session::flash('success', $flashMsg);
     redirect('/staff/applicants');
 }
 
@@ -106,17 +108,39 @@ if ($applicantId) {
         }
     }
 
-    // Count docs that can still be approved
-    $approvableCount = count(array_filter($docRows, fn($d) => in_array($d['status'], ['uploaded','under_review'], true)));
+    // AI flags (Phase 6): flagged documents are skipped by Approve All.
+    $aiFlags = doc_ai_flags($db, $applicantId);
+    $cats    = doc_categories($requiredDocs);
+    $aiLabel = function (?string $key) use ($cats, $requiredDocs): string {
+        if ($key === null || $key === '') return 'Unknown';
+        return $cats[$key]['label'] ?? $requiredDocs[$key] ?? ucwords(str_replace('_', ' ', $key));
+    };
+    // Empty slots a flagged file can move to.
+    $emptySlots = [];
+    foreach ($requiredDocs as $slug => $label) {
+        $r = $docRows[$slug] ?? null;
+        if (!$r || (!$r['file_path'] && $r['status'] === 'pending')) $emptySlots[$slug] = $label;
+    }
+
+    // Count docs that Approve All will approve (flagged ones are skipped)
+    $approvable = array_filter($docRows, fn($d) => in_array($d['status'], ['uploaded','under_review'], true));
+    $approvableCount = count(array_filter($approvable, fn($d) => !isset($aiFlags[(int)$d['id']])));
+    $flaggedPending  = count($approvable) - $approvableCount;
 
     ob_start();
 ?>
+<div id="doc-review">
 <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-6)">
     <a href="<?= url('/staff/applicants') ?>" class="btn btn-ghost btn-sm">
         <?= icon('ic_fluent_arrow_left_24_regular', 16) ?>
         Back
     </a>
     <div style="margin-left:auto"></div>
+    <?php if ($flaggedPending > 0): ?>
+        <span style="font-size:var(--text-sm);color:var(--text-tertiary)">
+            <?= $flaggedPending ?> AI-flagged document<?= $flaggedPending != 1 ? 's' : '' ?> skipped by Approve All
+        </span>
+    <?php endif; ?>
     <?php if ($approvableCount > 0): ?>
         <button type="button" class="btn btn-success btn-sm" id="approve-all-btn"
                 onclick="approveAllAjax()">
@@ -145,6 +169,7 @@ if ($applicantId) {
         'rejected'     => ['label'=>'Declined',     'class'=>'badge-rejected'],
     ];
     $badge = $statusMap[$status] ?? $statusMap['pending'];
+    $flag  = $doc ? ($aiFlags[(int)$doc['id']] ?? null) : null;
 
     // Find file index in viewable list for opening modal at correct position
     $fileIndex = -1;
@@ -160,6 +185,37 @@ if ($applicantId) {
                 <div style="font-weight:var(--weight-medium)"><?= e($label) ?></div>
                 <?php if ($doc && $doc['staff_remarks']): ?>
                     <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:2px">Remark: <?= e($doc['staff_remarks']) ?></div>
+                <?php endif; ?>
+                <?php if ($flag): ?>
+                    <div class="ai-flag" data-doc="<?= (int)$doc['id'] ?>" style="margin-top:var(--space-2)">
+                        <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;font-size:var(--text-sm)">
+                            <span class="badge badge-review">AI flag</span>
+                            <span style="color:var(--text-secondary)">
+                                <?php if ($flag['source'] === 'applicant_pick'): ?>
+                                    Applicant pick: <?= e($aiLabel($flag['pick'])) ?>
+                                    <?php if ($flag['guess']): ?> · AI guess: <?= e($aiLabel($flag['guess'])) ?><?php endif; ?>
+                                <?php else: ?>
+                                    Low confidence<?php if ($flag['guess']): ?> · AI guess: <?= e($aiLabel($flag['guess'])) ?><?php endif; ?>
+                                <?php endif; ?>
+                            </span>
+                        </div>
+                        <?php if (in_array($status, ['uploaded','under_review'], true)): ?>
+                            <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2)">
+                                <button type="button" class="btn btn-secondary btn-sm js-cat-ok">Category OK</button>
+                                <?php if ($emptySlots): ?>
+                                    <select class="form-control js-target" style="width:auto;max-width:260px" aria-label="Move to">
+                                        <option value="">Move to…</option>
+                                        <?php foreach ($emptySlots as $es => $el): if ($es === $slug) continue; ?>
+                                            <option value="<?= e($es) ?>"><?= e($el) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <button type="button" class="btn btn-secondary btn-sm js-change-type">Change type</button>
+                                <?php else: ?>
+                                    <span style="font-size:var(--text-xs);color:var(--text-tertiary)">No empty slot to move to</span>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
             </div>
             <span class="badge <?= $badge['class'] ?>"><?= $badge['label'] ?></span>
@@ -198,6 +254,7 @@ if ($applicantId) {
     </div>
 <?php endforeach; ?>
 </div>
+</div><!-- /#doc-review -->
 
 <!-- Advance to exam -->
 <?php
@@ -611,6 +668,53 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
         if(e.key==='0') fvResetZoom();
     });
 })();
+</script>
+
+<script>
+// Phase 6: Category OK / Change type (jQuery). jQuery loads after this block,
+// so wait for DOMContentLoaded. The list is re-fetched after each action, so
+// no full page reload.
+document.addEventListener('DOMContentLoaded', function () {
+    var $ = window.jQuery;
+    if (!$) return;
+    var actionUrl = '<?= url('/staff/documents/') ?>';
+    var csrf = '<?= e(csrf_token()) ?>';
+
+    function refresh(msg, ok) {
+        $('#doc-review').load(window.location.href + ' #doc-review > *', function () {
+            if (!msg) return;
+            $('<div class="alert"></div>')
+                .addClass(ok ? 'alert-success' : 'alert-error')
+                .css('margin-bottom', 'var(--space-4)')
+                .text(msg)
+                .prependTo('#doc-review');
+        });
+    }
+    function send($flag, data) {
+        $flag.find('button, select').prop('disabled', true);
+        $.ajax({
+            url: actionUrl + $flag.data('doc'),
+            method: 'POST',
+            data: $.extend({ _csrf: csrf }, data),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            dataType: 'json'
+        }).done(function (r) {
+            refresh(r.message, r.ok);
+        }).fail(function () {
+            refresh('Something went wrong. Please try again.', false);
+        });
+    }
+
+    $('#doc-review').on('click', '.js-cat-ok', function () {
+        send($(this).closest('.ai-flag'), { action: 'category_ok' });
+    });
+    $('#doc-review').on('click', '.js-change-type', function () {
+        var $flag = $(this).closest('.ai-flag');
+        var target = $flag.find('.js-target').val();
+        if (!target) { $flag.find('.js-target').focus(); return; }
+        send($flag, { action: 'change_type', target_slot: target });
+    });
+});
 </script>
 
 <script>
