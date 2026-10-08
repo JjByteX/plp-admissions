@@ -225,6 +225,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $slots      = array_values(array_intersect($r['slots'], array_keys($requiredDocs)));
         $cat        = $slots ? doc_category_of($slots[0]) : null;
 
+        // Category dropdown list; sent with failed and uncertain so the page can offer a manual pick.
+        $buildCats = static function () use ($categories, $docRows, $isSubmitted): array {
+            $list = [];
+            foreach ($categories as $key => $c) {
+                $pick   = doc_pick_slot($c['slots'], $docRows, $isSubmitted);
+                $list[] = [
+                    'category'  => $key,
+                    'label'     => $c['label'],
+                    'available' => $pick['slot'] !== null,
+                    'note'      => $pick['reason'] ?? ($pick['replaced'] ? 'Replaces your earlier file.' : null),
+                ];
+            }
+            return $list;
+        };
+
         $out = [
             'ok'          => true,
             'status'      => $r['status'],
@@ -236,22 +251,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
 
         if ($r['status'] === 'failed') {
+            $out['categories'] = $buildCats();
             $out['message'] = $r['reason'] !== '' ? $r['reason'] : 'This file is not clear enough. Please upload a better copy.';
             $reply($out);
         }
 
         if ($r['status'] === 'uncertain' || !$slots) {
             $out['status']     = 'uncertain';
-            $out['categories'] = [];
-            foreach ($categories as $key => $c) {
-                $pick = doc_pick_slot($c['slots'], $docRows, $isSubmitted);
-                $out['categories'][] = [
-                    'category'  => $key,
-                    'label'     => $c['label'],
-                    'available' => $pick['slot'] !== null,
-                    'note'      => $pick['reason'] ?? ($pick['replaced'] ? 'Replaces your earlier file.' : null),
-                ];
-            }
+            $out['categories'] = $buildCats();
             $out['message'] = $r['reason'] !== ''
                 ? $r['reason']
                 : ($out['guess_label']
@@ -758,6 +765,37 @@ ob_start();
         </div>
     </form>
     <div id="flags-msg" style="font-size:var(--text-xs);margin-top:var(--space-2);display:none"></div>
+</div>
+<?php endif; ?>
+
+<?php if ($applicant['applicant_type'] !== 'foreign' && !$pastDocuments && !$docDeadlinePassed): ?>
+<!-- Upload many files (AI sorting). The slot list below and its Upload buttons stay. -->
+<style>
+.batch-drop { border:2px dashed var(--border); border-radius:var(--radius-lg); padding:var(--space-6) var(--space-4); text-align:center; cursor:pointer; transition:border-color var(--transition-fast), background var(--transition-fast); }
+.batch-drop:hover, .batch-drop:focus, .batch-drop.drag-over { border-color:var(--accent); background:var(--bg-subtle); outline:none; }
+.batch-row { border:1px solid var(--border); border-radius:var(--radius-md); padding:var(--space-3) var(--space-4); background:var(--bg-surface, transparent); }
+.batch-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); }
+.batch-name { font-weight:var(--weight-medium); font-size:var(--text-sm); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.batch-msg { font-size:var(--text-sm); color:var(--text-secondary); margin-top:var(--space-1); }
+.batch-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); margin-top:var(--space-2); }
+.batch-actions:empty { display:none; }
+.batch-bar { height:4px; border-radius:2px; background:var(--bg-subtle); margin-top:var(--space-2); overflow:hidden; }
+.batch-bar > span { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
+.batch-tip { font-size:var(--text-xs); color:var(--warning); margin-top:var(--space-2); }
+</style>
+<div class="card" id="batch-box" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)">
+    <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Upload many files</div>
+    <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">Pick all your documents at once. We sort them into the right slots for you. Anything we are not sure about, you can fix below.</div>
+    <div class="batch-drop" id="batch-drop" role="button" tabindex="0" aria-label="Choose files to upload">
+        <p style="font-weight:var(--weight-medium);margin:0">Drop your files here</p>
+        <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:var(--space-1) 0 var(--space-3)">or click to choose files · PDF, JPG, PNG or WEBP · max 4 MB each</p>
+        <button type="button" class="btn btn-secondary btn-sm" id="batch-camera-btn">Take a photo</button>
+    </div>
+    <input type="file" id="batch-input" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple style="display:none">
+    <input type="file" id="batch-camera" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="batch-replace" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none">
+    <div id="batch-rows" style="display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)"></div>
+    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-3)">Prefer to do it one by one? Use the Upload button on each document below.</div>
 </div>
 <?php endif; ?>
 
@@ -1341,9 +1379,10 @@ function updateDropLabel(name) {
 // jQuery loads after page content, so wait for DOMContentLoaded.
 document.addEventListener('DOMContentLoaded', function () {
     var $ = window.jQuery;
-    if (!$ || !$('#flags-form').length) return;
+    if (!$) return;
 
     // Reusable: re-fetch this page and swap in the fresh slot list + submit panel.
+    // Used by the ticks (1.18) and by the batch upload box (5.11).
     window.refreshSlotList = function () {
         return $.get(window.location.href).done(function (html) {
             var $page = $('<div>').append($.parseHTML(html));
@@ -1351,6 +1390,8 @@ document.addEventListener('DOMContentLoaded', function () {
             $('#doc-submit').html($page.find('#doc-submit').html());
         });
     };
+
+    if (!$('#flags-form').length) return;
 
     function say(ok, msg) {
         $('#flags-msg').text(msg).css('color', ok ? 'var(--success)' : 'var(--error)').show();
@@ -1376,6 +1417,212 @@ document.addEventListener('DOMContentLoaded', function () {
             say(false, 'Could not save. Please try again.');
         });
     });
+});
+</script>
+
+<script>
+// Phase 5: Upload many files. One file per request (action=classify), sequential queue.
+// ponytail: queue lives in memory only (a page reload drops unfinished rows); upgrade path is none needed, saved files stay in the slot list.
+document.addEventListener('DOMContentLoaded', function () {
+    var $ = window.jQuery;
+    if (!$ || !$('#batch-box').length) return;
+
+    var URL_  = <?= json_encode(url('/student/documents')) ?>;
+    var CSRF  = $('#flags-form [name=_csrf], #upload-form [name=_csrf]').first().val() || <?= json_encode(csrf_token()) ?>;
+    var MAX   = 4 * 1024 * 1024;
+    var OK    = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    var rows  = {}, queue = [], busy = false, seq = 0, lastCats = null, replaceId = null;
+
+    function badge(cls, text) { return $('<span class="badge">').addClass(cls).text(text); }
+    function bytesOk(b) { return b.size <= MAX; }
+
+    // 5.3: shrink to 1280 px JPEG. Falls back to the original file if the browser cannot decode it.
+    function shrink(file) {
+        var d = $.Deferred();
+        if (file.type === 'application/pdf') return d.resolve(file).promise();
+        var img = new Image(), src = URL.createObjectURL(file);
+        img.onload = function () {
+            var k = Math.min(1, 1280 / Math.max(img.width, img.height));
+            var c = document.createElement('canvas');
+            c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+            var x = c.getContext('2d');
+            x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+            x.drawImage(img, 0, 0, c.width, c.height);
+            URL.revokeObjectURL(src);
+            c.toBlob(function (b) { d.resolve(b || file); }, 'image/jpeg', 0.85);
+        };
+        img.onerror = function () { URL.revokeObjectURL(src); d.resolve(file); };
+        img.src = src;
+        return d.promise();
+    }
+
+    function newRow(file) {
+        var id = ++seq;
+        var $el = $('<div class="batch-row">').attr('data-id', id).append(
+            $('<div class="batch-head">').append($('<span class="batch-name">').text(file.name), $('<span class="batch-state">')),
+            $('<div class="batch-msg">'), $('<div class="batch-bar" style="display:none"><span></span></div>'), $('<div class="batch-actions">')
+        );
+        $('#batch-rows').append($el);
+        rows[id] = { id: id, $el: $el, file: file, blob: null, tries: 0, guess: '' };
+        return rows[id];
+    }
+
+    function show(r, cls, label, msg) {
+        r.$el.find('.batch-state').empty().append(badge(cls, label));
+        r.$el.find('.batch-msg').text(msg || '');
+        r.$el.find('.batch-actions').empty();
+        r.$el.find('.batch-tip').remove();
+    }
+
+    function busyState(r, label) {
+        show(r, 'badge-info', label, '');
+        r.$el.find('.batch-bar').show().find('span').css('width', '0');
+    }
+
+    function tip(r) {
+        // 5.10: after 2 failed tries, point to one by one upload.
+        if (r.tries >= 2) r.$el.append($('<div class="batch-tip">').text('Still not working? Use the Upload button on that document in the list below to upload it one by one.'));
+    }
+
+    function actionBtn(text, fn, primary) {
+        return $('<button type="button" class="btn btn-sm">').addClass(primary ? 'btn-primary' : 'btn-ghost').text(text).on('click', fn);
+    }
+
+    function dropdown(r, cats) {
+        var $sel = $('<select class="form-select" style="width:auto;min-height:32px;font-size:var(--text-sm)">').append($('<option value="">').text('Choose document type…'));
+        $.each(cats, function (_, c) {
+            var $o = $('<option>').val(c.category).text(c.label + (c.note ? ' — ' + c.note : ''));
+            if (!c.available) $o.prop('disabled', true);
+            $sel.append($o);
+        });
+        var $go = actionBtn('Use this type', function () { pick(r, $sel.val()); }, true).prop('disabled', true);
+        $sel.on('change', function () { $go.prop('disabled', !$sel.val()); });
+        return [$sel, $go];
+    }
+
+    function offer(r, kind, msg, cats) {
+        // kind: 'uncertain' (Not sure) | 'failed' (Unreadable) | 'error'
+        cats = cats && cats.length ? cats : lastCats;
+        var cls = kind === 'uncertain' ? 'badge-warning' : 'badge-error';
+        var label = kind === 'uncertain' ? 'Not sure' : (kind === 'failed' ? 'Unreadable' : 'Error');
+        show(r, cls, label, msg);
+        var $a = r.$el.find('.batch-actions');
+        if (kind === 'uncertain') $a.append(actionBtn('Replace file', function () { replaceId = r.id; $('#batch-replace').removeAttr('capture').val('').trigger('click'); }));
+        else if (kind === 'failed') $a.append(actionBtn('Retake', function () { replaceId = r.id; $('#batch-replace').attr('capture', 'environment').val('').trigger('click'); }));
+        else $a.append(actionBtn('Try again', function () { r.tries = 0; enqueue(r); }));
+        if (cats && cats.length) $a.prepend.apply($a, dropdown(r, cats));
+        $a.append(actionBtn('Remove', function () { r.$el.remove(); delete rows[r.id]; }));
+        tip(r);
+    }
+
+    function done(r, label, cls, msg) {
+        show(r, cls, label, msg);
+        r.blob = null; r.file = null;
+        r.$el.find('.batch-actions').append(actionBtn('Dismiss', function () { r.$el.remove(); delete rows[r.id]; }));
+    }
+
+    function send(r, data) {
+        return $.ajax({
+            url: URL_, method: 'POST', data: data, processData: false, contentType: false,
+            dataType: 'json', timeout: 70000, headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            xhr: function () {
+                var x = $.ajaxSettings.xhr();
+                if (x.upload) x.upload.onprogress = function (e) {
+                    if (!e.lengthComputable) return;
+                    var p = Math.round(e.loaded / e.total * 100);
+                    r.$el.find('.batch-bar span').css('width', p + '%');
+                    if (p >= 100) r.$el.find('.batch-state .badge').text('Checking…');
+                };
+                return x;
+            }
+        });
+    }
+
+    function classify(r) {
+        var d = $.Deferred();
+        busyState(r, 'Uploading…');
+        var fd = new FormData();
+        fd.append('_csrf', CSRF); fd.append('action', 'classify');
+        fd.append('doc_file', r.blob, r.blob.name || r.file.name);
+        send(r, fd).done(function (res) {
+            r.$el.find('.batch-bar').hide();
+            if (!res || res.ok === false) { r.tries++; offer(r, 'error', (res && res.message) || 'Something went wrong. Please try again.'); }
+            else if (res.categories && res.categories.length) lastCats = res.categories;
+            if (res && res.ok !== false) {
+                r.guess = res.guess || '';
+                if (res.status === 'passed') { done(r, 'Sorted', 'badge-success', res.message || 'Saved.'); window.refreshSlotList && window.refreshSlotList(); }
+                else if (res.status === 'blocked') { done(r, 'Blocked', 'badge-error', res.message); window.refreshSlotList && window.refreshSlotList(); }
+                else if (res.status === 'failed') { r.tries++; offer(r, 'failed', res.message, res.categories); }
+                else { r.tries++; offer(r, 'uncertain', res.message, res.categories); }
+            }
+        }).fail(function () {
+            r.$el.find('.batch-bar').hide(); r.tries++;
+            offer(r, 'error', 'Could not reach the server. Check your connection and try again.');
+        }).always(function () { d.resolve(); });
+        return d.promise();
+    }
+
+    // 5.9: send the kept file to the existing upload action with the chosen category.
+    function pick(r, cat) {
+        if (!cat || !r.blob) return;
+        busyState(r, 'Saving…');
+        var fd = new FormData();
+        fd.append('_csrf', CSRF); fd.append('doc_slug', cat); fd.append('picked', '1'); fd.append('ai_guess', r.guess || '');
+        fd.append('doc_file', r.blob, r.blob.name || r.file.name);
+        send(r, fd).done(function (res) {
+            r.$el.find('.batch-bar').hide();
+            if (res && res.ok) { done(r, 'Sorted', 'badge-success', (res.message || 'Saved.') + ' Staff will double check the type.'); window.refreshSlotList && window.refreshSlotList(); }
+            else offer(r, 'error', (res && res.message) || 'Could not save this file.', lastCats);
+        }).fail(function () {
+            r.$el.find('.batch-bar').hide();
+            offer(r, 'error', 'Could not reach the server. Check your connection and try again.', lastCats);
+        });
+    }
+
+    function enqueue(r) {
+        show(r, 'badge-pending', 'Waiting', '');
+        queue.push(r); run();
+    }
+
+    function run() {
+        if (busy || !queue.length) return;
+        busy = true;
+        var r = queue.shift();
+        if (!rows[r.id]) { busy = false; return run(); }
+        (r.blob ? $.Deferred().resolve(r.blob).promise() : shrink(r.file)).then(function (b) {
+            if (!(b instanceof Blob)) b = r.file;
+            if (!b.name) b.name = r.file.name.replace(/\.[^.]+$/, '') + (b.type === 'image/jpeg' ? '.jpg' : '');
+            if (!bytesOk(b)) { offer(r, 'error', 'This file is over the 4 MB limit.'); return; }
+            r.blob = b;
+            return classify(r);
+        }).always(function () { busy = false; run(); });
+    }
+
+    function addFiles(list) {
+        $.each(list, function (_, f) {
+            var r = newRow(f);
+            if (OK.indexOf(f.type) < 0) { show(r, 'badge-error', 'Error', 'Only PDF, JPG, PNG, and WEBP files are accepted.'); r.$el.find('.batch-actions').append(actionBtn('Dismiss', function () { r.$el.remove(); delete rows[r.id]; })); return; }
+            enqueue(r);
+        });
+    }
+
+    // Replace file / Retake: swap the kept file and classify the same row again.
+    $('#batch-replace').on('change', function () {
+        var f = this.files[0], r = rows[replaceId];
+        if (!f || !r) return;
+        if (OK.indexOf(f.type) < 0) { offer(r, 'error', 'Only PDF, JPG, PNG, and WEBP files are accepted.'); return; }
+        r.file = f; r.blob = null; r.$el.find('.batch-name').text(f.name);
+        enqueue(r);
+    });
+
+    var $drop = $('#batch-drop');
+    $drop.on('click', function () { $('#batch-input').val('').trigger('click'); });
+    $drop.on('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#batch-input').val('').trigger('click'); } });
+    $('#batch-camera-btn').on('click', function (e) { e.stopPropagation(); $('#batch-camera').val('').trigger('click'); });
+    $('#batch-input, #batch-camera').on('change', function () { addFiles(this.files); });
+    $drop.on('dragover dragenter', function (e) { e.preventDefault(); $drop.addClass('drag-over'); });
+    $drop.on('dragleave drop', function (e) { e.preventDefault(); $drop.removeClass('drag-over'); });
+    $drop.on('drop', function (e) { addFiles(e.originalEvent.dataTransfer.files); });
 });
 </script>
 
