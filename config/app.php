@@ -66,6 +66,12 @@ define('SUPABASE_SERVICE_KEY',      getenv('SUPABASE_SERVICE_KEY')      ?: '');
 define('SUPABASE_BUCKET_DOCUMENTS', getenv('SUPABASE_BUCKET_DOCUMENTS') ?: 'documents');
 define('SUPABASE_BUCKET_BRANDING',  getenv('SUPABASE_BUCKET_BRANDING')  ?: 'branding');
 
+// -- AI document sorting (local model PC through a Cloudflare Tunnel) --
+// Empty AI_MODEL_URL = AI off; uploads use the category dropdown.
+define('AI_MODEL_URL', getenv('AI_MODEL_URL') ?: '');
+define('AI_TIMEOUT',   (int) (getenv('AI_TIMEOUT') ?: 25));
+define('AI_MODEL_KEY', getenv('AI_MODEL_KEY') ?: '');
+
 // -- Roles -------------------------------------------------------
 // DB enum values stored on users.role:
 //   'student' | 'staff' | 'proctor' | 'sso' | 'dean' | 'admin'

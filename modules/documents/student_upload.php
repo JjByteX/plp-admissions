@@ -195,16 +195,166 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/student/documents');
     }
 
+    // ---- Classify one file (batch upload backend) ----
+    // One file per request. passed: saved to the first open slot of its
+    // category. uncertain / failed / blocked: nothing is saved.
+    if ($action === 'classify') {
+        header('Content-Type: application/json');
+        $reply = static function (array $data): never {
+            echo json_encode($data);
+            exit;
+        };
+        $error = static fn(string $msg): array => ['ok' => false, 'status' => 'error', 'message' => $msg];
+        @set_time_limit(60);
+
+        $f = $_FILES['doc_file'] ?? null;
+        if (!$f || is_array($f['name']) || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $reply($error('Send exactly one file. It may be too large or missing.'));
+        }
+        if ($f['size'] > MAX_UPLOAD_BYTES) {
+            $reply($error('File size exceeds the 4 MB limit.'));
+        }
+        $mimeType = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']);
+        if (!in_array($mimeType, ALLOWED_MIME_TYPES, true)) {
+            $reply($error('Only PDF, JPG, PNG, and WEBP files are accepted.'));
+        }
+
+        // The classifier applies ai_confidence_threshold itself, so 'passed' is final here.
+        $categories = doc_categories($requiredDocs);
+        $r          = classify_upload($f['tmp_name'], $mimeType, $applicant);
+        $slots      = array_values(array_intersect($r['slots'], array_keys($requiredDocs)));
+        $cat        = $slots ? doc_category_of($slots[0]) : null;
+
+        $out = [
+            'ok'          => true,
+            'status'      => $r['status'],
+            'file'        => $f['name'],
+            'guess'       => $r['guess'],
+            'guess_label' => $categories[$cat ?? '']['label'] ?? null,
+            'confidence'  => $r['confidence'],
+            'reason'      => $r['reason'],
+        ];
+
+        if ($r['status'] === 'failed') {
+            $out['message'] = $r['reason'] !== '' ? $r['reason'] : 'This file is not clear enough. Please upload a better copy.';
+            $reply($out);
+        }
+
+        if ($r['status'] === 'uncertain' || !$slots) {
+            $out['status']     = 'uncertain';
+            $out['categories'] = [];
+            foreach ($categories as $key => $c) {
+                $pick = doc_pick_slot($c['slots'], $docRows, $isSubmitted);
+                $out['categories'][] = [
+                    'category'  => $key,
+                    'label'     => $c['label'],
+                    'available' => $pick['slot'] !== null,
+                    'note'      => $pick['reason'] ?? ($pick['replaced'] ? 'Replaces your earlier file.' : null),
+                ];
+            }
+            $out['message'] = $r['reason'] !== ''
+                ? $r['reason']
+                : ($out['guess_label']
+                    ? 'This looks like ' . $out['guess_label'] . ', but we are not sure. Please pick its type.'
+                    : 'We could not tell what this document is. Please pick its type.');
+            $reply($out);
+        }
+
+        // passed
+        $db->beginTransaction();
+        try {
+            // Lock this category's rows so two files sent together never take the same slot.
+            $in   = implode(',', array_fill(0, count($slots), '?'));
+            $stmt = $db->prepare("SELECT doc_type, status FROM documents WHERE applicant_id = ? AND doc_type IN ($in) FOR UPDATE");
+            $stmt->execute(array_merge([$applicantId], $slots));
+            $fresh = [];
+            foreach ($stmt->fetchAll() as $row) $fresh[$row['doc_type']] = $row;
+
+            // One image with two photos fills both photo slots with the same file.
+            $want = ($cat === 'photo' && (int)($r['fields']['photos'] ?? 0) === 2) ? 2 : 1;
+            $pick = doc_pick_slots($slots, $fresh, $isSubmitted, $want);
+            if (!$pick['slots']) {
+                $db->rollBack();
+                $out['status']  = 'blocked';
+                $out['message'] = $pick['reason'];
+                $reply($out);
+            }
+            $slot = $pick['slots'][0];
+
+            $ext      = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+            $filename = $applicantId . '_' . $slot . '_' . time() . '.' . $ext;
+            $fileUrl  = uploadcare_upload($f['tmp_name'], $filename, $mimeType);
+            if (!$fileUrl) {
+                $db->rollBack();
+                $reply($error('File upload failed. Please try again.'));
+            }
+
+            $update = $db->prepare(
+                "UPDATE documents SET file_path = ?, status = 'uploaded', staff_remarks = NULL, reviewed_by = NULL
+                  WHERE applicant_id = ? AND doc_type = ? RETURNING id"
+            );
+            $insert = $db->prepare(
+                "INSERT INTO documents (applicant_id, doc_type, file_path, status) VALUES (?, ?, ?, 'uploaded') RETURNING id"
+            );
+            $valid = $db->prepare(
+                "INSERT INTO document_validations (document_id, validation_type, status, confidence, details)
+                 VALUES (?, 'ai', 'passed', ?, ?)"
+            );
+            $details = json_encode(['category' => $r['guess'], 'reason' => $r['reason'], 'fields' => $r['fields']]);
+            // ponytail: a replaced file stays in storage; upgrade path is a storage cleanup job.
+            foreach ($pick['slots'] as $s) {
+                $update->execute([$fileUrl, $applicantId, $s]);
+                $docId = $update->fetchColumn();
+                if (!$docId) {
+                    $insert->execute([$applicantId, $s, $fileUrl]);
+                    $docId = $insert->fetchColumn();
+                }
+                $valid->execute([$docId, $r['confidence'], $details]);
+            }
+            $db->commit();
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            error_log('Classify save failed: ' . $e->getMessage());
+            $reply($error('Server error. Please try again.'));
+        }
+
+        audit_log('doc_ai_passed', "Applicant {$applicantId}: {$r['guess']} saved to " . implode(', ', $pick['slots']), 'applicant', $applicantId);
+        $out['slot']       = $slot;
+        $out['slots']      = $pick['slots'];
+        $out['slot_label'] = $requiredDocs[$slot];
+        $out['replaced']   = $pick['replaced'];
+        if (count($pick['slots']) === 2) {
+            $out['message'] = $categories[$cat]['label'] . ' saved to both slots.';
+        } elseif ($pick['replaced']) {
+            $out['message'] = $requiredDocs[$slot] . ' replaced your earlier file.';
+        } else {
+            $out['message'] = $requiredDocs[$slot] . ' saved.';
+        }
+        $reply($out);
+    }
+
     // ---- File upload ----
     $docSlug = trim($_POST['doc_slug'] ?? '');
 
-    if (!array_key_exists($docSlug, $requiredDocs)) {
+    // picked=1: the applicant chose the type from the dropdown after the AI was unsure.
+    // doc_slug may then be a slot or a category (valid_id, photo); a category follows the 4B slot rules.
+    // ai_guess is the AI's guess, sent back by the page, only used for the validation row.
+    // ponytail: picks are not locked; the upload page sends one file at a time. Upgrade path: lock like classify does.
+    $picked  = ($_POST['picked'] ?? '') === '1';
+    $aiGuess = substr(trim((string)($_POST['ai_guess'] ?? '')), 0, 64);
+    if ($picked) {
+        $res = doc_resolve_pick($docSlug, $requiredDocs, $docRows, $isSubmitted);
+        if ($res['slot'] === null) $errors[] = $res['reason'];
+        else $docSlug = $res['slot'];
+    }
+
+    if (!$errors && !array_key_exists($docSlug, $requiredDocs)) {
         $errors[] = 'Invalid document type.';
     }
 
     // Only allow replace based on submission state
     $currentStatus  = $docRows[$docSlug]['status'] ?? 'pending';
-    $allowedStatuses = $isSubmitted ? ['rejected'] : ['pending', 'rejected', 'uploaded'];
+    $allowedStatuses = $isSubmitted ? ['rejected', 'resubmission_required'] : ['pending', 'rejected', 'resubmission_required', 'uploaded'];
     if (!in_array($currentStatus, $allowedStatuses, true)) {
         $errors[] = 'This document cannot be replaced at this time.';
     }
@@ -260,6 +410,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$applicantId]);
             $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
 
+            // Newest validation row wins. A picked file is flagged for staff (ai, uncertain);
+            // a plain upload clears any old flag (file_check, passed).
+            try {
+                $docId = $docRows[$docSlug]['id'] ?? null;
+                if ($docId) {
+                    if ($picked) {
+                        $vType = 'ai';
+                        $vStat = 'uncertain';
+                        $vInfo = ['applicant_pick' => doc_category_of($docSlug), 'ai_guess' => $aiGuess !== '' ? $aiGuess : null];
+                    } else {
+                        $vType = 'file_check';
+                        $vStat = 'passed';
+                        $vInfo = ['check' => 'type_and_size'];
+                    }
+                    $db->prepare(
+                        'INSERT INTO document_validations (document_id, validation_type, status, confidence, details) VALUES (?,?,?,NULL,?)'
+                    )->execute([$docId, $vType, $vStat, json_encode($vInfo)]);
+                }
+            } catch (Throwable $e) {
+                error_log('Validation row failed: ' . $e->getMessage());
+            }
+
             $success[] = $requiredDocs[$docSlug] . ' uploaded successfully.';
         }
     }
@@ -271,6 +443,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode([
                 'ok'      => true,
                 'message' => $success[0] ?? 'Uploaded successfully.',
+                'slot'    => $docSlug,
             ]);
         } else {
             echo json_encode(['ok' => false, 'message' => implode(' ', $errors)]);

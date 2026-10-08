@@ -330,6 +330,138 @@ function doc_flags_blocked_slots(PDO $db, int $applicantId, array $newFlags): ar
     return $blocked;
 }
 
+// -- Upload categories (Phase 4) --------------------------------
+// A category is a kind of document. Two-slot categories (valid_id_1/_2,
+// photo_1/_2) share one category: valid_id, photo.
+function doc_category_of(string $slot): string
+{
+    return preg_replace('/_[12]$/', '', $slot);
+}
+
+// Group the slots that apply to an applicant by category:
+// [category => ['label' => string, 'slots' => [slot, ...]]].
+function doc_categories(array $required): array
+{
+    $out = [];
+    foreach ($required as $slot => $label) {
+        $cat = doc_category_of($slot);
+        if (!isset($out[$cat])) {
+            $out[$cat] = ['label' => trim(preg_replace('/\s*\(\d of \d\)/', '', $label)), 'slots' => []];
+        }
+        $out[$cat]['slots'][] = $slot;
+    }
+    return $out;
+}
+
+// Pick the slot a classified file goes to, or say why it cannot go anywhere.
+// $slots = the category's slots, $rows = documents rows keyed by doc_type.
+// Returns ['slot' => string|null, 'reason' => string|null, 'replaced' => bool].
+// Rules: an empty slot first, then a declined one. A one-slot category lets a
+// later file replace the earlier one (replaced = true). A two-slot category
+// (IDs, photos) never replaces: a third file is blocked. Approved slots and a
+// submitted application never take a file, except declined slots.
+function doc_pick_slot(array $slots, array $rows, bool $isSubmitted): array
+{
+    $declined = ['rejected', 'resubmission_required'];
+    $pending  = [];
+    $redo     = [];
+    $uploaded = [];
+    $approved = 0;
+    foreach ($slots as $slot) {
+        $status = $rows[$slot]['status'] ?? 'pending';
+        if ($status === 'approved') { $approved++; continue; }
+        if (in_array($status, $declined, true)) { $redo[] = $slot; continue; }
+        if ($isSubmitted) continue;
+        if ($status === 'pending')  $pending[]  = $slot;
+        if ($status === 'uploaded') $uploaded[] = $slot;
+    }
+    $slot = $pending[0] ?? $redo[0] ?? null;
+    if ($slot !== null) return ['slot' => $slot, 'reason' => null, 'replaced' => false];
+    if (count($slots) === 1 && $uploaded) {
+        return ['slot' => $uploaded[0], 'reason' => null, 'replaced' => true];
+    }
+    $why = 'All slots for this document are already filled.';
+    if ($slots && $approved === count($slots)) {
+        $why = 'This document is already approved.';
+    } elseif ($isSubmitted) {
+        $why = 'Your application is submitted. Only declined documents can be replaced.';
+    } elseif (count($slots) === 2) {
+        $why = 'Both slots for this document are already filled.';
+    }
+    return ['slot' => null, 'reason' => $why, 'replaced' => false];
+}
+
+// Turn what the applicant picked into one slot. $pick is a slot (psa_birth_cert,
+// valid_id_1) or a category (valid_id, photo); a category follows the 4B slot rules.
+// Returns ['slot' => string|null, 'reason' => string|null].
+function doc_resolve_pick(string $pick, array $required, array $rows, bool $isSubmitted): array
+{
+    if (isset($required[$pick])) return ['slot' => $pick, 'reason' => null];
+    $cats = doc_categories($required);
+    if (!isset($cats[$pick])) return ['slot' => null, 'reason' => 'Invalid document type.'];
+    $p = doc_pick_slot($cats[$pick]['slots'], $rows, $isSubmitted);
+    return ['slot' => $p['slot'], 'reason' => $p['reason']];
+}
+
+// Pick up to $want slots for one file (two when one image holds two photos).
+// Falls back to fewer when fewer slots are open.
+// Returns ['slots' => [slot, ...], 'replaced' => bool, 'reason' => string|null].
+function doc_pick_slots(array $slots, array $rows, bool $isSubmitted, int $want = 1): array
+{
+    $picked   = [];
+    $replaced = false;
+    $reason   = null;
+    for ($i = 0, $n = max(1, min($want, count($slots))); $i < $n; $i++) {
+        $p = doc_pick_slot($slots, $rows, $isSubmitted);
+        if ($p['slot'] === null) { $reason = $p['reason']; break; }
+        $picked[]  = $p['slot'];
+        $replaced  = $replaced || $p['replaced'];
+        $rows[$p['slot']] = ['status' => 'uploaded'];
+    }
+    return ['slots' => $picked, 'replaced' => $replaced, 'reason' => $picked ? null : $reason];
+}
+
+// Run the Phase 3 classifier (core/ai_classify.php) on one file.
+// Never throws. Returns status (passed|uncertain|failed), guess, confidence,
+// reason, fields and slots (the document slots the guess can fill).
+// ID numbers already saved for this applicant's IDs are passed along so the
+// classifier can flag the same ID uploaded twice.
+function classify_upload(string $path, string $mime, array $applicant): array
+{
+    $none = ['status' => 'uncertain', 'guess' => null, 'confidence' => null,
+             'reason' => 'AI unavailable. Please pick the document type.', 'fields' => [], 'slots' => []];
+    $lib = CORE_PATH . '/ai_classify.php';
+    if (is_file($lib)) require_once $lib;
+    if (!function_exists('ai_classify_image')) return $none;
+    try {
+        $others = [];
+        $stmt = db()->prepare(
+            "SELECT v.details FROM document_validations v
+               JOIN documents d ON d.id = v.document_id
+              WHERE d.applicant_id = ? AND d.doc_type IN ('valid_id_1','valid_id_2')
+                AND v.validation_type = 'ai'"
+        );
+        $stmt->execute([(int)($applicant['id'] ?? 0)]);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $details) {
+            $n = json_decode((string)$details, true)['fields']['id_number'] ?? '';
+            if ($n !== '') $others[] = (string)$n;
+        }
+        $r = ai_classify_image($path, $mime, $applicant, ['other_id_numbers' => $others]);
+    } catch (Throwable $e) {
+        error_log('AI classify failed: ' . $e->getMessage());
+        return $none;
+    }
+    if (!in_array($r['status'] ?? '', ['passed', 'uncertain', 'failed'], true)) return $none;
+    return [
+        'status'     => $r['status'],
+        'guess'      => isset($r['guess']) && $r['guess'] !== '' ? (string)$r['guess'] : null,
+        'confidence' => isset($r['confidence']) ? (float)$r['confidence'] : null,
+        'reason'     => (string)($r['reason'] ?? ''),
+        'fields'     => is_array($r['fields'] ?? null) ? $r['fields'] : [],
+        'slots'      => is_array($r['slots'] ?? null) ? array_values($r['slots']) : [],
+    ];
+}
+
 // -- Formatting -------------------------------------------------
 function format_date(string $date, string $format = 'F j, Y'): string
 {
