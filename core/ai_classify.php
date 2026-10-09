@@ -212,8 +212,13 @@ function ai_classify_image(string $path, string $mime, array $applicant, array $
     if (!$categories) return ai_result('uncertain', null, 0, 'AI is not used for this applicant type. Please pick the document type.');
     if ($mime === 'application/pdf') return ai_result('uncertain', null, 0, 'PDF files are not read by AI. Please pick the document type.');
 
-    $unavailable = fn() => ai_result('uncertain', null, 0, 'AI unavailable. Please pick the document type.');
-    if (AI_MODEL_URL === '' || !is_readable($path)) return $unavailable();
+    // The applicant still sees the same message; the real reason goes to the error log.
+    $unavailable = function (string $why) {
+        error_log('[ai] unavailable: ' . $why);
+        return ai_result('uncertain', null, 0, 'AI unavailable. Please pick the document type.');
+    };
+    if (AI_MODEL_URL === '') return $unavailable('AI_MODEL_URL is empty (not set in .env / Vercel, or .env not loaded)');
+    if (!is_readable($path)) return $unavailable('uploaded file not readable: ' . $path);
 
     $body = json_encode([
         'messages' => [[
@@ -243,11 +248,14 @@ function ai_classify_image(string $path, string $mime, array $applicant, array $
     ]);
     $raw = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = curl_error($ch);
     curl_close($ch);
-    if ($raw === false || $code !== 200) return $unavailable();
+    $where = rtrim(AI_MODEL_URL, '/') . ' (timeout ' . AI_TIMEOUT . 's, key ' . (AI_MODEL_KEY !== '' ? 'set' : 'NOT set') . ')';
+    if ($raw === false) return $unavailable("could not reach $where: $err");
+    if ($code !== 200) return $unavailable("HTTP $code from $where: " . substr((string)$raw, 0, 200));
 
     $choice = (json_decode((string)$raw, true)['choices'][0] ?? null);
-    if (!is_array($choice)) return $unavailable();
+    if (!is_array($choice)) return $unavailable("reply from $where had no choices: " . substr((string)$raw, 0, 200));
 
     $parsed = ai_parse_reply((string)($choice['message']['content'] ?? ''));
     $conf = ai_choice_confidence($choice['logprobs']['content'] ?? []);
