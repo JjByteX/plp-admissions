@@ -115,18 +115,18 @@ define('DOCS_CORE', [
 // Form 138 is for currently Grade 12; Form 137 (or Grade 12 Form 138) is for SHS graduates.
 define('DOCS_FRESHMAN', [
     'form_138'           => 'CTC of Form 138 (Grade 11 Report Card), if currently Grade 12',
-    'form_137'           => 'Form 138 (Grade 12) or updated CTC of Form 137 with remark \"For Evaluation Purposes Only\", for SHS graduates',
+    'form_137'           => 'Form 138 (Grade 12) or updated CTC of Form 137 with remark "For Evaluation Purposes Only", for SHS graduates',
 ]);
 
 // -- Transferee-only docs ----------------------------------------
 define('DOCS_TRANSFEREE', [
-    'tor'                => 'TOR or Certificate of Grades — \"For Evaluation Purposes Only\"',
+    'tor'                => 'TOR or Certificate of Grades — "For Evaluation Purposes Only"',
 ]);
 
 // -- Foreign student docs (kept for system completeness) ---------
 // Foreign applicants follow DOCS_CORE plus these extras.
 define('DOCS_FOREIGN', [
-    'tor'                => 'TOR or Certificate of Grades — \"For Evaluation Purposes Only\"',
+    'tor'                => 'TOR or Certificate of Grades — "For Evaluation Purposes Only"',
     'passport'           => 'Passport',
     'visa_permit'        => 'Visa or Study Permit',
     'alien_cert'         => 'Alien Certificate of Registration',
