@@ -1,0 +1,20 @@
+APP_ENV=development
+APP_URL=http://localhost:8000
+
+DB_HOST=aws-0-ap-southeast-1.pooler.supabase.com
+DB_PORT=6543
+DB_NAME=postgres
+DB_USER=postgres.lxugjadhegclfvuzkizz
+DB_PASS=Gz62pWMVbWDpgKon
+
+SUPABASE_URL=https://lxugjadhegclfvuzkizz.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4dWdqYWRoZWdjbGZ2dXpraXp6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTEyMDM0OCwiZXhwIjoyMTA2Njk2MzQ4fQ.M6sovx0rtAgadzz4b3AXdBexF41AZvLucKw8Zeq1bqE
+
+HCAPTCHA_SITE_KEY=
+HCAPTCHA_SECRET_KEY=
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM_NAME=PLP Admissions

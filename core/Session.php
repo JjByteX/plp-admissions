@@ -50,7 +50,8 @@ class Session
                     $stmt = db()->prepare('SELECT payload FROM sessions WHERE id = ?');
                     $stmt->execute([$id]);
                     return (string)($stmt->fetchColumn() ?: '');
-                } catch (\Throwable) {
+                } catch (\Throwable $e) {
+                    error_log('[session] read failed: ' . $e->getMessage());
                     return '';
                 }
             },
@@ -65,7 +66,8 @@ class Session
                             last_activity = EXCLUDED.last_activity
                     ')->execute([$id, $data, time()]);
                     return true;
-                } catch (\Throwable) {
+                } catch (\Throwable $e) {
+                    error_log('[session] write failed: ' . $e->getMessage());
                     return false;
                 }
             },
@@ -109,8 +111,23 @@ class Session
             $limit   = self::sessionTimeLimit();
             $elapsed = time() - $_SESSION['_last_activity'];
             if ($elapsed > $limit) {
-                self::flash('timeout', '1');
+                // Only show the "session timed out" notice to people who were
+                // actually logged in; anonymous visitors just get a clean session.
+                $wasLoggedIn = isset($_SESSION['user_id']);
                 self::destroy();
+
+                // destroy() closes the session, so anything written after it
+                // (including the CSRF token printed into the login form) was
+                // never saved and the next POST failed the token check.
+                // Open a brand-new session instead.
+                session_id(session_create_id());
+                session_start();
+                $_SESSION = [];
+                $_SESSION['_last_activity'] = time();
+                $_SESSION['_regen_at']      = time();
+                if ($wasLoggedIn) {
+                    self::flash('timeout', '1');
+                }
                 return;
             }
         }
