@@ -68,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'course_applied' => trim($_POST['course_applied'] ?? ''),
         'shs_strand'     => trim($_POST['shs_strand']     ?? ''),
     ];
+    $old['doc_flags'] = doc_flags_from_input($old['applicant_type'], $_POST['flags'] ?? []);
     $password        = $_POST['password']        ?? '';
     $passwordConfirm = $_POST['password_confirm'] ?? '';
 
@@ -97,6 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors['barangay'] = 'Select a valid barangay in Pasig City.';
     if (!$old['phone'])
         $errors['phone']      = 'Phone number is required.';
+    elseif (!preg_match('/^\d{11}$/', $old['phone']))
+        $errors['phone']      = 'Enter a valid 11-digit mobile number (e.g. 09123456789).';
     if (!filter_var($old['email'], FILTER_VALIDATE_EMAIL))
         $errors['email']      = 'Enter a valid email address.';
     if (!in_array($old['applicant_type'], [TYPE_FRESHMAN, TYPE_TRANSFEREE, TYPE_FOREIGN], true))
@@ -212,8 +215,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $schoolYear = school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
             $stmt = $pdo->prepare(
-                'INSERT INTO applicants (user_id, applicant_type, course_applied, shs_strand, overall_status, school_year)
-                 VALUES (?, ?, ?, ?, ?, ?)
+                'INSERT INTO applicants (user_id, applicant_type, course_applied, shs_strand, overall_status, school_year, doc_flags)
+                 VALUES (?, ?, ?, ?, ?, ?, ?::jsonb)
                  RETURNING id'
             );
             $stmt->execute([
@@ -223,10 +226,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $old['applicant_type'] === TYPE_FRESHMAN ? ($old['shs_strand'] ?: null) : null,
                 'pending',
                 $schoolYear,
+                json_encode($old['doc_flags']),
             ]);
             $applicantId = (int) $stmt->fetchColumn();
 
-            $docs    = docs_for_type($old['applicant_type']);
+            $docs    = docs_for_type($old['applicant_type'], $old['doc_flags']);
             $docStmt = $pdo->prepare(
                 'INSERT INTO documents (applicant_id, doc_type, status) VALUES (?, ?, ?)'
             );
@@ -295,7 +299,7 @@ try {
 } catch (\Throwable $e) { /* table may not exist yet */ }
 ob_start();
 ?>
-<div class="auth-card animate-fade-in" style="max-width:560px">
+<div class="auth-card auth-card-wide animate-fade-in">
 
     <button class="auth-theme-toggle" onclick="Theme.toggle()" aria-label="Toggle theme">
         <?= icon('ic_fluent_weather_sunny_24_regular', 16, '', 'data-theme-icon="dark" class="hidden"') ?>
@@ -311,8 +315,8 @@ ob_start();
             </div>
         <?php endif; ?>
         <div class="auth-header-text">
-            <h1 class="auth-title">PLP Admissions</h1>
-            <p class="auth-subtitle">Pamantasan ng Lungsod ng Pasig</p>
+            <h1 class="auth-title">Create your account</h1>
+            <p class="auth-subtitle">Start your PLP admission application.</p>
         </div>
     </div>
 
@@ -399,6 +403,32 @@ ob_start();
             <?php if (!empty($errors['shs_strand'])): ?>
                 <span class="form-error"><?= e($errors['shs_strand']) ?></span>
             <?php endif; ?>
+        </div>
+
+        <!-- Which conditional documents apply (shown by jQuery once a type is picked) -->
+        <div id="doc-flags" class="qual-box" style="display:none">
+            <div class="qual-box-title">Which of these apply to you?</div>
+            <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin:0 0 var(--space-3)">
+                This decides which documents you need to upload. You can change it later on the documents page until you submit.
+            </p>
+            <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+                <label class="form-check" data-types="freshman transferee foreign">
+                    <input type="checkbox" name="flags[married]" value="1" <?= !empty($old['doc_flags']['married']) ? 'checked' : '' ?>>
+                    <span>I am married</span>
+                </label>
+                <label class="form-check" data-types="freshman transferee foreign">
+                    <input type="checkbox" name="flags[guardian]" value="1" <?= !empty($old['doc_flags']['guardian']) ? 'checked' : '' ?>>
+                    <span>I am not living with my parents</span>
+                </label>
+                <label class="form-check" data-types="freshman">
+                    <input type="checkbox" name="flags[grade12]" value="1" <?= !empty($old['doc_flags']['grade12']) ? 'checked' : '' ?>>
+                    <span>I am currently in Grade 12</span>
+                </label>
+                <label class="form-check" data-types="freshman">
+                    <input type="checkbox" name="flags[shs_grad]" value="1" <?= !empty($old['doc_flags']['shs_grad']) ? 'checked' : '' ?>>
+                    <span>I am a Senior High School graduate</span>
+                </label>
+            </div>
         </div>
 
         <!-- Row: First / Middle / Last / Suffix — all in one row -->
@@ -531,10 +561,11 @@ ob_start();
                 <input type="tel" id="phone" name="phone"
                     class="form-input <?= isset($errors['phone']) ? 'error' : '' ?>"
                     value="<?= e($old['phone'] ?? '') ?>"
-                    placeholder=""
                     autocomplete="tel"
-                    maxlength="10"
-                    oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"
+                    maxlength="11"
+                    inputmode="numeric"
+                    placeholder="09123456789"
+                    oninput="this.value=this.value.replace(/\D/g,'').slice(0,11)"
                     required>
                 <?php if (!empty($errors['phone'])): ?>
                     <span class="form-error"><?= e($errors['phone']) ?></span>
@@ -684,6 +715,56 @@ function togglePw(id, btn) {
         }
     }
 })();
+</script>
+
+<script>
+// jQuery loads after page content, so wait for DOMContentLoaded.
+document.addEventListener('DOMContentLoaded', function () {
+    var $ = window.jQuery;
+    if (!$) return;
+    // Show only the ticks that fit the applicant type; clear hidden ones.
+    function syncFlags() {
+        var type = $('#applicant_type').val();
+        $('#doc-flags').toggle(!!type);
+        $('#doc-flags [data-types]').each(function () {
+            var show = String($(this).data('types')).split(' ').indexOf(type) !== -1;
+            $(this).toggle(show);
+            if (!show) $(this).find('input').prop('checked', false);
+        });
+    }
+    $('#applicant_type').on('change', syncFlags);
+    syncFlags();
+
+    // Live password checks (same rules as the server): 8+ chars, and both match.
+    function pwMsg($in, msg) {
+        var $box = $in.closest('.input-wrapper');
+        $box.siblings('.form-error').remove();
+        $in.toggleClass('error', !!msg);
+        if (msg) $('<span class="form-error"></span>').text(msg).insertAfter($box);
+    }
+    function checkPw() { pwMsg($('#password'), $('#password').val().length < 8 ? 'Password must be at least 8 characters.' : ''); }
+    function checkConfirm() { pwMsg($('#password_confirm'), $('#password_confirm').val() !== $('#password').val() ? 'Passwords do not match.' : ''); }
+    $('#password').on('blur', function () {
+        checkPw();
+        if ($('#password_confirm').val() !== '') checkConfirm();
+    }).on('input', function () {
+        if ($(this).hasClass('error')) checkPw();
+        if ($('#password_confirm').val() !== '') checkConfirm();
+    });
+    $('#password_confirm').on('blur', checkConfirm).on('input', function () {
+        if ($(this).hasClass('error')) checkConfirm();
+    });
+
+    // Live phone check: must be 11 digits.
+    $('#phone').on('blur input', function (ev) {
+        var $in = $(this), v = $in.val();
+        if (ev.type === 'input' && !$in.hasClass('error')) return; // wait for blur first
+        var bad = !/^\d{11}$/.test(v);
+        $in.siblings('.form-error').remove();
+        $in.toggleClass('error', bad);
+        if (bad) $('<span class="form-error">Enter a valid 11-digit mobile number (e.g. 09123456789).</span>').insertAfter($in);
+    });
+});
 </script>
 
 <style>

@@ -16,6 +16,17 @@ $staffId = Auth::id();
 $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
     && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
+// Reply for the AI flag actions: JSON for AJAX, flash + redirect otherwise.
+$flagReply = function (bool $ok, string $msg, int $applicantId) use ($isAjax) {
+    if ($isAjax) {
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => $ok, 'message' => $msg]);
+        exit;
+    }
+    Session::flash($ok ? 'success' : 'error', $msg);
+    redirect($applicantId ? '/staff/applicants/' . $applicantId : '/staff/applicants');
+};
+
 switch ($action) {
 
     case 'unapprove':
@@ -57,21 +68,13 @@ switch ($action) {
     case 'approve_all':
         // Approve all uploaded/under_review documents for this applicant in one shot.
         // $id here is the applicant ID (passed via the form action URL).
-        $stmt = $db->prepare(
-            'UPDATE documents SET status=\'approved\', staff_remarks=NULL, reviewed_by=?
-              WHERE applicant_id=? AND status IN (\'uploaded\',\'under_review\')'
-        );
-        $stmt->execute([$staffId, $id]);
-        $affected = $stmt->rowCount();
+        // AI-flagged documents are skipped until staff confirm the category.
+        $res      = doc_approve_unflagged($db, (int)$id, $staffId);
+        $affected = $res['approved'];
+        $skipped  = $res['skipped'];
 
         // Auto-advance to exam if all docs are now approved
-        $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\''
-        );
-        $stmt->execute([$id]);
-        $remaining = (int)$stmt->fetchColumn();
-
-        if ($remaining === 0) {
+        if (required_docs_all_approved($db, (int)$id)) {
             $db->prepare(
                 'UPDATE applicants
                     SET overall_status = \'exam\',
@@ -87,10 +90,13 @@ switch ($action) {
 
         audit_log('documents_approved_all', "Approved all {$affected} document(s) for applicant {$id}", 'applicant', $id);
         $msg = "{$affected} document" . ($affected != 1 ? 's' : '') . " approved.";
+        if ($skipped > 0) {
+            $msg .= " {$skipped} AI-flagged document" . ($skipped != 1 ? 's were' : ' was') . " skipped. Confirm the category first.";
+        }
 
         if ($isAjax) {
             header('Content-Type: application/json');
-            echo json_encode(['ok' => true, 'message' => $msg, 'affected' => $affected]);
+            echo json_encode(['ok' => true, 'message' => $msg, 'affected' => $affected, 'skipped' => $skipped]);
             exit;
         }
         Session::flash('success', $msg);
@@ -136,14 +142,15 @@ switch ($action) {
         $row = $stmt->fetch();
         $applicantId = $row['applicant_id'] ?? 0;
 
-        // Auto-advance to exam stage if all documents are now approved
-        $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\''
-        );
-        $stmt->execute([$applicantId]);
-        $pendingCount = $stmt->fetchColumn();
+        // Approving a flagged document also confirms its category.
+        $aiFlags = doc_ai_flags($db, (int)$applicantId);
+        if (isset($aiFlags[$id])) {
+            doc_ai_confirm($db, $aiFlags[$id]['validation_id'], 'approved', $staffId);
+            audit_log('doc_category_ok', "Category confirmed by approval of document ID {$id} (applicant {$applicantId})", 'document', $id);
+        }
 
-        if ($pendingCount == 0) {
+        // Auto-advance to exam stage if all documents are now approved
+        if (required_docs_all_approved($db, (int)$applicantId)) {
             $db->prepare(
                 'UPDATE applicants
                     SET overall_status = \'exam\',
@@ -162,23 +169,110 @@ switch ($action) {
         redirect('/staff/applicants/' . $applicantId);
         break;
 
+    // Phase 6: reviewer confirms the category of an AI-flagged document.
+    // $id is the document ID. AI never approves; this only marks the flag reviewed.
+    case 'category_ok':
+        $stmt = $db->prepare('SELECT applicant_id, doc_type FROM documents WHERE id=?');
+        $stmt->execute([$id]);
+        $doc = $stmt->fetch();
+        if (!$doc) $flagReply(false, 'Document not found.', 0);
+        $aid     = (int)$doc['applicant_id'];
+        $aiFlags = doc_ai_flags($db, $aid);
+        if (!isset($aiFlags[$id])) $flagReply(false, 'This document is not flagged.', $aid);
+
+        doc_ai_confirm($db, $aiFlags[$id]['validation_id'], 'approved', $staffId);
+        audit_log('doc_category_ok', "Confirmed category of document ID {$id} ({$doc['doc_type']}) for applicant {$aid}", 'document', $id);
+        $flagReply(true, 'Category confirmed.', $aid);
+        break;
+
+    // Phase 6: move a flagged file to another empty slot (review_result = corrected).
+    case 'change_type':
+        $target = trim($_POST['target_slot'] ?? '');
+        $stmt = $db->prepare(
+            'SELECT d.id, d.applicant_id, d.doc_type, d.file_path, d.status,
+                    a.applicant_type, a.doc_flags, a.user_id, a.overall_status
+               FROM documents d JOIN applicants a ON a.id = d.applicant_id
+              WHERE d.id = ?'
+        );
+        $stmt->execute([$id]);
+        $doc = $stmt->fetch();
+        if (!$doc) $flagReply(false, 'Document not found.', 0);
+        $aid      = (int)$doc['applicant_id'];
+        $aiFlags  = doc_ai_flags($db, $aid);
+        $required = docs_for_type($doc['applicant_type'], $doc['doc_flags'] ?? null);
+
+        if (!isset($aiFlags[$id]))                                   $flagReply(false, 'This document is not flagged.', $aid);
+        if ($doc['status'] === 'approved')                           $flagReply(false, 'Approved documents cannot be moved. Undo the approval first.', $aid);
+        if (!in_array($doc['status'], ['uploaded', 'under_review'], true)) $flagReply(false, 'Only an uploaded document can be moved.', $aid);
+        if (!isset($required[$target]))                              $flagReply(false, 'That document type does not apply to this applicant.', $aid);
+        if ($target === $doc['doc_type'])                            $flagReply(false, 'Pick a different document type.', $aid);
+
+        $stmt = $db->prepare('SELECT id, file_path, status FROM documents WHERE applicant_id = ? AND doc_type = ?');
+        $stmt->execute([$aid, $target]);
+        $tRow = $stmt->fetch();
+        if ($tRow && ($tRow['file_path'] || $tRow['status'] !== 'pending')) {
+            $flagReply(false, 'That slot is not empty.', $aid);
+        }
+
+        $srcLabel = $required[$doc['doc_type']] ?? $doc['doc_type'];
+        $tgtLabel = $required[$target];
+        try {
+            $db->beginTransaction();
+            if ($tRow) {
+                $targetId = (int)$tRow['id'];
+                $db->prepare(
+                    "UPDATE documents SET file_path = ?, status = 'uploaded', staff_remarks = NULL, reviewed_by = NULL WHERE id = ?"
+                )->execute([$doc['file_path'], $targetId]);
+            } else {
+                $ins = $db->prepare(
+                    "INSERT INTO documents (applicant_id, doc_type, file_path, status) VALUES (?, ?, ?, 'uploaded') RETURNING id"
+                );
+                $ins->execute([$aid, $target, $doc['file_path']]);
+                $targetId = (int)$ins->fetchColumn();
+            }
+
+            // The old slot is empty now. After submit the applicant can only fill
+            // a declined slot, so decline it and reopen the documents stage.
+            if ($doc['overall_status'] === 'submitted') {
+                $db->prepare(
+                    "UPDATE documents SET file_path = NULL, status = 'rejected', staff_remarks = ?, reviewed_by = ? WHERE id = ?"
+                )->execute(["Your file was moved to {$tgtLabel}. Please upload the correct {$srcLabel}.", $staffId, $id]);
+                $db->prepare("UPDATE applicants SET overall_status = 'documents' WHERE id = ? AND overall_status = 'submitted'")
+                   ->execute([$aid]);
+            } else {
+                $db->prepare(
+                    "UPDATE documents SET file_path = NULL, status = 'pending', staff_remarks = NULL, reviewed_by = NULL WHERE id = ?"
+                )->execute([$id]);
+            }
+
+            doc_ai_confirm($db, $aiFlags[$id]['validation_id'], 'corrected', $staffId, $targetId);
+            $db->commit();
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            error_log('Change type failed: ' . $e->getMessage());
+            $flagReply(false, 'Server error. Please try again.', $aid);
+        }
+
+        if (!empty($doc['user_id'])) {
+            create_notification(
+                (int)$doc['user_id'],
+                'doc_type_changed',
+                'Document Category Changed',
+                "Staff moved your file from \"{$srcLabel}\" to \"{$tgtLabel}\".",
+                '/student/documents'
+            );
+        }
+        audit_log('doc_type_changed', "Moved document ID {$id} from {$doc['doc_type']} to {$target} for applicant {$aid}", 'document', $id);
+        $flagReply(true, "Moved to {$tgtLabel}.", $aid);
+        break;
+
     // 'reject' action removed — see 'request_resubmission' below. Both did
     // the same thing functionally (reset applicant to 'documents', let them
     // re-upload), so we kept the one that actually notifies the student.
 
     case 'advance_to_exam':
         // Guard: all documents must exist and be approved before advancing
-        $stmt = $db->prepare('SELECT COUNT(*) FROM documents WHERE applicant_id=?');
-        $stmt->execute([$id]);
-        $totalDocs = (int)$stmt->fetchColumn();
-
-        $stmt = $db->prepare(
-            'SELECT COUNT(*) FROM documents WHERE applicant_id=? AND status != \'approved\''
-        );
-        $stmt->execute([$id]);
-        $pendingCount = (int)$stmt->fetchColumn();
-
-        if ($totalDocs === 0 || $pendingCount > 0) {
+        if (!required_docs_all_approved($db, (int)$id)) {
             Session::flash('error', 'Approve all documents before advancing.');
             redirect('/staff/applicants/' . $id);
         }

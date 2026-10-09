@@ -335,6 +335,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     </main>
 </div>
 
+<script src="<?= asset('js/jquery.min.js') ?>"></script>
 <script src="<?= asset('js/app.js') ?>"></script>
 <?php if (HCAPTCHA_ENABLED): ?>
 <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
@@ -352,6 +353,19 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
             });
         });
     });
+
+    // Live email check on blur
+    if (window.jQuery) {
+        var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        jQuery('#email').on('blur input', function (ev) {
+            var $in = jQuery(this), v = jQuery.trim($in.val());
+            if (ev.type === 'input' && !$in.hasClass('lg-bad')) return;
+            var bad = v !== '' && !emailRe.test(v);
+            $in.siblings('.lg-err').remove();
+            $in.toggleClass('lg-bad', bad);
+            if (bad) jQuery('<span class="lg-err">Enter a valid email address.</span>').insertAfter($in);
+        });
+    }
 
     // Show / hide password
     var pw  = document.getElementById('password');

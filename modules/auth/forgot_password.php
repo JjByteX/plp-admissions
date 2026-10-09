@@ -77,8 +77,8 @@ $schoolLogo = school_setting('school_logo', '');
             </div>
         <?php endif; ?>
         <div class="auth-header-text">
-            <h1 class="auth-title">PLP Admissions</h1>
-            <p class="auth-subtitle">Pamantasan ng Lungsod ng Pasig</p>
+            <h1 class="auth-title">Forgot your password?</h1>
+            <p class="auth-subtitle">Enter your email and we will generate a reset token.</p>
         </div>
     </div>
 

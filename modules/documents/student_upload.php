@@ -23,7 +23,10 @@ $stmt = $db->prepare('SELECT * FROM documents WHERE applicant_id = ?');
 $stmt->execute([$applicantId]);
 $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
 
-$requiredDocs = docs_for_type($applicant['applicant_type']);
+$requiredDocs = docs_for_type($applicant['applicant_type'], $applicant['doc_flags'] ?? null);
+
+// Applicant can change the conditional ticks until they submit.
+$canEditFlags = in_array($applicant['overall_status'] ?? '', ['pending', 'documents'], true);
 
 // Self-heal: if every required doc is approved but overall_status didn't
 // auto-advance (rejected-then-replaced-then-approved edge case), fix it
@@ -142,6 +145,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/student/documents');
     }
 
+    // ---- Change conditional ticks (married / guardian / Grade 12 / SHS grad) ----
+    if ($action === 'update_flags') {
+        if (!$canEditFlags) {
+            $errors[] = 'You can only change these before submitting your documents.';
+        } else {
+            $newFlags = doc_flags_from_input($applicant['applicant_type'], $_POST['flags'] ?? []);
+            $blocked  = doc_flags_blocked_slots($db, $applicantId, $newFlags);
+            if ($blocked) {
+                $errors[] = 'Cannot remove an approved document: ' . implode(', ', $blocked) . '.';
+            } else {
+                $db->prepare('UPDATE applicants SET doc_flags = ?::jsonb WHERE id = ?')
+                   ->execute([json_encode($newFlags), $applicantId]);
+                $applicant['doc_flags'] = json_encode($newFlags);
+                $requiredDocs = docs_for_type($applicant['applicant_type'], $applicant['doc_flags']);
+                sync_doc_rows($db, $applicantId, $requiredDocs);
+                audit_log('doc_flags_changed', "Applicant {$applicantId} updated document ticks", 'applicant', $applicantId);
+            }
+        }
+
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => empty($errors), 'message' => empty($errors) ? 'Requirements updated.' : implode(' ', $errors)]);
+            exit;
+        }
+        if ($errors) Session::flash('error', implode(' ', $errors));
+        redirect('/student/documents');
+    }
+
     // ---- Change applicant type ----
     if ($action === 'change_type') {
         $newType = trim($_POST['applicant_type'] ?? '');
@@ -151,26 +182,186 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($isSubmitted || !in_array($applicant['overall_status'], ['documents'], true)) {
             $errors[] = 'You can only change your applicant type before submitting documents.';
         } else {
-            $db->prepare('UPDATE applicants SET applicant_type = ? WHERE id = ?')
-                ->execute([$newType, $applicantId]);
+            $typeFlags = doc_flags_from_input($newType, doc_flags_decode($applicant['doc_flags'] ?? null));
+            $db->prepare('UPDATE applicants SET applicant_type = ?, doc_flags = ?::jsonb WHERE id = ?')
+                ->execute([$newType, json_encode($typeFlags), $applicantId]);
             $applicant['applicant_type'] = $newType;
-            $requiredDocs = docs_for_type($newType);
+            $applicant['doc_flags']      = json_encode($typeFlags);
+            $requiredDocs = docs_for_type($newType, $applicant['doc_flags']);
+            sync_doc_rows($db, $applicantId, $requiredDocs);
             audit_log('type_changed', "Applicant {$applicantId} changed type to {$newType}", 'applicant', $applicantId);
             Session::flash('success', 'Applicant type updated. Please review the updated document requirements.');
         }
         redirect('/student/documents');
     }
 
+    // ---- Classify one file (batch upload backend) ----
+    // One file per request. passed: saved to the first open slot of its
+    // category. uncertain / failed / blocked: nothing is saved.
+    if ($action === 'classify') {
+        header('Content-Type: application/json');
+        $reply = static function (array $data): never {
+            echo json_encode($data);
+            exit;
+        };
+        $error = static fn(string $msg): array => ['ok' => false, 'status' => 'error', 'message' => $msg];
+        @set_time_limit(60);
+
+        $f = $_FILES['doc_file'] ?? null;
+        if (!$f || is_array($f['name']) || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $reply($error('Send exactly one file. It may be too large or missing.'));
+        }
+        if ($f['size'] > MAX_UPLOAD_BYTES) {
+            $reply($error('File size exceeds the 4 MB limit.'));
+        }
+        $mimeType = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']);
+        if (!in_array($mimeType, ALLOWED_MIME_TYPES, true)) {
+            $reply($error('Only PDF, JPG, PNG, and WEBP files are accepted.'));
+        }
+
+        // The classifier applies ai_confidence_threshold itself, so 'passed' is final here.
+        $categories = doc_categories($requiredDocs);
+        $r          = classify_upload($f['tmp_name'], $mimeType, $applicant);
+        $slots      = array_values(array_intersect($r['slots'], array_keys($requiredDocs)));
+        $cat        = $slots ? doc_category_of($slots[0]) : null;
+
+        // Category dropdown list; sent with failed and uncertain so the page can offer a manual pick.
+        $buildCats = static function () use ($categories, $docRows, $isSubmitted): array {
+            $list = [];
+            foreach ($categories as $key => $c) {
+                $pick   = doc_pick_slot($c['slots'], $docRows, $isSubmitted);
+                $list[] = [
+                    'category'  => $key,
+                    'label'     => $c['label'],
+                    'available' => $pick['slot'] !== null,
+                    'note'      => $pick['reason'] ?? ($pick['replaced'] ? 'Replaces your earlier file.' : null),
+                ];
+            }
+            return $list;
+        };
+
+        $out = [
+            'ok'          => true,
+            'status'      => $r['status'],
+            'file'        => $f['name'],
+            'guess'       => $r['guess'],
+            'guess_label' => $categories[$cat ?? '']['label'] ?? null,
+            'confidence'  => $r['confidence'],
+            'reason'      => $r['reason'],
+        ];
+
+        if ($r['status'] === 'failed') {
+            $out['categories'] = $buildCats();
+            $out['message'] = $r['reason'] !== '' ? $r['reason'] : 'This file is not clear enough. Please upload a better copy.';
+            $reply($out);
+        }
+
+        if ($r['status'] === 'uncertain' || !$slots) {
+            $out['status']     = 'uncertain';
+            $out['categories'] = $buildCats();
+            $out['message'] = $r['reason'] !== ''
+                ? $r['reason']
+                : ($out['guess_label']
+                    ? 'This looks like ' . $out['guess_label'] . ', but we are not sure. Please pick its type.'
+                    : 'We could not tell what this document is. Please pick its type.');
+            $reply($out);
+        }
+
+        // passed
+        $db->beginTransaction();
+        try {
+            // Lock this category's rows so two files sent together never take the same slot.
+            $in   = implode(',', array_fill(0, count($slots), '?'));
+            $stmt = $db->prepare("SELECT doc_type, status FROM documents WHERE applicant_id = ? AND doc_type IN ($in) FOR UPDATE");
+            $stmt->execute(array_merge([$applicantId], $slots));
+            $fresh = [];
+            foreach ($stmt->fetchAll() as $row) $fresh[$row['doc_type']] = $row;
+
+            // One image with two photos fills both photo slots with the same file.
+            $want = ($cat === 'photo' && (int)($r['fields']['photos'] ?? 0) === 2) ? 2 : 1;
+            $pick = doc_pick_slots($slots, $fresh, $isSubmitted, $want);
+            if (!$pick['slots']) {
+                $db->rollBack();
+                $out['status']  = 'blocked';
+                $out['message'] = $pick['reason'];
+                $reply($out);
+            }
+            $slot = $pick['slots'][0];
+
+            $ext      = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+            $filename = $applicantId . '_' . $slot . '_' . time() . '.' . $ext;
+            $fileUrl  = uploadcare_upload($f['tmp_name'], $filename, $mimeType);
+            if (!$fileUrl) {
+                $db->rollBack();
+                $reply($error('File upload failed. Please try again.'));
+            }
+
+            $update = $db->prepare(
+                "UPDATE documents SET file_path = ?, status = 'uploaded', staff_remarks = NULL, reviewed_by = NULL
+                  WHERE applicant_id = ? AND doc_type = ? RETURNING id"
+            );
+            $insert = $db->prepare(
+                "INSERT INTO documents (applicant_id, doc_type, file_path, status) VALUES (?, ?, ?, 'uploaded') RETURNING id"
+            );
+            $valid = $db->prepare(
+                "INSERT INTO document_validations (document_id, validation_type, status, confidence, details)
+                 VALUES (?, 'ai', 'passed', ?, ?)"
+            );
+            $details = json_encode(['category' => $r['guess'], 'reason' => $r['reason'], 'fields' => $r['fields']]);
+            // ponytail: a replaced file stays in storage; upgrade path is a storage cleanup job.
+            foreach ($pick['slots'] as $s) {
+                $update->execute([$fileUrl, $applicantId, $s]);
+                $docId = $update->fetchColumn();
+                if (!$docId) {
+                    $insert->execute([$applicantId, $s, $fileUrl]);
+                    $docId = $insert->fetchColumn();
+                }
+                $valid->execute([$docId, $r['confidence'], $details]);
+            }
+            $db->commit();
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            error_log('Classify save failed: ' . $e->getMessage());
+            $reply($error('Server error. Please try again.'));
+        }
+
+        audit_log('doc_ai_passed', "Applicant {$applicantId}: {$r['guess']} saved to " . implode(', ', $pick['slots']), 'applicant', $applicantId);
+        $out['slot']       = $slot;
+        $out['slots']      = $pick['slots'];
+        $out['slot_label'] = $requiredDocs[$slot];
+        $out['replaced']   = $pick['replaced'];
+        if (count($pick['slots']) === 2) {
+            $out['message'] = $categories[$cat]['label'] . ' saved to both slots.';
+        } elseif ($pick['replaced']) {
+            $out['message'] = $requiredDocs[$slot] . ' replaced your earlier file.';
+        } else {
+            $out['message'] = $requiredDocs[$slot] . ' saved.';
+        }
+        $reply($out);
+    }
+
     // ---- File upload ----
     $docSlug = trim($_POST['doc_slug'] ?? '');
 
-    if (!array_key_exists($docSlug, $requiredDocs)) {
+    // picked=1: the applicant chose the type from the dropdown after the AI was unsure.
+    // doc_slug may then be a slot or a category (valid_id, photo); a category follows the 4B slot rules.
+    // ai_guess is the AI's guess, sent back by the page, only used for the validation row.
+    // ponytail: picks are not locked; the upload page sends one file at a time. Upgrade path: lock like classify does.
+    $picked  = ($_POST['picked'] ?? '') === '1';
+    $aiGuess = substr(trim((string)($_POST['ai_guess'] ?? '')), 0, 64);
+    if ($picked) {
+        $res = doc_resolve_pick($docSlug, $requiredDocs, $docRows, $isSubmitted);
+        if ($res['slot'] === null) $errors[] = $res['reason'];
+        else $docSlug = $res['slot'];
+    }
+
+    if (!$errors && !array_key_exists($docSlug, $requiredDocs)) {
         $errors[] = 'Invalid document type.';
     }
 
     // Only allow replace based on submission state
     $currentStatus  = $docRows[$docSlug]['status'] ?? 'pending';
-    $allowedStatuses = $isSubmitted ? ['rejected'] : ['pending', 'rejected', 'uploaded'];
+    $allowedStatuses = $isSubmitted ? ['rejected', 'resubmission_required'] : ['pending', 'rejected', 'resubmission_required', 'uploaded'];
     if (!in_array($currentStatus, $allowedStatuses, true)) {
         $errors[] = 'This document cannot be replaced at this time.';
     }
@@ -226,6 +417,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$applicantId]);
             $docRows = array_column($stmt->fetchAll(), null, 'doc_type');
 
+            // Newest validation row wins. A picked file is flagged for staff (ai, uncertain);
+            // a plain upload clears any old flag (file_check, passed).
+            try {
+                $docId = $docRows[$docSlug]['id'] ?? null;
+                if ($docId) {
+                    if ($picked) {
+                        $vType = 'ai';
+                        $vStat = 'uncertain';
+                        $vInfo = ['applicant_pick' => doc_category_of($docSlug), 'ai_guess' => $aiGuess !== '' ? $aiGuess : null];
+                    } else {
+                        $vType = 'file_check';
+                        $vStat = 'passed';
+                        $vInfo = ['check' => 'type_and_size'];
+                    }
+                    $db->prepare(
+                        'INSERT INTO document_validations (document_id, validation_type, status, confidence, details) VALUES (?,?,?,NULL,?)'
+                    )->execute([$docId, $vType, $vStat, json_encode($vInfo)]);
+                }
+            } catch (Throwable $e) {
+                error_log('Validation row failed: ' . $e->getMessage());
+            }
+
             $success[] = $requiredDocs[$docSlug] . ' uploaded successfully.';
         }
     }
@@ -237,6 +450,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode([
                 'ok'      => true,
                 'message' => $success[0] ?? 'Uploaded successfully.',
+                'slot'    => $docSlug,
             ]);
         } else {
             echo json_encode(['ok' => false, 'message' => implode(' ', $errors)]);
@@ -245,14 +459,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Count statuses
-$statusCounts = array_count_values(array_column($docRows, 'status'));
-$allApproved  = count($docRows) === count($requiredDocs)
+// Count statuses (only slots that apply; old or extra rows are ignored)
+$reqRows      = array_intersect_key($docRows, $requiredDocs);
+$statusCounts = array_count_values(array_column($reqRows, 'status'));
+$allApproved  = count($reqRows) === count($requiredDocs)
     && ($statusCounts['approved'] ?? 0) === count($requiredDocs);
 
 // Submission state helpers
 $uploadedOrApproved = ($statusCounts['uploaded'] ?? 0) + ($statusCounts['approved'] ?? 0);
-$allUploaded  = count($docRows) === count($requiredDocs) && $uploadedOrApproved === count($requiredDocs);
+$allUploaded  = count($reqRows) === count($requiredDocs) && $uploadedOrApproved === count($requiredDocs);
 $pastDocuments = in_array($applicant['overall_status'] ?? '', ['exam', 'interview', 'released'], true);
 $hasRejected   = ($statusCounts['rejected'] ?? 0) > 0;
 $canSubmit     = $allUploaded && !$isSubmitted && !$pastDocuments;
@@ -493,6 +708,13 @@ ob_start();
 
 
 
+<!-- Client notice -->
+<div class="alert alert-info" style="margin-bottom:var(--space-4);display:block;line-height:1.6">
+    <p style="margin:0 0 var(--space-2)">When uploading the REQUIRED DOCUMENTS, please ensure that the scanned copies or screenshots are CLEAR, LEGIBLE, and FREE FROM ANY ALTERATIONS or DIGITAL MANIPULATION.</p>
+    <p style="margin:0 0 var(--space-2)">Applicants are reminded that ONLY THOSE with COMPLETE REQUIREMENTS will be entertained and scheduled for VALIDATION.</p>
+    <p style="margin:0">Qualifying applicants shall take the admission exam. The schedule of examination will be posted on the PLP Official Facebook Page.</p>
+</div>
+
 <?php if (!$isSubmitted && $applicant['overall_status'] === 'documents'): ?>
 <!-- Applicant type selector -->
 <div class="card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
@@ -513,8 +735,72 @@ ob_start();
 </div>
 <?php endif; ?>
 
+<?php if ($canEditFlags && !$isSubmitted): ?>
+<!-- Conditional ticks: change until submit; jQuery refreshes the slot list below -->
+<div class="card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)">
+    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-2)">Which of these apply to you?</div>
+    <form id="flags-form">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="update_flags">
+        <?php $_ticks = doc_flags_decode($applicant['doc_flags'] ?? null); ?>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+            <label class="form-check">
+                <input type="checkbox" name="flags[married]" value="1" <?= $_ticks['married'] ? 'checked' : '' ?>>
+                <span>I am married</span>
+            </label>
+            <label class="form-check">
+                <input type="checkbox" name="flags[guardian]" value="1" <?= $_ticks['guardian'] ? 'checked' : '' ?>>
+                <span>I am not living with my parents</span>
+            </label>
+            <?php if ($applicant['applicant_type'] === 'freshman'): ?>
+            <label class="form-check">
+                <input type="checkbox" name="flags[grade12]" value="1" <?= $_ticks['grade12'] ? 'checked' : '' ?>>
+                <span>I am currently in Grade 12</span>
+            </label>
+            <label class="form-check">
+                <input type="checkbox" name="flags[shs_grad]" value="1" <?= $_ticks['shs_grad'] ? 'checked' : '' ?>>
+                <span>I am a Senior High School graduate</span>
+            </label>
+            <?php endif; ?>
+        </div>
+    </form>
+    <div id="flags-msg" style="font-size:var(--text-xs);margin-top:var(--space-2);display:none"></div>
+</div>
+<?php endif; ?>
+
+<?php if ($applicant['applicant_type'] !== 'foreign' && !$pastDocuments && !$docDeadlinePassed): ?>
+<!-- Upload many files (AI sorting). The slot list below and its Upload buttons stay. -->
+<style>
+.batch-drop { border:2px dashed var(--border); border-radius:var(--radius-lg); padding:var(--space-6) var(--space-4); text-align:center; cursor:pointer; transition:border-color var(--transition-fast), background var(--transition-fast); }
+.batch-drop:hover, .batch-drop:focus, .batch-drop.drag-over { border-color:var(--accent); background:var(--bg-subtle); outline:none; }
+.batch-row { border:1px solid var(--border); border-radius:var(--radius-md); padding:var(--space-3) var(--space-4); background:var(--bg-surface, transparent); }
+.batch-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); }
+.batch-name { font-weight:var(--weight-medium); font-size:var(--text-sm); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.batch-msg { font-size:var(--text-sm); color:var(--text-secondary); margin-top:var(--space-1); }
+.batch-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); margin-top:var(--space-2); }
+.batch-actions:empty { display:none; }
+.batch-bar { height:4px; border-radius:2px; background:var(--bg-subtle); margin-top:var(--space-2); overflow:hidden; }
+.batch-bar > span { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
+.batch-tip { font-size:var(--text-xs); color:var(--warning); margin-top:var(--space-2); }
+</style>
+<div class="card" id="batch-box" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)">
+    <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Upload many files</div>
+    <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">Pick all your documents at once. We sort them into the right slots for you. Anything we are not sure about, you can fix below.</div>
+    <div class="batch-drop" id="batch-drop" role="button" tabindex="0" aria-label="Choose files to upload">
+        <p style="font-weight:var(--weight-medium);margin:0">Drop your files here</p>
+        <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:var(--space-1) 0 var(--space-3)">or click to choose files · PDF, JPG, PNG or WEBP · max 4 MB each</p>
+        <button type="button" class="btn btn-secondary btn-sm" id="batch-camera-btn">Take a photo</button>
+    </div>
+    <input type="file" id="batch-input" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple style="display:none">
+    <input type="file" id="batch-camera" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="batch-replace" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none">
+    <div id="batch-rows" style="display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)"></div>
+    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-3)">Prefer to do it one by one? Use the Upload button on each document below.</div>
+</div>
+<?php endif; ?>
+
 <!-- Document list -->
-<div style="display:flex;flex-direction:column;gap:var(--space-3)">
+<div id="doc-list" style="display:flex;flex-direction:column;gap:var(--space-3)">
 <?php foreach ($requiredDocs as $slug => $label):
     $doc    = $docRows[$slug] ?? null;
     $status = $doc['status'] ?? 'pending';
@@ -1057,6 +1343,7 @@ function updateDropLabel(name) {
 </script>
 
 <!-- Submit / Withdraw panel -->
+<div id="doc-submit">
 <?php if ($canSubmit): ?>
 <div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4)">
     <div style="flex:1">
@@ -1085,6 +1372,259 @@ function updateDropLabel(name) {
     <button class="btn btn-primary" disabled style="cursor:not-allowed">Submit Application</button>
 </div>
 <?php endif; ?>
+</div>
+
+<script>
+// 1D: save ticks with $.ajax, then refresh the slot list and submit panel without a reload.
+// jQuery loads after page content, so wait for DOMContentLoaded.
+document.addEventListener('DOMContentLoaded', function () {
+    var $ = window.jQuery;
+    if (!$) return;
+
+    // Reusable: re-fetch this page and swap in the fresh slot list + submit panel.
+    // Used by the ticks (1.18) and by the batch upload box (5.11).
+    window.refreshSlotList = function () {
+        return $.get(window.location.href).done(function (html) {
+            var $page = $('<div>').append($.parseHTML(html));
+            $('#doc-list').html($page.find('#doc-list').html());
+            $('#doc-submit').html($page.find('#doc-submit').html());
+        });
+    };
+
+    if (!$('#flags-form').length) return;
+
+    function say(ok, msg) {
+        $('#flags-msg').text(msg).css('color', ok ? 'var(--success)' : 'var(--error)').show();
+    }
+
+    $('#flags-form').on('change', 'input[type=checkbox]', function () {
+        var $box = $(this);
+        $.ajax({
+            url: $('#flags-form').attr('action') || window.location.href,
+            method: 'POST',
+            data: $('#flags-form').serialize(),
+            dataType: 'json'
+        }).done(function (res) {
+            if (res.ok) {
+                say(true, res.message);
+                window.refreshSlotList();
+            } else {
+                $box.prop('checked', !$box.prop('checked')); // put it back
+                say(false, res.message);
+            }
+        }).fail(function () {
+            $box.prop('checked', !$box.prop('checked'));
+            say(false, 'Could not save. Please try again.');
+        });
+    });
+});
+</script>
+
+<script>
+// Phase 5: Upload many files. One file per request (action=classify), sequential queue.
+// ponytail: queue lives in memory only (a page reload drops unfinished rows); upgrade path is none needed, saved files stay in the slot list.
+document.addEventListener('DOMContentLoaded', function () {
+    var $ = window.jQuery;
+    if (!$ || !$('#batch-box').length) return;
+
+    var URL_  = <?= json_encode(url('/student/documents')) ?>;
+    var CSRF  = $('#flags-form [name=_csrf], #upload-form [name=_csrf]').first().val() || <?= json_encode(csrf_token()) ?>;
+    var MAX   = 4 * 1024 * 1024;
+    var OK    = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    var rows  = {}, queue = [], busy = false, seq = 0, lastCats = null, replaceId = null;
+
+    function badge(cls, text) { return $('<span class="badge">').addClass(cls).text(text); }
+    function bytesOk(b) { return b.size <= MAX; }
+
+    // 5.3: shrink to 1280 px JPEG. Falls back to the original file if the browser cannot decode it.
+    function shrink(file) {
+        var d = $.Deferred();
+        if (file.type === 'application/pdf') return d.resolve(file).promise();
+        var img = new Image(), src = URL.createObjectURL(file);
+        img.onload = function () {
+            var k = Math.min(1, 1280 / Math.max(img.width, img.height));
+            var c = document.createElement('canvas');
+            c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+            var x = c.getContext('2d');
+            x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+            x.drawImage(img, 0, 0, c.width, c.height);
+            URL.revokeObjectURL(src);
+            c.toBlob(function (b) { d.resolve(b || file); }, 'image/jpeg', 0.85);
+        };
+        img.onerror = function () { URL.revokeObjectURL(src); d.resolve(file); };
+        img.src = src;
+        return d.promise();
+    }
+
+    function newRow(file) {
+        var id = ++seq;
+        var $el = $('<div class="batch-row">').attr('data-id', id).append(
+            $('<div class="batch-head">').append($('<span class="batch-name">').text(file.name), $('<span class="batch-state">')),
+            $('<div class="batch-msg">'), $('<div class="batch-bar" style="display:none"><span></span></div>'), $('<div class="batch-actions">')
+        );
+        $('#batch-rows').append($el);
+        rows[id] = { id: id, $el: $el, file: file, blob: null, tries: 0, guess: '' };
+        return rows[id];
+    }
+
+    function show(r, cls, label, msg) {
+        r.$el.find('.batch-state').empty().append(badge(cls, label));
+        r.$el.find('.batch-msg').text(msg || '');
+        r.$el.find('.batch-actions').empty();
+        r.$el.find('.batch-tip').remove();
+    }
+
+    function busyState(r, label) {
+        show(r, 'badge-info', label, '');
+        r.$el.find('.batch-bar').show().find('span').css('width', '0');
+    }
+
+    function tip(r) {
+        // 5.10: after 2 failed tries, point to one by one upload.
+        if (r.tries >= 2) r.$el.append($('<div class="batch-tip">').text('Still not working? Use the Upload button on that document in the list below to upload it one by one.'));
+    }
+
+    function actionBtn(text, fn, primary) {
+        return $('<button type="button" class="btn btn-sm">').addClass(primary ? 'btn-primary' : 'btn-ghost').text(text).on('click', fn);
+    }
+
+    function dropdown(r, cats) {
+        var $sel = $('<select class="form-select" style="width:auto;min-height:32px;font-size:var(--text-sm)">').append($('<option value="">').text('Choose document type…'));
+        $.each(cats, function (_, c) {
+            var $o = $('<option>').val(c.category).text(c.label + (c.note ? ' — ' + c.note : ''));
+            if (!c.available) $o.prop('disabled', true);
+            $sel.append($o);
+        });
+        var $go = actionBtn('Use this type', function () { pick(r, $sel.val()); }, true).prop('disabled', true);
+        $sel.on('change', function () { $go.prop('disabled', !$sel.val()); });
+        return [$sel, $go];
+    }
+
+    function offer(r, kind, msg, cats) {
+        // kind: 'uncertain' (Not sure) | 'failed' (Unreadable) | 'error'
+        cats = cats && cats.length ? cats : lastCats;
+        var cls = kind === 'uncertain' ? 'badge-warning' : 'badge-error';
+        var label = kind === 'uncertain' ? 'Not sure' : (kind === 'failed' ? 'Unreadable' : 'Error');
+        show(r, cls, label, msg);
+        var $a = r.$el.find('.batch-actions');
+        if (kind === 'uncertain') $a.append(actionBtn('Replace file', function () { replaceId = r.id; $('#batch-replace').removeAttr('capture').val('').trigger('click'); }));
+        else if (kind === 'failed') $a.append(actionBtn('Retake', function () { replaceId = r.id; $('#batch-replace').attr('capture', 'environment').val('').trigger('click'); }));
+        else $a.append(actionBtn('Try again', function () { r.tries = 0; enqueue(r); }));
+        if (cats && cats.length) $a.prepend.apply($a, dropdown(r, cats));
+        $a.append(actionBtn('Remove', function () { r.$el.remove(); delete rows[r.id]; }));
+        tip(r);
+    }
+
+    function done(r, label, cls, msg) {
+        show(r, cls, label, msg);
+        r.blob = null; r.file = null;
+        r.$el.find('.batch-actions').append(actionBtn('Dismiss', function () { r.$el.remove(); delete rows[r.id]; }));
+    }
+
+    function send(r, data) {
+        return $.ajax({
+            url: URL_, method: 'POST', data: data, processData: false, contentType: false,
+            dataType: 'json', timeout: 70000, headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            xhr: function () {
+                var x = $.ajaxSettings.xhr();
+                if (x.upload) x.upload.onprogress = function (e) {
+                    if (!e.lengthComputable) return;
+                    var p = Math.round(e.loaded / e.total * 100);
+                    r.$el.find('.batch-bar span').css('width', p + '%');
+                    if (p >= 100) r.$el.find('.batch-state .badge').text('Checking…');
+                };
+                return x;
+            }
+        });
+    }
+
+    function classify(r) {
+        var d = $.Deferred();
+        busyState(r, 'Uploading…');
+        var fd = new FormData();
+        fd.append('_csrf', CSRF); fd.append('action', 'classify');
+        fd.append('doc_file', r.blob, r.blob.name || r.file.name);
+        send(r, fd).done(function (res) {
+            r.$el.find('.batch-bar').hide();
+            if (!res || res.ok === false) { r.tries++; offer(r, 'error', (res && res.message) || 'Something went wrong. Please try again.'); }
+            else if (res.categories && res.categories.length) lastCats = res.categories;
+            if (res && res.ok !== false) {
+                r.guess = res.guess || '';
+                if (res.status === 'passed') { done(r, 'Sorted', 'badge-success', res.message || 'Saved.'); window.refreshSlotList && window.refreshSlotList(); }
+                else if (res.status === 'blocked') { done(r, 'Blocked', 'badge-error', res.message); window.refreshSlotList && window.refreshSlotList(); }
+                else if (res.status === 'failed') { r.tries++; offer(r, 'failed', res.message, res.categories); }
+                else { r.tries++; offer(r, 'uncertain', res.message, res.categories); }
+            }
+        }).fail(function () {
+            r.$el.find('.batch-bar').hide(); r.tries++;
+            offer(r, 'error', 'Could not reach the server. Check your connection and try again.');
+        }).always(function () { d.resolve(); });
+        return d.promise();
+    }
+
+    // 5.9: send the kept file to the existing upload action with the chosen category.
+    function pick(r, cat) {
+        if (!cat || !r.blob) return;
+        busyState(r, 'Saving…');
+        var fd = new FormData();
+        fd.append('_csrf', CSRF); fd.append('doc_slug', cat); fd.append('picked', '1'); fd.append('ai_guess', r.guess || '');
+        fd.append('doc_file', r.blob, r.blob.name || r.file.name);
+        send(r, fd).done(function (res) {
+            r.$el.find('.batch-bar').hide();
+            if (res && res.ok) { done(r, 'Sorted', 'badge-success', (res.message || 'Saved.') + ' Staff will double check the type.'); window.refreshSlotList && window.refreshSlotList(); }
+            else offer(r, 'error', (res && res.message) || 'Could not save this file.', lastCats);
+        }).fail(function () {
+            r.$el.find('.batch-bar').hide();
+            offer(r, 'error', 'Could not reach the server. Check your connection and try again.', lastCats);
+        });
+    }
+
+    function enqueue(r) {
+        show(r, 'badge-pending', 'Waiting', '');
+        queue.push(r); run();
+    }
+
+    function run() {
+        if (busy || !queue.length) return;
+        busy = true;
+        var r = queue.shift();
+        if (!rows[r.id]) { busy = false; return run(); }
+        (r.blob ? $.Deferred().resolve(r.blob).promise() : shrink(r.file)).then(function (b) {
+            if (!(b instanceof Blob)) b = r.file;
+            if (!b.name) b.name = r.file.name.replace(/\.[^.]+$/, '') + (b.type === 'image/jpeg' ? '.jpg' : '');
+            if (!bytesOk(b)) { offer(r, 'error', 'This file is over the 4 MB limit.'); return; }
+            r.blob = b;
+            return classify(r);
+        }).always(function () { busy = false; run(); });
+    }
+
+    function addFiles(list) {
+        $.each(list, function (_, f) {
+            var r = newRow(f);
+            if (OK.indexOf(f.type) < 0) { show(r, 'badge-error', 'Error', 'Only PDF, JPG, PNG, and WEBP files are accepted.'); r.$el.find('.batch-actions').append(actionBtn('Dismiss', function () { r.$el.remove(); delete rows[r.id]; })); return; }
+            enqueue(r);
+        });
+    }
+
+    // Replace file / Retake: swap the kept file and classify the same row again.
+    $('#batch-replace').on('change', function () {
+        var f = this.files[0], r = rows[replaceId];
+        if (!f || !r) return;
+        if (OK.indexOf(f.type) < 0) { offer(r, 'error', 'Only PDF, JPG, PNG, and WEBP files are accepted.'); return; }
+        r.file = f; r.blob = null; r.$el.find('.batch-name').text(f.name);
+        enqueue(r);
+    });
+
+    var $drop = $('#batch-drop');
+    $drop.on('click', function () { $('#batch-input').val('').trigger('click'); });
+    $drop.on('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#batch-input').val('').trigger('click'); } });
+    $('#batch-camera-btn').on('click', function (e) { e.stopPropagation(); $('#batch-camera').val('').trigger('click'); });
+    $('#batch-input, #batch-camera').on('change', function () { addFiles(this.files); });
+    $drop.on('dragover dragenter', function (e) { e.preventDefault(); $drop.addClass('drag-over'); });
+    $drop.on('dragleave drop', function (e) { e.preventDefault(); $drop.removeClass('drag-over'); });
+    $drop.on('drop', function (e) { addFiles(e.originalEvent.dataTransfer.files); });
+});
+</script>
 
 <!-- Step navigation -->
 <div class="step-nav">

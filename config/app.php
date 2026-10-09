@@ -66,6 +66,12 @@ define('SUPABASE_SERVICE_KEY',      getenv('SUPABASE_SERVICE_KEY')      ?: '');
 define('SUPABASE_BUCKET_DOCUMENTS', getenv('SUPABASE_BUCKET_DOCUMENTS') ?: 'documents');
 define('SUPABASE_BUCKET_BRANDING',  getenv('SUPABASE_BUCKET_BRANDING')  ?: 'branding');
 
+// -- AI document sorting (local model PC through a Cloudflare Tunnel) --
+// Empty AI_MODEL_URL = AI off; uploads use the category dropdown.
+define('AI_MODEL_URL', getenv('AI_MODEL_URL') ?: '');
+define('AI_TIMEOUT',   (int) (getenv('AI_TIMEOUT') ?: 25));
+define('AI_MODEL_KEY', getenv('AI_MODEL_KEY') ?: '');
+
 // -- Roles -------------------------------------------------------
 // DB enum values stored on users.role:
 //   'student' | 'staff' | 'proctor' | 'sso' | 'dean' | 'admin'
@@ -93,36 +99,46 @@ define('TYPE_FOREIGN',    'foreign');
 // ----------------------------------------------------------------
 
 // -- Documents shared by BOTH freshmen and transferees -----------
+// Conditional slots (see DOCS_CONDITIONAL) are only required when the applicant ticks the flag.
 define('DOCS_CORE', [
-    'applicant_id'       => 'Government-issued ID / School ID (Applicant)',
-    'psa_birth_cert'     => 'PSA Birth Certificate',
-    'passport_photos'    => 'Passport-size Photos, white background with nameplate',
-    'parent_id'          => 'Government-issued ID of Parent/Guardian',
-    'proof_of_income'    => 'Proof of Income of Parents (ITR, DSWD Case Study, or DSWD Beneficiary ID)',
-    'guardianship_affidavit' => 'Notarized Affidavit of Guardianship (for applicants under a guardian)',
+    'psa_birth_cert'         => 'PSA Birth Certificate (second page or notation, if needed)',
+    'marriage_cert'          => 'Marriage Certificate (if married)',
+    'valid_id_1'             => 'Valid Government-issued ID (1 of 2)',
+    'valid_id_2'             => 'Valid Government-issued ID (2 of 2)',
+    'barangay_cert'          => 'Barangay Certificate of Residence',
+    'guardianship_affidavit' => 'Affidavit of Guardianship or Support (if not living with parents)',
+    'photo_1'                => 'Passport-size Photo (1 of 2), white background with nameplate',
+    'photo_2'                => 'Passport-size Photo (2 of 2), white background with nameplate',
 ]);
 
 // -- Freshman-only docs ------------------------------------------
-// Note: Form 138 is for currently graduating Grade 12; Form 137 is for SHS graduates.
-// Applicants upload whichever applies to them.
+// Form 138 is for currently Grade 12; Form 137 (or Grade 12 Form 138) is for SHS graduates.
 define('DOCS_FRESHMAN', [
-    'form_138'           => 'CTC of Grade 11 Form 138 (for currently enrolled Grade 12)',
-    'form_137'           => 'CTC of Form 137 with remark "For Evaluation Purposes Only" (for SHS graduates)',
+    'form_138'           => 'CTC of Form 138 (Grade 11 Report Card), if currently Grade 12',
+    'form_137'           => 'Form 138 (Grade 12) or updated CTC of Form 137 with remark "For Evaluation Purposes Only", for SHS graduates',
 ]);
 
 // -- Transferee-only docs ----------------------------------------
 define('DOCS_TRANSFEREE', [
-    'tor'                => 'CTC of Transcript of Records (TOR) — "For Evaluation Purposes Only"',
-    'good_moral'         => 'Certificate of Good Moral Character',
+    'tor'                => 'TOR or Certificate of Grades — "For Evaluation Purposes Only"',
 ]);
 
 // -- Foreign student docs (kept for system completeness) ---------
+// Foreign applicants follow DOCS_CORE plus these extras.
 define('DOCS_FOREIGN', [
-    'tor'                => 'CTC of Transcript of Records (TOR) — "For Evaluation Purposes Only"',
-    'good_moral'         => 'Certificate of Good Moral Character',
+    'tor'                => 'TOR or Certificate of Grades — "For Evaluation Purposes Only"',
     'passport'           => 'Passport',
     'visa_permit'        => 'Visa or Study Permit',
     'alien_cert'         => 'Alien Certificate of Registration',
+]);
+
+// -- Conditional slots: slot => doc_flags key on applicants.doc_flags ----
+// A slot listed here is only required when its flag is true.
+define('DOCS_CONDITIONAL', [
+    'marriage_cert'          => 'married',
+    'guardianship_affidavit' => 'guardian',
+    'form_138'               => 'grade12',
+    'form_137'               => 'shs_grad',
 ]);
 
 // -- Official PLP courses offered --------------------------------

@@ -46,7 +46,7 @@ $_fullName = format_full_name($_app, $_app['student_name'] ?? '—');
 $_initials = strtoupper(substr($_fullName, 0, 1));
 
 // ── Documents ───────────────────────────────────────────────
-$_required = docs_for_type($_app['applicant_type']);
+$_required = docs_for_type($_app['applicant_type'], $_app['doc_flags'] ?? null);
 $_dStmt = $panelDb->prepare('SELECT * FROM documents WHERE applicant_id = ?');
 $_dStmt->execute([$panelApplicantId]);
 $_docRows = array_column($_dStmt->fetchAll(), null, 'doc_type');

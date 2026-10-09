@@ -24,7 +24,7 @@ $stepperCurrent = 'exam';
 // covers cases where a document was rejected-then-replaced-then-approved
 // but the auto-advance didn't fire (e.g. a race or a partial state).
 if (in_array($applicant['overall_status'] ?? '', ['submitted', 'documents'], true)) {
-    $requiredDocs = docs_for_type($applicant['applicant_type'] ?? '');
+    $requiredDocs = docs_for_type($applicant['applicant_type'] ?? '', $applicant['doc_flags'] ?? null);
     if (!empty($requiredDocs)) {
         $slugs = array_keys($requiredDocs);
         $placeholders = implode(',', array_fill(0, count($slugs), '?'));
