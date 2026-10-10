@@ -324,10 +324,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ----------------------------------------------------------------
+// Filters + pagination — same auto-fit scheme as the audit log:
+// AutoPageSize (app.js) measures how many fixed-height rows fit the
+// table and reloads with ?per_page=; see auto_per_page() in helpers.php.
+// ----------------------------------------------------------------
+$search     = trim($_GET['q']    ?? '');
+$filterDept = trim($_GET['dept'] ?? '');
+$filterDate = trim($_GET['date'] ?? '');
+if ($filterDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterDate)) {
+    $filterDate = '';
+}
+$page    = max(1, (int)($_GET['page'] ?? 1));
+$perPage = auto_per_page('exam-reschedule');
+
+$where  = ["rr.status = 'pending'", "COALESCE(a.overall_status, '') <> 'withdrawn'"];
+$params = [];
+
+if ($search !== '') {
+    // Distinct placeholder per column (emulated prepares + the pooler).
+    $cols = ['u.name', 'u.first_name', 'u.last_name', 'u.email',
+             'a.course_applied', 'rr.reason', 's.room_label'];
+    $likes = [];
+    foreach ($cols as $i => $col) {
+        $likes[]            = "{$col} ILIKE :q{$i}";
+        $params[":q{$i}"]   = '%' . $search . '%';
+    }
+    $where[] = '(' . implode(' OR ', $likes) . ')';
+}
+if ($filterDept !== '') {
+    $where[]          = 'u.department = :dept';
+    $params[':dept']  = $filterDept;
+}
+if ($filterDate !== '') {
+    $where[]         = 'CAST(rr.created_at AS date) = :sub_date';
+    $params[':sub_date'] = $filterDate;
+}
+$whereStr = implode(' AND ', $where);
+
+$fromSql = 'FROM exam_reschedule_requests rr
+            JOIN applicants a ON a.id = rr.applicant_id
+            JOIN users u      ON u.id = a.user_id
+       LEFT JOIN exam_slot_schedule s ON s.id = rr.slot_id';
+
+// ----------------------------------------------------------------
 // Load pending reschedule requests with applicant + current-slot info
 // ----------------------------------------------------------------
-$reschedRequests = $db->query(
-    'SELECT rr.*, a.course_applied,
+$result = paginate(
+    $db,
+    "SELECT COUNT(*) {$fromSql} WHERE {$whereStr}",
+    "SELECT rr.*, a.course_applied,
             u.name AS student_name, u.email AS student_email,
             u.first_name, u.middle_name, u.last_name, u.suffix,
             u.department AS student_department,
@@ -336,14 +381,25 @@ $reschedRequests = $db->query(
             s.end_time   AS cur_end_time,
             s.room_label AS cur_room,
             s.department AS slot_department
+       {$fromSql}
+      WHERE {$whereStr}
+      ORDER BY rr.created_at ASC",
+    $params, $page, $perPage
+);
+$reschedRequests = $result['data'];
+$page            = $result['current_page'];
+
+// Department filter options — only colleges that have a pending request.
+$deptOptions = $db->query(
+    "SELECT DISTINCT u.department
        FROM exam_reschedule_requests rr
        JOIN applicants a ON a.id = rr.applicant_id
        JOIN users u      ON u.id = a.user_id
-  LEFT JOIN exam_slot_schedule s ON s.id = rr.slot_id
-      WHERE rr.status = \'pending\'
-        AND COALESCE(a.overall_status, \'\') <> \'withdrawn\'
-      ORDER BY rr.created_at ASC'
-)->fetchAll();
+      WHERE rr.status = 'pending'
+        AND COALESCE(a.overall_status, '') <> 'withdrawn'
+        AND COALESCE(u.department, '') <> ''
+      ORDER BY u.department ASC"
+)->fetchAll(PDO::FETCH_COLUMN);
 
 // ----------------------------------------------------------------
 // Load open future slots (used as reschedule targets in the dropdown)
@@ -359,50 +415,100 @@ $stmt = $db->prepare(
 $stmt->execute([$today]);
 $openSlots = $stmt->fetchAll();
 
+// URL helper — keeps every current filter + per_page while overriding just
+// the given keys (page links, the Clear link). Same shape as the audit log's
+// auditUrl().
+$reschedUrl = function (array $merge = []) use ($search, $filterDept, $filterDate, $perPage): string {
+    $base = [
+        'q'        => $search,
+        'dept'     => $filterDept,
+        'date'     => $filterDate,
+        'per_page' => $perPage,
+        'page'     => 1,
+    ];
+    return url('/staff/exam/reschedule') . '?' . http_build_query(array_filter(
+        array_merge($base, $merge),
+        fn($v) => $v !== '' && $v !== null
+    ));
+};
+$hasFilters = ($search !== '' || $filterDept !== '' || $filterDate !== '');
+
 ob_start();
 ?>
 
-<style>
-.page:has(.sa-table-card) { display:flex; flex-direction:column; }
-.sa-table-card { flex:1; min-height:300px; display:flex; flex-direction:column; }
-.sa-table-card table { flex:0 0 auto; }
-.sa-table-card .sa-filler { flex:1; border-top:1px solid var(--border); }
-</style>
-
-<div style="margin-bottom:var(--space-5);display:flex;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap">
+<div style="margin-bottom:var(--space-5);display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);flex-wrap:wrap;flex-shrink:0">
     <a href="<?= url('/staff/exam/slots') ?>" class="btn btn-ghost btn-sm">← Back to Exam Slots</a>
     <?php if ($canReschedule): ?>
         <a href="<?= url('/staff/exam/cancel-slot') ?>" class="btn btn-ghost btn-sm">
             Cancel a slot (bulk move) →
         </a>
+    <?php else: ?>
+        <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
+            Only SSO and Admin can approve or deny exam reschedule requests.
+        </span>
     <?php endif; ?>
 </div>
 
-<?php if (empty($reschedRequests)): ?>
-    <div class="card sa-table-card" style="padding:var(--space-8);color:var(--text-tertiary);align-items:center;justify-content:center;text-align:center">
-        No pending exam reschedule requests.
-    </div>
-<?php else: ?>
-    <div class="card sa-table-card" style="padding:0;overflow:hidden">
-        <table class="table" style="width:100%;border-collapse:collapse">
+<?php
+// Same structure as the audit log (and lakbay-pasig's AdminDataTable): one
+// .auto-table-wrap that AutoPageSize measures, the card with the toolbar and
+// the fixed-height table fused together, and the pagination bar under the card.
+// Each row is ONE line: the slot picker, the deny reason and the buttons sit in
+// their own columns, tied to that row's two <form>s with the form="" attribute.
+?>
+<div class="auto-table-wrap" data-auto-page-size="exam-reschedule" data-current-per-page="<?= (int)$perPage ?>">
+
+<div class="auto-table-card">
+
+    <!-- Toolbar: search + filters, one row, inside the card -->
+    <form method="GET" action="<?= url('/staff/exam/reschedule') ?>" class="auto-table-toolbar">
+        <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
+
+        <div class="auto-table-search">
+            <?= icon('ic_fluent_search_24_filled', 14) ?>
+            <input type="text" name="q" class="form-input" placeholder="Search student, course, reason…" value="<?= e($search) ?>">
+        </div>
+
+        <?php if ($deptOptions): ?>
+        <select name="dept" class="form-input" style="width:200px" onchange="this.form.submit()" aria-label="Department">
+            <option value="">All departments</option>
+            <?php foreach ($deptOptions as $d): ?>
+                <option value="<?= e($d) ?>" <?= $filterDept === $d ? 'selected' : '' ?>><?= e($d) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <?php endif; ?>
+
+        <input type="date" name="date" class="form-input" style="width:160px" value="<?= e($filterDate) ?>"
+               onchange="this.form.submit()" aria-label="Submitted on">
+
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        <?php if ($hasFilters): ?>
+            <a href="<?= e(url('/staff/exam/reschedule') . '?' . http_build_query(['per_page' => $perPage])) ?>" class="btn btn-ghost btn-sm">Clear</a>
+        <?php endif; ?>
+    </form>
+
+    <!-- Table body — sized so the rows AutoPageSize picks fit exactly; it
+         only scrolls as a safety net (e.g. a very narrow window) -->
+    <div class="auto-table-body">
+        <table class="auto-table">
             <thead>
-                <tr style="background:var(--bg-subtle);text-align:left;font-size:var(--text-xs);
-                            color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em">
-                    <th style="padding:var(--space-3) var(--space-4)">Student</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Course / Dept</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Current Slot</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Reason</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Submitted</th>
+                <tr>
+                    <th style="width:170px">Student</th>
+                    <th style="width:190px">Course / Dept</th>
+                    <th style="width:210px">Current Slot</th>
+                    <th style="min-width:140px">Reason</th>
+                    <th style="width:140px">Submitted</th>
                     <?php if ($canReschedule): ?>
-                    <th style="padding:var(--space-3) var(--space-4)">Action</th>
+                    <th style="width:190px">Move to</th>
+                    <th style="width:160px">Deny reason</th>
+                    <th style="width:150px">Action</th>
                     <?php endif; ?>
                 </tr>
             </thead>
+            <?php if (!empty($reschedRequests)): ?>
             <tbody>
             <?php foreach ($reschedRequests as $rr):
-                // Build a single-line current-slot label so the row stays 1 line per cell.
-                // Full breakdown (date + time + room) is condensed with · separators
-                // and shown as a tooltip too.
+                // Single-line current-slot label; the full text is also a tooltip.
                 $curSlotLabel = '—';
                 if ($rr['cur_date']) {
                     $parts = [format_date($rr['cur_date'])];
@@ -414,72 +520,73 @@ ob_start();
                     if ($rr['cur_room']) $parts[] = $rr['cur_room'];
                     $curSlotLabel = implode(' · ', $parts);
                 }
+                $courseLabel = ($rr['course_applied'] ?: '—')
+                             . ($rr['student_department'] ? ' · ' . $rr['student_department'] : '');
+                $approveFormId = 'resched-approve-' . (int)$rr['id'];
+                $denyFormId    = 'resched-deny-'    . (int)$rr['id'];
             ?>
-                <tr style="border-top:1px solid var(--border);font-size:var(--text-sm)">
-                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
-                        <?php // Single-line — email is a tooltip on hover. ?>
-                        <span style="font-weight:var(--weight-medium)"
+                <tr>
+                    <td style="font-size:var(--text-sm)">
+                        <span class="auto-table-clip" style="font-weight:var(--weight-medium)"
                               title="<?= e($rr['student_email']) ?>"><?= e(format_full_name($rr)) ?></span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
-                        <?= e($rr['course_applied'] ?: '—') ?><?php if ($rr['student_department']): ?>
-                            <span style="color:var(--text-tertiary)"> · <?= e($rr['student_department']) ?></span>
-                        <?php endif; ?>
+                    <td style="font-size:var(--text-sm)" title="<?= e($courseLabel) ?>">
+                        <span class="auto-table-clip"><?= e($rr['course_applied'] ?: '—') ?><?php if ($rr['student_department']): ?><span style="color:var(--text-tertiary)"> · <?= e($rr['student_department']) ?></span><?php endif; ?></span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap"
-                        title="<?= e($curSlotLabel) ?>">
-                        <?= e($curSlotLabel) ?>
+                    <td style="font-size:var(--text-sm)" title="<?= e($curSlotLabel) ?>">
+                        <span class="auto-table-clip"><?= e($curSlotLabel) ?></span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4);max-width:280px">
-                        <?php // Single-line — truncate with ellipsis; full reason on hover. ?>
-                        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px"
-                             title="<?= e($rr['reason']) ?>">
-                            <?= e($rr['reason']) ?>
-                        </div>
+                    <td style="font-size:var(--text-sm);color:var(--text-secondary)" title="<?= e($rr['reason']) ?>">
+                        <span class="auto-table-clip"><?= e($rr['reason']) ?></span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
-                        <?= date('M j, g:i A', strtotime($rr['created_at'])) ?>
+                    <td style="font-size:var(--text-sm)">
+                        <span class="auto-table-clip"><?= date('M j, g:i A', strtotime($rr['created_at'])) ?></span>
                     </td>
                     <?php if ($canReschedule): ?>
-                    <td style="padding:var(--space-3) var(--space-4)">
+                    <td>
+                        <select name="target_slot_id" form="<?= $approveFormId ?>" class="form-control"
+                                style="font-size:var(--text-xs);height:30px;min-height:30px;padding:0 var(--space-2)">
+                            <option value="0">Auto-assign</option>
+                            <?php foreach ($openSlots as $s):
+                                if ((int)$s['id'] === (int)$rr['slot_id']) continue;
+                                $spotsLeft = (int)$s['capacity'] - (int)$s['filled'];
+                            ?>
+                                <option value="<?= (int)$s['id'] ?>">
+                                    <?= format_date($s['exam_date']) ?>
+                                    <?php if ($s['slot_time']): ?> <?= format_time($s['slot_time']) ?><?php endif; ?>
+                                    · <?= e($s['room_label'] ?: 'room') ?>
+                                    · <?= e($s['department'] ?: 'any') ?>
+                                    (<?= $spotsLeft ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" name="deny_reason" form="<?= $denyFormId ?>"
+                               placeholder="Optional, shown to student"
+                               title="Reason shown to the student if you deny"
+                               maxlength="500"
+                               class="form-control"
+                               style="font-size:var(--text-xs);height:30px;min-height:30px;padding:0 var(--space-2)">
+                    </td>
+                    <td>
                         <div style="display:flex;gap:var(--space-2);align-items:center">
-                            <form method="POST" style="display:flex;gap:var(--space-2);align-items:center">
+                            <form id="<?= $approveFormId ?>" method="POST" style="margin:0">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="approve_reschedule">
                                 <input type="hidden" name="request_id" value="<?= (int)$rr['id'] ?>">
-                                <select name="target_slot_id" class="form-control"
-                                        style="font-size:var(--text-xs);height:28px;min-height:28px;max-width:220px;padding:0 var(--space-2)">
-                                    <option value="0">Auto-assign</option>
-                                    <?php foreach ($openSlots as $s):
-                                        if ((int)$s['id'] === (int)$rr['slot_id']) continue;
-                                        $spotsLeft = (int)$s['capacity'] - (int)$s['filled'];
-                                    ?>
-                                        <option value="<?= (int)$s['id'] ?>">
-                                            <?= format_date($s['exam_date']) ?>
-                                            <?php if ($s['slot_time']): ?> <?= format_time($s['slot_time']) ?><?php endif; ?>
-                                            · <?= e($s['room_label'] ?: 'room') ?>
-                                            · <?= e($s['department'] ?: 'any') ?>
-                                            (<?= $spotsLeft ?>)
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
                                 <button type="submit" class="btn btn-sm btn-primary"
-                                        style="height:28px;min-height:28px;padding:0 var(--space-3);font-size:var(--text-xs)"
+                                        style="height:30px;min-height:30px;padding:0 var(--space-3);font-size:var(--text-xs)"
                                         title="Approve and assign new slot">Approve</button>
                             </form>
-                            <form method="POST" style="display:flex;gap:var(--space-2);align-items:center"
+                            <form id="<?= $denyFormId ?>" method="POST" style="margin:0"
                                   onsubmit="return confirm('Deny this exam reschedule request? The student keeps their current slot.')">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="deny_reschedule">
                                 <input type="hidden" name="request_id" value="<?= (int)$rr['id'] ?>">
-                                <input type="text" name="deny_reason"
-                                       placeholder="Reason (optional, shown to student)"
-                                       maxlength="500"
-                                       class="form-control"
-                                       style="font-size:var(--text-xs);height:28px;min-height:28px;max-width:240px;padding:0 var(--space-2)">
                                 <button type="submit" class="btn btn-sm btn-ghost"
-                                        style="height:28px;min-height:28px;padding:0 var(--space-3);font-size:var(--text-xs);
-                                               color:var(--error)" title="Deny request">Deny</button>
+                                        style="height:30px;min-height:30px;padding:0 var(--space-3);font-size:var(--text-xs);color:var(--error)"
+                                        title="Deny request">Deny</button>
                             </form>
                         </div>
                     </td>
@@ -487,15 +594,25 @@ ob_start();
                 </tr>
             <?php endforeach; ?>
             </tbody>
+            <?php endif; ?>
         </table>
-        <div class="sa-filler"></div>
+
+        <?php if (empty($reschedRequests)): ?>
+        <div class="auto-table-empty">
+            <?= icon('ic_fluent_calendar_sync_24_regular', 32) ?>
+            <div><?= $hasFilters ? 'No reschedule requests match your filters.' : 'No pending exam reschedule requests.' ?></div>
+        </div>
+        <?php endif; ?>
     </div>
-    <?php if (!$canReschedule): ?>
-    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-3)">
-        Only SSO and Admin can approve or deny exam reschedule requests.
-    </div>
-    <?php endif; ?>
+</div><!-- /.auto-table-card -->
+
+<!-- Pagination bar — under the card, inside the wrap. Its 40px is reserved in
+     AutoPageSize's math whether or not it renders. -->
+<?php if ($result['last_page'] > 1): ?>
+    <?= auto_table_footer($result, fn(int $p): string => $reschedUrl(['page' => $p])) ?>
 <?php endif; ?>
+
+</div><!-- /.auto-table-wrap -->
 
 <?php
 $content   = ob_get_clean();

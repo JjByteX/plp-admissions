@@ -11,10 +11,10 @@
 //                            college, with a "+ Add Slot" dashed
 //                            card and the awaiting-applicants list
 //                            scoped to the same college below.
-//   ?slot=SLOT_ID          → Roster table for one slot (full-page
-//                            .card + .table style matching the
-//                            Documents / Results / Interview Queue
-//                            pages), with unassign + edit actions.
+//   ?slot=SLOT_ID          → Roster table for one slot (auto-paginated
+//                            .auto-table with search + type filter, same
+//                            as the audit log), with unassign + edit
+//                            actions.
 //
 // Layout intentionally mirrors modules/interview/staff_setup.php
 // so colleges, slots, and rosters all share the same family of
@@ -674,19 +674,51 @@ if ($mode === 'roster') {
         $slotDetail['pw_secs_left']       = EXAM_PASSWORD_EXPIRY_SECONDS;
     }
 
-    $stmt = $db->prepare(
+    // Roster table — search + applicant-type filter, paginated in SQL.
+    // Same auto-fit scheme as the audit log: AutoPageSize (app.js) measures how
+    // many fixed-height rows fit and reloads with ?per_page=; see
+    // auto_per_page() in helpers.php.
+    $rosterSearch = trim($_GET['q'] ?? '');
+    $rosterType   = trim($_GET['type'] ?? '');
+    if (!in_array($rosterType, ['freshman', 'transferee', 'foreign'], true)) {
+        $rosterType = '';
+    }
+    $rosterPerPage = auto_per_page('exam-slot-roster');
+
+    $rWhere  = ['aes.slot_id = :slot_id'];
+    $rParams = [':slot_id' => $slotIdParam];
+    if ($rosterSearch !== '') {
+        // Distinct placeholder per column (emulated prepares + the pooler).
+        $rCols  = ['u.name', 'u.first_name', 'u.last_name', 'u.email', 'a.course_applied'];
+        $rLikes = [];
+        foreach ($rCols as $i => $col) {
+            $rLikes[]            = "{$col} ILIKE :q{$i}";
+            $rParams[":q{$i}"]   = '%' . $rosterSearch . '%';
+        }
+        $rWhere[] = '(' . implode(' OR ', $rLikes) . ')';
+    }
+    if ($rosterType !== '') {
+        $rWhere[]            = 'a.applicant_type = :atype';
+        $rParams[':atype']   = $rosterType;
+    }
+    $rWhereStr = implode(' AND ', $rWhere);
+    $rFrom     = 'FROM applicant_exam_slots aes
+                  JOIN applicants a ON a.id = aes.applicant_id
+                  JOIN users u      ON u.id = a.user_id';
+
+    $rosterResult = paginate(
+        $db,
+        "SELECT COUNT(*) {$rFrom} WHERE {$rWhereStr}",
         "SELECT aes.applicant_id, aes.assigned_at,
                 u.name AS student_name, a.course_applied, a.applicant_type,
                 u.email AS student_email,
                 u.first_name, u.middle_name, u.last_name, u.suffix
-           FROM applicant_exam_slots aes
-           JOIN applicants a ON a.id = aes.applicant_id
-           JOIN users u      ON u.id = a.user_id
-          WHERE aes.slot_id = ?
-          ORDER BY u.last_name ASC, u.first_name ASC, u.name ASC"
+           {$rFrom}
+          WHERE {$rWhereStr}
+          ORDER BY u.last_name ASC, u.first_name ASC, u.name ASC, aes.applicant_id ASC",
+        $rParams, max(1, (int)($_GET['page'] ?? 1)), $rosterPerPage
     );
-    $stmt->execute([$slotIdParam]);
-    $slotRoster = $stmt->fetchAll();
+    $slotRoster = $rosterResult['data'];
 }
 
 if ($mode === 'colleges') {
@@ -896,9 +928,9 @@ ob_start();
     display: flex; align-items: center; justify-content: center;
 }
 
-/* Roster page — full-page card+table shell, same as Documents/Results/Queue */
-.page:has(.es-roster-card) { display: flex; flex-direction: column; }
-.es-roster-card { flex: 1; min-height: 300px; }
+/* Roster page — the table is an .auto-table-wrap (app.css) that fills the page
+   height left under these rows; keep the rows above it from shrinking. */
+.es-code-panel { flex-shrink: 0; }
 </style>
 
 <?php if (!empty($errors)): ?>
@@ -1227,7 +1259,7 @@ ob_start();
     ], JSON_HEX_APOS | JSON_HEX_QUOT);
     ?>
 
-    <div style="display:flex;align-items:center;margin-bottom:var(--space-4);gap:var(--space-2);flex-wrap:wrap">
+    <div style="display:flex;align-items:center;margin-bottom:var(--space-4);gap:var(--space-2);flex-wrap:wrap;flex-shrink:0">
         <a href="<?= e(url('/staff/exam/slots') . '?college=' . urlencode($slotDetail['department'])) ?>"
            class="btn btn-ghost btn-sm" style="margin-right:auto">← Back to <?= e($slotDetail['department']) ?> slots</a>
 
@@ -1242,7 +1274,7 @@ ob_start();
     <!-- Slot summary strip -->
     <div style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);
                 margin-bottom:var(--space-4);background:var(--bg-elevated);border:1px solid var(--border);
-                border-radius:var(--radius-md);font-size:var(--text-sm);flex-wrap:wrap">
+                border-radius:var(--radius-md);font-size:var(--text-sm);flex-wrap:wrap;flex-shrink:0">
         <?= icon('ic_fluent_location_24_regular', 14, 'color:var(--text-tertiary);flex-shrink:0') ?>
 
         <?php if ($canManage && !$isPast): ?>
@@ -1337,7 +1369,7 @@ ob_start();
             </span>
         <?php endif; ?>
     </div>
-    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin:-2px 0 var(--space-4) 2px">
+    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin:-2px 0 var(--space-4) 2px;flex-shrink:0">
         <?php if ($rosterCodeActive): ?>
             Codes are valid for 5 minutes. Use <strong>Extend</strong> to give late
             but legitimate applicants another 5 minutes from now, or <strong>New</strong>
@@ -1352,77 +1384,145 @@ ob_start();
     </div>
     <?php endif; ?>
 
-    <div class="card es-roster-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Applicant</th>
-                    <th>Course</th>
-                    <th style="width:120px">Type</th>
-                    <th style="width:160px">Assigned</th>
-                    <?php if ($canManage && !$isPast): ?>
-                        <th style="width:100px">Action</th>
-                    <?php endif; ?>
-                </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($slotRoster as $row): ?>
-                <tr>
-                    <td>
-                        <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></div>
-                        <?php if (!empty($row['student_email'])): ?>
-                            <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                                <?= e($row['student_email']) ?>
-                            </div>
-                        <?php endif; ?>
-                    </td>
-                    <td style="font-size:var(--text-sm)"><?= e($row['course_applied'] ?: '—') ?></td>
-                    <td>
-                        <span class="badge badge-neutral" style="font-size:var(--text-xs)">
-                            <?= e(ucfirst($row['applicant_type'] ?? '')) ?>
-                        </span>
-                    </td>
-                    <td style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                        <?= $row['assigned_at']
-                            ? e(date('M j, g:i A', strtotime($row['assigned_at'])))
-                            : '—' ?>
-                    </td>
-                    <?php if ($canManage && !$isPast): ?>
-                        <td>
-                            <form method="POST" style="margin:0"
-                                  onsubmit="return confirm('Remove this applicant from the slot?')">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="action"       value="unassign">
-                                <input type="hidden" name="ctx_slot"     value="<?= $sid ?>">
-                                <input type="hidden" name="applicant_id" value="<?= (int)$row['applicant_id'] ?>">
-                                <button type="submit" class="btn btn-ghost btn-sm"
-                                        style="color:var(--error);font-size:var(--text-xs)">
-                                    Remove
-                                </button>
-                            </form>
-                        </td>
-                    <?php endif; ?>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
+    <?php
+    // URL helper — keeps the slot + current filters + per_page while overriding
+    // just the given keys (page links, the Clear link). Same shape as the audit
+    // log's auditUrl().
+    $rosterUrl = function (array $merge = []) use ($sid, $rosterSearch, $rosterType, $rosterPerPage): string {
+        $base = [
+            'slot'     => $sid,
+            'q'        => $rosterSearch,
+            'type'     => $rosterType,
+            'per_page' => $rosterPerPage,
+            'page'     => 1,
+        ];
+        return url('/staff/exam/slots') . '?' . http_build_query(array_filter(
+            array_merge($base, $merge),
+            fn($v) => $v !== '' && $v !== null
+        ));
+    };
+    $rosterHasFilters = ($rosterSearch !== '' || $rosterType !== '');
+    $collegeUrl       = url('/staff/exam/slots') . '?college=' . urlencode($slotDetail['department']);
+    ?>
 
-        <?php if (empty($slotRoster)): ?>
-            <div class="empty-state"
-                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-                        gap:var(--space-3);color:var(--text-tertiary);padding:var(--space-8)">
-                <?= icon('ic_fluent_people_24_regular', 32) ?>
-                <div style="text-align:center;max-width:420px">
-                    No applicants assigned to this slot yet. Use the
-                    <a href="<?= e(url('/staff/exam/slots') . '?college=' . urlencode($slotDetail['department'])) ?>">
-                        college view
-                    </a> to assign applicants from the awaiting list.
-                </div>
+    <?php
+    // Same structure as the audit log (and lakbay-pasig's AdminDataTable): one
+    // .auto-table-wrap that AutoPageSize measures, the card with the toolbar and
+    // the fixed-height table fused together, and the pagination bar under the card.
+    ?>
+    <div class="auto-table-wrap" data-auto-page-size="exam-slot-roster" data-current-per-page="<?= (int)$rosterPerPage ?>">
+
+    <div class="auto-table-card">
+
+        <!-- Toolbar: search + filter, one row, inside the card -->
+        <form method="GET" action="<?= e(url('/staff/exam/slots')) ?>" class="auto-table-toolbar">
+            <input type="hidden" name="slot"     value="<?= $sid ?>">
+            <input type="hidden" name="per_page" value="<?= (int)$rosterPerPage ?>">
+
+            <div class="auto-table-search">
+                <?= icon('ic_fluent_search_24_filled', 14) ?>
+                <input type="text" name="q" class="form-input" placeholder="Search name, email, course…" value="<?= e($rosterSearch) ?>">
             </div>
-        <?php else: ?>
-            <div style="flex:1;border-top:1px solid var(--border)"></div>
-        <?php endif; ?>
-    </div>
+
+            <select name="type" class="form-input" style="width:160px" onchange="this.form.submit()" aria-label="Applicant type">
+                <option value="">All Types</option>
+                <option value="freshman"   <?= $rosterType === 'freshman'   ? 'selected' : '' ?>>Freshman</option>
+                <option value="transferee" <?= $rosterType === 'transferee' ? 'selected' : '' ?>>Transferee</option>
+                <option value="foreign"    <?= $rosterType === 'foreign'    ? 'selected' : '' ?>>Foreign Student</option>
+            </select>
+
+            <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+            <?php if ($rosterHasFilters): ?>
+                <a href="<?= e($rosterUrl(['q' => '', 'type' => '', 'page' => 1])) ?>" class="btn btn-ghost btn-sm">Clear</a>
+            <?php endif; ?>
+        </form>
+
+        <!-- Table body — sized so the rows AutoPageSize picks fit exactly; it
+             only scrolls as a safety net (e.g. a very narrow window) -->
+        <div class="auto-table-body">
+            <table class="auto-table">
+                <thead>
+                    <tr>
+                        <th style="min-width:220px">Applicant</th>
+                        <th style="width:240px">Email</th>
+                        <th style="width:240px">Course</th>
+                        <th style="width:120px">Type</th>
+                        <th style="width:160px">Assigned</th>
+                        <?php if ($canManage && !$isPast): ?>
+                            <th style="width:100px">Action</th>
+                        <?php endif; ?>
+                    </tr>
+                </thead>
+                <?php if (!empty($slotRoster)): ?>
+                <tbody>
+                <?php foreach ($slotRoster as $row): ?>
+                    <tr>
+                        <td style="font-size:var(--text-sm)" title="<?= e(format_full_name($row)) ?>">
+                            <span class="auto-table-clip" style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></span>
+                        </td>
+                        <td style="font-size:var(--text-xs);color:var(--text-tertiary)" title="<?= e($row['student_email'] ?? '') ?>">
+                            <span class="auto-table-clip"><?= e(!empty($row['student_email']) ? $row['student_email'] : '—') ?></span>
+                        </td>
+                        <td style="font-size:var(--text-sm)" title="<?= e($row['course_applied'] ?? '') ?>">
+                            <span class="auto-table-clip"><?= e($row['course_applied'] ?: '—') ?></span>
+                        </td>
+                        <td>
+                            <span class="badge badge-neutral" style="font-size:var(--text-xs)">
+                                <?= e(ucfirst($row['applicant_type'] ?? '')) ?>
+                            </span>
+                        </td>
+                        <td style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                            <span class="auto-table-clip">
+                            <?= $row['assigned_at']
+                                ? e(date('M j, g:i A', strtotime($row['assigned_at'])))
+                                : '—' ?>
+                            </span>
+                        </td>
+                        <?php if ($canManage && !$isPast): ?>
+                            <td>
+                                <form method="POST" style="margin:0"
+                                      onsubmit="return confirm('Remove this applicant from the slot?')">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action"       value="unassign">
+                                    <input type="hidden" name="ctx_slot"     value="<?= $sid ?>">
+                                    <input type="hidden" name="applicant_id" value="<?= (int)$row['applicant_id'] ?>">
+                                    <button type="submit" class="btn btn-ghost btn-sm"
+                                            style="color:var(--error);font-size:var(--text-xs)">
+                                        Remove
+                                    </button>
+                                </form>
+                            </td>
+                        <?php endif; ?>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+                <?php endif; ?>
+            </table>
+
+            <?php if (empty($slotRoster)): ?>
+            <div class="auto-table-empty">
+                <?= icon('ic_fluent_people_24_regular', 32) ?>
+                <?php if ($rosterHasFilters): ?>
+                    <div>No applicants match your filters.</div>
+                <?php else: ?>
+                    <div style="max-width:420px">
+                        No applicants assigned to this slot yet. Use the
+                        <a href="<?= e($collegeUrl) ?>">college view</a>
+                        to assign applicants from the awaiting list.
+                    </div>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div><!-- /.auto-table-card -->
+
+    <!-- Pagination bar — under the card, inside the wrap. Its 40px is reserved in
+         AutoPageSize's math whether or not it renders. -->
+    <?php if ($rosterResult['last_page'] > 1): ?>
+        <?= auto_table_footer($rosterResult, fn(int $p): string => $rosterUrl(['page' => $p]), 'applicants') ?>
+    <?php endif; ?>
+
+    </div><!-- /.auto-table-wrap -->
 
 <?php endif; ?>
 

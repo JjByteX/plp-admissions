@@ -206,6 +206,9 @@ $orderDir = strtoupper($sortDir);
 $orderDir .= ($orderDir === 'ASC') ? ' NULLS FIRST' : ' NULLS LAST';
 
 // ── Paginate ──────────────────────────────────────────────────
+// Rows per page — AutoPageSize (app.js) measures how many fixed-height rows
+// fit the table and reloads with ?per_page=; see auto_per_page() in helpers.php.
+$perPage = auto_per_page('results-manage');
 $result = paginate(
     $db,
     "SELECT COUNT(*)
@@ -230,13 +233,13 @@ $result = paginate(
      LEFT JOIN interview_queue    iq ON iq.applicant_id = a.id
      WHERE $whereStr
      ORDER BY $orderCol $orderDir",
-    $params, $page, 25
+    $params, $page, $perPage
 );
 
 // ── Filter URL helper ─────────────────────────────────────────
 function filterUrl(array $merge = []): string {
-    global $search, $filterRes, $sortCol, $sortDir;
-    $base = ['q' => $search, 'result' => $filterRes, 'sort_col' => $sortCol, 'sort_dir' => $sortDir, 'page' => 1];
+    global $search, $filterRes, $sortCol, $sortDir, $perPage;
+    $base = ['q' => $search, 'result' => $filterRes, 'sort_col' => $sortCol, 'sort_dir' => $sortDir, 'per_page' => $perPage, 'page' => 1];
     return '?' . http_build_query(array_merge($base, $merge));
 }
 
@@ -248,13 +251,13 @@ ob_start();
 ?>
 
 <?php if ($msg = Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+    <div class="alert alert-success" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+    <div class="alert alert-error" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('info')): ?>
-    <div class="alert alert-info" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+    <div class="alert alert-info" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
 <?php endif; ?>
 
 <?php if (!enrollment_schedule_posted()): ?>
@@ -264,7 +267,7 @@ ob_start();
       Accept and hit a flash error. Reject still works without it.
     -->
     <div class="alert alert-warning"
-         style="margin-bottom:var(--space-4);display:flex;align-items:flex-start;gap:var(--space-3)">
+         style="margin-bottom:var(--space-4);display:flex;align-items:flex-start;gap:var(--space-3);flex-shrink:0">
         <?= icon('ic_fluent_warning_24_regular', 18, 'color:var(--warning);flex-shrink:0;margin-top:2px') ?>
         <div style="flex:1;font-size:var(--text-sm)">
             <strong>Enrollment schedule not posted yet.</strong>
@@ -276,7 +279,8 @@ ob_start();
 <?php endif; ?>
 
 <!-- ============================================================
-     TOP BAR: Search + Auto-Release (LEFT) · Tabs (RIGHT)
+     Search + Close Admissions (LEFT) · Tabs (RIGHT) now live in the
+     table card's toolbar, fused to the table (see below).
 
      Tab cleanup (vs Chunk 4):
        • "All" tab dropped — no useful filter, just clutter.
@@ -303,100 +307,12 @@ $secondaryTabs = [
 ];
 $awaitingCount = (int)$countRows['awaiting_count'];
 ?>
-<div style="
-    display:flex;
-    align-items:flex-end;
-    justify-content:space-between;
-    gap:var(--space-4);
-    margin-bottom:var(--space-3);
-    border-bottom:1px solid var(--border);
-    flex-wrap:wrap;
-">
-    <!-- LEFT: Search + Auto-Release -->
-    <div style="display:flex;align-items:center;gap:var(--space-2);padding-bottom:var(--space-1);flex-shrink:0">
-        <form method="GET" style="display:flex;align-items:center;gap:var(--space-2);margin:0">
-            <input type="hidden" name="result"   value="<?= e($filterRes) ?>">
-            <input type="hidden" name="sort_col" value="<?= e($sortCol) ?>">
-            <input type="hidden" name="sort_dir" value="<?= e($sortDir) ?>">
-
-            <!-- Search input -->
-            <div style="position:relative">
-                <?= icon('ic_fluent_search_24_filled', 14, 'position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);pointer-events:none') ?>
-                <input type="text" name="q" value="<?= e($search) ?>" class="form-control"
-                       style="padding:0 var(--space-3) 0 32px;height:32px;min-height:32px;font-size:var(--text-sm);width:220px;border-radius:var(--radius-sm)"
-                       placeholder="Search name, email, course…">
-            </div>
-
-            <button type="submit" style="display:none" aria-hidden="true"></button>
-        </form>
-
-        <?php if ($canCloseCycle): ?>
-            <!-- Close Admissions (SSO / Admin) — bulk-rejects every
-                 unreleased applicant so leftover rows don't sit forever. -->
-            <button type="button" class="btn btn-ghost btn-sm"
-                    onclick="openCloseAdmissionsModal()"
-                    style="display:inline-flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--error);border:1px solid var(--error)">
-                <?= icon('ic_fluent_lock_closed_24_regular', 13) ?>
-                Close Admissions
-            </button>
-        <?php endif; ?>
-    </div>
-
-    <!-- RIGHT: Bucket tabs (primary + de-emphasized Withdrawn) -->
-    <div style="display:flex;gap:var(--space-1);flex-wrap:wrap;align-items:flex-end">
-        <?php foreach ($primaryTabs as $val => $tab):
-            $active = ($filterRes === $val);
-        ?>
-            <a href="<?= filterUrl(['result' => $val]) ?>"
-               style="
-                   padding:var(--space-2) var(--space-4);
-                   border-bottom:2px solid <?= $active ? 'var(--accent)' : 'transparent' ?>;
-                   color:<?= $active ? 'var(--accent)' : 'var(--text-secondary)' ?>;
-                   font-size:var(--text-sm);
-                   font-weight:<?= $active ? 'var(--weight-semibold)' : 'var(--weight-regular)' ?>;
-                   white-space:nowrap;text-decoration:none;margin-bottom:-1px;
-                   transition:color var(--transition-fast);
-               ">
-                <?= $tab['label'] ?>
-                <span style="margin-left:4px;font-size:var(--text-xs);color:var(--text-tertiary)"><?= $tab['count'] ?></span>
-            </a>
-        <?php endforeach; ?>
-
-        <?php // Subtle separator before the de-emphasized archive tab. ?>
-        <span aria-hidden="true" style="
-            align-self:center;width:1px;height:14px;background:var(--border);
-            margin:0 var(--space-2) calc(var(--space-1) + 2px)">
-        </span>
-
-        <?php foreach ($secondaryTabs as $val => $tab):
-            $active = ($filterRes === $val);
-        ?>
-            <a href="<?= filterUrl(['result' => $val]) ?>"
-               style="
-                   padding:var(--space-2) var(--space-3);
-                   border-bottom:2px solid <?= $active ? 'var(--text-tertiary)' : 'transparent' ?>;
-                   color:<?= $active ? 'var(--text-secondary)' : 'var(--text-tertiary)' ?>;
-                   font-size:var(--text-xs);
-                   font-weight:<?= $active ? 'var(--weight-medium)' : 'var(--weight-regular)' ?>;
-                   white-space:nowrap;text-decoration:none;margin-bottom:-1px;
-                   opacity:<?= $active ? '1' : '.75' ?>;
-                   transition:color var(--transition-fast),opacity var(--transition-fast);
-               "
-               onmouseover="this.style.opacity='1'"
-               onmouseout="this.style.opacity='<?= $active ? '1' : '.75' ?>'">
-                <?= $tab['label'] ?>
-                <span style="margin-left:4px;font-size:var(--text-xs);color:var(--text-tertiary)"><?= $tab['count'] ?></span>
-            </a>
-        <?php endforeach; ?>
-    </div>
-</div>
-
 <?php if ($awaitingCount > 0): ?>
 <!-- Awaiting-interview nudge — replaces the old "Awaiting interview" tab.
      SSO can't release these here (Professor hasn't evaluated yet), so
      surface them as a quiet pointer to the Interviews page where the
      action actually lives. -->
-<div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-4)">
+<div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-3);flex-shrink:0">
     <a href="<?= url('/staff/interviews/queue') ?>"
        style="
            display:inline-flex;align-items:center;gap:var(--space-2);
@@ -418,7 +334,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
 
 <?php if (!empty($slotCaps)): ?>
 <!-- ── Slot capacity indicator ────────────────────────────── -->
-<div style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-4)">
+<div style="display:flex;flex-wrap:nowrap;overflow-x:auto;gap:var(--space-2);margin-bottom:var(--space-3);flex-shrink:0">
     <?php foreach ($slotCaps as $cap):
         $accepted = (int)$cap['accepted_count'];
         $pending  = (int)$cap['pending_accept_count'];
@@ -437,7 +353,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
         border-radius:var(--radius-md);
         background:var(--bg-elevated);
         font-size:var(--text-xs);
-        min-width:180px;
+        min-width:180px;flex-shrink:0;
     ">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3)">
             <span style="color:var(--text-secondary);font-weight:var(--weight-medium);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px" title="<?= e($cap['course_name']) ?>">
@@ -464,35 +380,83 @@ $awaitingCount = (int)$countRows['awaiting_count'];
 </div>
 <?php endif; ?>
 
-<style>
-/* Make the table card stretch to fill the .page area so the gap below the
-   card matches the .page horizontal padding (var(--space-8) = 32px). */
-.page:has(.results-table-card) { display:flex; flex-direction:column; }
-.results-table-card { flex:1; min-height:300px; }
-</style>
+<?php
+// Same structure as the audit log (and lakbay-pasig's AdminDataTable): one
+// .auto-table-wrap that AutoPageSize measures, the card with the toolbar and
+// the fixed-height table fused together, and the pagination bar under the card.
+$sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, 'page' => 1];
+?>
+<div class="auto-table-wrap" data-auto-page-size="results-manage" data-current-per-page="<?= (int)$perPage ?>">
 
-<!-- ── Results table ──────────────────────────────────────── -->
-<div class="card results-table-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
-    <table class="table" id="results-table">
-        <thead>
-            <tr>
-                <?php if ($canRelease): ?>
-                <th style="width:40px;padding-left:var(--space-3)">
-                    <input type="checkbox" id="res-select-all" onchange="resToggleAll(this)"
-                           style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
-                </th>
-                <?php endif; ?>
-                <?= sortable_th('applicant', 'Applicant',   $sortCol, $sortDir, ['q' => $search, 'result' => $filterRes, 'page' => 1]) ?>
-                <?= sortable_th('course',    'Course',      $sortCol, $sortDir, ['q' => $search, 'result' => $filterRes, 'page' => 1]) ?>
-                <th>Exam Score</th>
-                <th>Interview</th>
-                <?= sortable_th('result',    'Result',      $sortCol, $sortDir, ['q' => $search, 'result' => $filterRes, 'page' => 1]) ?>
-                <?= sortable_th('released',  'Released',    $sortCol, $sortDir, ['q' => $search, 'result' => $filterRes, 'page' => 1]) ?>
-                <th style="width:160px">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        <?php if (!empty($result['data'])): ?>
+<div class="auto-table-card">
+
+    <!-- Toolbar: search + Close Admissions (left), bucket tabs (right), one row -->
+    <form method="GET" class="auto-table-toolbar">
+        <input type="hidden" name="result"   value="<?= e($filterRes) ?>">
+        <input type="hidden" name="sort_col" value="<?= e($sortCol) ?>">
+        <input type="hidden" name="sort_dir" value="<?= e($sortDir) ?>">
+        <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
+
+        <div class="auto-table-search" style="max-width:320px">
+            <?= icon('ic_fluent_search_24_filled', 14) ?>
+            <input type="text" name="q" class="form-input" placeholder="Search name, email, course…" value="<?= e($search) ?>">
+        </div>
+
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        <?php if ($search !== ''): ?>
+            <a href="<?= e(filterUrl(['q' => ''])) ?>" class="btn btn-ghost btn-sm">Clear</a>
+        <?php endif; ?>
+
+        <?php if ($canCloseCycle): ?>
+            <!-- Close Admissions (SSO / Admin) — bulk-rejects every
+                 unreleased applicant so leftover rows don't sit forever. -->
+            <button type="button" class="btn btn-ghost btn-sm"
+                    onclick="openCloseAdmissionsModal()"
+                    style="display:inline-flex;align-items:center;gap:6px;font-size:var(--text-xs);color:var(--error);border:1px solid var(--error)">
+                <?= icon('ic_fluent_lock_closed_24_regular', 13) ?>
+                Close Admissions
+            </button>
+        <?php endif; ?>
+
+        <span class="toolbar-spacer"></span>
+
+        <!-- Bucket tabs (primary + de-emphasized Withdrawn) -->
+        <?php foreach (array_merge($primaryTabs, $secondaryTabs) as $val => $tab):
+            $active = ($filterRes === $val);
+            $muted  = isset($secondaryTabs[$val]);
+        ?>
+            <a href="<?= e(filterUrl(['result' => $val])) ?>"
+               class="btn btn-sm <?= $active ? 'btn-secondary' : 'btn-ghost' ?>"
+               style="white-space:nowrap;<?= $active ? 'color:var(--accent);font-weight:var(--weight-semibold)' : ($muted ? 'color:var(--text-tertiary)' : 'color:var(--text-secondary)') ?>">
+                <?= $tab['label'] ?>
+                <span style="margin-left:4px;font-size:var(--text-xs);color:var(--text-tertiary)"><?= $tab['count'] ?></span>
+            </a>
+        <?php endforeach; ?>
+    </form>
+
+    <!-- Table body — sized so the rows AutoPageSize picks fit exactly; it
+         only scrolls as a safety net (e.g. a very narrow window) -->
+    <div class="auto-table-body">
+        <table class="auto-table" id="results-table">
+            <thead>
+                <tr>
+                    <?php if ($canRelease): ?>
+                    <th class="col-check">
+                        <input type="checkbox" id="res-select-all" onchange="resToggleAll(this)"
+                               style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                    </th>
+                    <?php endif; ?>
+                    <?= sortable_th('applicant', 'Applicant', $sortCol, $sortDir, $sortParams) ?>
+                    <?= sortable_th('course',    'Course',    $sortCol, $sortDir, $sortParams) ?>
+                    <th style="width:100px">Exam Score</th>
+                    <th style="width:120px">Interview</th>
+                    <?= sortable_th('result',    'Result',    $sortCol, $sortDir, $sortParams, 'width:200px') ?>
+                    <?= sortable_th('released',  'Released',  $sortCol, $sortDir, $sortParams, 'width:120px') ?>
+                    <th style="width:240px">Actions</th>
+                </tr>
+            </thead>
+            <?php if (!empty($result['data'])): ?>
+            <tbody>
             <?php foreach ($result['data'] as $row):
                 $bucket     = $row['bucket'] ?? 'awaiting';
                 $isReady    = ($bucket === 'ready_accept' || $bucket === 'ready_reject');
@@ -501,7 +465,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
             ?>
                 <tr class="res-bulk-row" data-id="<?= (int)$row['id'] ?>" data-bucket="<?= e($bucket) ?>">
                     <?php if ($canRelease): ?>
-                    <td style="padding-left:var(--space-3)">
+                    <td class="col-check">
                         <?php if ($selectable): ?>
                         <input type="checkbox" class="res-check" value="<?= (int)$row['id'] ?>"
                                onchange="resUpdateSelection()"
@@ -517,16 +481,18 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                                 data-applicant-panel="<?= (int)$row['id'] ?>"
                                 title="<?= e($row['email']) ?>"
                                 style="background:none;border:none;padding:0;cursor:pointer;text-align:left;width:100%">
-                            <span style="font-weight:var(--weight-medium);color:var(--text-primary);white-space:nowrap"><?= e($fullName) ?></span>
+                            <span class="auto-table-clip" style="font-weight:var(--weight-medium);color:var(--text-primary)"><?= e($fullName) ?></span>
                         </button>
                     </td>
 
-                    <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>
+                    <td style="font-size:var(--text-sm)" title="<?= e($row['course_applied']) ?>">
+                        <span class="auto-table-clip"><?= e($row['course_applied']) ?></span>
+                    </td>
 
                     <!-- Exam score — color carries the pass/fail signal so we
                          don't repeat it as text. Tooltip stays explicit for
                          hover + screen-reader users. -->
-                    <td style="font-size:var(--text-sm);white-space:nowrap">
+                    <td style="font-size:var(--text-sm)">
                         <?php if ($row['exam_score'] !== null):
                             $_examScoreColor = ((int)$row['exam_passed'] === 1) ? 'var(--success)'
                                               : (((int)$row['exam_passed'] === 0) ? 'var(--error)' : 'inherit');
@@ -548,7 +514,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                          "Completed · Pass" (which double-states the outcome).
                          For other statuses (Scheduled, In Progress, No-show, etc.)
                          we show the status as-is, since there's no result yet. -->
-                    <td style="font-size:var(--text-sm);white-space:nowrap">
+                    <td style="font-size:var(--text-sm)">
                         <?php if ($row['interview_status']):
                             $iMap = [
                                 'scheduled'   => ['badge-uploaded', 'Scheduled'],
@@ -580,7 +546,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                     </td>
 
                     <!-- Result column -->
-                    <td style="white-space:nowrap">
+                    <td>
                         <?php if ($bucket === 'withdrawn'): ?>
                             <span class="badge" style="color:#6b7280;background:#f3f4f6">Withdrawn</span>
                         <?php elseif ($bucket === 'released'): ?>
@@ -604,7 +570,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
 
                     <!-- Actions -->
                     <td>
-                        <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">
+                        <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:nowrap">
 
                         <!-- View Details button — visible to all roles -->
                         <button type="button" class="btn btn-ghost btn-sm"
@@ -702,32 +668,26 @@ $awaitingCount = (int)$countRows['awaiting_count'];
                     </td>
                 </tr>
             <?php endforeach; ?>
-        <?php endif; ?>
-        </tbody>
-    </table>
+            </tbody>
+            <?php endif; ?>
+        </table>
 
-    <?php if (empty($result['data'])): ?>
-        <!-- Empty state — fills remaining card height, centered both axes, no hover -->
-        <div class="empty-state" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-3);color:var(--text-tertiary);padding:var(--space-8)">
+        <?php if (empty($result['data'])): ?>
+        <div class="auto-table-empty">
             <?= icon('ic_fluent_clipboard_24_regular', 32) ?>
-            <div>No applicants found.</div>
+            <div><?= $search !== '' ? 'No applicants match your search.' : 'No applicants found.' ?></div>
         </div>
-    <?php else: ?>
-        <!-- Filler below the last row so the empty space inherits a top divider line -->
-        <div style="flex:1;border-top:1px solid var(--border)"></div>
-    <?php endif; ?>
-</div>
-
-<!-- Pagination -->
-<?php if ($result['last_page'] > 1): ?>
-    <div style="display:flex;justify-content:center;gap:var(--space-2);margin-top:var(--space-6)">
-        <?php for ($i = 1; $i <= $result['last_page']; $i++): ?>
-            <a href="<?= filterUrl(['page' => $i]) ?>"
-               class="btn <?= $i === $result['current_page'] ? 'btn-primary' : 'btn-ghost' ?> btn-sm"
-               style="min-width:36px"><?= $i ?></a>
-        <?php endfor; ?>
+        <?php endif; ?>
     </div>
+</div><!-- /.auto-table-card -->
+
+<!-- Pagination bar — under the card, inside the wrap, same as the audit log.
+     Its 40px is reserved in AutoPageSize's math whether or not it renders. -->
+<?php if ($result['last_page'] > 1): ?>
+    <?= auto_table_footer($result, fn(int $p): string => filterUrl(['page' => $p]), 'applicants') ?>
 <?php endif; ?>
+
+</div><!-- /.auto-table-wrap -->
 
 <?php if ($canOverride): ?>
 <!-- ── Admin override modal ────────────────────────────────── -->
@@ -1016,7 +976,7 @@ document.getElementById('suggest-modal').addEventListener('click', function(e){
     from { opacity:0; transform:translateX(-50%) translateY(20px); }
     to   { opacity:1; transform:translateX(-50%) translateY(0); }
 }
-tr.res-bulk-row.res-selected { background:var(--accent-muted); }
+tr.res-bulk-row.res-selected, tr.res-bulk-row.res-selected td { background:var(--accent-muted); }
 </style>
 
 <script>

@@ -335,36 +335,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ----------------------------------------------------------------
-// Load pending reschedule requests
-// ----------------------------------------------------------------
-$reschedRequests = $db->query(
-    "SELECT rr.*, a.course_applied,
-            u.name AS student_name, u.email AS student_email,
-            u.first_name, u.middle_name, u.last_name, u.suffix,
-            u.department AS student_department,
-            s.slot_date AS cur_date,
-            s.slot_time AS cur_time,
-            s.end_time  AS cur_end_time,
-            s.department AS slot_department
-       FROM reschedule_requests rr
-       JOIN interview_queue q ON q.id = rr.queue_id
-       JOIN applicants a      ON a.id = rr.applicant_id
-       JOIN users u           ON u.id = a.user_id
-  LEFT JOIN interview_slots s ON s.id = q.slot_id
-      WHERE rr.status = 'pending'
-        AND COALESCE(a.overall_status, '') <> 'withdrawn'
-      ORDER BY rr.created_at ASC"
-)->fetchAll();
-
-// ----------------------------------------------------------------
-// Load absent applicants + their previous slot
-// ----------------------------------------------------------------
 // Auto-detect no-shows on page load: any pending queue row whose slot
 // has already ended is flipped to status='no_show',
 // interview_status='absent', attendance_status='absent', so unmarked
 // students show up here automatically without an interviewer having
 // to manually mark them.  Idempotent — already-absent rows are
 // skipped.
+// ----------------------------------------------------------------
 if (function_exists('auto_detect_interview_no_shows')) {
     try {
         auto_detect_interview_no_shows(null, $staffId);
@@ -373,26 +350,141 @@ if (function_exists('auto_detect_interview_no_shows')) {
     }
 }
 
-$absent = $db->query(
-    "SELECT q.id            AS queue_id,
-            q.applicant_id,
-            q.evaluated_at,
-            s.id             AS slot_id,
-            s.slot_date      AS missed_date,
-            s.slot_time      AS missed_time,
-            s.department     AS missed_department,
-            a.course_applied,
-            u.name           AS student_name,
-            u.first_name, u.middle_name, u.last_name, u.suffix,
-            u.email          AS student_email,
-            u.department     AS student_department
-       FROM interview_queue q
-       JOIN applicants a ON a.id = q.applicant_id
-       JOIN users u      ON u.id = a.user_id
-  LEFT JOIN interview_slots s ON s.id = q.slot_id
-      WHERE q.interview_status = 'absent'
-      ORDER BY q.evaluated_at DESC NULLS LAST, q.id DESC"
-)->fetchAll();
+// ----------------------------------------------------------------
+// Filters + pagination — same auto-fit scheme as the audit log:
+// AutoPageSize (app.js) measures how many fixed-height rows fit the
+// table and reloads with ?per_page=; see auto_per_page() in helpers.php.
+// Each tab has its own table and its own remembered page size.
+// ----------------------------------------------------------------
+$search     = trim($_GET['q']    ?? '');
+$filterDept = trim($_GET['dept'] ?? '');
+$filterDate = trim($_GET['date'] ?? '');
+if ($filterDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterDate)) {
+    $filterDate = '';
+}
+$page       = max(1, (int)($_GET['page'] ?? 1));
+$perPage    = auto_per_page($activeTab === 'requests' ? 'interview-reschedule' : 'interview-absent');
+$hasFilters = ($search !== '' || $filterDept !== '' || $filterDate !== '');
+
+// ILIKE across several columns; a distinct placeholder per column
+// (emulated prepares + the pooler).
+$searchClause = function (array $cols, string $term, array &$params): string {
+    $likes = [];
+    foreach ($cols as $i => $col) {
+        $likes[]           = "{$col} ILIKE :q{$i}";
+        $params[":q{$i}"]  = '%' . $term . '%';
+    }
+    return '(' . implode(' OR ', $likes) . ')';
+};
+
+$absentFrom = 'FROM interview_queue q
+               JOIN applicants a ON a.id = q.applicant_id
+               JOIN users u      ON u.id = a.user_id
+          LEFT JOIN interview_slots s ON s.id = q.slot_id';
+$absentBase = "q.interview_status = 'absent'";
+
+$reschedFrom = 'FROM reschedule_requests rr
+                JOIN interview_queue q ON q.id = rr.queue_id
+                JOIN applicants a      ON a.id = rr.applicant_id
+                JOIN users u           ON u.id = a.user_id
+           LEFT JOIN interview_slots s ON s.id = q.slot_id';
+$reschedBase = "rr.status = 'pending' AND COALESCE(a.overall_status, '') <> 'withdrawn'";
+
+// Unfiltered totals for the two tab badges.
+$absentTotal  = (int)$db->query("SELECT COUNT(*) {$absentFrom} WHERE {$absentBase}")->fetchColumn();
+$reschedTotal = (int)$db->query("SELECT COUNT(*) {$reschedFrom} WHERE {$reschedBase}")->fetchColumn();
+
+$absent          = [];
+$reschedRequests = [];
+$deptOptions     = [];
+$result          = ['data' => [], 'total' => 0, 'current_page' => 1, 'last_page' => 1, 'per_page' => $perPage];
+
+if ($activeTab === 'absent') {
+    // ── Absent applicants + their previous slot ─────────────────
+    $where  = [$absentBase];
+    $params = [];
+    if ($search !== '') {
+        $where[] = $searchClause(['u.name', 'u.first_name', 'u.last_name', 'u.email', 'a.course_applied'], $search, $params);
+    }
+    if ($filterDept !== '') {
+        $where[]              = 'u.department = :dept';
+        $params[':dept']      = $filterDept;
+    }
+    if ($filterDate !== '') {
+        $where[]                  = 's.slot_date = :flt_date';
+        $params[':flt_date']      = $filterDate;
+    }
+    $whereStr = implode(' AND ', $where);
+
+    $result = paginate(
+        $db,
+        "SELECT COUNT(*) {$absentFrom} WHERE {$whereStr}",
+        "SELECT q.id            AS queue_id,
+                q.applicant_id,
+                q.evaluated_at,
+                s.id             AS slot_id,
+                s.slot_date      AS missed_date,
+                s.slot_time      AS missed_time,
+                s.department     AS missed_department,
+                a.course_applied,
+                u.name           AS student_name,
+                u.first_name, u.middle_name, u.last_name, u.suffix,
+                u.email          AS student_email,
+                u.department     AS student_department
+           {$absentFrom}
+          WHERE {$whereStr}
+          ORDER BY q.evaluated_at DESC NULLS LAST, q.id DESC",
+        $params, $page, $perPage
+    );
+    $absent = $result['data'];
+
+    $deptOptions = $db->query(
+        "SELECT DISTINCT u.department {$absentFrom}
+          WHERE {$absentBase} AND COALESCE(u.department, '') <> ''
+          ORDER BY u.department ASC"
+    )->fetchAll(PDO::FETCH_COLUMN);
+} else {
+    // ── Pending reschedule requests ─────────────────────────────
+    $where  = [$reschedBase];
+    $params = [];
+    if ($search !== '') {
+        $where[] = $searchClause(['u.name', 'u.first_name', 'u.last_name', 'u.email', 'a.course_applied', 'rr.reason'], $search, $params);
+    }
+    if ($filterDept !== '') {
+        $where[]              = 'u.department = :dept';
+        $params[':dept']      = $filterDept;
+    }
+    if ($filterDate !== '') {
+        $where[]                  = 'CAST(rr.created_at AS date) = :flt_date';
+        $params[':flt_date']      = $filterDate;
+    }
+    $whereStr = implode(' AND ', $where);
+
+    $result = paginate(
+        $db,
+        "SELECT COUNT(*) {$reschedFrom} WHERE {$whereStr}",
+        "SELECT rr.*, a.course_applied,
+                u.name AS student_name, u.email AS student_email,
+                u.first_name, u.middle_name, u.last_name, u.suffix,
+                u.department AS student_department,
+                s.slot_date AS cur_date,
+                s.slot_time AS cur_time,
+                s.end_time  AS cur_end_time,
+                s.department AS slot_department
+           {$reschedFrom}
+          WHERE {$whereStr}
+          ORDER BY rr.created_at ASC",
+        $params, $page, $perPage
+    );
+    $reschedRequests = $result['data'];
+
+    $deptOptions = $db->query(
+        "SELECT DISTINCT u.department {$reschedFrom}
+          WHERE {$reschedBase} AND COALESCE(u.department, '') <> ''
+          ORDER BY u.department ASC"
+    )->fetchAll(PDO::FETCH_COLUMN);
+}
+$page = $result['current_page'];
 
 // ----------------------------------------------------------------
 // Load open slots (used as reschedule targets)
@@ -418,7 +510,8 @@ $openSlots = array_filter(
 
 // ----------------------------------------------------------------
 // Also load reschedule history per absent applicant (most recent 3)
-// to surface "this is their 2nd miss" info for context.
+// to surface "this is their 2nd miss" info for context. Only for the
+// rows on the current page.
 // ----------------------------------------------------------------
 $historyByApplicant = [];
 if (!empty($absent)) {
@@ -443,45 +536,62 @@ $todayStmt = $db->prepare(
 $todayStmt->execute([$staffId, $today]);
 $hasToday = (int)$todayStmt->fetchColumn() > 0;
 
+// URL helper — keeps the tab + every current filter + per_page while overriding
+// just the given keys (page links, the Clear link). Same shape as the audit
+// log's auditUrl().
+$absUrl = function (array $merge = []) use ($activeTab, $search, $filterDept, $filterDate, $perPage): string {
+    $base = [
+        'tab'      => $activeTab,
+        'q'        => $search,
+        'dept'     => $filterDept,
+        'date'     => $filterDate,
+        'per_page' => $perPage,
+        'page'     => 1,
+    ];
+    return url('/staff/interviews/absent') . '?' . http_build_query(array_filter(
+        array_merge($base, $merge),
+        fn($v) => $v !== '' && $v !== null
+    ));
+};
+
 ob_start();
 ?>
 
-<style>
-.page:has(.sa-table-card) { display:flex; flex-direction:column; }
-.sa-table-card { flex:1; min-height:300px; display:flex; flex-direction:column; }
-.sa-table-card table { flex:0 0 auto; }
-.sa-table-card .sa-filler { flex:1; border-top:1px solid var(--border); }
-</style>
-
 <?php foreach ($errors as $err): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($err) ?></div>
+    <div class="alert alert-error" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($err) ?></div>
 <?php endforeach; ?>
 <?php foreach ($success as $s): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($s) ?></div>
+    <div class="alert alert-success" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div style="margin-bottom:var(--space-5);display:flex;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap">
+<div style="margin-bottom:var(--space-5);display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);flex-wrap:wrap;flex-shrink:0">
     <a href="<?= url('/staff/interviews') ?>" class="btn btn-ghost btn-sm">← Back</a>
     <?php if ($canReschedule): ?>
         <a href="<?= url('/staff/interviews/cancel-slot') ?>" class="btn btn-ghost btn-sm">
             Cancel a slot (bulk move) →
         </a>
+    <?php else: ?>
+        <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
+            <?= $activeTab === 'requests'
+                ? 'Only SSO and Admin can approve or deny reschedule requests.'
+                : 'Only SSO and Admin can reschedule students.' ?>
+        </span>
     <?php endif; ?>
 </div>
 
 <!-- ============================================================
      TAB NAVIGATION
 ============================================================ -->
-<div style="display:flex;gap:var(--space-1);margin-bottom:var(--space-5);border-bottom:1.5px solid var(--border)">
+<div style="display:flex;gap:var(--space-1);margin-bottom:var(--space-5);border-bottom:1.5px solid var(--border);flex-shrink:0">
     <a href="<?= url('/staff/interviews/absent?tab=absent') ?>"
        style="padding:var(--space-2) var(--space-4);font-size:var(--text-sm);font-weight:var(--weight-medium);
               text-decoration:none;border-bottom:2px solid <?= $activeTab === 'absent' ? 'var(--accent)' : 'transparent' ?>;
               color:<?= $activeTab === 'absent' ? 'var(--accent)' : 'var(--text-secondary)' ?>;
               margin-bottom:-1.5px">
         Absent Students
-        <?php if (!empty($absent)): ?>
+        <?php if ($absentTotal > 0): ?>
             <span style="background:var(--bg-subtle);padding:1px 7px;border-radius:999px;font-size:var(--text-xs);
-                          margin-left:var(--space-1)"><?= count($absent) ?></span>
+                          margin-left:var(--space-1)"><?= $absentTotal ?></span>
         <?php endif; ?>
     </a>
     <?php if (!$isDean): ?>
@@ -491,9 +601,9 @@ ob_start();
               color:<?= $activeTab === 'requests' ? 'var(--accent)' : 'var(--text-secondary)' ?>;
               margin-bottom:-1.5px">
         Reschedule Requests
-        <?php if (!empty($reschedRequests)): ?>
+        <?php if ($reschedTotal > 0): ?>
             <span style="background:var(--warning-bg);color:var(--warning);padding:1px 7px;border-radius:999px;
-                          font-size:var(--text-xs);margin-left:var(--space-1)"><?= count($reschedRequests) ?></span>
+                          font-size:var(--text-xs);margin-left:var(--space-1)"><?= $reschedTotal ?></span>
         <?php endif; ?>
     </a>
     <?php endif; ?>
@@ -502,122 +612,160 @@ ob_start();
 <?php if ($activeTab === 'absent'): ?>
 <!-- ============================================================
      TAB 1: ABSENT STUDENTS
+
+     Same structure as the audit log (and lakbay-pasig's AdminDataTable): one
+     .auto-table-wrap that AutoPageSize measures, the card with the toolbar and
+     the fixed-height table fused together, and the pagination bar under the
+     card. The bulk-reschedule POST form is a standalone <form>; the row
+     checkboxes and the target picker / button in the toolbar are tied to it
+     with the form="" attribute, so the toolbar's GET form isn't nested in it.
 ============================================================ -->
-<?php if (empty($absent)): ?>
-    <div class="card" style="padding:var(--space-8);text-align:left;color:var(--text-tertiary)">
-        No absent applicants right now.
-    </div>
-<?php else: ?>
-    <?php if ($canReschedule): ?>
-    <form method="POST">
-        <?= csrf_field() ?>
-        <input type="hidden" name="action" value="reschedule">
-    <?php endif; ?>
+<?php if ($canReschedule): ?>
+<form method="POST" id="absent-resched-form" style="display:none">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="reschedule">
+</form>
+<?php endif; ?>
 
-        <div class="card sa-table-card" style="padding:0;overflow:hidden;margin-bottom:var(--space-4)">
-            <table class="table" style="width:100%;border-collapse:collapse">
-                <thead>
-                    <tr style="background:var(--bg-subtle);text-align:left;font-size:var(--text-xs);
-                                color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em">
-                        <?php if ($canReschedule): ?>
-                        <th style="padding:var(--space-3) var(--space-4);width:36px">
-                            <input type="checkbox" id="select-all">
-                        </th>
-                        <?php endif; ?>
-                        <th style="padding:var(--space-3) var(--space-4)">Student</th>
-                        <th style="padding:var(--space-3) var(--space-4)">Course / Dept</th>
-                        <th style="padding:var(--space-3) var(--space-4)">Missed</th>
-                        <th style="padding:var(--space-3) var(--space-4)">History</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($absent as $row):
-                    $hist = $historyByApplicant[(int)$row['applicant_id']] ?? [];
-                ?>
-                    <tr style="border-top:1px solid var(--border);font-size:var(--text-sm)">
-                        <?php if ($canReschedule): ?>
-                        <td style="padding:var(--space-3) var(--space-4)">
-                            <input type="checkbox"
-                                   name="applicant_ids[]"
-                                   value="<?= (int)$row['applicant_id'] ?>"
-                                   class="js-select-row">
-                        </td>
-                        <?php endif; ?>
-                        <td style="padding:var(--space-3) var(--space-4)">
-                            <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                <?= e($row['student_email']) ?>
-                            </div>
-                        </td>
-                        <td style="padding:var(--space-3) var(--space-4)">
-                            <div><?= e($row['course_applied'] ?: '—') ?></div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                <?= e($row['student_department'] ?: 'no department') ?>
-                            </div>
-                        </td>
-                        <td style="padding:var(--space-3) var(--space-4)">
-                            <?php if ($row['missed_date']): ?>
-                                <?= format_date($row['missed_date']) ?>
-                                <?php if ($row['missed_time']): ?>
-                                    <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                        <?= format_time($row['missed_time']) ?>
-                                    </div>
-                                <?php endif; ?>
-                            <?php else: ?>
-                                —
-                            <?php endif; ?>
-                        </td>
-                        <td style="padding:var(--space-3) var(--space-4)">
-                            <?php if (empty($hist)): ?>
-                                <span style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                    First miss
-                                </span>
-                            <?php else: ?>
-                                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                                    <?= count($hist) ?> previous reschedule<?= count($hist) === 1 ? '' : 's' ?>
-                                </span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+<div class="auto-table-wrap" data-auto-page-size="interview-absent" data-current-per-page="<?= (int)$perPage ?>">
+
+<div class="auto-table-card">
+
+    <!-- Toolbar: search + filters (+ reschedule action), inside the card -->
+    <form method="GET" action="<?= url('/staff/interviews/absent') ?>" class="auto-table-toolbar">
+        <input type="hidden" name="tab"      value="absent">
+        <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
+
+        <div class="auto-table-search">
+            <?= icon('ic_fluent_search_24_filled', 14) ?>
+            <input type="text" name="q" class="form-input" placeholder="Search name, email, course…" value="<?= e($search) ?>">
         </div>
 
-        <?php if ($canReschedule): ?>
-        <div class="card" style="padding:var(--space-4) var(--space-5);display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap">
-            <label style="font-size:var(--text-sm);font-weight:var(--weight-medium)">Reschedule target:</label>
-            <select name="target_slot_id" class="form-control" style="max-width:420px">
-                <option value="0">Auto-assign (earliest matching slot)</option>
-                <?php foreach ($openSlots as $s):
-                    $spotsLeft = (int)$s['capacity'] - (int)$s['booked'];
-                ?>
-                    <option value="<?= (int)$s['id'] ?>">
-                        <?= format_date($s['slot_date']) ?>
-                        <?php if ($s['slot_time']): ?>
-                            at <?= format_time($s['slot_time']) ?>
-                        <?php endif; ?>
-                        &nbsp;·&nbsp; <?= e($s['department'] ?: 'any dept') ?>
-                        (<?= $spotsLeft ?> spot<?= $spotsLeft !== 1 ? 's' : '' ?> left)
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <div style="flex:1"></div>
-            <button type="submit" class="btn btn-primary">Reschedule selected</button>
-        </div>
-        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">
-            Choosing "Auto-assign" will pick the earliest slot that matches each applicant's department.
-            Reschedules are recorded in <code>reschedule_logs</code> for audit.
-        </p>
-    </form>
-        <?php else: ?>
-        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-3)">
-            Only SSO and Admin can reschedule students.
-        </div>
+        <?php if ($deptOptions): ?>
+        <select name="dept" class="form-input" style="width:200px" onchange="this.form.submit()" aria-label="Department">
+            <option value="">All departments</option>
+            <?php foreach ($deptOptions as $d): ?>
+                <option value="<?= e($d) ?>" <?= $filterDept === $d ? 'selected' : '' ?>><?= e($d) ?></option>
+            <?php endforeach; ?>
+        </select>
         <?php endif; ?>
 
-    <script>
-        const selectAll = document.getElementById('select-all');
+        <input type="date" name="date" class="form-input" style="width:160px" value="<?= e($filterDate) ?>"
+               onchange="this.form.submit()" aria-label="Missed on" title="Missed on">
+
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        <?php if ($hasFilters): ?>
+            <a href="<?= e(url('/staff/interviews/absent') . '?' . http_build_query(['tab' => 'absent', 'per_page' => $perPage])) ?>" class="btn btn-ghost btn-sm">Clear</a>
+        <?php endif; ?>
+
+        <?php if ($canReschedule): ?>
+        <span class="toolbar-spacer"></span>
+        <select name="target_slot_id" form="absent-resched-form" class="form-input" style="width:280px"
+                aria-label="Reschedule target"
+                title="Auto-assign picks the earliest slot that matches each applicant's department. Reschedules are recorded in reschedule_logs for audit.">
+            <option value="0">Auto-assign (earliest matching slot)</option>
+            <?php foreach ($openSlots as $s):
+                $spotsLeft = (int)$s['capacity'] - (int)$s['booked'];
+            ?>
+                <option value="<?= (int)$s['id'] ?>">
+                    <?= format_date($s['slot_date']) ?>
+                    <?php if ($s['slot_time']): ?>
+                        at <?= format_time($s['slot_time']) ?>
+                    <?php endif; ?>
+                    &nbsp;·&nbsp; <?= e($s['department'] ?: 'any dept') ?>
+                    (<?= $spotsLeft ?> spot<?= $spotsLeft !== 1 ? 's' : '' ?> left)
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <button type="submit" form="absent-resched-form" class="btn btn-primary btn-sm"
+                title="Reschedule the checked applicants on this page">Reschedule selected</button>
+        <?php endif; ?>
+    </form>
+
+    <!-- Table body — sized so the rows AutoPageSize picks fit exactly; it
+         only scrolls as a safety net (e.g. a very narrow window) -->
+    <div class="auto-table-body">
+        <table class="auto-table">
+            <thead>
+                <tr>
+                    <?php if ($canReschedule): ?>
+                    <th class="col-check">
+                        <input type="checkbox" id="select-all" title="Select all on this page" aria-label="Select all on this page">
+                    </th>
+                    <?php endif; ?>
+                    <th style="min-width:220px">Student</th>
+                    <th style="width:280px">Course / Dept</th>
+                    <th style="width:200px">Missed</th>
+                    <th style="width:190px">History</th>
+                </tr>
+            </thead>
+            <?php if (!empty($absent)): ?>
+            <tbody>
+            <?php foreach ($absent as $row):
+                $hist = $historyByApplicant[(int)$row['applicant_id']] ?? [];
+                $courseDept = ($row['course_applied'] ?: '—') . ' · ' . ($row['student_department'] ?: 'no department');
+            ?>
+                <tr>
+                    <?php if ($canReschedule): ?>
+                    <td class="col-check">
+                        <input type="checkbox"
+                               name="applicant_ids[]"
+                               form="absent-resched-form"
+                               value="<?= (int)$row['applicant_id'] ?>"
+                               class="js-select-row">
+                    </td>
+                    <?php endif; ?>
+                    <td style="font-size:var(--text-sm)" title="<?= e($row['student_email']) ?>">
+                        <span class="auto-table-clip" style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></span>
+                    </td>
+                    <td style="font-size:var(--text-sm)" title="<?= e($courseDept) ?>">
+                        <span class="auto-table-clip"><?= e($row['course_applied'] ?: '—') ?><span style="color:var(--text-tertiary)"> · <?= e($row['student_department'] ?: 'no department') ?></span></span>
+                    </td>
+                    <td style="font-size:var(--text-sm)">
+                        <span class="auto-table-clip">
+                        <?php if ($row['missed_date']): ?>
+                            <?= format_date($row['missed_date']) ?><?php if ($row['missed_time']): ?><span style="color:var(--text-tertiary)"> · <?= format_time($row['missed_time']) ?></span><?php endif; ?>
+                        <?php else: ?>
+                            —
+                        <?php endif; ?>
+                        </span>
+                    </td>
+                    <td style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                        <span class="auto-table-clip">
+                        <?php if (empty($hist)): ?>
+                            First miss
+                        <?php else: ?>
+                            <?= count($hist) ?> previous reschedule<?= count($hist) === 1 ? '' : 's' ?>
+                        <?php endif; ?>
+                        </span>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+            <?php endif; ?>
+        </table>
+
+        <?php if (empty($absent)): ?>
+        <div class="auto-table-empty">
+            <?= icon('ic_fluent_people_24_regular', 32) ?>
+            <div><?= $hasFilters ? 'No absent applicants match your filters.' : 'No absent applicants right now.' ?></div>
+        </div>
+        <?php endif; ?>
+    </div>
+</div><!-- /.auto-table-card -->
+
+<!-- Pagination bar — under the card, inside the wrap. Its 40px is reserved in
+     AutoPageSize's math whether or not it renders. -->
+<?php if ($result['last_page'] > 1): ?>
+    <?= auto_table_footer($result, fn(int $p): string => $absUrl(['page' => $p]), 'applicants') ?>
+<?php endif; ?>
+
+</div><!-- /.auto-table-wrap -->
+
+<?php if ($canReschedule): ?>
+<script>
+    (function () {
+        var selectAll = document.getElementById('select-all');
         if (selectAll) {
             selectAll.addEventListener('change', function () {
                 document.querySelectorAll('.js-select-row').forEach(function (cb) {
@@ -625,104 +773,143 @@ ob_start();
                 });
             });
         }
-    </script>
+    })();
+</script>
 <?php endif; ?>
 
 <?php else: ?>
 <!-- ============================================================
      TAB 2: RESCHEDULE REQUESTS
+
+     Same structure as the audit log. Each row is ONE line: the slot picker, the
+     deny reason and the buttons sit in their own columns, tied to that row's
+     two <form>s with the form="" attribute.
 ============================================================ -->
-<?php if (empty($reschedRequests)): ?>
-    <div class="card sa-table-card" style="padding:var(--space-8);color:var(--text-tertiary);align-items:center;justify-content:center;text-align:center">
-        No pending reschedule requests.
-    </div>
-<?php else: ?>
-    <div class="card sa-table-card" style="padding:0;overflow:hidden">
-        <table class="table" style="width:100%;border-collapse:collapse">
+<div class="auto-table-wrap" data-auto-page-size="interview-reschedule" data-current-per-page="<?= (int)$perPage ?>">
+
+<div class="auto-table-card">
+
+    <!-- Toolbar: search + filters, one row, inside the card -->
+    <form method="GET" action="<?= url('/staff/interviews/absent') ?>" class="auto-table-toolbar">
+        <input type="hidden" name="tab"      value="requests">
+        <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
+
+        <div class="auto-table-search">
+            <?= icon('ic_fluent_search_24_filled', 14) ?>
+            <input type="text" name="q" class="form-input" placeholder="Search student, course, reason…" value="<?= e($search) ?>">
+        </div>
+
+        <?php if ($deptOptions): ?>
+        <select name="dept" class="form-input" style="width:200px" onchange="this.form.submit()" aria-label="Department">
+            <option value="">All departments</option>
+            <?php foreach ($deptOptions as $d): ?>
+                <option value="<?= e($d) ?>" <?= $filterDept === $d ? 'selected' : '' ?>><?= e($d) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <?php endif; ?>
+
+        <input type="date" name="date" class="form-input" style="width:160px" value="<?= e($filterDate) ?>"
+               onchange="this.form.submit()" aria-label="Submitted on" title="Submitted on">
+
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        <?php if ($hasFilters): ?>
+            <a href="<?= e(url('/staff/interviews/absent') . '?' . http_build_query(['tab' => 'requests', 'per_page' => $perPage])) ?>" class="btn btn-ghost btn-sm">Clear</a>
+        <?php endif; ?>
+    </form>
+
+    <!-- Table body — sized so the rows AutoPageSize picks fit exactly; it
+         only scrolls as a safety net (e.g. a very narrow window) -->
+    <div class="auto-table-body">
+        <table class="auto-table">
             <thead>
-                <tr style="background:var(--bg-subtle);text-align:left;font-size:var(--text-xs);
-                            color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em">
-                    <th style="padding:var(--space-3) var(--space-4)">Student</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Course / Dept</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Current Slot</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Reason</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Submitted</th>
+                <tr>
+                    <th style="width:170px">Student</th>
+                    <th style="width:200px">Course / Dept</th>
+                    <th style="width:240px">Current Slot</th>
+                    <th style="min-width:140px">Reason</th>
+                    <th style="width:140px">Submitted</th>
                     <?php if ($canReschedule): ?>
-                    <th style="padding:var(--space-3) var(--space-4)">Action</th>
+                    <th style="width:190px">Move to</th>
+                    <th style="width:160px">Deny reason</th>
+                    <th style="width:150px">Action</th>
                     <?php endif; ?>
                 </tr>
             </thead>
+            <?php if (!empty($reschedRequests)): ?>
             <tbody>
-            <?php foreach ($reschedRequests as $rr): ?>
-                <tr style="border-top:1px solid var(--border);font-size:var(--text-sm)">
-                    <td style="padding:var(--space-3) var(--space-4)">
-                        <div style="font-weight:var(--weight-medium)"><?= e(format_full_name($rr)) ?></div>
-                        <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                            <?= e($rr['student_email']) ?>
-                        </div>
+            <?php foreach ($reschedRequests as $rr):
+                // Single-line current-slot label; the full text is also a tooltip.
+                $curSlotLabel = '—';
+                if ($rr['cur_date']) {
+                    $curSlotLabel = format_date($rr['cur_date']);
+                    if ($rr['cur_time']) {
+                        $curSlotLabel .= ' · ' . format_time($rr['cur_time'])
+                                      . ($rr['cur_end_time'] ? ' – ' . format_time($rr['cur_end_time']) : '');
+                    }
+                }
+                $courseLabel = ($rr['course_applied'] ?: '—') . ' · ' . ($rr['student_department'] ?: 'no department');
+                $approveFormId = 'resched-approve-' . (int)$rr['id'];
+                $denyFormId    = 'resched-deny-'    . (int)$rr['id'];
+            ?>
+                <tr>
+                    <td style="font-size:var(--text-sm)" title="<?= e($rr['student_email']) ?>">
+                        <span class="auto-table-clip" style="font-weight:var(--weight-medium)"><?= e(format_full_name($rr)) ?></span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4)">
-                        <div><?= e($rr['course_applied'] ?: '—') ?></div>
-                        <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                            <?= e($rr['student_department'] ?: 'no department') ?>
-                        </div>
+                    <td style="font-size:var(--text-sm)" title="<?= e($courseLabel) ?>">
+                        <span class="auto-table-clip"><?= e($rr['course_applied'] ?: '—') ?><span style="color:var(--text-tertiary)"> · <?= e($rr['student_department'] ?: 'no department') ?></span></span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4)">
-                        <?php if ($rr['cur_date']): ?>
-                            <?= format_date($rr['cur_date']) ?>
-                            <?php if ($rr['cur_time']): ?>
-                                <div style="color:var(--text-tertiary);font-size:var(--text-xs)">
-                                    <?= format_time($rr['cur_time']) ?><?= $rr['cur_end_time'] ? ' – ' . format_time($rr['cur_end_time']) : '' ?>
-                                </div>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            —
-                        <?php endif; ?>
+                    <td style="font-size:var(--text-sm)" title="<?= e($curSlotLabel) ?>">
+                        <span class="auto-table-clip"><?= e($curSlotLabel) ?></span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4);max-width:280px">
-                        <div style="white-space:pre-line;word-break:break-word"><?= e($rr['reason']) ?></div>
+                    <td style="font-size:var(--text-sm);color:var(--text-secondary)" title="<?= e($rr['reason']) ?>">
+                        <span class="auto-table-clip"><?= e($rr['reason']) ?></span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
-                        <?= date('M j, g:i A', strtotime($rr['created_at'])) ?>
+                    <td style="font-size:var(--text-sm)">
+                        <span class="auto-table-clip"><?= date('M j, g:i A', strtotime($rr['created_at'])) ?></span>
                     </td>
                     <?php if ($canReschedule): ?>
-                    <td style="padding:var(--space-3) var(--space-4)">
+                    <td>
+                        <select name="target_slot_id" form="<?= $approveFormId ?>" class="form-control"
+                                style="font-size:var(--text-xs);height:30px;min-height:30px;padding:0 var(--space-2)">
+                            <option value="0">Auto-assign</option>
+                            <?php foreach ($openSlots as $s):
+                                $spotsLeft = (int)$s['capacity'] - (int)$s['booked'];
+                            ?>
+                                <option value="<?= (int)$s['id'] ?>">
+                                    <?= format_date($s['slot_date']) ?>
+                                    <?php if ($s['slot_time']): ?> <?= format_time($s['slot_time']) ?><?php endif; ?>
+                                    · <?= e($s['department'] ?: 'any') ?>
+                                    (<?= $spotsLeft ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" name="deny_reason" form="<?= $denyFormId ?>"
+                               placeholder="Optional, shown to student"
+                               title="Reason shown to the student if you deny"
+                               maxlength="500"
+                               class="form-control"
+                               style="font-size:var(--text-xs);height:30px;min-height:30px;padding:0 var(--space-2)">
+                    </td>
+                    <td>
                         <div style="display:flex;gap:var(--space-2);align-items:center">
-                            <form method="POST" style="display:flex;gap:var(--space-2);align-items:center">
+                            <form id="<?= $approveFormId ?>" method="POST" style="margin:0">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="approve_reschedule">
                                 <input type="hidden" name="request_id" value="<?= (int)$rr['id'] ?>">
-                                <select name="target_slot_id" class="form-control"
-                                        style="font-size:var(--text-xs);height:28px;min-height:28px;max-width:200px;padding:0 var(--space-2)">
-                                    <option value="0">Auto-assign</option>
-                                    <?php foreach ($openSlots as $s):
-                                        $spotsLeft = (int)$s['capacity'] - (int)$s['booked'];
-                                    ?>
-                                        <option value="<?= (int)$s['id'] ?>">
-                                            <?= format_date($s['slot_date']) ?>
-                                            <?php if ($s['slot_time']): ?> <?= format_time($s['slot_time']) ?><?php endif; ?>
-                                            · <?= e($s['department'] ?: 'any') ?>
-                                            (<?= $spotsLeft ?>)
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
                                 <button type="submit" class="btn btn-sm btn-primary"
-                                        style="height:28px;min-height:28px;padding:0 var(--space-3);font-size:var(--text-xs)"
+                                        style="height:30px;min-height:30px;padding:0 var(--space-3);font-size:var(--text-xs)"
                                         title="Approve and assign new slot">Approve</button>
                             </form>
-                            <form method="POST" style="display:flex;gap:var(--space-2);align-items:center"
+                            <form id="<?= $denyFormId ?>" method="POST" style="margin:0"
                                   onsubmit="return confirm('Deny this reschedule request? The student keeps their current slot.')">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="deny_reschedule">
                                 <input type="hidden" name="request_id" value="<?= (int)$rr['id'] ?>">
-                                <input type="text" name="deny_reason"
-                                       placeholder="Reason (optional, shown to student)"
-                                       maxlength="500"
-                                       class="form-control"
-                                       style="font-size:var(--text-xs);height:28px;min-height:28px;max-width:240px;padding:0 var(--space-2)">
                                 <button type="submit" class="btn btn-sm btn-ghost"
-                                        style="height:28px;min-height:28px;padding:0 var(--space-3);font-size:var(--text-xs);
-                                               color:var(--error)" title="Deny request">Deny</button>
+                                        style="height:30px;min-height:30px;padding:0 var(--space-3);font-size:var(--text-xs);color:var(--error)"
+                                        title="Deny request">Deny</button>
                             </form>
                         </div>
                     </td>
@@ -730,15 +917,25 @@ ob_start();
                 </tr>
             <?php endforeach; ?>
             </tbody>
+            <?php endif; ?>
         </table>
-        <div class="sa-filler"></div>
+
+        <?php if (empty($reschedRequests)): ?>
+        <div class="auto-table-empty">
+            <?= icon('ic_fluent_calendar_sync_24_regular', 32) ?>
+            <div><?= $hasFilters ? 'No reschedule requests match your filters.' : 'No pending reschedule requests.' ?></div>
+        </div>
+        <?php endif; ?>
     </div>
-    <?php if (!$canReschedule): ?>
-    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-3)">
-        Only SSO and Admin can approve or deny reschedule requests.
-    </div>
-    <?php endif; ?>
+</div><!-- /.auto-table-card -->
+
+<!-- Pagination bar — under the card, inside the wrap. Its 40px is reserved in
+     AutoPageSize's math whether or not it renders. -->
+<?php if ($result['last_page'] > 1): ?>
+    <?= auto_table_footer($result, fn(int $p): string => $absUrl(['page' => $p])) ?>
 <?php endif; ?>
+
+</div><!-- /.auto-table-wrap -->
 <?php endif; /* end activeTab */ ?>
 
 <?php

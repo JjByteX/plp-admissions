@@ -15,6 +15,11 @@
 //   after the start time), any still-waiting / still-in-progress
 //   row is flipped to no_show right when the page loads. There is
 //   no manual "No-show" button anywhere in the UI.
+//
+// The table is auto-paginated like the audit log: fixed-height rows,
+// search + date/slot filters fused into the table card, and a
+// pagination bar under it. Filters are GET params (?q= ?date= ?slot=)
+// so they survive paging and the 60s auto-refresh.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -291,6 +296,66 @@ function queue_status_badge(string $status): array {
     };
 }
 
+// ----------------------------------------------------------------
+// Filters (search + date + slot) — applied server-side so pagination
+// counts only the rows that match.
+//
+// The date / slot dropdowns are built from the UNFILTERED rows above
+// (so they always list every option); a slot that doesn't belong to
+// the chosen date is dropped, the same cascade the old client-side
+// filter did.
+// ----------------------------------------------------------------
+$filterQ    = trim((string)($_GET['q'] ?? ''));
+$filterDate = trim((string)($_GET['date'] ?? ''));
+$filterSlot = (int)($_GET['slot'] ?? 0);
+
+$slotById = [];
+foreach ($slotMap as $sl) { $slotById[(int)$sl['id']] = $sl; }
+if (!in_array($filterDate, array_column($dateMap, 'date'), true)) {
+    $filterDate = '';
+}
+if (!isset($slotById[$filterSlot])
+    || ($filterDate !== '' && (string)$slotById[$filterSlot]['date'] !== $filterDate)) {
+    $filterSlot = 0;
+}
+
+$visibleRows = array_values(array_filter($rows, function (array $r) use ($filterQ, $filterDate, $filterSlot): bool {
+    if ($filterDate !== '' && (string)($r['slot_date'] ?? '') !== $filterDate) return false;
+    if ($filterSlot > 0 && (int)$r['slot_id'] !== $filterSlot) return false;
+    if ($filterQ !== '') {
+        $hay = mb_strtolower(queue_format_name($r) . ' ' . ($r['course_applied'] ?? '') . ' ' . ($r['applicant_type'] ?? ''));
+        if (!str_contains($hay, mb_strtolower($filterQ))) return false;
+    }
+    return true;
+}));
+$hasFilters = ($filterQ !== '' || $filterDate !== '' || $filterSlot > 0);
+
+// Pagination — same auto-fit scheme as the audit log: AutoPageSize (app.js)
+// measures how many fixed-height rows fit and reloads with ?per_page=.
+$perPage  = auto_per_page('interview-queue');
+$total    = count($visibleRows);
+$pages    = max(1, (int)ceil($total / $perPage));
+$page     = min(max(1, (int)($_GET['page'] ?? 1)), $pages);
+$result   = ['total' => $total, 'current_page' => $page, 'last_page' => $pages, 'per_page' => $perPage];
+$pageRows = array_slice($visibleRows, ($page - 1) * $perPage, $perPage);
+
+// URL helper — keeps the college scope + every filter + per_page while
+// overriding just the given keys (page links, clear link).
+$queueUrl = function (array $merge = []) use ($canSeeAll, $collegeFilter, $filterQ, $filterDate, $filterSlot, $perPage): string {
+    $base = [
+        'college'  => $canSeeAll ? $collegeFilter : '',
+        'q'        => $filterQ,
+        'date'     => $filterDate,
+        'slot'     => $filterSlot > 0 ? $filterSlot : '',
+        'per_page' => $perPage,
+        'page'     => 1,
+    ];
+    return url('/staff/interviews/queue') . '?' . http_build_query(array_filter(
+        array_merge($base, $merge),
+        fn($v) => $v !== '' && $v !== null
+    ));
+};
+
 ob_start();
 ?>
 
@@ -300,54 +365,10 @@ ob_start();
     50%   {opacity:.5;transform:scale(1.3)}
 }
 
-/* Make the table card stretch to fill the .page area so the gap below the
-   card matches the .page horizontal padding (var(--space-8) = 32px). Same
-   pattern used on the Results page. */
+/* Empty state only: stretch the card to fill the .page area. A populated
+   queue uses .auto-table-wrap (app.css) instead. */
 .page:has(.iq-table-card) { display:flex; flex-direction:column; }
 .iq-table-card { flex:1; min-height:300px; }
-
-/* Toolbar above the table (search + count). Matches the look of the
-   Results page top bar. */
-.iq-toolbar {
-    display:flex;
-    align-items:center;
-    gap:var(--space-3);
-    margin-bottom:var(--space-4);
-    flex-wrap:wrap;
-}
-.iq-toolbar .iq-search-wrap {
-    position:relative;
-    flex:1;
-    min-width:240px;
-    max-width:420px;
-}
-.iq-toolbar .iq-search-wrap input {
-    width:100%;
-    padding:0 var(--space-3) 0 32px;
-    height:36px;
-    min-height:36px;
-    font-size:var(--text-sm);
-    border:1px solid var(--border);
-    border-radius:var(--radius-sm);
-    background:var(--bg-elevated);
-    color:var(--text-primary);
-}
-.iq-toolbar .iq-filter-select {
-    height:36px;
-    min-height:36px;
-    font-size:var(--text-sm);
-    max-width:340px;
-    border:1px solid var(--border);
-    border-radius:var(--radius-sm);
-    padding:0 var(--space-3);
-    background:var(--bg-elevated);
-    color:var(--text-primary);
-}
-.iq-toolbar .iq-count {
-    font-size:var(--text-xs);
-    color:var(--text-tertiary);
-    white-space:nowrap;
-}
 
 /* Row tints by status, matches existing badge palette. */
 .iq-row-in-progress td { background: rgba(45,106,79,0.06); }
@@ -378,14 +399,14 @@ ob_start();
 </style>
 
 <?php if ($msg = Session::getFlash('success')): ?>
-    <div id="iq-flash-success" class="alert alert-success" style="margin-bottom:var(--space-4);display:flex;align-items:center;gap:var(--space-3)">
+    <div id="iq-flash-success" class="alert alert-success" style="margin-bottom:var(--space-4);display:flex;align-items:center;gap:var(--space-3);flex-shrink:0">
         <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
         <span style="flex:1"><?= e($msg) ?></span>
         <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:inherit;font-size:18px;line-height:1;padding:0 2px">&times;</button>
     </div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('error')): ?>
-    <div id="iq-flash-error" class="alert alert-error" style="margin-bottom:var(--space-4);display:flex;align-items:center;gap:var(--space-3)">
+    <div id="iq-flash-error" class="alert alert-error" style="margin-bottom:var(--space-4);display:flex;align-items:center;gap:var(--space-3);flex-shrink:0">
         <?= icon('ic_fluent_info_24_regular', 16) ?>
         <span style="flex:1"><?= e($msg) ?></span>
         <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:inherit;font-size:18px;line-height:1;padding:0 2px">&times;</button>
@@ -412,7 +433,7 @@ ob_start();
        (this IS their primary view), so no back button.
 ============================================================ -->
 <?php if ($canSeeAll): ?>
-    <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-5);flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-5);flex-wrap:wrap;flex-shrink:0">
         <a href="<?= e(url('/staff/interviews/queue')) ?>" class="btn btn-ghost btn-sm">
             ← Back to colleges
         </a>
@@ -433,7 +454,7 @@ ob_start();
      — setup is not the professor's responsibility.
 ============================================================ -->
 <?php if (!$isAdmin && !$isSSO && !$isDean && $deskLabel): ?>
-    <div style="display:flex;align-items:center;gap:var(--space-3);
+    <div style="display:flex;align-items:center;gap:var(--space-3);flex-shrink:0;
                  padding:var(--space-3) var(--space-4);margin-bottom:var(--space-4);
                  background:var(--bg-elevated);border:1px solid var(--border);
                  border-radius:var(--radius-md);font-size:var(--text-sm)">
@@ -487,208 +508,227 @@ ob_start();
 <?php else: ?>
 
 <!-- ============================================================
-     TOOLBAR — search + count
+     TABLE — one .auto-table-wrap (measured by AutoPageSize): the card
+     holds the search + date/slot filters fused to the fixed-height
+     table, and the pagination bar sits under it. Same structure as
+     the audit log.
 ============================================================ -->
-<div class="iq-toolbar">
-    <div class="iq-search-wrap">
-        <?= icon('ic_fluent_search_24_filled', 14, 'position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);pointer-events:none') ?>
-        <input type="search" id="iq-filter" placeholder="Filter by name or course…"
-               autocomplete="off">
-    </div>
-    <?php if (count($dateMap) > 1): ?>
-    <select id="iq-date-filter" class="form-control iq-filter-select"
-            title="Filter by interview date">
-        <?php
-            // The "All dates" item leads so the page starts unfiltered. The
-            // applicant count next to each row mirrors what's currently visible
-            // in the table (rebuilt client-side as filters change so the badge
-            // and the visible count never drift apart).
-            $totalApplicants = count($rows);
-        ?>
-        <option value="" data-count="<?= (int)$totalApplicants ?>">
-            All dates · <?= (int)$totalApplicants ?> applicant<?= $totalApplicants === 1 ? '' : 's' ?>
-        </option>
-        <?php foreach ($dateMap as $d): ?>
-            <option value="<?= e($d['date']) ?>" data-count="<?= (int)$d['count'] ?>">
-                <?= format_date($d['date']) ?><?= $d['is_past'] ? ' (Past)' : '' ?>
-                · <?= (int)$d['count'] ?> applicant<?= (int)$d['count'] === 1 ? '' : 's' ?>
+<div class="auto-table-wrap" data-auto-page-size="interview-queue" data-current-per-page="<?= (int)$perPage ?>">
+
+<div class="auto-table-card">
+
+    <!-- Toolbar: search + filters, one row, inside the card -->
+    <form method="GET" action="<?= e(url('/staff/interviews/queue')) ?>" class="auto-table-toolbar">
+        <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
+        <?php if ($canSeeAll): ?>
+            <input type="hidden" name="college" value="<?= e($collegeFilter) ?>">
+        <?php endif; ?>
+
+        <div class="auto-table-search">
+            <?= icon('ic_fluent_search_24_filled', 14) ?>
+            <input type="text" name="q" class="form-input" placeholder="Filter by name or course…"
+                   value="<?= e($filterQ) ?>" autocomplete="off">
+        </div>
+
+        <?php if (count($dateMap) > 1): ?>
+        <select name="date" class="form-input" style="width:230px" onchange="this.form.submit()"
+                title="Filter by interview date">
+            <?php $totalApplicants = count($rows); ?>
+            <option value="">
+                All dates · <?= (int)$totalApplicants ?> applicant<?= $totalApplicants === 1 ? '' : 's' ?>
             </option>
-        <?php endforeach; ?>
-    </select>
-    <?php endif; ?>
-    <?php if (count($slotMap) > 1): ?>
-    <select id="iq-slot-filter" class="form-control iq-filter-select"
-            title="Filter by specific slot within the selected date">
-        <?php $totalSlotApplicants = array_sum(array_column($slotMap, 'count')); ?>
-        <option value="" data-date="" data-count="<?= (int)$totalSlotApplicants ?>">
-            All slots · <?= (int)$totalSlotApplicants ?> applicant<?= $totalSlotApplicants === 1 ? '' : 's' ?>
-        </option>
-        <?php foreach ($slotMap as $sl): ?>
-            <?php
-                $slPast = (string)$sl['date'] !== '' && (string)$sl['date'] < $todayDate;
-                $slLbl  = format_date($sl['date']);
-                if (!empty($sl['time'])) {
-                    $slLbl .= ' · ' . format_time($sl['time']);
-                    if (!empty($sl['end_time'])) {
-                        $slLbl .= ' – ' . format_time($sl['end_time']);
-                    }
-                }
-                if ($slPast) $slLbl .= ' (Past)';
-                if (!empty($sl['department'])) {
-                    $slLbl .= ' · ' . $sl['department'];
-                }
-                $slLbl .= ' · ' . (int)$sl['count'] . ' applicant' . ((int)$sl['count'] === 1 ? '' : 's');
-            ?>
-            <option value="<?= (int)$sl['id'] ?>"
-                    data-date="<?= e($sl['date']) ?>"
-                    data-count="<?= (int)$sl['count'] ?>">
-                <?= e($slLbl) ?>
+            <?php foreach ($dateMap as $d): ?>
+                <option value="<?= e($d['date']) ?>" <?= $filterDate === (string)$d['date'] ? 'selected' : '' ?>>
+                    <?= format_date($d['date']) ?><?= $d['is_past'] ? ' (Past)' : '' ?>
+                    · <?= (int)$d['count'] ?> applicant<?= (int)$d['count'] === 1 ? '' : 's' ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <?php endif; ?>
+
+        <?php if (count($slotMap) > 1): ?>
+        <select name="slot" class="form-input" style="width:260px" onchange="this.form.submit()"
+                title="Filter by specific slot within the selected date">
+            <?php $totalSlotApplicants = array_sum(array_column($slotMap, 'count')); ?>
+            <option value="">
+                All slots · <?= (int)$totalSlotApplicants ?> applicant<?= $totalSlotApplicants === 1 ? '' : 's' ?>
             </option>
-        <?php endforeach; ?>
-    </select>
-    <?php endif; ?>
-    <span class="iq-count" id="iq-count">
-        <?= count($rows) ?> applicant<?= count($rows) === 1 ? '' : 's' ?>
-    </span>
-</div>
-
-<!-- ============================================================
-     TABLE — full-page card matching documents/results pages
-============================================================ -->
-<div class="card iq-table-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
-    <table class="table" id="queue-table">
-        <thead>
-            <tr>
-                <th>Applicant</th>
-                <?php if ($canSeeAll && $showAll): ?>
-                    <th style="width:140px">College</th>
-                <?php endif; ?>
-                <th>Course</th>
-                <th style="width:120px">Type</th>
-                <th style="width:120px">Status</th>
-                <th style="width:140px">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        <?php foreach ($rows as $r):
-            [$badgeText, $badgeClass] = queue_status_badge($r['status']);
-            $rowClass  = 'iq-row-' . str_replace('_', '-', $r['status']);
-            $name      = queue_format_name($r);
-            $course    = $r['course_applied'] ?? '';
-            $type      = $r['applicant_type'] ?? '';
-            $isInProg  = $r['status'] === 'in_progress';
-            $isFinal   = in_array($r['status'], ['completed', 'no_show'], true);
-            $existing  = $r['interview_notes'] ?? '';
-            $haystack  = strtolower($name . ' ' . $course . ' ' . $type);
-        ?>
-            <tr class="<?= $rowClass ?>"
-                data-name="<?= e($haystack) ?>"
-                data-slot="<?= (int)$r['slot_id'] ?>"
-                data-date="<?= e($r['slot_date'] ?? '') ?>">
-                <td>
-                    <?php // Single-line row — name only.
-                          // Eval result moved into the Status column.
-                          // Eval notes are in the detail panel that opens on click. ?>
-                    <button type="button"
-                            class="iq-name-cell iq-name-cell-clickable"
-                            data-applicant-panel="<?= (int)$r['app_id'] ?>"
-                            title="View applicant details">
-                        <span><?= e($name) ?></span>
-                    </button>
-                </td>
-
-                <?php if ($canSeeAll && $showAll): ?>
-                    <td style="font-size:var(--text-sm)">
-                        <?php $col = (string)($r['slot_department'] ?? ''); ?>
-                        <?= $col !== '' ? e($col) : '<span style="color:var(--text-tertiary)">—</span>' ?>
-                    </td>
-                <?php endif; ?>
-
-                <td style="font-size:var(--text-sm)">
-                    <?= $course !== '' ? e($course) : '<span style="color:var(--text-tertiary)">—</span>' ?>
-                </td>
-
-                <td style="font-size:var(--text-sm)">
-                    <?= $type !== '' ? e(ucfirst($type)) : '<span style="color:var(--text-tertiary)">—</span>' ?>
-                </td>
-
-                <td>
-                    <?php
-                        // For completed rows, surface the eval result (Pass / Decline)
-                        // as the badge itself — same pattern as the Results page.
-                        // For non-completed rows (Scheduled / In Progress / No-show / etc.)
-                        // we still show the queue stage as the badge.
-                        $statusBadgeClass = $badgeClass;
-                        $statusBadgeText  = $badgeText;
-                        if ($r['status'] === 'completed' && $r['evaluation_result']) {
-                            if ($r['evaluation_result'] === 'pass') {
-                                $statusBadgeClass = 'badge-approved';
-                                $statusBadgeText  = 'Pass';
-                            } elseif ($r['evaluation_result'] === 'reject') {
-                                $statusBadgeClass = 'badge-rejected';
-                                $statusBadgeText  = 'Decline';
-                            }
+            <?php foreach ($slotMap as $sl): ?>
+                <?php
+                    // With a date chosen, only that date's slots are listed.
+                    if ($filterDate !== '' && (string)$sl['date'] !== $filterDate) continue;
+                    $slPast = (string)$sl['date'] !== '' && (string)$sl['date'] < $todayDate;
+                    $slLbl  = format_date($sl['date']);
+                    if (!empty($sl['time'])) {
+                        $slLbl .= ' · ' . format_time($sl['time']);
+                        if (!empty($sl['end_time'])) {
+                            $slLbl .= ' – ' . format_time($sl['end_time']);
                         }
-                    ?>
-                    <span class="badge <?= $statusBadgeClass ?>" style="font-size:var(--text-xs)"
-                          <?= ($isFinal && $existing !== '') ? 'title="' . e($existing) . '"' : '' ?>>
-                        <?php if ($isInProg): ?>
-                            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
-                                         background:#fff;animation:pulse-dot 1.4s infinite;margin-right:4px"></span>
-                        <?php endif; ?>
-                        <?= e($statusBadgeText) ?>
-                    </span>
-                </td>
+                    }
+                    if ($slPast) $slLbl .= ' (Past)';
+                    if (!empty($sl['department'])) {
+                        $slLbl .= ' · ' . $sl['department'];
+                    }
+                    $slLbl .= ' · ' . (int)$sl['count'] . ' applicant' . ((int)$sl['count'] === 1 ? '' : 's');
+                ?>
+                <option value="<?= (int)$sl['id'] ?>" <?= $filterSlot === (int)$sl['id'] ? 'selected' : '' ?>>
+                    <?= e($slLbl) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <?php endif; ?>
 
-                <td>
-                    <div class="iq-actions">
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        <?php if ($hasFilters): ?>
+            <a href="<?= e($queueUrl(['q' => '', 'date' => '', 'slot' => '', 'page' => 1])) ?>" class="btn btn-ghost btn-sm">Clear</a>
+        <?php endif; ?>
+    </form>
+
+    <!-- Table body — fixed-height rows, sized so the rows AutoPageSize
+         picks fit exactly; it only scrolls as a safety net -->
+    <div class="auto-table-body">
+        <table class="auto-table" id="queue-table">
+            <thead>
+                <tr>
+                    <th>Applicant</th>
+                    <?php if ($canSeeAll && $showAll): ?>
+                        <th style="width:140px">College</th>
+                    <?php endif; ?>
+                    <th>Course</th>
+                    <th style="width:110px">Type</th>
+                    <th style="width:120px">Status</th>
+                    <th style="width:190px">Actions</th>
+                </tr>
+            </thead>
+            <?php if (!empty($pageRows)): ?>
+            <tbody>
+            <?php foreach ($pageRows as $r):
+                [$badgeText, $badgeClass] = queue_status_badge($r['status']);
+                $rowClass  = 'iq-row-' . str_replace('_', '-', $r['status']);
+                $name      = queue_format_name($r);
+                $course    = $r['course_applied'] ?? '';
+                $type      = $r['applicant_type'] ?? '';
+                $isInProg  = $r['status'] === 'in_progress';
+                $isFinal   = in_array($r['status'], ['completed', 'no_show'], true);
+                $existing  = $r['interview_notes'] ?? '';
+            ?>
+                <tr class="<?= $rowClass ?>">
+                    <td>
+                        <?php // Single-line row — name only.
+                              // Eval result moved into the Status column.
+                              // Eval notes are in the detail panel that opens on click. ?>
                         <button type="button"
-                                class="btn btn-ghost btn-sm iq-view-btn"
+                                class="iq-name-cell iq-name-cell-clickable"
                                 data-applicant-panel="<?= (int)$r['app_id'] ?>"
-                                title="View applicant details"
-                                aria-label="View applicant details">
-                            <?= icon('ic_fluent_eye_show_24_regular', 14) ?>
+                                title="View applicant details">
+                            <span class="auto-table-clip"><?= e($name) ?></span>
                         </button>
-                        <?php if ($isFinal): ?>
-                            <?php // Final-state rows: View-only. The Status
-                                  // column already shows Pass / Decline / No-show,
-                                  // so we don't repeat it here. ?>
-                        <?php else: ?>
-                            <?php
-                                $evalData = [
-                                    'queueId' => (int)$r['queue_id'],
-                                    'name'    => $name,
-                                    'course'  => $course,
-                                    'type'    => $type,
-                                    'notes'   => $existing,
-                                    'email'   => $r['student_email'] ?? '',
-                                    'phone'   => $r['student_phone'] ?? '',
-                                    'birthdate' => $r['student_birthdate'] ?? '',
-                                    'sex'     => $r['student_sex'] ?? '',
-                                    'address' => $r['student_address'] ?? '',
-                                    'strand'  => $r['shs_strand'] ?? '',
-                                    'school_year' => $r['school_year'] ?? '',
-                                    'exam_score'  => $r['exam_score'] !== null ? (int)$r['exam_score'] : null,
-                                    'exam_total'  => $r['exam_total'] !== null ? (int)$r['exam_total'] : null,
-                                    'exam_passed' => $r['exam_passed'] !== null ? (int)$r['exam_passed'] : null,
-                                ];
-                            ?>
-                            <button type="button" class="btn btn-primary btn-sm"
-                                    onclick='openEvalModal(<?= htmlspecialchars(json_encode($evalData), ENT_QUOTES) ?>)'>
-                                <?= icon('ic_fluent_edit_24_regular', 13) ?>
-                                Evaluation
-                            </button>
-                        <?php endif; ?>
-                    </div>
-                </td>
-            </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
+                    </td>
 
-    <!-- Filler below the last row so the empty space inherits a top divider line -->
-    <div style="flex:1;border-top:1px solid var(--border)"></div>
-</div>
+                    <?php if ($canSeeAll && $showAll): ?>
+                        <td style="font-size:var(--text-sm)">
+                            <?php $col = (string)($r['slot_department'] ?? ''); ?>
+                            <span class="auto-table-clip"><?= $col !== '' ? e($col) : '<span style="color:var(--text-tertiary)">—</span>' ?></span>
+                        </td>
+                    <?php endif; ?>
+
+                    <td style="font-size:var(--text-sm)" title="<?= e($course) ?>">
+                        <span class="auto-table-clip"><?= $course !== '' ? e($course) : '<span style="color:var(--text-tertiary)">—</span>' ?></span>
+                    </td>
+
+                    <td style="font-size:var(--text-sm)">
+                        <span class="auto-table-clip"><?= $type !== '' ? e(ucfirst($type)) : '<span style="color:var(--text-tertiary)">—</span>' ?></span>
+                    </td>
+
+                    <td>
+                        <?php
+                            // For completed rows, surface the eval result (Pass / Decline)
+                            // as the badge itself — same pattern as the Results page.
+                            // For non-completed rows (Scheduled / In Progress / No-show / etc.)
+                            // we still show the queue stage as the badge.
+                            $statusBadgeClass = $badgeClass;
+                            $statusBadgeText  = $badgeText;
+                            if ($r['status'] === 'completed' && $r['evaluation_result']) {
+                                if ($r['evaluation_result'] === 'pass') {
+                                    $statusBadgeClass = 'badge-approved';
+                                    $statusBadgeText  = 'Pass';
+                                } elseif ($r['evaluation_result'] === 'reject') {
+                                    $statusBadgeClass = 'badge-rejected';
+                                    $statusBadgeText  = 'Decline';
+                                }
+                            }
+                        ?>
+                        <span class="badge <?= $statusBadgeClass ?>" style="font-size:var(--text-xs)"
+                              <?= ($isFinal && $existing !== '') ? 'title="' . e($existing) . '"' : '' ?>>
+                            <?php if ($isInProg): ?>
+                                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
+                                             background:#fff;animation:pulse-dot 1.4s infinite;margin-right:4px"></span>
+                            <?php endif; ?>
+                            <?= e($statusBadgeText) ?>
+                        </span>
+                    </td>
+
+                    <td>
+                        <div class="iq-actions">
+                            <button type="button"
+                                    class="btn btn-ghost btn-sm iq-view-btn"
+                                    data-applicant-panel="<?= (int)$r['app_id'] ?>"
+                                    title="View applicant details"
+                                    aria-label="View applicant details">
+                                <?= icon('ic_fluent_eye_show_24_regular', 14) ?>
+                            </button>
+                            <?php if ($isFinal): ?>
+                                <?php // Final-state rows: View-only. The Status
+                                      // column already shows Pass / Decline / No-show,
+                                      // so we don't repeat it here. ?>
+                            <?php else: ?>
+                                <?php
+                                    $evalData = [
+                                        'queueId' => (int)$r['queue_id'],
+                                        'name'    => $name,
+                                        'course'  => $course,
+                                        'type'    => $type,
+                                        'notes'   => $existing,
+                                        'email'   => $r['student_email'] ?? '',
+                                        'phone'   => $r['student_phone'] ?? '',
+                                        'birthdate' => $r['student_birthdate'] ?? '',
+                                        'sex'     => $r['student_sex'] ?? '',
+                                        'address' => $r['student_address'] ?? '',
+                                        'strand'  => $r['shs_strand'] ?? '',
+                                        'school_year' => $r['school_year'] ?? '',
+                                        'exam_score'  => $r['exam_score'] !== null ? (int)$r['exam_score'] : null,
+                                        'exam_total'  => $r['exam_total'] !== null ? (int)$r['exam_total'] : null,
+                                        'exam_passed' => $r['exam_passed'] !== null ? (int)$r['exam_passed'] : null,
+                                    ];
+                                ?>
+                                <button type="button" class="btn btn-primary btn-sm"
+                                        onclick='openEvalModal(<?= htmlspecialchars(json_encode($evalData), ENT_QUOTES) ?>)'>
+                                    <?= icon('ic_fluent_edit_24_regular', 13) ?>
+                                    Evaluation
+                                </button>
+                            <?php endif; ?>
+                        </div>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+            <?php endif; ?>
+        </table>
+
+        <?php if (empty($pageRows)): ?>
+        <div class="auto-table-empty">
+            <?= icon('ic_fluent_calendar_ltr_24_regular', 32) ?>
+            <div>No applicants match your filters.</div>
+        </div>
+        <?php endif; ?>
+    </div>
+</div><!-- /.auto-table-card -->
+
+<?php if ($result['last_page'] > 1): ?>
+    <?= auto_table_footer($result, fn(int $p): string => $queueUrl(['page' => $p]), 'applicants') ?>
+<?php endif; ?>
+
+</div><!-- /.auto-table-wrap -->
 <?php endif; // empty($rows) ?>
 
 <!-- ============================================================
@@ -797,59 +837,6 @@ ob_start();
      SCRIPT
 ============================================================ -->
 <script>
-// Live filters — combines the name/course search box, the date
-// dropdown and the slot dropdown. The slot dropdown cascades off the
-// date one: picking a date hides slots on other dates and resets the
-// slot filter if its current selection no longer matches.
-(function() {
-    var filterEl = document.getElementById('iq-filter');
-    var dateEl   = document.getElementById('iq-date-filter');
-    var slotEl   = document.getElementById('iq-slot-filter');
-    var countEl  = document.getElementById('iq-count');
-
-    function syncSlotOptions() {
-        if (!slotEl) return;
-        var selectedDate = dateEl ? dateEl.value : '';
-        var currentSlot  = slotEl.value;
-        var stillVisible = false;
-        Array.prototype.forEach.call(slotEl.options, function(opt) {
-            if (opt.value === '') { opt.hidden = false; return; } // keep "All slots"
-            var optDate = opt.getAttribute('data-date') || '';
-            var match   = !selectedDate || optDate === selectedDate;
-            opt.hidden  = !match;
-            if (match && opt.value === currentSlot) stillVisible = true;
-        });
-        // If the previously-selected slot is on a different date, clear it.
-        if (currentSlot && !stillVisible) slotEl.value = '';
-    }
-
-    function applyFilters() {
-        var term       = filterEl ? filterEl.value.toLowerCase().trim() : '';
-        var slotId     = slotEl   ? slotEl.value : '';
-        var dateValue  = dateEl   ? dateEl.value : '';
-        var visible    = 0;
-        document.querySelectorAll('#queue-table tbody tr').forEach(function(tr) {
-            var haystack   = tr.dataset.name || '';
-            var rowSlot    = tr.dataset.slot || '';
-            var rowDate    = tr.dataset.date || '';
-            var matchText  = !term      || haystack.includes(term);
-            var matchSlot  = !slotId    || rowSlot === slotId;
-            var matchDate  = !dateValue || rowDate === dateValue;
-            var show       = matchText && matchSlot && matchDate;
-            tr.style.display = show ? '' : 'none';
-            if (show) visible++;
-        });
-        if (countEl) countEl.textContent = visible + ' applicant' + (visible === 1 ? '' : 's');
-    }
-
-    if (filterEl) filterEl.addEventListener('input', applyFilters);
-    if (dateEl)   dateEl.addEventListener('change', function() { syncSlotOptions(); applyFilters(); });
-    if (slotEl)   slotEl.addEventListener('change', applyFilters);
-
-    // Initial sync in case the page is reloaded with a date already chosen.
-    syncSlotOptions();
-})();
-
 // Evaluation modal handlers
 const evalModal = document.getElementById('eval-modal');
 
