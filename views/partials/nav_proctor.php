@@ -25,15 +25,7 @@ $_navExamReady = (int)$_navSlotStmt->fetchColumn() > 0;
 $items = [
     ['href' => '/staff/exam/slots',  'key' => 'exam',      'label' => 'Exam Slots', 'icon' => 'calendar-blank', 'alert' => !$_navExamReady],
 ];
-?>
-<?php foreach ($items as $item): ?>
-    <a href="<?= url($item['href']) ?>"
-       class="nav-item <?= $nav === $item['key'] ? 'active' : '' ?>"
-       aria-current="<?= $nav === $item['key'] ? 'page' : 'false' ?>">
-        <?= icon($item['icon'] . ($nav === $item['key'] ? ':fill' : ''), 18) ?>
-        <?= e($item['label']) ?>
-        <?php if (!empty($item['alert'])): ?>
-            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--error);margin-left:auto;flex-shrink:0" title="Needs setup"></span>
-        <?php endif; ?>
-    </a>
-<?php endforeach; ?>
+
+// Rendered by the shared sidebar partial (collapse / expand markup lives there).
+$sidebarItems = $items;
+include __DIR__ . '/sidebar_nav_items.php';

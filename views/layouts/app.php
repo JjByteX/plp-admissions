@@ -16,6 +16,21 @@ $activeNav    = $activeNav ?? '';
 $showStepper  = $showStepper ?? false;
 $pageWide     = $pageWide ?? false;
 $isStudent    = ($userRole === 'student');
+
+// Sidebar (staff / admin / SSO / dean / proctor), ported from lakbay-pasig's
+// SidebarProvider. Lakbay keeps the desktop open/closed state in a cookie so
+// the server can render the right state on first paint; same here. The cookie
+// is written by Sidebar.setOpen() in app.js. Only the literal 'false' collapses
+// the rail, so a missing or odd value means expanded (Lakbay: defaultOpen).
+$sidebarOpen = ($_COOKIE['sidebar_state'] ?? 'true') !== 'false';
+
+// Where the logo + school name in the sidebar header link to: each role's own
+// landing page, the same one its first nav item points at.
+$sidebarHome = match ($userRole) {
+    ROLE_STAFF   => '/staff/interviews/queue',
+    ROLE_PROCTOR => '/staff/exam/slots',
+    default      => '/admin/dashboard',
+};
 ?>
 <?php
 // CSP header
@@ -56,6 +71,8 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
         (function(){
             const t = localStorage.getItem('plp_theme') || 'light';
             document.documentElement.dataset.theme = t;
+            var fs = null; try { fs = localStorage.getItem('plp_font_size'); } catch (e) {}
+            document.documentElement.dataset.fontSize = ['small','medium','large','xlarge'].indexOf(fs) > -1 ? fs : 'medium';
             document.addEventListener('DOMContentLoaded', function() {
                 const pill = document.querySelector('.theme-pill');
                 if (pill) pill.dataset.theme = t;
@@ -197,94 +214,108 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     <!-- ====================================================
          SIDEBAR (staff / admin)
     ==================================================== -->
-    <aside class="sidebar" id="sidebar">
+    <div class="sidebar-wrapper" id="sidebar-wrapper"
+         data-state="<?= $sidebarOpen ? 'expanded' : 'collapsed' ?>"
+         data-collapsible="<?= $sidebarOpen ? '' : 'icon' ?>"
+         data-mobile-open="false">
 
-        <!-- Brand -->
-        <div class="sidebar-brand">
-            <?php if ($schoolLogo): ?>
-                <img src="<?= str_starts_with($schoolLogo, 'http') ? e($schoolLogo) : e(url('/' . $schoolLogo)) ?>" alt="Logo" class="sidebar-logo">
-            <?php else: ?>
-                <div class="sidebar-logo-placeholder">
-                    <?= icon('bank:fill', 18) ?>
-                </div>
-            <?php endif; ?>
-            <span class="sidebar-school-name"><?= e($schoolName) ?></span>
-        </div>
+        <!-- Spacer: takes the rail's width in the flex row so .main sits beside
+             it, and animates the same way the rail does. The rail itself is
+             position:fixed, so without this .main would slide under it. -->
+        <div class="sidebar-gap" aria-hidden="true"></div>
 
-        <!-- Navigation — rendered per role.
-             Professor (staff) uses the trimmed nav_staff.php.
-             Proctor uses nav_proctor.php (exam-only sidebar).
-             Admin / SSO / Dean share the management nav, which itself
-             filters individual items per role. -->
-        <nav class="sidebar-nav" aria-label="Main navigation">
-            <?php if ($userRole === ROLE_STAFF): ?>
-                <?php include __DIR__ . '/../partials/nav_staff.php'; ?>
-            <?php elseif ($userRole === ROLE_PROCTOR): ?>
-                <?php include __DIR__ . '/../partials/nav_proctor.php'; ?>
-            <?php elseif (in_array($userRole, [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN], true)): ?>
-                <?php include __DIR__ . '/../partials/nav_admin.php'; ?>
-            <?php endif; ?>
-        </nav>
+        <!-- Phone only: dims the page behind the open drawer, click to close. -->
+        <div class="sidebar-overlay" data-sidebar-overlay></div>
 
-        <!-- User footer -->
-        <div class="sidebar-footer">
-            <div class="dropdown">
-                <div class="sidebar-user" data-dropdown tabindex="0" role="button" aria-label="User menu">
-                    <div class="user-avatar"><?= e($userInitials) ?></div>
-                    <div class="user-info">
-                        <div class="user-name truncate"><?= e($authUser['name'] ?? '') ?></div>
-                        <div class="user-role"><?= e(Auth::roleLabel($userRole)) ?></div>
+        <aside class="sidebar" id="sidebar" data-sidebar="sidebar">
+          <div class="sidebar-inner">
+
+            <!-- Header: shared logo row (partials/sidebar_logo_row.php) -->
+            <div class="sidebar-header">
+                <?php include __DIR__ . '/../partials/sidebar_logo_row.php'; ?>
+            </div>
+
+            <!-- Navigation — rendered per role.
+                 Professor (staff) uses the trimmed nav_staff.php.
+                 Proctor uses nav_proctor.php (exam-only sidebar).
+                 Admin / SSO / Dean share the management nav, which itself
+                 filters individual items per role. All three build their list
+                 and hand it to partials/sidebar_nav_items.php. -->
+            <nav class="sidebar-nav" aria-label="Main navigation">
+                <?php if ($userRole === ROLE_STAFF): ?>
+                    <?php include __DIR__ . '/../partials/nav_staff.php'; ?>
+                <?php elseif ($userRole === ROLE_PROCTOR): ?>
+                    <?php include __DIR__ . '/../partials/nav_proctor.php'; ?>
+                <?php elseif (in_array($userRole, [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN], true)): ?>
+                    <?php include __DIR__ . '/../partials/nav_admin.php'; ?>
+                <?php endif; ?>
+            </nav>
+
+            <!-- User footer: the account row is the menu trigger. Collapsed, only
+                 the avatar shows. The menu opens upward and hugs the row's left
+                 edge (Lakbay: side="top" align="start"). -->
+            <div class="sidebar-footer">
+                <div class="dropdown">
+                    <div class="sidebar-user" data-dropdown tabindex="0" role="button"
+                         aria-label="User menu" aria-haspopup="true"
+                         data-tooltip="<?= e($authUser['name'] ?? 'Account') ?>">
+                        <div class="user-avatar"><?= e($userInitials) ?></div>
+                        <div class="user-info">
+                            <div class="user-name truncate"><?= e($authUser['name'] ?? '') ?></div>
+                            <div class="user-role"><?= e(Auth::roleLabel($userRole)) ?></div>
+                        </div>
+                        <?= icon('caret-up-down', 16, 'flex-shrink:0;color:var(--text-tertiary)', 'class="sidebar-user-caret"') ?>
                     </div>
-                    <?= icon('ic_fluent_more_horizontal_24_filled', 20, 'flex-shrink:0;color:var(--text-tertiary)') ?>
-                </div>
-                <div class="dropdown-menu">
-                    <?php
-                        // Only ROLE_ADMIN may visit /admin/settings (school
-                        // branding + admin password). Everyone else (Staff /
-                        // SSO / Dean) lands on /staff/settings, which is now
-                        // a personal-only page (theme, password, help).
-                        $settingsHref = ($userRole === ROLE_ADMIN)
-                            ? '/admin/settings'
-                            : '/staff/settings';
-                    ?>
-                    <a href="<?= url($settingsHref) ?>" class="dropdown-item">
-                        <?= icon('gear', 15) ?>
-                        Settings
-                    </a>
-                    <div class="dropdown-item theme-toggle-row" onclick="
-                        const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-                        document.documentElement.dataset.theme = t;
-                        localStorage.setItem('plp_theme', t);
-                        document.querySelector('.theme-pill').dataset.theme = t;" style="cursor:pointer;justify-content:space-between;">
-                        <span style="display:flex;align-items:center;gap:var(--space-2)">
-                            <?= icon('ic_fluent_weather_moon_24_regular', 15) ?>
-                            Dark Mode
-                        </span>
-                        <div class="theme-pill" data-theme="light" style="
-                            position:relative;width:32px;height:18px;border-radius:999px;
-                            background:var(--border);transition:background .2s;flex-shrink:0;pointer-events:none;">
-                            <div style="
-                                position:absolute;top:3px;left:3px;width:12px;height:12px;
-                                border-radius:50%;background:#fff;
-                                transition:transform .2s;
-                                transform:translateX(0);">
+                    <div class="dropdown-menu">
+                        <?php
+                            // Only ROLE_ADMIN may visit /admin/settings (school
+                            // branding + admin password). Everyone else (Staff /
+                            // SSO / Dean) lands on /staff/settings, which is now
+                            // a personal-only page (theme, password, help).
+                            $settingsHref = ($userRole === ROLE_ADMIN)
+                                ? '/admin/settings'
+                                : '/staff/settings';
+                        ?>
+                        <a href="<?= url($settingsHref) ?>" class="dropdown-item">
+                            <?= icon('gear', 15) ?>
+                            Settings
+                        </a>
+                        <div class="dropdown-item theme-toggle-row" onclick="
+                            const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+                            document.documentElement.dataset.theme = t;
+                            localStorage.setItem('plp_theme', t);
+                            document.querySelector('.theme-pill').dataset.theme = t;" style="cursor:pointer;justify-content:space-between;">
+                            <span style="display:flex;align-items:center;gap:var(--space-2)">
+                                <?= icon('ic_fluent_weather_moon_24_regular', 15) ?>
+                                Dark Mode
+                            </span>
+                            <div class="theme-pill" data-theme="light" style="
+                                position:relative;width:32px;height:18px;border-radius:999px;
+                                background:var(--border);transition:background .2s;flex-shrink:0;pointer-events:none;">
+                                <div style="
+                                    position:absolute;top:3px;left:3px;width:12px;height:12px;
+                                    border-radius:50%;background:#fff;
+                                    transition:transform .2s;
+                                    transform:translateX(0);">
+                                </div>
                             </div>
                         </div>
+                        <style>
+                            .theme-pill[data-theme='dark'] { background: var(--accent) !important; }
+                            .theme-pill[data-theme='dark'] div { transform: translateX(14px) !important; }
+                        </style>
+                        <div class="dropdown-separator"></div>
+                        <a href="<?= url('/logout') ?>" class="dropdown-item danger">
+                            <?= icon('sign-out', 15) ?>
+                            Log out
+                        </a>
                     </div>
-                    <style>
-                        .theme-pill[data-theme='dark'] { background: var(--accent) !important; }
-                        .theme-pill[data-theme='dark'] div { transform: translateX(14px) !important; }
-                    </style>
-                    <div class="dropdown-separator"></div>
-                    <a href="<?= url('/logout') ?>" class="dropdown-item danger">
-                        <?= icon('sign-out', 15) ?>
-                        Log out
-                    </a>
                 </div>
             </div>
-        </div>
 
-    </aside>
+          </div><!-- /.sidebar-inner -->
+        </aside>
+    </div><!-- /.sidebar-wrapper -->
 
 <?php endif; ?>
 
@@ -292,6 +323,23 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
          MAIN
     ==================================================== -->
     <div class="main">
+
+        <?php if (!$isStudent): ?>
+        <!-- Phone-only top bar (hidden >768px by CSS). Below that the sidebar is a
+             drawer, so this button is the only way to open it. It carries a dot
+             when any nav row has one, because the row dots are inside the closed
+             drawer (Lakbay: pendingTotal on SidebarTrigger). -->
+        <header class="mobile-bar">
+            <div class="mobile-bar-trigger">
+                <button type="button" class="sidebar-icon-btn" data-sidebar-toggle aria-label="Toggle sidebar">
+                    <?= icon('sidebar-simple', 16) ?>
+                </button>
+                <?php if (!empty($sidebarHasDot)): ?>
+                    <output class="mobile-bar-dot" aria-label="Items need attention"></output>
+                <?php endif; ?>
+            </div>
+        </header>
+        <?php endif; ?>
 
         <!-- Flash messages -->
         <?php if (Session::hasFlash('success') || Session::hasFlash('error') || Session::hasFlash('info')): ?>
@@ -333,13 +381,6 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     // Inject accent from DB
     setAccentColor('<?= e($accentColor) ?>');
 
-    // Show hamburger on mobile (staff/admin only)
-    <?php if (!$isStudent): ?>
-    if (window.innerWidth <= 768) {
-        const toggle = document.getElementById('sidebar-toggle');
-        if (toggle) toggle.style.display = 'flex';
-    }
-    <?php endif; ?>
 </script>
 
 <?php if (Auth::check()): ?>

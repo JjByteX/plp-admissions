@@ -64,41 +64,143 @@ const Dropdown = (() => {
 })();
 
 // ============================================================
-// Mobile sidebar
+// Sidebar — collapse / expand
+//
+// Ported from lakbay-pasig's SidebarProvider + useSidebar
+// (src/components/ui/sidebar.tsx). Same state model, same rules:
+//
+//   open        desktop rail: expanded (true) or icon-only (false).
+//               Persisted in the `sidebar_state` cookie for 7 days. The
+//               cookie, not localStorage, because layouts/app.php reads it
+//               server-side to render the right state on first paint (no
+//               expanded -> collapsed flash). Lakbay's cookie is named
+//               "sidebar:state"; PHP-safe name here.
+//   openMobile  phone drawer. Never persisted (Lakbay: same).
+//   toggle()    isMobile ? flip openMobile : flip open.
+//   Ctrl/Cmd+B  toggles from anywhere on the page.
+//
+// What React did with state, this does with attributes on #sidebar-wrapper,
+// which the CSS (app.css, "SIDEBAR" section) keys off:
+//   data-state="expanded|collapsed"   data-collapsible="icon" when collapsed
+//   data-mobile-open="true|false"
+//
+// Markup hooks:
+//   [data-sidebar-toggle]   any button that toggles (header collapse button,
+//                           collapsed logo button, phone menu button)
+//   [data-sidebar-overlay]  dim layer behind the phone drawer, click closes
+//   [data-tooltip]          label shown beside a row while the rail is collapsed
+//
+// Breakpoint: <=768px is "mobile". Keep MOBILE_QUERY equal to the
+// max-width media queries in app.css.
 // ============================================================
 const Sidebar = (() => {
-    let overlay = null;
+    const COOKIE_NAME    = 'sidebar_state';
+    const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days, same as Lakbay
+    const SHORTCUT_KEY   = 'b';
+    const MOBILE_QUERY   = '(max-width: 768px)';
+    const TOOLTIP_OFFSET = 4;                 // px between row and tooltip (Radix default)
+
+    let wrapper    = null;
+    let tooltip    = null;
+    let mql        = null;
+    let open       = true;
+    let openMobile = false;
+
+    const isMobile = () => (mql ? mql.matches : window.innerWidth <= 768);
+
+    function setOpen(value) {
+        open = !!value;
+        wrapper.dataset.state       = open ? 'expanded' : 'collapsed';
+        wrapper.dataset.collapsible = open ? '' : 'icon';
+        document.cookie = `${COOKIE_NAME}=${open}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
+        hideTooltip();
+    }
+
+    function setOpenMobile(value) {
+        openMobile = !!value;
+        wrapper.dataset.mobileOpen = String(openMobile);
+        document.body.classList.toggle('sidebar-drawer-open', openMobile);
+        hideTooltip();
+    }
+
+    function toggle() {
+        return isMobile() ? setOpenMobile(!openMobile) : setOpen(!open);
+    }
+
+    // ── Tooltip ─────────────────────────────────────────────
+    // Only while the rail is collapsed on desktop (Lakbay: TooltipContent
+    // hidden={state !== "collapsed" || isMobile}). One element on <body>
+    // rather than a ::after, because the collapsed rail clips its overflow.
+    function showTooltip(target) {
+        if (isMobile() || open) return;
+        const label = target.dataset.tooltip;
+        if (!label) return;
+
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.className = 'sidebar-tooltip';
+            tooltip.setAttribute('role', 'tooltip');
+            document.body.appendChild(tooltip);
+        }
+        tooltip.textContent = label;
+        tooltip.classList.add('is-visible'); // visible first, so it can be measured
+
+        const r = target.getBoundingClientRect();
+        const t = tooltip.getBoundingClientRect();
+        tooltip.style.left = `${r.right + TOOLTIP_OFFSET}px`;
+        tooltip.style.top  = `${r.top + (r.height - t.height) / 2}px`;
+    }
+
+    function hideTooltip() {
+        if (tooltip) tooltip.classList.remove('is-visible');
+    }
 
     function init() {
-        const toggle = document.getElementById('sidebar-toggle');
-        if (!toggle) return;
+        wrapper = document.getElementById('sidebar-wrapper');
+        if (!wrapper) return; // student layout / auth pages have no sidebar
 
-        toggle.addEventListener('click', open);
+        mql  = window.matchMedia(MOBILE_QUERY);
+        open = wrapper.dataset.state !== 'collapsed'; // server-rendered from the cookie
+
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('[data-sidebar-toggle]'))  { toggle(); return; }
+            if (e.target.closest('[data-sidebar-overlay]')) { setOpenMobile(false); }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === SHORTCUT_KEY && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                toggle();
+            } else if (e.key === 'Escape' && openMobile) {
+                setOpenMobile(false);
+            }
+        });
+
+        // Tooltips: delegated, so rows need no per-element wiring.
+        wrapper.addEventListener('mouseover', (e) => {
+            const t = e.target.closest('[data-tooltip]');
+            if (t) showTooltip(t);
+        });
+        wrapper.addEventListener('mouseout', (e) => {
+            const t = e.target.closest('[data-tooltip]');
+            if (t && !t.contains(e.relatedTarget)) hideTooltip();
+        });
+        wrapper.addEventListener('focusin', (e) => {
+            const t = e.target.closest('[data-tooltip]');
+            if (t) showTooltip(t);
+        });
+        wrapper.addEventListener('focusout', hideTooltip);
+        wrapper.addEventListener('click', hideTooltip); // e.g. opening the account menu
+
+        // Resized from a phone width up to desktop with the drawer open:
+        // close it, the desktop rail takes over.
+        mql.addEventListener('change', () => {
+            if (!mql.matches && openMobile) setOpenMobile(false);
+            hideTooltip();
+        });
     }
 
-    function open() {
-        const sidebar = document.querySelector('.sidebar');
-        if (!sidebar) return;
-        sidebar.classList.add('open');
-
-        overlay = document.createElement('div');
-        overlay.style.cssText = `
-            position: fixed; inset: 0;
-            background: rgba(0,0,0,0.3);
-            z-index: 49;
-            backdrop-filter: blur(2px);
-        `;
-        overlay.addEventListener('click', close);
-        document.body.appendChild(overlay);
-    }
-
-    function close() {
-        document.querySelector('.sidebar')?.classList.remove('open');
-        overlay?.remove();
-        overlay = null;
-    }
-
-    return { init };
+    return { init, toggle, setOpen, setOpenMobile };
 })();
 
 // ============================================================
