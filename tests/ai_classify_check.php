@@ -60,14 +60,15 @@ $id = $num('valid_id');
 $idf = ['name' => 'Juan Dela Cruz', 'id_type' => "Driver's License", 'id_number' => 'N01-23-456789'];
 check(ai_decide($ok($idf, $id), 95, $cat, $me, $t80)['status'] === 'passed', 'good id');
 check(ai_decide($ok(array_merge($idf, ['id_type' => 'Library card']), $id), 95, $cat, $me, $t80)['status'] === 'uncertain', 'id type not accepted');
-check(ai_decide($ok($idf, $id), 95, $cat, $me, $t80 + ['other_id_numbers' => ['n01-23-456789']])['status'] === 'uncertain', 'same id number on both ids');
 
-// back of an ID: asks for the front instead of "name not found"
+// the ID is one file with the front and the back
 $back = ai_decide($ok(['name' => '', 'id_type' => 'Philippine National ID', 'id_side' => 'back'], $id), 95, $cat, $me, $t80);
-check($back['status'] === 'uncertain' && str_contains($back['reason'], 'back of an ID'), 'back of an ID gets its own message');
-check(ai_decide($ok(array_merge($idf, ['id_side' => 'front']), $id), 95, $cat, $me, $t80)['status'] === 'passed', 'front of an ID still passes');
+check($back['status'] === 'uncertain' && str_contains($back['reason'], 'only the back'), 'back of an ID gets its own message');
+check(ai_decide($ok(array_merge($idf, ['id_side' => 'both']), $id), 95, $cat, $me, $t80)['status'] === 'passed', 'front and back in one image passes');
+check(ai_decide($ok($idf, $id), 95, $cat, $me, $t80)['status'] === 'passed', 'an unflagged side still passes');
+check(ai_decide($ok(array_merge($idf, ['id_side' => 'front']), $id), 95, $cat, $me, $t80)['status'] === 'uncertain', 'front only is flagged: the back is missing');
 check(ai_decide($ok(array_merge($idf, ['id_side' => 'back']), $id), 95, $cat, $me, $t80)['status'] === 'passed', 'a read name wins over a wrong back flag');
-check(str_contains(ai_decide($ok(['name' => '', 'id_type' => 'Driver\'s License'], $id), 95, $cat, $me, $t80)['reason'], 'upload the front'), 'blank name on an ID asks for the front even without a back flag');
+check(str_contains(ai_decide($ok(['name' => '', 'id_type' => 'Driver\'s License'], $id), 95, $cat, $me, $t80)['reason'], 'front (your photo and name) and the back'), 'blank name on an ID asks for front and back even without a back flag');
 
 // the one Form 138 / 137 category passes at normal confidence
 $frm = $num('form_137');

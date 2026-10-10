@@ -105,8 +105,7 @@ define('TYPE_FOREIGN',    'foreign');
 define('DOCS_CORE', [
     'psa_birth_cert'         => 'PSA Birth Certificate (second page or notation, if needed)',
     'marriage_cert'          => 'Marriage Certificate (if married)',
-    'valid_id_1'             => 'Valid Government-issued ID (1 of 2)',
-    'valid_id_2'             => 'Valid Government-issued ID (2 of 2)',
+    'valid_id_1'             => 'Valid Government-issued ID (front and back)',
     'barangay_cert'          => 'Barangay Certificate of Residence',
     'guardianship_affidavit' => 'Affidavit of Guardianship or Support (if not living with parents)',
     'photo_1'                => 'Passport-size Photo, white background with nameplate',

@@ -252,15 +252,29 @@ function docs_for_type(string $applicantType, array|string|null $flags = null): 
 }
 
 // Normalise ticked boxes from a form (e.g. $_POST['flags']) for an applicant type.
-// Grade 12 / SHS graduate only apply to freshmen.
+// Grade 12 / SHS graduate only apply to freshmen. The forms send them as one radio
+// (flags[stage] = grade12 | shs_grad), so exactly one can be on. Input without a
+// stage key (stored flags, old forms) keeps its two booleans as they are.
 function doc_flags_from_input(string $applicantType, mixed $input): array
 {
-    $flags = doc_flags_decode(is_array($input) ? $input : []);
+    $in    = is_array($input) ? $input : [];
+    $flags = doc_flags_decode($in);
     if ($applicantType !== TYPE_FRESHMAN) {
         $flags['grade12']  = false;
         $flags['shs_grad'] = false;
+    } elseif (isset($in['stage'])) {
+        $flags['grade12']  = $in['stage'] === 'grade12';
+        $flags['shs_grad'] = $in['stage'] === 'shs_grad';
     }
     return $flags;
+}
+
+// A freshman's school stage: 'grade12', 'shs_grad', or '' when neither is chosen.
+// A freshman must have one before submitting (they decide Form 138 or Form 137).
+function doc_stage_of(array|string|null $flags): string
+{
+    $on = doc_flags_decode($flags);
+    return $on['grade12'] ? 'grade12' : ($on['shs_grad'] ? 'shs_grad' : '');
 }
 
 // Make the documents rows match the slots that apply: add missing pending
@@ -331,8 +345,9 @@ function doc_flags_blocked_slots(PDO $db, int $applicantId, array $newFlags): ar
 }
 
 // -- Upload categories (Phase 4) --------------------------------
-// A category is a kind of document. Two-slot categories (valid_id_1/_2,
-// photo_1/_2) share one category: valid_id, photo.
+// A category is a kind of document. A slot name ending in _1 or _2 shares a
+// category with its siblings (valid_id_1 and photo_1 are the categories
+// valid_id and photo). The ID is one slot: one file showing front and back.
 function doc_category_of(string $slot): string
 {
     return preg_replace('/_[12]$/', '', $slot);
@@ -358,7 +373,7 @@ function doc_categories(array $required): array
 // Returns ['slot' => string|null, 'reason' => string|null, 'replaced' => bool].
 // Rules: an empty slot first, then a declined one. A one-slot category lets a
 // later file replace the earlier one (replaced = true). A two-slot category
-// (IDs, photos) never replaces: a third file is blocked. Approved slots and a
+// never replaces: a third file is blocked. Approved slots and a
 // submitted application never take a file, except declined slots.
 function doc_pick_slot(array $slots, array $rows, bool $isSubmitted): array
 {
@@ -424,8 +439,6 @@ function doc_pick_slots(array $slots, array $rows, bool $isSubmitted, int $want 
 // Run the Phase 3 classifier (core/ai_classify.php) on one file.
 // Never throws. Returns status (passed|uncertain|failed), guess, confidence,
 // reason, fields and slots (the document slots the guess can fill).
-// ID numbers already saved for this applicant's IDs are passed along so the
-// classifier can flag the same ID uploaded twice.
 function classify_upload(string $path, string $mime, array $applicant): array
 {
     $none = ['status' => 'uncertain', 'guess' => null, 'confidence' => null,
@@ -434,19 +447,7 @@ function classify_upload(string $path, string $mime, array $applicant): array
     if (is_file($lib)) require_once $lib;
     if (!function_exists('ai_classify_image')) return $none;
     try {
-        $others = [];
-        $stmt = db()->prepare(
-            "SELECT v.details FROM document_validations v
-               JOIN documents d ON d.id = v.document_id
-              WHERE d.applicant_id = ? AND d.doc_type IN ('valid_id_1','valid_id_2')
-                AND v.validation_type = 'ai'"
-        );
-        $stmt->execute([(int)($applicant['id'] ?? 0)]);
-        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $details) {
-            $n = json_decode((string)$details, true)['fields']['id_number'] ?? '';
-            if ($n !== '') $others[] = (string)$n;
-        }
-        $r = ai_classify_image($path, $mime, $applicant, ['other_id_numbers' => $others]);
+        $r = ai_classify_image($path, $mime, $applicant);
     } catch (Throwable $e) {
         error_log('AI classify failed: ' . $e->getMessage());
         return $none;

@@ -28,6 +28,10 @@ $requiredDocs = docs_for_type($applicant['applicant_type'], $applicant['doc_flag
 // Applicant can change the conditional ticks until they submit.
 $canEditFlags = in_array($applicant['overall_status'] ?? '', ['pending', 'documents'], true);
 
+// A freshman must choose Grade 12 or SHS graduate (it decides Form 138 or Form 137) before submitting.
+$stageMissing = $applicant['applicant_type'] === TYPE_FRESHMAN
+    && doc_stage_of($applicant['doc_flags'] ?? null) === '';
+
 // Self-heal: if every required doc is approved but overall_status didn't
 // auto-advance (rejected-then-replaced-then-approved edge case), fix it
 // now so the stepper / exam page unblock immediately.
@@ -102,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $s = $docRows[$slug]['status'] ?? 'pending';
                 if (in_array($s, ['uploaded', 'approved'], true)) $uploadedCount++;
             }
-            $readyToSubmit = $uploadedCount === count($requiredDocs);
+            $readyToSubmit = $uploadedCount === count($requiredDocs) && !$stageMissing;
 
             if ($readyToSubmit && !$isSubmitted) {
                 $db->prepare('UPDATE applicants SET overall_status = \'submitted\' WHERE id = ?')
@@ -110,6 +114,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $isSubmitted = true;
             } elseif ($isSubmitted) {
                 $errors[] = 'Application is already submitted.';
+            } elseif ($stageMissing) {
+                $errors[] = 'Choose whether you are currently in Grade 12 or a Senior High School graduate before submitting.';
             } else {
                 $errors[] = 'All documents must be uploaded before submitting.';
             }
@@ -482,7 +488,7 @@ $uploadedOrApproved = ($statusCounts['uploaded'] ?? 0) + ($statusCounts['approve
 $allUploaded  = count($reqRows) === count($requiredDocs) && $uploadedOrApproved === count($requiredDocs);
 $pastDocuments = in_array($applicant['overall_status'] ?? '', ['exam', 'interview', 'released'], true);
 $hasRejected   = ($statusCounts['rejected'] ?? 0) > 0;
-$canSubmit     = $allUploaded && !$isSubmitted && !$pastDocuments;
+$canSubmit     = $allUploaded && !$stageMissing && !$isSubmitted && !$pastDocuments;
 $canWithdraw   = $isSubmitted && !$allApproved && !$pastDocuments && !$hasRejected;
 
 // Stepper current step
@@ -770,7 +776,24 @@ ob_start();
     <form id="flags-form">
         <?= csrf_field() ?>
         <input type="hidden" name="action" value="update_flags">
-        <?php $_ticks = doc_flags_decode($applicant['doc_flags'] ?? null); ?>
+        <?php $_ticks = doc_flags_decode($applicant['doc_flags'] ?? null); $_stage = doc_stage_of($_ticks); ?>
+        <?php if ($applicant['applicant_type'] === 'freshman'): ?>
+        <!-- Freshmen pick exactly one (required); it decides Form 138 or Form 137 -->
+        <div role="radiogroup" aria-required="true" style="margin-bottom:var(--space-3)">
+            <div style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--text-secondary);margin-bottom:var(--space-2)">Select one <span style="color:var(--error)">*</span></div>
+            <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+                <label class="form-check">
+                    <input type="radio" name="flags[stage]" value="grade12" <?= $_stage === 'grade12' ? 'checked' : '' ?>>
+                    <span>I am currently in Grade 12</span>
+                </label>
+                <label class="form-check">
+                    <input type="radio" name="flags[stage]" value="shs_grad" <?= $_stage === 'shs_grad' ? 'checked' : '' ?>>
+                    <span>I am a Senior High School graduate</span>
+                </label>
+            </div>
+        </div>
+        <div style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--text-secondary);margin-bottom:var(--space-2)">Also tick if they apply</div>
+        <?php endif; ?>
         <div style="display:flex;flex-direction:column;gap:var(--space-2)">
             <label class="form-check">
                 <input type="checkbox" name="flags[married]" value="1" <?= $_ticks['married'] ? 'checked' : '' ?>>
@@ -780,16 +803,6 @@ ob_start();
                 <input type="checkbox" name="flags[guardian]" value="1" <?= $_ticks['guardian'] ? 'checked' : '' ?>>
                 <span>I am not living with my parents</span>
             </label>
-            <?php if ($applicant['applicant_type'] === 'freshman'): ?>
-            <label class="form-check">
-                <input type="checkbox" name="flags[grade12]" value="1" <?= $_ticks['grade12'] ? 'checked' : '' ?>>
-                <span>I am currently in Grade 12</span>
-            </label>
-            <label class="form-check">
-                <input type="checkbox" name="flags[shs_grad]" value="1" <?= $_ticks['shs_grad'] ? 'checked' : '' ?>>
-                <span>I am a Senior High School graduate</span>
-            </label>
-            <?php endif; ?>
         </div>
     </form>
     <div id="flags-msg" style="font-size:var(--text-xs);margin-top:var(--space-2);display:none"></div>
@@ -1385,10 +1398,12 @@ function updateDropLabel(name) {
         <button class="btn btn-ghost btn-sm" type="button" onclick="withdrawSubmission()">Withdraw Submission</button>
     </div>
 </div>
-<?php elseif (!$allUploaded && !$isSubmitted): ?>
+<?php elseif ((!$allUploaded || ($stageMissing && !$pastDocuments)) && !$isSubmitted): ?>
 <div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4);opacity:.6">
     <div style="flex:1">
-        <div style="font-size:var(--text-sm);color:var(--text-secondary)">Upload all required documents to enable submission.</div>
+        <div style="font-size:var(--text-sm);color:var(--text-secondary)"><?= $stageMissing && !$pastDocuments
+            ? 'Choose "currently in Grade 12" or "Senior High School graduate" above to enable submission.'
+            : 'Upload all required documents to enable submission.' ?></div>
     </div>
     <button class="btn btn-primary" disabled style="cursor:not-allowed">Submit Application</button>
 </div>
@@ -1418,7 +1433,18 @@ document.addEventListener('DOMContentLoaded', function () {
         $('#flags-msg').text(msg).css('color', ok ? 'var(--success)' : 'var(--error)').show();
     }
 
-    $('#flags-form').on('change', 'input[type=checkbox]', function () {
+    // The Grade 12 / SHS graduate radio: remember the saved choice so a failed save can put it back.
+    var $stage    = $('#flags-form input[name="flags[stage]"]');
+    var savedStage = $stage.filter(':checked').val() || '';
+    function putBack($el) {
+        if ($el.is(':radio')) {
+            $stage.each(function () { this.checked = (this.value === savedStage); });
+        } else {
+            $el.prop('checked', !$el.prop('checked'));
+        }
+    }
+
+    $('#flags-form').on('change', 'input[type=checkbox], input[type=radio]', function () {
         var $box = $(this);
         $.ajax({
             url: $('#flags-form').attr('action') || window.location.href,
@@ -1427,14 +1453,15 @@ document.addEventListener('DOMContentLoaded', function () {
             dataType: 'json'
         }).done(function (res) {
             if (res.ok) {
+                if ($box.is(':radio')) savedStage = $box.val();
                 say(true, res.message);
                 window.refreshSlotList();
             } else {
-                $box.prop('checked', !$box.prop('checked')); // put it back
+                putBack($box); // put it back
                 say(false, res.message);
             }
         }).fail(function () {
-            $box.prop('checked', !$box.prop('checked'));
+            putBack($box);
             say(false, 'Could not save. Please try again.');
         });
     });

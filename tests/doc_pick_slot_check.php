@@ -24,21 +24,22 @@ check(doc_category_of('tor') === 'tor', 'tor is its own category');
 
 // Grouping
 $cats = doc_categories(docs_for_type(TYPE_FRESHMAN, ['grade12' => true]));
-check($cats['valid_id']['slots'] === ['valid_id_1', 'valid_id_2'], 'valid_id has two slots');
+check($cats['valid_id']['slots'] === ['valid_id_1'], 'valid_id has one slot (front and back in one file)');
 check($cats['photo']['slots'] === ['photo_1'], 'photo has one slot');
 check($cats['psa_birth_cert']['slots'] === ['psa_birth_cert'], 'psa has one slot');
-check(!str_contains($cats['valid_id']['label'], '(1 of 2)'), 'category label drops the (1 of 2)');
+check($cats['valid_id']['label'] === 'Valid Government-issued ID (front and back)', 'category label keeps (front and back)');
 check(isset($cats['form_138']) && !isset($cats['form_137']), 'only ticked conditional categories');
 
-$id = ['valid_id_1', 'valid_id_2'];
+// Generic two-slot rules (no document uses two slots now, the rules still hold)
+$id = ['doc_1', 'doc_2'];
 
 // First empty slot wins; a missing row counts as pending
-check(doc_pick_slot($id, [], false)['slot'] === 'valid_id_1', 'empty goes to slot 1');
-check(doc_pick_slot($id, rows(['valid_id_1' => 'uploaded', 'valid_id_2' => 'pending']), false)['slot'] === 'valid_id_2', 'second ID goes to slot 2');
+check(doc_pick_slot($id, [], false)['slot'] === 'doc_1', 'empty goes to slot 1');
+check(doc_pick_slot($id, rows(['doc_1' => 'uploaded', 'doc_2' => 'pending']), false)['slot'] === 'doc_2', 'second file goes to slot 2');
 
-// Both filled: a third ID is blocked (two-slot categories never replace)
-$full = doc_pick_slot($id, rows(['valid_id_1' => 'uploaded', 'valid_id_2' => 'uploaded']), false);
-check($full['slot'] === null && str_contains($full['reason'], 'Both'), 'third ID is blocked');
+// Both filled: a third file is blocked (two-slot categories never replace)
+$full = doc_pick_slot($id, rows(['doc_1' => 'uploaded', 'doc_2' => 'uploaded']), false);
+check($full['slot'] === null && str_contains($full['reason'], 'Both'), 'third file is blocked');
 $ph = doc_pick_slot(['photo_1'], rows(['photo_1' => 'uploaded']), false);
 check($ph['slot'] === 'photo_1' && $ph['replaced'], 'a new photo replaces the earlier one');
 
@@ -55,7 +56,7 @@ $sub = doc_pick_slot(['tor'], rows(['tor' => 'pending']), true);
 check($sub['slot'] === null && str_contains($sub['reason'], 'submitted'), 'submitted is blocked');
 
 // Pending is preferred over declined
-check(doc_pick_slot($id, rows(['valid_id_1' => 'rejected', 'valid_id_2' => 'pending']), false)['slot'] === 'valid_id_2', 'pending before declined');
+check(doc_pick_slot($id, rows(['doc_1' => 'rejected', 'doc_2' => 'pending']), false)['slot'] === 'doc_2', 'pending before declined');
 
 // 4B: one-slot category, a later file replaces the earlier one
 $rep = doc_pick_slot(['tor'], rows(['tor' => 'uploaded']), false);
@@ -64,9 +65,13 @@ check(doc_pick_slot(['tor'], rows(['tor' => 'pending']), false)['replaced'] === 
 check(doc_pick_slot(['tor'], rows(['tor' => 'uploaded']), true)['slot'] === null, 'no replace after submit');
 check(doc_pick_slot(['tor'], rows(['tor' => 'under_review']), false)['slot'] === null, 'no replace while under review');
 
-// 4B: IDs fill slot 1 then slot 2 as separate files
-check(doc_pick_slots($id, [], false)['slots'] === ['valid_id_1'], 'first ID');
-check(doc_pick_slots($id, rows(['valid_id_1' => 'uploaded']), false)['slots'] === ['valid_id_2'], 'second ID');
+// 4B: two-slot rules fill slot 1 then slot 2 as separate files
+check(doc_pick_slots($id, [], false)['slots'] === ['doc_1'], 'first file');
+check(doc_pick_slots($id, rows(['doc_1' => 'uploaded']), false)['slots'] === ['doc_2'], 'second file');
+
+// The ID is one slot: a new file replaces the earlier one
+$idr = doc_pick_slots(['valid_id_1'], rows(['valid_id_1' => 'uploaded']), false);
+check($idr['slots'] === ['valid_id_1'] && $idr['replaced'] === true, 'a new ID file replaces the earlier one');
 
 // 4B: one image with two photos fills both slots
 $two = doc_pick_slots(['photo_1', 'photo_2'], [], false, 2);
@@ -81,9 +86,9 @@ check(count(doc_pick_slots(['tor'], rows(['tor' => 'uploaded']), false, 2)['slot
 $req = docs_for_type(TYPE_FRESHMAN);
 check(doc_resolve_pick('psa_birth_cert', $req, [], false)['slot'] === 'psa_birth_cert', 'pick by slot');
 check(doc_resolve_pick('valid_id', $req, [], false)['slot'] === 'valid_id_1', 'pick category, first empty slot');
-check(doc_resolve_pick('valid_id', $req, rows(['valid_id_1' => 'uploaded']), false)['slot'] === 'valid_id_2', 'pick category, second slot');
-$third = doc_resolve_pick('valid_id', $req, rows(['valid_id_1' => 'uploaded', 'valid_id_2' => 'uploaded']), false);
-check($third['slot'] === null && $third['reason'] !== null, 'pick category, third blocked');
+check(doc_resolve_pick('valid_id', $req, rows(['valid_id_1' => 'uploaded']), false)['slot'] === 'valid_id_1', 'pick category, replaces the earlier ID');
+$done = doc_resolve_pick('valid_id', $req, rows(['valid_id_1' => 'approved']), false);
+check($done['slot'] === null && $done['reason'] !== null, 'pick category, approved ID is blocked');
 check(doc_resolve_pick('tor', $req, [], false)['slot'] === null, 'pick a slot that does not apply');
 check(doc_resolve_pick('nonsense', $req, [], false)['reason'] === 'Invalid document type.', 'pick unknown');
 

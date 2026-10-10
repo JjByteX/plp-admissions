@@ -145,6 +145,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // A freshman must say if they are in Grade 12 or a graduate: it decides Form 138 or Form 137.
+    if ($old['applicant_type'] === TYPE_FRESHMAN && doc_stage_of($old['doc_flags']) === '') {
+        $errors['stage'] = 'Select whether you are currently in Grade 12 or a Senior High School graduate.';
+    }
+
     // Email uniqueness
     if (empty($errors['email'])) {
         $check = db()->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
@@ -411,22 +416,33 @@ ob_start();
             <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin:0 0 var(--space-3)">
                 This decides which documents you need to upload. You can change it later on the documents page until you submit.
             </p>
+            <?php $_stage = doc_stage_of($old['doc_flags'] ?? []); ?>
+            <!-- Freshmen pick exactly one (required); it decides Form 138 or Form 137 -->
+            <div data-types="freshman" role="radiogroup" aria-required="true" style="margin-bottom:var(--space-3)">
+                <div style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--text-secondary);margin-bottom:var(--space-2)">Select one <span style="color:var(--error)">*</span></div>
+                <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+                    <label class="form-check">
+                        <input type="radio" name="flags[stage]" value="grade12" <?= $_stage === 'grade12' ? 'checked' : '' ?>>
+                        <span>I am currently in Grade 12</span>
+                    </label>
+                    <label class="form-check">
+                        <input type="radio" name="flags[stage]" value="shs_grad" <?= $_stage === 'shs_grad' ? 'checked' : '' ?>>
+                        <span>I am a Senior High School graduate</span>
+                    </label>
+                </div>
+                <?php if (!empty($errors['stage'])): ?>
+                    <span class="form-error"><?= e($errors['stage']) ?></span>
+                <?php endif; ?>
+            </div>
+            <div style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--text-secondary);margin-bottom:var(--space-2)">Also tick if they apply</div>
             <div style="display:flex;flex-direction:column;gap:var(--space-2)">
-                <label class="form-check" data-types="freshman transferee foreign">
+                <label class="form-check">
                     <input type="checkbox" name="flags[married]" value="1" <?= !empty($old['doc_flags']['married']) ? 'checked' : '' ?>>
                     <span>I am married</span>
                 </label>
-                <label class="form-check" data-types="freshman transferee foreign">
+                <label class="form-check">
                     <input type="checkbox" name="flags[guardian]" value="1" <?= !empty($old['doc_flags']['guardian']) ? 'checked' : '' ?>>
                     <span>I am not living with my parents</span>
-                </label>
-                <label class="form-check" data-types="freshman">
-                    <input type="checkbox" name="flags[grade12]" value="1" <?= !empty($old['doc_flags']['grade12']) ? 'checked' : '' ?>>
-                    <span>I am currently in Grade 12</span>
-                </label>
-                <label class="form-check" data-types="freshman">
-                    <input type="checkbox" name="flags[shs_grad]" value="1" <?= !empty($old['doc_flags']['shs_grad']) ? 'checked' : '' ?>>
-                    <span>I am a Senior High School graduate</span>
                 </label>
             </div>
         </div>

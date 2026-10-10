@@ -17,7 +17,7 @@ function slots(string $type, $flags = null): array
 }
 function expect(array $list): array { sort($list); return $list; }
 
-$base = ['psa_birth_cert','valid_id_1','valid_id_2','barangay_cert','photo_1'];
+$base = ['psa_birth_cert','valid_id_1','barangay_cert','photo_1'];
 
 // No flags: only always-required slots
 check(slots(TYPE_FRESHMAN)   === expect($base), 'freshman, no flags');
@@ -53,5 +53,20 @@ foreach ([TYPE_FRESHMAN, TYPE_TRANSFEREE, TYPE_FOREIGN] as $t) {
         check(!in_array($old, slots($t, ['married'=>true,'guardian'=>true,'grade12'=>true,'shs_grad'=>true]), true), "$t still has $old");
     }
 }
+
+// Grade 12 / SHS graduate is one radio (flags[stage]) for freshmen: exactly one, never both
+$g12 = doc_flags_from_input(TYPE_FRESHMAN, ['stage' => 'grade12']);
+check($g12['grade12'] === true && $g12['shs_grad'] === false, 'stage grade12');
+$shs = doc_flags_from_input(TYPE_FRESHMAN, ['stage' => 'shs_grad', 'married' => '1']);
+check($shs['shs_grad'] === true && $shs['grade12'] === false && $shs['married'] === true, 'stage shs_grad keeps the checkboxes');
+$bad = doc_flags_from_input(TYPE_FRESHMAN, ['stage' => 'nonsense']);
+check($bad['grade12'] === false && $bad['shs_grad'] === false, 'unknown stage is neither');
+$tr = doc_flags_from_input(TYPE_TRANSFEREE, ['stage' => 'grade12']);
+check($tr['grade12'] === false && $tr['shs_grad'] === false, 'transferee never has a stage');
+$keep = doc_flags_from_input(TYPE_FRESHMAN, ['grade12' => true, 'shs_grad' => false]);
+check($keep['grade12'] === true, 'input without a stage key keeps stored flags');
+check(doc_stage_of($g12) === 'grade12' && doc_stage_of($shs) === 'shs_grad', 'doc_stage_of reads the choice');
+check(doc_stage_of([]) === '' && doc_stage_of(null) === '' && doc_stage_of(['married' => true]) === '', 'no stage chosen is empty');
+check(doc_stage_of('{"shs_grad":true}') === 'shs_grad', 'doc_stage_of reads a json string');
 
 echo "docs_for_type: all checks passed\n";

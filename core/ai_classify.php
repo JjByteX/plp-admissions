@@ -18,7 +18,7 @@ function ai_category_map(): array
     return [
         'psa_birth_cert'         => ['PSA birth certificate',                                   ['psa_birth_cert'], 'Certificate of Live Birth, usually on PSA security paper'],
         'marriage_cert'          => ['Marriage certificate',                                    ['marriage_cert'], 'names a husband and a wife'],
-        'valid_id'               => ['Government-issued ID (school ID, National ID, PhilHealth, driver\'s license, voter\'s ID or certificate, UMID, PWD ID, PRC ID)', ['valid_id_1', 'valid_id_2'], 'a card with the holder\'s photo and name'],
+        'valid_id'               => ['Government-issued ID (school ID, National ID, PhilHealth, driver\'s license, voter\'s ID or certificate, UMID, PWD ID, PRC ID)', ['valid_id_1'], 'a card with the holder\'s photo and name, ideally the front and back shown in one image'],
         'barangay_cert'          => ['Barangay certificate of residence',                       ['barangay_cert'], 'also called certificate of residency, signed by the Punong Barangay'],
         'guardianship_affidavit' => ['Affidavit of guardianship or support',                    ['guardianship_affidavit'], 'a sworn statement, usually notarized'],
         'passport_photo'         => ['Passport-size photo (one or two photos on a white background)', ['photo_1'], 'a plain photo of a face, not a document'],
@@ -66,7 +66,7 @@ function ai_build_prompt(array $categories, array $applicant): string
     if ($has('valid_id')) {
         array_push($fields, '"id_type": ""', '"id_number": ""', '"id_side": ""');
         $notes[] = 'fields.id_number is the main ID or card number (for the Philippine National ID, the 16-digit PhilSys number).';
-        $notes[] = 'fields.id_side is "front" if the image shows the holder\'s photo or printed name, "back" if it shows only the back of a card (QR code, barcode, signature strip, other details), otherwise "".';
+        $notes[] = 'fields.id_side is "both" if the image shows the front and the back of the card, "front" if it shows only the holder\'s photo or printed name, "back" if it shows only the back of a card (QR code, barcode, signature strip, other details), otherwise "".';
     }
     if ($has('passport_photo')) {
         $fields[] = '"photos": 0';
@@ -163,18 +163,13 @@ function ai_id_type_accepted(string $type): bool
     return false;
 }
 
-function ai_id_number_key(string $n): string
-{
-    return strtolower(preg_replace('/[^a-z0-9]/i', '', $n));
-}
-
 function ai_result(string $status, ?string $guess, float $conf, string $reason, array $fields = [], array $slots = []): array
 {
     return ['status' => $status, 'guess' => $guess, 'confidence' => $conf, 'reason' => $reason, 'fields' => $fields, 'slots' => $slots];
 }
 
 // Turn a parsed reply into a result. Pure (no network), so it can be asserted.
-// $opts: threshold (0-100), other_id_numbers (ID numbers already on the applicant's other ID).
+// $opts: threshold (0-100).
 function ai_decide(?array $parsed, ?float $confidence, array $categories, array $applicant, array $opts = []): array
 {
     $threshold = (float)($opts['threshold'] ?? school_setting('ai_confidence_threshold', '80'));
@@ -196,13 +191,14 @@ function ai_decide(?array $parsed, ?float $confidence, array $categories, array 
     $units = (float)($f['units'] ?? 0);
     $name = $str('name');
 
-    // The back of an ID has no name, so "name not found" only confuses the applicant. Say what to do instead.
+    // The ID is one file showing the front and the back. The back has no name, so "name not found"
+    // only confuses the applicant. Say what to do instead.
     // A small model does not always flag id_side, so any ID with no readable name gets this message.
     if ($slug === 'valid_id' && $name === '') {
         $isBack = strtolower($str('id_side')) === 'back';
         return ai_result('uncertain', $slug, $conf, $isBack
-            ? 'This looks like the back of an ID. Please upload the front, which shows your photo and name.'
-            : 'We could not find a name on this ID. If this is the back of the ID, please upload the front, which shows your photo and name.', $f, $slots);
+            ? 'This shows only the back of the ID. Please upload one image or PDF with the front and the back of your ID.'
+            : 'We could not find a name on this ID. Please upload one image or PDF with the front (your photo and name) and the back of your ID.', $f, $slots);
     }
 
     // Key fields that must not be blank
@@ -223,10 +219,7 @@ function ai_decide(?array $parsed, ?float $confidence, array $categories, array 
     if ($slug === 'guardianship_affidavit' && empty($f['notary'])) $miss[] = 'no notary seen';
     if ($slug === 'valid_id') {
         if ($str('id_type') !== '' && !ai_id_type_accepted($str('id_type'))) $miss[] = 'ID type is not accepted';
-        $mine = ai_id_number_key($str('id_number'));
-        foreach ($opts['other_id_numbers'] ?? [] as $o) {
-            if ($mine !== '' && $mine === ai_id_number_key((string)$o)) $miss[] = 'same ID number as the other ID';
-        }
+        if (strtolower($str('id_side')) === 'front') $miss[] = 'the back of the ID is not shown (front and back go in one file)';
     }
     if ($slug === 'tor') {
         if ($units < 21) $miss[] = 'less than 21 units';
