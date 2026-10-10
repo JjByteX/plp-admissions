@@ -26,7 +26,8 @@ check(array_column(ai_categories(TYPE_FRESHMAN), 'slug') === ['psa_birth_cert', 
 check(in_array('tor', array_column(ai_categories(TYPE_TRANSFEREE), 'slug'), true), 'transferee has tor');
 check(!in_array('form_137', array_column(ai_categories(TYPE_TRANSFEREE), 'slug'), true), 'transferee has no form_137');
 check(ai_categories(TYPE_FOREIGN) === [], 'foreign gets no AI categories');
-check(in_array('form_138_g12', array_column($cat, 'slug'), true) && in_array('form_137', array_column($cat, 'slug'), true), 'shs_grad has both form_137 categories');
+check(array_count_values(array_column($cat, 'slug'))['form_137'] === 1 && !in_array('form_138_g12', array_column($cat, 'slug'), true), 'Form 138 (Grade 12) and Form 137 are one category');
+check(count(array_filter($cat, fn($c) => in_array('form_137', $c['slots'], true))) === 1, 'only one category fills the form_137 slot');
 
 // -- confidence from the choice token
 $lp = [['token' => '{"', 'logprob' => 0], ['token' => 'choice', 'logprob' => 0], ['token' => '":', 'logprob' => 0], ['token' => ' ', 'logprob' => -0.0001], ['token' => '2', 'logprob' => log(0.9)], ['token' => ',', 'logprob' => 0]];
@@ -60,6 +61,28 @@ $idf = ['name' => 'Juan Dela Cruz', 'id_type' => "Driver's License", 'id_number'
 check(ai_decide($ok($idf, $id), 95, $cat, $me, $t80)['status'] === 'passed', 'good id');
 check(ai_decide($ok(array_merge($idf, ['id_type' => 'Library card']), $id), 95, $cat, $me, $t80)['status'] === 'uncertain', 'id type not accepted');
 check(ai_decide($ok($idf, $id), 95, $cat, $me, $t80 + ['other_id_numbers' => ['n01-23-456789']])['status'] === 'uncertain', 'same id number on both ids');
+
+// back of an ID: asks for the front instead of "name not found"
+$back = ai_decide($ok(['name' => '', 'id_type' => 'Philippine National ID', 'id_side' => 'back'], $id), 95, $cat, $me, $t80);
+check($back['status'] === 'uncertain' && str_contains($back['reason'], 'back of an ID'), 'back of an ID gets its own message');
+check(ai_decide($ok(array_merge($idf, ['id_side' => 'front']), $id), 95, $cat, $me, $t80)['status'] === 'passed', 'front of an ID still passes');
+check(ai_decide($ok(array_merge($idf, ['id_side' => 'back']), $id), 95, $cat, $me, $t80)['status'] === 'passed', 'a read name wins over a wrong back flag');
+check(str_contains(ai_decide($ok(['name' => '', 'id_type' => 'Driver\'s License'], $id), 95, $cat, $me, $t80)['reason'], 'name not found'), 'blank name without a back flag still says name not found');
+
+// the one Form 138 / 137 category passes at normal confidence
+$frm = $num('form_137');
+check(ai_decide($ok(['name' => 'BASSIG, JJ SANCHEZ'], $frm), 90, $cat, array_merge($me, ['first_name' => 'JJ', 'middle_name' => 'Sanchez', 'last_name' => 'Bassig']), $t80)['status'] === 'passed', 'report card passes');
+
+// prompt: hints and only the fields this applicant needs
+$pf = ai_build_prompt($cat, $me);
+check(str_contains($pf, 'Punong Barangay') || !in_array('barangay_cert', array_column($cat, 'slug'), true), 'prompt carries the hints');
+check(str_contains($pf, '"id_side"') && str_contains($pf, '"id_number"'), 'prompt asks for id fields when valid_id is listed');
+check(!str_contains($pf, '"units"') && !str_contains($pf, '"seal"'), 'freshman prompt has no tor fields');
+$pt = ai_build_prompt(ai_categories(TYPE_TRANSFEREE), array_merge($me, ['applicant_type' => TYPE_TRANSFEREE]));
+check(str_contains($pt, '"units"') && str_contains($pt, '"notation"'), 'transferee prompt has tor fields');
+foreach ([$pf, $pt] as $p) {
+    check(preg_match('/"fields": (\{[^}]*\})/', $p, $m) === 1 && is_array(json_decode($m[1], true)), 'the fields template in the prompt is valid JSON');
+}
 
 $ph = $num('passport_photo');
 check(ai_decide($ok(['photos' => 2], $ph), 95, $cat, $me, $t80)['status'] === 'passed', 'two photos pass without a name');

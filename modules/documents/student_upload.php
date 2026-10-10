@@ -219,9 +219,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $reply($error('Only PDF, JPG, PNG, and WEBP files are accepted.'));
         }
 
+        // A PDF is read through a picture of its first page, made by the browser (ai_preview).
+        // The picture is only for the AI; the PDF itself is what gets saved.
+        $aiPath = $f['tmp_name'];
+        $aiMime = $mimeType;
+        if ($mimeType === 'application/pdf') {
+            $pv = $_FILES['ai_preview'] ?? null;
+            if ($pv && !is_array($pv['name']) && ($pv['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK
+                && $pv['size'] > 0 && $pv['size'] <= 2 * 1024 * 1024
+                && (new finfo(FILEINFO_MIME_TYPE))->file($pv['tmp_name']) === 'image/jpeg') {
+                $aiPath = $pv['tmp_name'];
+                $aiMime = 'image/jpeg';
+            }
+        }
+
         // The classifier applies ai_confidence_threshold itself, so 'passed' is final here.
         $categories = doc_categories($requiredDocs);
-        $r          = classify_upload($f['tmp_name'], $mimeType, $applicant);
+        $r          = classify_upload($aiPath, $aiMime, $applicant);
         $slots      = array_values(array_intersect($r['slots'], array_keys($requiredDocs)));
         $cat        = $slots ? doc_category_of($slots[0]) : null;
 
@@ -1430,19 +1444,22 @@ document.addEventListener('DOMContentLoaded', function () {
     var URL_  = <?= json_encode(url('/student/documents')) ?>;
     var CSRF  = $('#flags-form [name=_csrf], #upload-form [name=_csrf]').first().val() || <?= json_encode(csrf_token()) ?>;
     var MAX   = 4 * 1024 * 1024;
+    var BODY  = 4.3 * 1024 * 1024;   // Vercel rejects request bodies over 4.5 MB; the PDF and its preview travel together
+    var AI_PX = 1024;                // longest side of the picture the AI reads (keep in step with llama-server --image-max-tokens)
+    var PDFJS = <?= json_encode(asset('js/pdf.min.js')) ?>, PDFJS_WORKER = <?= json_encode(asset('js/pdf.worker.min.js')) ?>;
     var OK    = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     var rows  = {}, queue = [], busy = false, seq = 0, lastCats = null, replaceId = null;
 
     function badge(cls, text) { return $('<span class="badge">').addClass(cls).text(text); }
     function bytesOk(b) { return b.size <= MAX; }
 
-    // 5.3: shrink to 1280 px JPEG. Falls back to the original file if the browser cannot decode it.
+    // 5.3: shrink to AI_PX JPEG. Falls back to the original file if the browser cannot decode it.
     function shrink(file) {
         var d = $.Deferred();
         if (file.type === 'application/pdf') return d.resolve(file).promise();
         var img = new Image(), src = URL.createObjectURL(file);
         img.onload = function () {
-            var k = Math.min(1, 1280 / Math.max(img.width, img.height));
+            var k = Math.min(1, AI_PX / Math.max(img.width, img.height));
             var c = document.createElement('canvas');
             c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
             var x = c.getContext('2d');
@@ -1456,6 +1473,60 @@ document.addEventListener('DOMContentLoaded', function () {
         return d.promise();
     }
 
+    // PDF first page -> JPEG for the AI. pdf.js is loaded only when a PDF is picked.
+    // Any failure (script blocked, locked or broken PDF) just means no preview: the applicant picks the type.
+    var pdfLib = null;
+    function loadPdfJs() {
+        if (pdfLib) return pdfLib;
+        pdfLib = new Promise(function (resolve, reject) {
+            if (window.pdfjsLib) return resolve(window.pdfjsLib);
+            var s = document.createElement('script');
+            s.src = PDFJS;
+            s.onload = function () {
+                if (!window.pdfjsLib) return reject(new Error('pdf.js missing'));
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+                resolve(window.pdfjsLib);
+            };
+            s.onerror = function () { reject(new Error('pdf.js failed to load')); };
+            document.head.appendChild(s);
+        });
+        return pdfLib;
+    }
+
+    function renderPdf(file) {
+        return loadPdfJs().then(function (lib) {
+            return file.arrayBuffer().then(function (buf) {
+                return lib.getDocument({ data: buf, isEvalSupported: false }).promise;
+            });
+        }).then(function (pdf) {
+            return pdf.getPage(1);
+        }).then(function (page) {
+            var v1 = page.getViewport({ scale: 1 });
+            var vp = page.getViewport({ scale: AI_PX / Math.max(v1.width, v1.height) });
+            var c = document.createElement('canvas');
+            c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+            var x = c.getContext('2d');
+            x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+            return page.render({ canvasContext: x, viewport: vp }).promise.then(function () {
+                return new Promise(function (resolve, reject) {
+                    c.toBlob(function (b) { b ? resolve(b) : reject(new Error('no preview')); }, 'image/jpeg', 0.85);
+                });
+            });
+        });
+    }
+
+    // Sets r.preview (a JPEG blob, or null). Runs once per file.
+    function previewFor(r) {
+        var d = $.Deferred();
+        if (!r.blob || r.blob.type !== 'application/pdf' || r.preview !== undefined) return d.resolve().promise();
+        busyState(r, 'Reading PDF…');
+        renderPdf(r.blob).then(function (b) {
+            r.preview = (r.blob.size + b.size <= BODY) ? b : null;
+            d.resolve();
+        }, function () { r.preview = null; d.resolve(); });
+        return d.promise();
+    }
+
     function newRow(file) {
         var id = ++seq;
         var $el = $('<div class="batch-row">').attr('data-id', id).append(
@@ -1463,7 +1534,7 @@ document.addEventListener('DOMContentLoaded', function () {
             $('<div class="batch-msg">'), $('<div class="batch-bar" style="display:none"><span></span></div>'), $('<div class="batch-actions">')
         );
         $('#batch-rows').append($el);
-        rows[id] = { id: id, $el: $el, file: file, blob: null, tries: 0, guess: '' };
+        rows[id] = { id: id, $el: $el, file: file, blob: null, preview: undefined, tries: 0, guess: '' };
         return rows[id];
     }
 
@@ -1544,6 +1615,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var fd = new FormData();
         fd.append('_csrf', CSRF); fd.append('action', 'classify');
         fd.append('doc_file', r.blob, r.blob.name || r.file.name);
+        if (r.preview) fd.append('ai_preview', r.preview, 'preview.jpg');
         send(r, fd).done(function (res) {
             r.$el.find('.batch-bar').hide();
             if (!res || res.ok === false) { r.tries++; offer(r, 'error', (res && res.message) || 'Something went wrong. Please try again.'); }
@@ -1594,7 +1666,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!b.name) b.name = r.file.name.replace(/\.[^.]+$/, '') + (b.type === 'image/jpeg' ? '.jpg' : '');
             if (!bytesOk(b)) { offer(r, 'error', 'This file is over the 4 MB limit.'); return; }
             r.blob = b;
-            return classify(r);
+            return previewFor(r).then(function () { return classify(r); });
         }).always(function () { busy = false; run(); });
     }
 
@@ -1611,7 +1683,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var f = this.files[0], r = rows[replaceId];
         if (!f || !r) return;
         if (OK.indexOf(f.type) < 0) { offer(r, 'error', 'Only PDF, JPG, PNG, and WEBP files are accepted.'); return; }
-        r.file = f; r.blob = null; r.$el.find('.batch-name').text(f.name);
+        r.file = f; r.blob = null; r.preview = undefined; r.$el.find('.batch-name').text(f.name);
         enqueue(r);
     });
 

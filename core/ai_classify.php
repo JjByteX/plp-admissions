@@ -8,21 +8,23 @@
 // Needs config/app.php (slots, AI_* constants) and core/helpers.php.
 // ============================================================
 
-// AI category => label for the prompt, and the document slots it can fill.
+// AI category => label for the prompt, the document slots it can fill, and a short hint
+// that helps a small model tell similar documents apart.
 // ponytail: a hand-written map; add a row when a new slot is added.
+// Form 138 (Grade 12) and Form 137 fill the same slot, so they are ONE category. As two
+// choices the model split its confidence between them and a right answer fell under the threshold.
 function ai_category_map(): array
 {
     return [
-        'psa_birth_cert'         => ['PSA birth certificate',                                   ['psa_birth_cert']],
-        'marriage_cert'          => ['Marriage certificate',                                    ['marriage_cert']],
-        'valid_id'               => ['Government-issued ID (school ID, National ID, PhilHealth, driver\'s license, voter\'s ID or certificate, UMID, PWD ID, PRC ID)', ['valid_id_1', 'valid_id_2']],
-        'barangay_cert'          => ['Barangay certificate of residence',                       ['barangay_cert']],
-        'guardianship_affidavit' => ['Affidavit of guardianship or support',                    ['guardianship_affidavit']],
-        'passport_photo'         => ['Passport-size photo (one or two photos on a white background)', ['photo_1', 'photo_2']],
-        'form_138_g11'           => ['Certified true copy of Form 138 (Grade 11 report card)',  ['form_138']],
-        'form_138_g12'           => ['Form 138 (Grade 12 report card)',                         ['form_137']],
-        'form_137'               => ['Form 137 with the remark "For Evaluation Purposes Only"', ['form_137']],
-        'tor'                    => ['Transcript of Records or Certificate of Grades',          ['tor']],
+        'psa_birth_cert'         => ['PSA birth certificate',                                   ['psa_birth_cert'], 'Certificate of Live Birth, usually on PSA security paper'],
+        'marriage_cert'          => ['Marriage certificate',                                    ['marriage_cert'], 'names a husband and a wife'],
+        'valid_id'               => ['Government-issued ID (school ID, National ID, PhilHealth, driver\'s license, voter\'s ID or certificate, UMID, PWD ID, PRC ID)', ['valid_id_1', 'valid_id_2'], 'a card with the holder\'s photo and name'],
+        'barangay_cert'          => ['Barangay certificate of residence',                       ['barangay_cert'], 'also called certificate of residency, signed by the Punong Barangay'],
+        'guardianship_affidavit' => ['Affidavit of guardianship or support',                    ['guardianship_affidavit'], 'a sworn statement, usually notarized'],
+        'passport_photo'         => ['Passport-size photo (one or two photos on a white background)', ['photo_1', 'photo_2'], 'a plain photo of a face, not a document'],
+        'form_138_g11'           => ['Certified true copy of Form 138 (Grade 11 report card)',  ['form_138'], 'school report card with subjects and grades'],
+        'form_137'               => ['Form 138 (Grade 12 report card) or Form 137 school record', ['form_137'], 'school report card or permanent record with subjects and grades, LRN, school name'],
+        'tor'                    => ['Transcript of Records or Certificate of Grades',          ['tor'], 'college grades with units and a school seal'],
     ];
 }
 
@@ -34,10 +36,10 @@ function ai_categories(string $applicantType, array|string|null $flags = null): 
     $applies = array_keys(docs_for_type($applicantType, $flags));
     $list = [];
     $n = 1;
-    foreach (ai_category_map() as $slug => [$label, $slots]) {
+    foreach (ai_category_map() as $slug => [$label, $slots, $hint]) {
         $slots = array_values(array_intersect($slots, $applies));
         if (!$slots) continue;
-        $list[$n++] = ['slug' => $slug, 'label' => $label, 'slots' => $slots];
+        $list[$n++] = ['slug' => $slug, 'label' => $label, 'slots' => $slots, 'hint' => $hint];
     }
     return $list;
 }
@@ -49,19 +51,45 @@ function ai_applicant_name(array $a): string
 
 function ai_build_prompt(array $categories, array $applicant): string
 {
+    $slugs = array_column($categories, 'slug');
+    $has   = fn(string $slug): bool => in_array($slug, $slugs, true);
+
     $lines = ["0 = other, or not an admission document"];
-    foreach ($categories as $n => $c) $lines[] = "$n = {$c['label']}";
+    foreach ($categories as $n => $c) {
+        $lines[] = "$n = {$c['label']}" . (($c['hint'] ?? '') !== '' ? " ({$c['hint']})" : '');
+    }
     $birth = trim((string)($applicant['birthdate'] ?? '')) ?: 'unknown';
+
+    // Only ask for the fields this applicant's categories use: a shorter answer is faster and easier for a small model.
+    $fields = ['"name": ""', '"birthdate": ""'];
+    $notes  = ["fields.name is the person's name as printed (for a marriage certificate, both spouses; for a report card, the student)."];
+    if ($has('valid_id')) {
+        array_push($fields, '"id_type": ""', '"id_number": ""', '"id_side": ""');
+        $notes[] = 'fields.id_number is the main ID or card number (for the Philippine National ID, the 16-digit PhilSys number).';
+        $notes[] = 'fields.id_side is "front" if the image shows the holder\'s photo or printed name, "back" if it shows only the back of a card (QR code, barcode, signature strip, other details), otherwise "".';
+    }
+    if ($has('passport_photo')) {
+        $fields[] = '"photos": 0';
+        $notes[]  = 'fields.photos is how many passport photos are in the image.';
+    }
+    if ($has('tor')) {
+        array_push($fields, '"school": ""', '"program": ""', '"academic_year": ""', '"units": 0', '"complete": false', '"seal": false', '"signature": false', '"notation": false');
+        $notes[] = 'fields.units is the total units shown. fields.complete is true only if one full academic year with all subjects and grades is shown.';
+        $notes[] = 'seal, signature and notation ("For Evaluation Purposes Only") are true only if clearly visible.';
+    }
+    if ($has('guardianship_affidavit')) {
+        $fields[] = '"notary": false';
+        $notes[]  = 'fields.notary is true only if a notary seal or signature is clearly visible.';
+    }
+
     return "You sort one image for a university admission. Applicant: " . ai_applicant_name($applicant)
-        . ", born $birth.\nWhich document is it?\n" . implode("\n", $lines)
+        . ", born $birth.\nWhich document is it? Pick the closest match.\n" . implode("\n", $lines)
         . "\n\nReply with JSON only, no other text, keys in this order:\n"
         . '{"choice": <number from the list>, "legible": <true or false>, "reason": "<short plain message for the applicant, empty if fine>", '
-        . '"fields": {"name": "", "birthdate": "", "id_type": "", "id_number": "", "photos": 0, "school": "", "program": "", "academic_year": "", '
-        . '"units": 0, "complete": false, "seal": false, "signature": false, "notation": false, "notary": false}}'
-        . "\nchoice must be the first key. legible is false if the image is blurry, too dark, cut off, or not a document. "
-        . "fields.name is the person's name as printed (for a marriage certificate, both spouses). fields.photos is how many passport photos are in the image. "
-        . "fields.units is the total units shown. fields.complete is true only if one full academic year with all subjects and grades is shown. "
-        . "seal, signature, notation (\"For Evaluation Purposes Only\") and notary are true only if clearly visible. Use \"\", 0 or false when not visible.";
+        . '"fields": {' . implode(', ', $fields) . '}}'
+        . "\nchoice must be the first key. legible is false only if the text cannot be read at all because the image is blurry, too dark, cut off, or not a document. "
+        . implode(' ', $notes)
+        . ' Use "", 0 or false when not visible.';
 }
 
 // Probability (0-100) of the token that holds the value of "choice".
@@ -167,6 +195,11 @@ function ai_decide(?array $parsed, ?float $confidence, array $categories, array 
     $str = fn(string $k): string => trim((string)($f[$k] ?? ''));
     $units = (float)($f['units'] ?? 0);
     $name = $str('name');
+
+    // The back of an ID has no name, so asking for one only confuses the applicant. Say what to do instead.
+    if ($slug === 'valid_id' && $name === '' && strtolower($str('id_side')) === 'back') {
+        return ai_result('uncertain', $slug, $conf, 'This looks like the back of an ID. Please upload the front, which shows your photo and name.', $f, $slots);
+    }
 
     // Key fields that must not be blank
     $need = match ($slug) {
