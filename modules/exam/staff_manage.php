@@ -2640,9 +2640,9 @@ function renderAiPreview(sections) {
                     return`<div style="display:flex;align-items:center;gap:7px;padding:2px 0;font-size:13px;color:${ok?'#15803d':'#374151'};${ok?'font-weight:500':''}">${dot}${escHtml(c)}</div>`;
                 }).join('')+'</div>';
             } else if(q.question_type==='short_answer'){
-                choices=`<div style="margin-top:6px;font-size:12px;color:#6b7280;font-style:italic">${q.correct_answer?'Expected: <strong style=\'color:#111827\'">'+escHtml(q.correct_answer)+'</strong>':'Short answer — reviewed manually'}</div>`;
+                choices=`<div style="margin-top:6px;font-size:12px;color:#6b7280">${q.correct_answer?'Expected: <strong style=\'color:#111827\'">'+escHtml(q.correct_answer)+'</strong>':'Short answer — reviewed manually'}</div>`;
             } else {
-                choices=`<div style="margin-top:6px;font-size:12px;color:#6b7280;font-style:italic">Paragraph — reviewed manually</div>`;
+                choices=`<div style="margin-top:6px;font-size:12px;color:#6b7280">Paragraph — reviewed manually</div>`;
             }
             card.innerHTML=`<div class="ai-q-card-head"><span style="background:#2d6a4f;color:#fff;border-radius:4px;padding:1px 7px;font-weight:600;font-size:11px">Q${globalQ}</span><span style="font-size:11px;color:#6b7280">${q.question_type.replace(/_/g,' ')}</span><span style="margin-left:auto;font-size:11px;color:#6b7280">${q.points} pt${q.points!==1?'s':''}</span></div><div class="ai-q-card-body"><div class="ai-q-text">${escHtml(q.question_text)}</div>${choices}</div>`;
             wrap.appendChild(card);

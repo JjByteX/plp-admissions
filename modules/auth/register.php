@@ -854,7 +854,6 @@ document.addEventListener('DOMContentLoaded', function () {
 .qual-box {
     background: var(--bg-subtle);
     border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
     border-radius: var(--radius-md);
     padding: var(--space-3) var(--space-4);
     margin-bottom: var(--space-4);
@@ -872,7 +871,7 @@ document.addEventListener('DOMContentLoaded', function () {
     gap: var(--space-1);
     color: var(--text-secondary);
 }
-.qual-list li::before { content: '· '; color: var(--accent); font-weight: bold; }
+.qual-list li::before { content: '· '; color: var(--accent); font-weight: var(--weight-semibold); }
 
 @media (max-width: 560px) {
     .reg-row-names { grid-template-columns: 1fr 1fr; }

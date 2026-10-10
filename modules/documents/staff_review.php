@@ -1175,7 +1175,6 @@ $docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $c
     to   { opacity:1; transform:translateX(-50%) translateY(0); }
 }
 tr.bulk-row.bulk-selected { background:var(--accent-muted); }
-tr.bulk-row.bulk-selected td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
 </style>
 
 <script>

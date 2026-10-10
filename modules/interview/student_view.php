@@ -416,7 +416,7 @@ ob_start();
                         <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:var(--warning)">
                             Reschedule request submitted
                         </div>
-                        <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px">
+                        <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:var(--space-1)">
                             Submitted <?= date('M j, g:i A', strtotime($myReschedule['created_at'])) ?>
                             — awaiting staff review. You'll see a new slot here once it's approved.
                         </div>
@@ -484,7 +484,7 @@ ob_start();
                                         $sClass = $sLabel === 'approved' ? 'badge-success'
                                                 : ($sLabel === 'denied' ? 'badge-error' : 'badge-warning');
                                     ?>
-                                    <span class="badge <?= $sClass ?>" style="font-size:10px">
+                                    <span class="badge <?= $sClass ?>" style="font-size:var(--text-xs)">
                                         <?= e(ucfirst($sLabel)) ?>
                                     </span>
                                 </div>
@@ -494,7 +494,7 @@ ob_start();
                                     </div>
                                 <?php endif; ?>
                                 <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
-                                    <div style="margin-top:var(--space-2);color:var(--text-tertiary);font-style:italic">
+                                    <div style="margin-top:var(--space-2);color:var(--text-tertiary)">
                                         Staff: <?= e($h['deny_reason']) ?>
                                     </div>
                                 <?php endif; ?>

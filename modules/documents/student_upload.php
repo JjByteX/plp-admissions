@@ -687,7 +687,7 @@ if ($docDeadlinePassed && !$isSubmitted && !$pastDocuments) {
 ?>
 <div style="display:flex;align-items:center;justify-content:center;min-height:60vh">
     <div style="text-align:center;max-width:480px;padding:var(--space-8)">
-        <div style="font-size:48px;margin-bottom:var(--space-4)">
+        <div style="margin-bottom:var(--space-4)">
             <?= icon('ic_fluent_dismiss_circle_24_regular', 48) ?>
         </div>
         <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-3);color:var(--text-primary)">
@@ -821,7 +821,7 @@ ob_start();
 .batch-actions:empty { display:none; }
 .batch-actions .batch-select { flex:1 1 100%; width:100%; max-width:100%; min-width:0; text-overflow:ellipsis; }
 .batch-link { color:var(--accent); text-decoration:underline; }
-.batch-bar { height:4px; border-radius:2px; background:var(--bg-subtle); margin-top:var(--space-2); overflow:hidden; }
+.batch-bar { height:4px; border-radius:var(--radius-full); background:var(--bg-subtle); margin-top:var(--space-2); overflow:hidden; }
 .batch-bar > span { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
 .batch-tip { font-size:var(--text-xs); color:var(--warning); margin-top:var(--space-2); }
 </style>
@@ -882,7 +882,7 @@ ob_start();
             <div style="flex:1;min-width:0">
                 <div style="font-weight:var(--weight-medium);color:var(--text-primary)"><?= e($label) ?></div>
                 <?php if ($doc && $doc['staff_remarks']): ?>
-                    <div style="font-size:var(--text-sm);color:var(--error);margin-top:2px">
+                    <div style="font-size:var(--text-sm);color:var(--error);margin-top:var(--space-1)">
                         Staff note: <?= e($doc['staff_remarks']) ?>
                     </div>
                 <?php endif; ?>
@@ -1183,7 +1183,7 @@ function updateDropLabel(name) {
             </button>
             <div style="flex:1;min-width:0">
                 <div id="fv-label" style="font-weight:var(--weight-semibold);font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
-                <div id="fv-counter" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:1px"></div>
+                <div id="fv-counter" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)"></div>
             </div>
             <button id="fv-next" onclick="fvNavigate(1)" type="button" style="
                 display:flex;align-items:center;justify-content:center;
@@ -1226,14 +1226,14 @@ function updateDropLabel(name) {
                 <!-- content injected by _render() -->
             </div>
             <div id="fv-hint" style="
-                position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+                position:absolute;bottom:var(--space-2);left:50%;transform:translateX(-50%);
                 background:rgba(0,0,0,0.55);color:#fff;
-                font-size:var(--text-xs);padding:5px 14px;border-radius:var(--radius-full);
+                font-size:var(--text-xs);padding:var(--space-1) var(--space-4);border-radius:var(--radius-full);
                 pointer-events:none;opacity:0;transition:opacity .4s ease;white-space:nowrap;
             ">Scroll to zoom · Drag to pan when zoomed in</div>
         </div>
         <div id="fv-dots" style="
-            display:flex;align-items:center;justify-content:center;gap:6px;
+            display:flex;align-items:center;justify-content:center;gap:var(--space-2);
             padding:var(--space-3);border-top:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
         "></div>
     </div>
@@ -1392,7 +1392,7 @@ function updateDropLabel(name) {
 <div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4)">
     <div style="flex:1">
         <div style="font-weight:var(--weight-medium);color:var(--text-primary)">Application submitted</div>
-        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:2px">Your documents are awaiting staff review.</div>
+        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:var(--space-1)">Your documents are awaiting staff review.</div>
     </div>
     <div style="text-align:right;flex-shrink:0">
         <button class="btn btn-ghost btn-sm" type="button" onclick="withdrawSubmission()">Withdraw Submission</button>

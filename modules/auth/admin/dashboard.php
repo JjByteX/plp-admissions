@@ -254,7 +254,6 @@ ob_start();
 .db-kpi-item {
     background: var(--bg-subtle);
     border-radius: var(--radius-md);
-    border-left: 3px solid var(--accent);
     padding: var(--space-5) var(--space-4);
     display: flex;
     flex-direction: column;

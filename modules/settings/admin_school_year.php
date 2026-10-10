@@ -596,7 +596,7 @@ ob_start();
                                placeholder="e.g. 2023-2024" pattern="\d{4}-\d{4}"
                                value="<?= e(date('Y') - 1) . '-' . e(date('Y')) ?>">
                         <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                            Current SY: <strong><?= e($currentYear) ?></strong> — import into a <em>past</em> year only.
+                            Current SY: <strong><?= e($currentYear) ?></strong> — import into a past year only.
                         </span>
                     </div>
                     <div id="legacy-sy-hint" style="display:none;font-size:var(--text-xs);color:var(--error);margin-top:4px"></div>

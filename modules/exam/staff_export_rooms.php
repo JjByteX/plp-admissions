@@ -287,7 +287,7 @@ if ($filterDate !== '') {
   }
   table.roster td.num { width: 36px; color: var(--muted); text-align: right; }
   table.roster td.name { letter-spacing: .01em; }
-  table.roster .empty-row td { color: var(--muted); font-style: italic; padding: 24px 12px; text-align:center; }
+  table.roster .empty-row td { color: var(--muted); padding: 24px 12px; text-align:center; }
 
   /* ── Print styles ───────────────────────────────────────── */
   @media print {

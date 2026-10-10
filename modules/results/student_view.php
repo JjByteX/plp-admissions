@@ -107,27 +107,27 @@ ob_start();
         <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)">
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">Name</div>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Name</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(Auth::user()['name']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">Course Applied</div>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Course Applied</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['course_applied']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">Withdrawn On</div>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Withdrawn On</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)">
                         <?= $applicant['withdrawn_at'] ? format_date($applicant['withdrawn_at'], 'F j, Y') : '—' ?>
                     </div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">Status</div>
-                    <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:9999px;font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);background:var(--bg-subtle)">Withdrawn</span>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Status</div>
+                    <span style="display:inline-flex;align-items:center;gap:var(--space-1);padding:var(--space-1) var(--space-2);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);background:var(--bg-subtle)">Withdrawn</span>
                 </div>
             </div>
             <?php if ($applicant['withdrawn_reason']): ?>
                 <div style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border)">
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">Reason Given</div>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Reason Given</div>
                     <p style="font-size:var(--text-sm);color:var(--text-secondary)"><?= e($applicant['withdrawn_reason']) ?></p>
                 </div>
             <?php endif; ?>
@@ -145,7 +145,7 @@ ob_start();
             <path stroke="currentColor" stroke-width="1.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
         <p style="font-weight:var(--weight-medium)">Result not yet released</p>
-        <p style="font-size:var(--text-sm);margin-top:4px">You'll be notified once your result is ready.</p>
+        <p style="font-size:var(--text-sm);margin-top:var(--space-1)">You'll be notified once your result is ready.</p>
     </div>
 
 <?php elseif ($result['result'] === 'accepted'): ?>
@@ -182,16 +182,16 @@ ob_start();
             <?php if ($enrollmentDate && $enrollmentTime && $enrollmentVenue): ?>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-3)">
                     <div>
-                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:2px">Date</div>
+                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-1)">Date</div>
                         <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(format_date($enrollmentDate, 'l, F j, Y')) ?></div>
                     </div>
                     <div>
-                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:2px">Time</div>
+                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-1)">Time</div>
                         <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(date('g:i A', strtotime($enrollmentTime))) ?></div>
                     </div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:2px">Venue</div>
+                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-1)">Venue</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($enrollmentVenue) ?></div>
                 </div>
             <?php else: ?>
@@ -204,7 +204,7 @@ ob_start();
         <!-- Documents to bring -->
         <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
             <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Bring the originals of</div>
-            <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-3);font-style:italic">matches what you uploaded</div>
+            <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-3)">matches what you uploaded</div>
             <?php if (!empty($myDocs)): ?>
                 <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--space-2)">
                     <?php foreach ($myDocs as $d):
@@ -212,7 +212,7 @@ ob_start();
                         $label = $docLabels[$slug] ?? ucwords(str_replace('_', ' ', $slug));
                     ?>
                         <li style="display:flex;align-items:flex-start;gap:var(--space-3);background:white;border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--space-2) var(--space-3)">
-                            <?= icon('ic_fluent_document_24_regular', 16, 'color:var(--text-tertiary);flex-shrink:0;margin-top:2px') ?>
+                            <?= icon('ic_fluent_document_24_regular', 16, 'color:var(--text-tertiary);flex-shrink:0;margin-top:var(--space-1)') ?>
                             <span style="font-size:var(--text-sm);line-height:1.4"><?= e($label) ?></span>
                         </li>
                     <?php endforeach; ?>
@@ -248,25 +248,25 @@ ob_start();
         <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)">
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">Name</div>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Name</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(Auth::user()['name']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">Course Applied</div>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Course Applied</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['course_applied']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">School Year</div>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">School Year</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['school_year']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">Result</div>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Result</div>
                     <span class="badge badge-<?= $result['result'] ?>"><?= e(RESULT_LABELS[$result['result']]) ?></span>
                 </div>
             </div>
             <?php if ($result['remarks']): ?>
                 <div style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border)">
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:4px">Remarks</div>
+                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Remarks</div>
                     <p style="font-size:var(--text-sm);color:var(--text-secondary)"><?= e($result['remarks']) ?></p>
                 </div>
             <?php endif; ?>
@@ -286,7 +286,7 @@ ob_start();
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path stroke="#f59e0b" stroke-width="2" stroke-linecap="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3M6.343 6.343l-.707-.707M12 21a9 9 0 100-18 9 9 0 000 18z"/></svg>
                 </div>
                 <div style="flex:1">
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:4px">Course Suggestion from Admissions</div>
+                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-1)">Course Suggestion from Admissions</div>
                     <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">
                         Admissions suggested an alternative course:
                     </p>
@@ -294,7 +294,7 @@ ob_start();
                         <?= e($suggestion['suggested_course']) ?>
                     </div>
                     <?php if ($suggestion['note']): ?>
-                    <p style="font-size:var(--text-xs);color:var(--text-secondary);font-style:italic;margin-bottom:var(--space-3)">
+                    <p style="font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:var(--space-3)">
                         "<?= e($suggestion['note']) ?>"
                     </p>
                     <?php endif; ?>
@@ -335,7 +335,7 @@ ob_start();
                     </svg>
                 </div>
                 <div style="flex:1">
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:#4338ca;margin-bottom:4px">
+                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:#4338ca;margin-bottom:var(--space-1)">
                         Good News — Other Doors Are Open For You
                     </div>
                     <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">

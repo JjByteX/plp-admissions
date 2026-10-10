@@ -804,7 +804,6 @@ ob_start();
 }
 .es-code-display.is-empty {
     color: var(--text-tertiary);
-    font-style: italic;
     font-weight: normal;
     letter-spacing: normal;
 }

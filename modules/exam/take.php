@@ -322,7 +322,7 @@ if ($isSlotFuture) {
                                 </div>
                             <?php endif; ?>
                             <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
-                                <div style="margin-top:var(--space-2);color:var(--text-tertiary);font-style:italic">
+                                <div style="margin-top:var(--space-2);color:var(--text-tertiary)">
                                     Staff: <?= e($h['deny_reason']) ?>
                                 </div>
                             <?php endif; ?>
@@ -428,7 +428,7 @@ if ($isSlotPast) {
                                 </div>
                             <?php endif; ?>
                             <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
-                                <div style="margin-top:var(--space-2);color:var(--text-tertiary);font-style:italic">
+                                <div style="margin-top:var(--space-2);color:var(--text-tertiary)">
                                     Staff: <?= e($h['deny_reason']) ?>
                                 </div>
                             <?php endif; ?>
@@ -1008,7 +1008,6 @@ ob_start();
 .choice-label.chosen {
     background: var(--accent-muted);
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(45,106,79,.08);
 }
 .choice-label input { accent-color: var(--accent); flex-shrink: 0; width: 16px; height: 16px; }
 .choice-label span { font-size: var(--text-sm); line-height: var(--leading-normal); }
@@ -1037,7 +1036,7 @@ ob_start();
 .short-answer-input:hover:not(:focus) { border-color: var(--border-strong); }
 .short-answer-input:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(45,106,79,.10);
+    outline: 1px solid var(--accent);
 }
 
 /* ── Paragraph ───────────────────────────────────────────── */
@@ -1060,7 +1059,7 @@ ob_start();
 .paragraph-input:hover:not(:focus) { border-color: var(--border-strong); }
 .paragraph-input:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(45,106,79,.10);
+    outline: 1px solid var(--accent);
 }
 
 /* ── Linear scale ────────────────────────────────────────── */
