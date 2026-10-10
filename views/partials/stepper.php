@@ -59,7 +59,7 @@ $stepUrls = [
                     <?= icon('ic_fluent_checkmark_24_regular', 12) ?>
                 <?php elseif ($state === 'active'): ?>
                     <!-- Dot -->
-                    <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
+                    <?= icon('circle:fill', 12) ?>
                 <?php else: ?>
                     <!-- Lock -->
                     <?= icon('ic_fluent_lock_closed_24_regular', 12) ?>

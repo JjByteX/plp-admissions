@@ -1159,9 +1159,7 @@ ob_start();
                     <span style="font-size:var(--text-xs);font-weight:var(--weight-medium);
                                  color:var(--accent);display:flex;align-items:center;gap:4px">
                         View
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                            <path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14M13 6l6 6-6 6"/>
-                        </svg>
+                        <?= icon('arrow-right', 12) ?>
                     </span>
                 </div>
             </a>
@@ -1174,9 +1172,7 @@ ob_start();
                  onclick="document.getElementById('add-slot-modal').style.display='flex'"
                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
                 <div class="es-add-card-circle">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                        <path stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/>
-                    </svg>
+                    <?= icon('plus', 22, 'color:var(--accent)') ?>
                 </div>
                 <div style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--accent)">
                     Add Slot

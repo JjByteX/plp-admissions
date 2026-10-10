@@ -13,7 +13,7 @@ $authLogoUrl = $authLogo
 $authPhotoUrl = asset('img/' . rawurlencode('schol blg.jpg'));
 ?>
 <?php
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; frame-src https://newassets.hcaptcha.com https://*.hcaptcha.com; connect-src 'self' https://*.hcaptcha.com;");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; frame-src https://newassets.hcaptcha.com https://*.hcaptcha.com; connect-src 'self' https://*.hcaptcha.com;");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("Referrer-Policy: strict-origin-when-cross-origin");
@@ -28,6 +28,8 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <?= phosphor_head() ?>
 
     <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
 
@@ -61,7 +63,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 <script>
 // Auth UI (jQuery): show-password toggle, confirm-password check, loading label.
 jQuery(function ($) {
-    var eye = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+    var eye = '<i class="ph-bold ph-eye" style="font-size:18px" aria-hidden="true"></i>';
 
     // Pages that already ship their own toggle (register) are skipped.
     $('input[type="password"]').each(function () {

@@ -237,21 +237,21 @@ foreach ($byDate as $date => $dateSlots) {
             <!-- Meta: date · time · location · capacity -->
             <div class="sess-dir-meta">
                 <div class="sess-dir-meta-row">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    <?= icon('calendar-blank', 12) ?>
                     <?= e(format_date($date, 'D, M j')) ?>
                 </div>
                 <div class="sess-dir-meta-row">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 7v5l3 3"/></svg>
+                    <?= icon('clock', 12) ?>
                     <?= e($timeLabel) ?>
                 </div>
                 <?php if (!empty($slot['location_label'])): ?>
                     <div class="sess-dir-meta-row">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                        <?= icon('map-pin', 12) ?>
                         <?= e($slot['location_label']) ?>
                     </div>
                 <?php endif; ?>
                 <div class="sess-dir-meta-row">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                    <?= icon('users', 12) ?>
                     <?= $booked ?> / <?= $capacity ?> booked
                 </div>
             </div>
@@ -267,9 +267,7 @@ foreach ($byDate as $date => $dateSlots) {
                 <span style="font-size:var(--text-xs);font-weight:var(--weight-medium);
                              color:var(--accent);display:flex;align-items:center;gap:4px">
                     Edit
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                        <path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14M13 6l6 6-6 6"/>
-                    </svg>
+                    <?= icon('arrow-right', 12) ?>
                 </span>
             </div>
         </div>
@@ -283,7 +281,7 @@ foreach ($byDate as $date => $dateSlots) {
          style="align-items:center;justify-content:center;min-height:200px;border-style:dashed;cursor:pointer">
         <div style="width:48px;height:48px;border-radius:50%;background:var(--accent-muted);
                     display:flex;align-items:center;justify-content:center;color:var(--accent)">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+            <?= icon('plus:fill', 24) ?>
         </div>
         <div style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--accent);margin-top:var(--space-2)">Add Session</div>
     </div>

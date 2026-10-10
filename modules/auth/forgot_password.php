@@ -73,7 +73,7 @@ $schoolLogo = school_setting('school_logo', '');
             <img src="<?= e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url($schoolLogo)) ?>" alt="School Logo" class="auth-logo-img">
         <?php else: ?>
             <div class="auth-logo">
-                <?php include VIEWS_PATH . '/partials/icons/ic_fluent_building_bank_24_regular.svg'; ?>
+                <?= icon('bank:fill', 26) ?>
             </div>
         <?php endif; ?>
         <div class="auth-header-text">

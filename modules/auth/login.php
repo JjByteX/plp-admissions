@@ -75,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $logoUrl  = asset('img/' . rawurlencode('plp logo.png'));
 $photoUrl = asset('img/' . rawurlencode('schol blg.jpg'));
 
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; frame-src https://newassets.hcaptcha.com https://*.hcaptcha.com; connect-src 'self' https://*.hcaptcha.com;");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; frame-src https://newassets.hcaptcha.com https://*.hcaptcha.com; connect-src 'self' https://*.hcaptcha.com;");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("Referrer-Policy: strict-origin-when-cross-origin");
@@ -91,6 +91,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Anton&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <?= phosphor_head() ?>
 
     <style>
     :root {
@@ -154,7 +155,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     .lg-info { background: rgba(8,22,14,.72); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; padding: 16px 16px 16px 18px; display: flex; gap: 12px; justify-content: space-between; min-width: 0; }
     .lg-info h3 { margin: 0 0 8px; font-size: 1.05rem; font-weight: var(--lg-weight-semibold); }
     .lg-info p { margin: 0; font-size: .8rem; line-height: 1.5; color: rgba(255,255,255,.78); }
-    .lg-info svg { width: 52px; height: 52px; flex: none; fill: none; stroke: #fff; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: .92; }
+    .lg-info i { font-size: 52px; line-height: 1; flex: none; color: #fff; opacity: .92; }
 
     /* login card */
     .lg-card { background: var(--lg-paper); color: var(--lg-ink); border-radius: var(--lg-radius-lg); padding: 34px 32px 28px; box-shadow: 0 24px 60px rgba(0,0,0,.38); }
@@ -176,7 +177,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     .lg-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border: 0; background: none; border-radius: var(--lg-radius); cursor: pointer; display: grid; place-items: center; color: var(--lg-muted); }
     .lg-eye:hover { background: rgba(0,0,0,.06); }
     .lg-eye:focus-visible { outline: 2px solid var(--lg-green-600); }
-    .lg-eye svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .lg-eye i { font-size: 20px; line-height: 1; display: block; }
     .lg-eye.on { color: var(--lg-green-700); }
 
     .lg-forgot { text-align: right; margin: -4px 0 20px; }
@@ -232,14 +233,14 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                             <h3>Submit Documents</h3>
                             <p>Upload your PSA birth certificate, Form 137 or 138, IDs, and other requirements.</p>
                         </div>
-                        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 5h17l9 9v29H12z"/><path d="M29 5v9h9M18 24h14M18 30h14M18 36h9"/></svg>
+                        <i class="ph-fill ph-file-text" aria-hidden="true"></i>
                     </article>
                     <article class="lg-info">
                         <div>
                             <h3>Exam &amp; Interview</h3>
                             <p>See your entrance exam schedule, interview slot, and final result as they are released.</p>
                         </div>
-                        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="7" y="9" width="34" height="32" rx="3"/><path d="M7 19h34M16 5v8M32 5v8M16 27h6M26 27h6M16 34h6"/></svg>
+                        <i class="ph-fill ph-calendar-check" aria-hidden="true"></i>
                     </article>
                 </div>
             </div>
@@ -252,14 +253,14 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                             <h3>Check your email</h3>
                             <p>New accounts must verify their email with the code we send before signing in.</p>
                         </div>
-                        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="11" width="36" height="26" rx="3"/><path d="M7 14l17 13 17-13"/></svg>
+                        <i class="ph-fill ph-envelope-simple" aria-hidden="true"></i>
                     </article>
                     <article class="lg-info">
                         <div>
                             <h3>Account lock</h3>
                             <p>Too many failed sign-ins lock your account for 15 minutes.</p>
                         </div>
-                        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="10" y="21" width="28" height="20" rx="3"/><path d="M16 21v-6a8 8 0 0 1 16 0v6M24 29v5"/></svg>
+                        <i class="ph-fill ph-lock" aria-hidden="true"></i>
                     </article>
                 </div>
             </div>
@@ -310,7 +311,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                             required
                         >
                         <button type="button" class="lg-eye" id="lg-eye" aria-label="Show password">
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <i class="ph-bold ph-eye" aria-hidden="true"></i>
                         </button>
                     </div>
                     <?php if (!empty($errors['password'])): ?>

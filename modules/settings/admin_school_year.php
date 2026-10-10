@@ -453,10 +453,7 @@ ob_start();
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2)">
             <div class="card-title" style="margin:0">Import Historical Records</div>
             <button class="btn btn-secondary" onclick="openLegacyImportModal()" style="display:flex;align-items:center;gap:6px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                          d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 0v8m0 0-3-3m3 3 3-3M8 17h8"/>
-                </svg>
+                <?= icon('arrow-circle-down', 14) ?>
                 Import with AI ✨
             </button>
         </div>
@@ -560,7 +557,7 @@ ob_start();
         <div class="modal-header" style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)">
             <div style="display:flex;align-items:center;gap:var(--space-3)">
                 <div style="width:34px;height:34px;border-radius:var(--radius-md);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 3c-1.2 5.4-4.5 7.5-9 9 4.5 1.5 7.8 3.6 9 9 1.2-5.4 4.5-7.5 9-9-4.5-1.5-7.8-3.6-9-9z"/></svg>
+                    <?= icon('sparkle', 17, 'color:#fff') ?>
                 </div>
                 <div>
                     <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">Import Historical Records with AI</div>
@@ -609,14 +606,14 @@ ob_start();
                      ondragleave="this.classList.remove('dragover')"
                      ondrop="handleLegacyFileDrop(event)">
                     <div class="ai-dropzone-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path stroke="var(--text-tertiary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2z"/><polyline stroke="var(--text-tertiary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" points="14 2 14 8 20 8"/></svg>
+                        <?= icon('file', 20, 'color:var(--text-tertiary)') ?>
                     </div>
                     <div id="legacy-dropzone-label" style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-secondary)">Drop file here or <span style="color:var(--accent)">click to browse</span></div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">CSV · Excel (xlsx/xls) · PDF · DOCX · JPG · PNG — columns can be in any order</div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">Need a template? <a href="/sample-legacy-admissions.csv" download style="color:var(--accent)" onclick="event.stopPropagation()">Download sample CSV</a></div>
                     <div id="legacy-file-tag-wrap" style="display:none;margin-top:var(--space-3)">
                         <span class="ai-file-tag">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="#fff" stroke-width="2.2" stroke-linecap="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2z"/></svg>
+                            <?= icon('file', 12, 'color:#fff') ?>
                             <span id="legacy-file-tag-name"></span>
                             <button class="rm" onclick="event.stopPropagation();clearLegacyFile()" title="Remove">✕</button>
                         </span>
@@ -648,7 +645,7 @@ ob_start();
                     <button class="btn btn-ghost btn-sm" onclick="resetLegacyImport()">← Try again</button>
                 </div>
                 <div class="ai-warn-strip">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;margin-top:1px"><path stroke="#d97706" stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                    <?= icon('warning:fill', 14, 'margin-top:1px;color:#d97706') ?>
                     <span>AI results may not be 100% accurate. <strong>Review each row and uncheck any you want to skip</strong> before saving.</span>
                 </div>
                 <div style="display:flex;justify-content:flex-end">
@@ -676,7 +673,7 @@ ob_start();
             <!-- Step: error -->
             <div id="legacy-step-error" style="display:none;flex-direction:column;gap:var(--space-3)">
                 <div style="display:flex;align-items:flex-start;gap:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--radius-md);padding:12px 14px;font-size:var(--text-sm);color:#991b1b">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
+                    <?= icon('warning-circle:fill', 16, 'margin-top:1px') ?>
                     <span id="legacy-error-msg"></span>
                 </div>
                 <button class="btn btn-ghost btn-sm" style="align-self:flex-start" onclick="resetLegacyImport()">← Try again</button>
@@ -688,7 +685,7 @@ ob_start();
         <div class="modal-footer" id="legacy-modal-footer" style="border-top:1px solid var(--border)">
             <button type="button" class="btn btn-ghost" onclick="closeLegacyImportModal()">Cancel</button>
             <button type="button" class="btn btn-primary" id="legacy-process-btn" onclick="startLegacyProcessing()" disabled>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="margin-right:5px"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 3c-1.2 5.4-4.5 7.5-9 9 4.5 1.5 7.8 3.6 9 9 1.2-5.4 4.5-7.5 9-9-4.5-1.5-7.8-3.6-9-9z"/></svg>
+                <?= icon('sparkle', 14, 'margin-right:5px') ?>
                 Extract Records
             </button>
         </div>
@@ -697,7 +694,7 @@ ob_start();
         <div class="modal-footer" id="legacy-save-footer" style="display:none;border-top:1px solid var(--border)">
             <button type="button" class="btn btn-ghost" onclick="closeLegacyImportModal()">Cancel</button>
             <button type="button" class="btn btn-primary" id="legacy-save-btn" onclick="saveLegacyRows()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="margin-right:5px"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14a2 2 0 01-2 2z"/><polyline stroke="currentColor" stroke-width="2" stroke-linecap="round" points="17 21 17 13 7 13 7 21"/><polyline stroke="currentColor" stroke-width="2" stroke-linecap="round" points="7 3 7 8 15 8"/></svg>
+                <?= icon('floppy-disk', 14, 'margin-right:5px') ?>
                 Save Selected Records
             </button>
         </div>

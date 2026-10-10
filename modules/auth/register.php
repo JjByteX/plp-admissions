@@ -25,7 +25,7 @@ if (!admissions_is_open()) {
             <?php if ($schoolLogo): ?>
                 <img src="<?= e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url($schoolLogo)) ?>" alt="School Logo" class="auth-logo-img">
             <?php else: ?>
-                <div class="auth-logo"><?php include VIEWS_PATH . '/partials/icons/ic_fluent_building_bank_24_regular.svg'; ?></div>
+                <div class="auth-logo"><?= icon('bank:fill', 26) ?></div>
             <?php endif; ?>
             <div class="auth-header-text">
                 <h1 class="auth-title">PLP Admissions</h1>
@@ -316,7 +316,7 @@ ob_start();
             <img src="<?= e(str_starts_with($schoolLogo, 'http') ? $schoolLogo : url($schoolLogo)) ?>" alt="School Logo" class="auth-logo-img">
         <?php else: ?>
             <div class="auth-logo">
-                <?php include VIEWS_PATH . '/partials/icons/ic_fluent_building_bank_24_regular.svg'; ?>
+                <?= icon('bank:fill', 26) ?>
             </div>
         <?php endif; ?>
         <div class="auth-header-text">
@@ -709,7 +709,7 @@ function togglePw(id, btn) {
     const inp = document.getElementById(id);
     const isText = inp.type === 'text';
     inp.type = isText ? 'password' : 'text';
-    btn.querySelector('svg').style.opacity = isText ? '1' : '0.5';
+    btn.querySelector('i').style.opacity = isText ? '1' : '0.5';
 }
 
 (function() {

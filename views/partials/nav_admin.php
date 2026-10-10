@@ -146,38 +146,38 @@ elseif ($isSSO)   { $intHref = '/staff/interviews/setup';  }
 else              { $intHref = '/staff/interviews'; }
 
 $items = [
-    ['href' => '/admin/dashboard',   'key' => 'dashboard',   'label' => 'Dashboard',        'icon' => 'ic_fluent_home_24_regular',
+    ['href' => '/admin/dashboard',   'key' => 'dashboard',   'label' => 'Dashboard',        'icon' => 'house',
         'roles' => [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN]],
 
-    ['href' => '/admin/school-year', 'key' => 'school-year', 'label' => 'School Year',      'icon' => 'ic_fluent_arrow_sync_24_regular', 'alert' => $_navAdmNeedsSetup,
+    ['href' => '/admin/school-year', 'key' => 'school-year', 'label' => 'School Year',      'icon' => 'arrows-clockwise', 'alert' => $_navAdmNeedsSetup,
         'roles' => [ROLE_ADMIN, ROLE_SSO]],
-    ['href' => '/admin/courses',     'key' => 'courses',     'label' => 'Courses & Strands','icon' => 'ic_fluent_library_24_regular', 'alert' => $_navCoursesNeedsSetup,
+    ['href' => '/admin/courses',     'key' => 'courses',     'label' => 'Courses & Strands','icon' => 'books', 'alert' => $_navCoursesNeedsSetup,
         'roles' => [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN]],
 
-    ['href' => '/staff/applicants',  'key' => 'documents',   'label' => 'Documents',        'icon' => 'ic_fluent_document_24_regular',      'pending' => $_navDocsPending,
+    ['href' => '/staff/applicants',  'key' => 'documents',   'label' => 'Documents',        'icon' => 'file-text',      'pending' => $_navDocsPending,
         'roles' => [ROLE_ADMIN, ROLE_SSO]],
-    ['href' => '/staff/exam',        'key' => 'exam',        'label' => 'Exam',             'icon' => 'ic_fluent_edit_24_regular',          'alert' => !$_navExamReady,
+    ['href' => '/staff/exam',        'key' => 'exam',        'label' => 'Exam',             'icon' => 'pencil-simple',          'alert' => !$_navExamReady,
         'roles' => [ROLE_ADMIN, ROLE_SSO]],
-    ['href' => '/staff/exam/reschedule', 'key' => 'exam-reschedule', 'label' => 'Exam Reschedules', 'icon' => 'ic_fluent_arrow_sync_24_regular', 'pending' => $_navExamReschedPending,
+    ['href' => '/staff/exam/reschedule', 'key' => 'exam-reschedule', 'label' => 'Exam Reschedules', 'icon' => 'arrows-clockwise', 'pending' => $_navExamReschedPending,
         'roles' => [ROLE_ADMIN, ROLE_SSO]],
-    ['href' => $intHref,             'key' => 'interviews',  'label' => 'Interviews',       'icon' => 'ic_fluent_calendar_ltr_24_regular',  'alert' => !$_navIntReady,
+    ['href' => $intHref,             'key' => 'interviews',  'label' => 'Interviews',       'icon' => 'calendar-blank',  'alert' => !$_navIntReady,
         'roles' => [ROLE_ADMIN, ROLE_SSO, ROLE_DEAN]],
     // Interview Reschedules — SSO/Admin only. Dean is intentionally
     // excluded; reschedules are a scheduling/registrar action, not
     // an academic-oversight one, and SSO owns it end-to-end.
-    ['href' => '/staff/interviews/absent?tab=requests', 'key' => 'reschedule', 'label' => 'Interview Reschedules', 'icon' => 'ic_fluent_arrow_sync_24_regular', 'pending' => $_navReschedPending,
+    ['href' => '/staff/interviews/absent?tab=requests', 'key' => 'reschedule', 'label' => 'Interview Reschedules', 'icon' => 'arrows-clockwise', 'pending' => $_navReschedPending,
         'roles' => [ROLE_ADMIN, ROLE_SSO]],
-    ['href' => '/staff/results',     'key' => 'results',     'label' => 'Results',          'icon' => 'ic_fluent_ribbon_star_24_regular',   'pending' => $_navResPending,
+    ['href' => '/staff/results',     'key' => 'results',     'label' => 'Results',          'icon' => 'medal',   'pending' => $_navResPending,
         'roles' => [ROLE_ADMIN, ROLE_DEAN]],
     // Export Results — SSO + Admin can pull the CSV / summary that
     // the registrar files. Dean works the per-college Results page
     // above, so they don't need a bulk-export entry.
-    ['href' => '/admin/results',     'key' => 'results-export', 'label' => 'Export Results', 'icon' => 'ic_fluent_arrow_download_24_regular', 
+    ['href' => '/admin/results',     'key' => 'results-export', 'label' => 'Export Results', 'icon' => 'download-simple', 
         'roles' => [ROLE_ADMIN, ROLE_SSO]],
 
-    ['href' => '/admin/users',       'key' => 'users',       'label' => 'Users',            'icon' => 'ic_fluent_shield_24_regular',
+    ['href' => '/admin/users',       'key' => 'users',       'label' => 'Users',            'icon' => 'shield-check',
         'roles' => [ROLE_ADMIN]],
-    ['href' => '/admin/audit-log',   'key' => 'audit-log',   'label' => 'Audit Log',        'icon' => 'ic_fluent_eye_show_24_regular',
+    ['href' => '/admin/audit-log',   'key' => 'audit-log',   'label' => 'Audit Log',        'icon' => 'eye',
         'roles' => [ROLE_ADMIN]],
 ];
 
@@ -187,7 +187,7 @@ $visible = array_values(array_filter($items, fn($i) => in_array($navRole, $i['ro
     <a href="<?= url($item['href']) ?>"
        class="nav-item <?= $nav === $item['key'] ? 'active' : '' ?>"
        aria-current="<?= $nav === $item['key'] ? 'page' : 'false' ?>">
-        <?php include __DIR__ . '/icons/' . $item['icon'] . '.svg'; ?>
+        <?= icon($item['icon'] . ($nav === $item['key'] ? ':fill' : ''), 18) ?>
         <?= e($item['label']) ?>
         <?php if (!empty($item['alert'])): ?>
             <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--error);margin-left:auto;flex-shrink:0" title="Needs setup"></span>

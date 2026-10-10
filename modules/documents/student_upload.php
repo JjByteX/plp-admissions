@@ -938,7 +938,7 @@ ob_start();
                     <input type="file" name="doc_file" id="file-input" class="file-input"
                            accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none">
                     <div class="file-drop-content" id="drop-content">
-                        <svg width="32" height="32" fill="none" viewBox="0 0 24 24" style="color:var(--text-tertiary);margin-bottom:var(--space-3)"><path stroke="currentColor" stroke-width="1.5" d="M4 16l4-4 4 4 4-8 4 4"/><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 20h16"/></svg>
+                        <?= icon('image:fill', 32, 'color:var(--text-tertiary);margin-bottom:var(--space-3)') ?>
                         <p style="font-weight:var(--weight-medium)">Drop your file here</p>
                         <p style="font-size:var(--text-sm);color:var(--text-tertiary)">or <span style="color:var(--accent)">browse</span></p>
                         <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">PDF, JPG, PNG or WEBP · max 4 MB</p>
@@ -983,7 +983,7 @@ function openUploadModal(slug, label) {
     // Reset drop zone
     document.getElementById('file-input').value = '';
     document.getElementById('drop-content').innerHTML =
-        '<svg width="32" height="32" fill="none" viewBox="0 0 24 24" style="color:var(--text-tertiary);margin-bottom:var(--space-3)"><path stroke="currentColor" stroke-width="1.5" d="M4 16l4-4 4 4 4-8 4 4"/><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M4 20h16"/></svg>' +
+        '<i class="ph-fill ph-image" aria-hidden="true" style="font-size:32px;color:var(--text-tertiary);margin-bottom:var(--space-3)"></i>' +
         '<p style="font-weight:var(--weight-medium)">Drop your file here</p>' +
         '<p style="font-size:var(--text-sm);color:var(--text-tertiary)">or <span style="color:var(--accent)">browse</span></p>' +
         '<p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-2)">PDF, JPG, PNG or WEBP · max 4 MB</p>';
@@ -1005,10 +1005,10 @@ function showResultModal(ok, title, msg) {
 
     if (ok) {
         iconEl.style.background = 'var(--success-bg, #d1fae5)';
-        iconEl.innerHTML = '<svg width="28" height="28" fill="none" viewBox="0 0 24 24" style="color:var(--success,#059669)"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M5 13l4 4L19 7"/></svg>';
+        iconEl.innerHTML = '<i class="ph-fill ph-check" aria-hidden="true" style="font-size:28px;color:var(--success,#059669)"></i>';
     } else {
         iconEl.style.background = 'var(--error-bg, #fee2e2)';
-        iconEl.innerHTML = '<svg width="28" height="28" fill="none" viewBox="0 0 24 24" style="color:var(--error,#dc2626)"><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+        iconEl.innerHTML = '<i class="ph-fill ph-x" aria-hidden="true" style="font-size:28px;color:var(--error,#dc2626)"></i>';
     }
 
     titleEl.textContent = title;
@@ -1140,7 +1140,7 @@ document.getElementById('file-input').addEventListener('change', function() {
 
 function updateDropLabel(name) {
     document.getElementById('drop-content').innerHTML =
-        '<svg width="28" height="28" fill="none" viewBox="0 0 24 24" style="color:var(--accent);margin-bottom:var(--space-2)"><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z"/></svg>' +
+        '<i class="ph-fill ph-file-text" aria-hidden="true" style="font-size:28px;color:var(--accent);margin-bottom:var(--space-2)"></i>' +
         '<p style="font-weight:var(--weight-medium);color:var(--accent)">' + name + '</p>' +
         '<p style="font-size:var(--text-sm);color:var(--text-tertiary)">Ready to upload</p>';
 }
@@ -1203,7 +1203,7 @@ function updateDropLabel(name) {
                 <?= icon('ic_fluent_add_24_regular', 14) ?>
             </button>
             <button onclick="fvResetZoom()" type="button" class="fv-ctrl-btn" title="Reset zoom (0)">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 21l-4.35-4.35m0 0A7 7 0 105.65 5.65a7 7 0 0011 11.35z"/></svg>
+                <?= icon('magnifying-glass', 14) ?>
             </button>
             <div style="width:1px;height:24px;background:var(--border);flex-shrink:0"></div>
             <button onclick="closeFileViewer()" type="button" class="fv-ctrl-btn" title="Close (Esc)" aria-label="Close">

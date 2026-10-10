@@ -333,17 +333,16 @@ foreach ($questions as $q) {
 }
 
 // Type icons helper
-function typeIcon($type) {
+function typeIcon($type, $size = 14) {
     $icons = [
-        'multiple_choice' => '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="currentColor"/>',
-        'checkboxes'      => '<rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M7 12l4 4 6-6"/>',
-        'dropdown'        => '<rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 11l4 4 4-4"/>',
-        'short_answer'    => '<path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 8h18M3 12h12"/>',
-        'paragraph'       => '<path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 6h18M3 10h18M3 14h12M3 18h8"/>',
-        'linear_scale'    => '<path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/>',
+        'multiple_choice' => 'radio-button',
+        'checkboxes'      => 'check-square',
+        'dropdown'        => 'caret-circle-down',
+        'short_answer'    => 'text-align-left',
+        'paragraph'       => 'text-align-justify',
+        'linear_scale'    => 'arrows-left-right',
     ];
-    $d = $icons[$type] ?? $icons['multiple_choice'];
-    return "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" style=\"flex-shrink:0\">{$d}</svg>";
+    return icon($icons[$type] ?? 'radio-button', $size);
 }
 
 // Format a datetime for display
@@ -505,7 +504,7 @@ ob_start();
     margin-top: var(--space-3);
 }
 .exam-meta-item { display: flex; align-items: center; gap: 5px; }
-.exam-meta-item svg { flex-shrink: 0; color: var(--text-tertiary); }
+.exam-meta-item svg, .exam-meta-item i { flex-shrink: 0; color: var(--text-tertiary); }
 
 /* ── LANDING PAGE ────────────────────────────────── */
 .exam-landing-wrap {
@@ -657,21 +656,14 @@ elseif ($selectedExamId) $view = 'editor';
     <!-- Exam Builder (left) — always enabled -->
     <a href="<?= url('/staff/exam') ?>?view=exams" class="exam-landing-card">
         <div class="exam-landing-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                      d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2z"/>
-                <polyline stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                          points="14 2 14 8 20 8"/>
-                <line stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="8" y1="13" x2="16" y2="13"/>
-                <line stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="8" y1="17" x2="13" y2="17"/>
-            </svg>
+            <?= icon('file-text:fill', 28) ?>
         </div>
         <div class="exam-landing-title">Exam Builder</div>
         <div class="exam-landing-desc">
             Create exams, set questions, and manage schedules.
         </div>
         <div class="exam-landing-meta">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
+            <?= icon('calendar-check', 13) ?>
             <?= count($exams) ?> exam<?= count($exams) !== 1 ? 's' : '' ?> created
             <?php if ($activeExam): ?>
                 &nbsp;&middot;&nbsp;
@@ -687,12 +679,7 @@ elseif ($selectedExamId) $view = 'editor';
     <div class="exam-landing-card exam-landing-card--disabled" title="Create an exam first before setting up room slots">
     <?php endif; ?>
         <div class="exam-landing-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-                <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-                <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-                <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-            </svg>
+            <?= icon('squares-four:fill', 28) ?>
         </div>
         <div class="exam-landing-title">Room Slots</div>
         <div class="exam-landing-desc">
@@ -700,10 +687,10 @@ elseif ($selectedExamId) $view = 'editor';
         </div>
         <div class="exam-landing-meta">
             <?php if (empty($exams)): ?>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4M12 16h.01"/></svg>
+                <?= icon('warning-circle:fill', 13) ?>
                 Create an exam first
             <?php else: ?>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
+                <?= icon('calendar-check', 13) ?>
                 <?= $slotCount ?> slot<?= $slotCount !== 1 ? 's' : '' ?> configured
             <?php endif; ?>
         </div>
@@ -735,7 +722,7 @@ elseif ($selectedExamId) $view = 'editor';
              style="align-items:center;justify-content:center;min-height:220px;border-style:dashed;cursor:pointer">
             <div style="width:56px;height:56px;border-radius:50%;background:var(--accent-muted);
                         display:flex;align-items:center;justify-content:center;color:var(--accent)">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                <?= icon('plus:fill', 28) ?>
             </div>
             <div style="font-size:var(--text-base);font-weight:var(--weight-semibold);color:var(--accent);margin-top:var(--space-2)">Create Your First Exam</div>
             <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:var(--space-1)">Get started by creating an entrance exam.</div>
@@ -762,7 +749,7 @@ elseif ($selectedExamId) $view = 'editor';
                 <!-- Meta info -->
                 <div class="exam-dir-meta">
                     <div class="exam-dir-meta-row">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
+                        <?= icon('calendar-check', 12) ?>
                         <?= $qCount ?> question<?= $qCount !== 1 ? 's' : '' ?>
                     </div>
                 </div>
@@ -774,7 +761,7 @@ elseif ($selectedExamId) $view = 'editor';
                     </span>
                     <span style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);display:flex;align-items:center;gap:4px">
                         Edit
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14M13 6l6 6-6 6"/></svg>
+                        <?= icon('arrow-right', 12) ?>
                     </span>
                 </div>
             </a>
@@ -785,7 +772,7 @@ elseif ($selectedExamId) $view = 'editor';
              style="align-items:center;justify-content:center;min-height:200px;border-style:dashed;cursor:pointer">
             <div style="width:48px;height:48px;border-radius:50%;background:var(--accent-muted);
                         display:flex;align-items:center;justify-content:center;color:var(--accent)">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                <?= icon('plus:fill', 24) ?>
             </div>
             <div style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--accent);margin-top:var(--space-2)">New Exam</div>
         </div>
@@ -995,9 +982,7 @@ elseif ($selectedExamId) $view = 'editor';
                         </div>
                         <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;align-items:center">
                             <button type="button" class="drag-handle" title="Drag to reorder">
-                                <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M8 6a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM8 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM8 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 6a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM16 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
-                                </svg>
+                                <?= icon('dots-six-vertical', 14) ?>
                             </button>
                             <button class="btn-icon" title="Edit question" onclick="startInlineQFullEdit(<?= $q['id'] ?>)">
                                 <?= icon('ic_fluent_edit_24_regular', 14) ?>
@@ -1103,11 +1088,11 @@ elseif ($selectedExamId) $view = 'editor';
             <button class="btn btn-ghost btn-sm"
                     onclick="openAddSectionModal()"
                     style="display:flex;align-items:center;gap:5px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h16M4 18h8"/><circle cx="19" cy="18" r="3" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M19 16v4M17 18h4"/></svg>
+                <?= icon('list-plus', 14) ?>
                 Add Section
             </button>
             <button class="btn btn-secondary btn-sm" onclick="openAiImportModal()" style="display:flex;align-items:center;gap:5px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2a7 7 0 017 7c0 2.5-1.3 4.7-3.3 6L12 22l-3.7-7C6.3 13.7 5 11.5 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>
+                <?= icon('map-pin', 14) ?>
                 Import with AI
             </button>
         </div>
@@ -1258,20 +1243,11 @@ elseif ($selectedExamId) $view = 'editor';
                         All questions added to this section will automatically use this type.
                     </p>
                     <div class="type-grid" id="sec-type-grid">
-                        <?php foreach ($QUESTION_TYPES as $typeKey => $typeMeta):
-                            $svgPaths = [
-                                'multiple_choice' => '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="currentColor"/>',
-                                'checkboxes'      => '<rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M7 12l4 4 6-6"/>',
-                                'dropdown'        => '<rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 11l4 4 4-4"/>',
-                                'short_answer'    => '<path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 8h18M3 12h12"/>',
-                                'paragraph'       => '<path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 6h18M3 10h18M3 14h12M3 18h8"/>',
-                                'linear_scale'    => '<path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/>',
-                            ];
-                        ?>
+                        <?php foreach ($QUESTION_TYPES as $typeKey => $typeMeta): ?>
                             <div class="type-option <?= $typeKey==='multiple_choice'?'selected':'' ?>"
                                  data-type="<?= $typeKey ?>"
                                  onclick="selectSectionType('<?= $typeKey ?>')">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><?= $svgPaths[$typeKey] ?></svg>
+                                <?= typeIcon($typeKey, 20) ?>
                                 <?= $typeMeta['label'] ?>
                             </div>
                         <?php endforeach; ?>
@@ -2008,7 +1984,7 @@ function togglePassingPanel() {
         <div class="modal-header" style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)">
             <div style="display:flex;align-items:center;gap:var(--space-3)">
                 <div style="width:34px;height:34px;border-radius:var(--radius-md);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 3c-1.2 5.4-4.5 7.5-9 9 4.5 1.5 7.8 3.6 9 9 1.2-5.4 4.5-7.5 9-9-4.5-1.5-7.8-3.6-9-9z"/></svg>
+                    <?= icon('sparkle', 17, 'color:#fff') ?>
                 </div>
                 <div>
                     <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">Import Exam with AI</div>
@@ -2029,12 +2005,12 @@ function togglePassingPanel() {
             </div>
             <div id="ai-step-upload">
                 <div class="ai-dropzone" id="ai-drop-zone" onclick="document.getElementById('ai-file-input').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleAiFileDrop(event)">
-                    <div class="ai-dropzone-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path stroke="var(--text-tertiary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2z"/><polyline stroke="var(--text-tertiary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" points="14 2 14 8 20 8"/></svg></div>
+                    <div class="ai-dropzone-icon"><?= icon('file', 20, 'color:var(--text-tertiary)') ?></div>
                     <div id="ai-dropzone-label" style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-secondary)">Drop file here or <span style="color:var(--accent)">click to browse</span></div>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">JPG · PNG · PDF · DOCX · TXT</div>
                     <div id="ai-file-tag-wrap" style="display:none;margin-top:var(--space-3)">
                         <span class="ai-file-tag">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path stroke="#fff" stroke-width="2.2" stroke-linecap="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2z"/></svg>
+                            <?= icon('file', 12, 'color:#fff') ?>
                             <span id="ai-file-tag-name"></span>
                             <button class="rm" onclick="event.stopPropagation();clearAiFile()" title="Remove"><?= icon('ic_fluent_dismiss_24_regular', 12) ?></button>
                         </span>
@@ -2063,14 +2039,14 @@ function togglePassingPanel() {
                     <button class="btn btn-ghost btn-sm" onclick="resetAiImport()">← Try again</button>
                 </div>
                 <div class="ai-warn-strip">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;margin-top:1px"><path stroke="#d97706" stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                    <?= icon('warning:fill', 14, 'margin-top:1px;color:#d97706') ?>
                     <span>AI results may not be 100% accurate. <strong>Review each question and answer</strong> before saving.</span>
                 </div>
                 <div id="ai-questions-preview" style="display:flex;flex-direction:column;gap:var(--space-2);max-height:320px;overflow-y:auto"></div>
             </div>
             <div id="ai-step-error" style="display:none;flex-direction:column;gap:var(--space-3)">
                 <div style="display:flex;align-items:flex-start;gap:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--radius-md);padding:12px 14px;font-size:var(--text-sm);color:#991b1b">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
+                    <?= icon('warning-circle:fill', 16, 'margin-top:1px') ?>
                     <span id="ai-error-msg"></span>
                 </div>
                 <button class="btn btn-ghost btn-sm" style="align-self:flex-start" onclick="resetAiImport()">← Try again</button>
@@ -2079,14 +2055,14 @@ function togglePassingPanel() {
         <div class="modal-footer" id="ai-modal-footer" style="border-top:1px solid var(--border)">
             <button type="button" class="btn btn-ghost" onclick="closeAiImportModal()">Cancel</button>
             <button type="button" class="btn btn-primary" id="ai-process-btn" onclick="startAiProcessing()" disabled>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="margin-right:5px"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 3c-1.2 5.4-4.5 7.5-9 9 4.5 1.5 7.8 3.6 9 9 1.2-5.4 4.5-7.5 9-9-4.5-1.5-7.8-3.6-9-9z"/></svg>
+                <?= icon('sparkle', 14, 'margin-right:5px') ?>
                 Generate Questions
             </button>
         </div>
         <div class="modal-footer" id="ai-save-footer" style="display:none;border-top:1px solid var(--border)">
             <button type="button" class="btn btn-ghost" onclick="closeAiImportModal()">Cancel</button>
             <button type="button" class="btn btn-primary" id="ai-save-btn" onclick="saveAiQuestions()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="margin-right:5px"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14a2 2 0 01-2 2z"/><polyline stroke="currentColor" stroke-width="2" stroke-linecap="round" points="17 21 17 13 7 13 7 21"/><polyline stroke="currentColor" stroke-width="2" stroke-linecap="round" points="7 3 7 8 15 8"/></svg>
+                <?= icon('floppy-disk', 14, 'margin-right:5px') ?>
                 Add All to Exam
             </button>
         </div>
@@ -2635,7 +2611,7 @@ function renderAiPreview(sections) {
                 choices='<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px">'+q.choices.map((c,ci)=>{
                     const ok=q.question_type==='checkboxes'?(q.correct_indices||[]).includes(ci):ci===parseInt(q.correct_index);
                     const dot=ok
-                        ? `<span style="width:14px;height:14px;border-radius:50%;background:#15803d;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"><svg width="8" height="8" viewBox="0 0 24 24" fill="none"><path stroke="#fff" stroke-width="3.5" stroke-linecap="round" d="M5 13l4 4L19 7"/></svg></span>`
+                        ? `<span style="width:14px;height:14px;border-radius:50%;background:#15803d;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"><i class="ph-bold ph-check" aria-hidden="true" style="font-size:8px;color:#fff"></i></span>`
                         : `<span style="width:14px;height:14px;border-radius:50%;border:1.5px solid #d1d5db;flex-shrink:0;display:inline-block"></span>`;
                     return`<div style="display:flex;align-items:center;gap:7px;padding:2px 0;font-size:13px;color:${ok?'#15803d':'#374151'};${ok?'font-weight:500':''}">${dot}${escHtml(c)}</div>`;
                 }).join('')+'</div>';

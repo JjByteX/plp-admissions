@@ -249,7 +249,7 @@ ob_start();
 <?php if ($totalIdle > 0): ?>
 <div class="card" style="padding:var(--space-4);margin-bottom:var(--space-6)">
     <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3)">
-        <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="#f97316" stroke-width="2" stroke-linecap="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <?= icon('warning-circle:fill', 18, 'color:#f97316') ?>
         <strong style="font-size:var(--text-sm)">Idle Applicants (<?= $totalIdle ?> waiting ><?= $idleDays ?> days)</strong>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:var(--space-3)">

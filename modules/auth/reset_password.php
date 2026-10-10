@@ -58,7 +58,7 @@ ob_start();
 
     <div class="auth-header">
         <div class="auth-logo">
-            <?php include VIEWS_PATH . '/partials/icons/ic_fluent_shield_24_regular.svg'; ?>
+            <?= icon('shield-check:fill', 26) ?>
         </div>
         <h1 class="auth-title">New password</h1>
         <p class="auth-subtitle">Choose a strong password for your account</p>

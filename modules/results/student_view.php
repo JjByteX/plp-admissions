@@ -141,9 +141,7 @@ ob_start();
 <?php elseif (!$result): ?>
 <!-- ── No result yet ────────────────────────────────────────── -->
     <div style="text-align:center;padding:var(--space-16);color:var(--text-tertiary)">
-        <svg width="48" height="48" fill="none" viewBox="0 0 24 24" style="color:var(--text-tertiary);margin-bottom:var(--space-4)">
-            <path stroke="currentColor" stroke-width="1.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
+        <?= icon('warning-circle:fill', 48, 'color:var(--text-tertiary);margin-bottom:var(--space-4)') ?>
         <p style="font-weight:var(--weight-medium)">Result not yet released</p>
         <p style="font-size:var(--text-sm);margin-top:var(--space-1)">You'll be notified once your result is ready.</p>
     </div>
@@ -283,7 +281,7 @@ ob_start();
         <div style="border:1.5px solid #f59e0b;background:#fffbeb;border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
             <div style="display:flex;align-items:flex-start;gap:var(--space-3)">
                 <div style="width:36px;height:36px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path stroke="#f59e0b" stroke-width="2" stroke-linecap="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3M6.343 6.343l-.707-.707M12 21a9 9 0 100-18 9 9 0 000 18z"/></svg>
+                    <?= icon('lightbulb', 16, 'color:#f59e0b') ?>
                 </div>
                 <div style="flex:1">
                     <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-1)">Course Suggestion from Admissions</div>
@@ -328,11 +326,7 @@ ob_start();
         <div style="border:1.5px solid #6366f1;background:#eef2ff;border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
             <div style="display:flex;align-items:flex-start;gap:var(--space-3)">
                 <div style="width:36px;height:36px;border-radius:50%;background:#e0e7ff;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                        <path stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                              d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 0v4m0 8v4m-4-8h8"/>
-                        <circle cx="12" cy="12" r="2" fill="#6366f1"/>
-                    </svg>
+                    <?= icon('crosshair', 18, 'color:#6366f1') ?>
                 </div>
                 <div style="flex:1">
                     <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:#4338ca;margin-bottom:var(--space-1)">
@@ -350,10 +344,7 @@ ob_start();
                         <li style="display:flex;align-items:center;gap:var(--space-3);
                                    background:white;border:1px solid #c7d2fe;border-radius:var(--radius-md);
                                    padding:var(--space-2) var(--space-3)">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">
-                                <path stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4"/>
-                                <circle cx="12" cy="12" r="10" stroke="#6366f1" stroke-width="2"/>
-                            </svg>
+                            <?= icon('check-circle:fill', 14, 'color:#6366f1') ?>
                             <span style="font-size:var(--text-sm);font-weight:var(--weight-medium)"><?= e($ac) ?></span>
                         </li>
                         <?php endforeach; ?>

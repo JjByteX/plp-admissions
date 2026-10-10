@@ -3481,3 +3481,28 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 60px; --hei
 
 /* Keep every row one line tall: clip instead of wrapping */
 .auto-table td { white-space: nowrap; text-overflow: ellipsis; }
+
+/* ── Phosphor icons (CDN) ─────────────────────────────────────
+   <i class="ph-bold|ph-fill ph-*"> replaces the old inline <svg>.
+   Block-level + non-shrinking like svg was; the !important sizes
+   mirror the old `X svg { width/height }` rules so nothing shifts. */
+.ph-bold, .ph-fill { display: block; flex-shrink: 0; }
+.nav-item i, .sidebar-logo-placeholder i { font-size: 18px !important; }
+.btn i, .dropdown-item i, .btn-outline-warning i { font-size: 15px !important; }
+.alert i, .input-prefix-icon i, .input-suffix-icon i, .btn-pw-toggle i,
+.theme-toggle i, .auto-table-page-btn i { font-size: 16px !important; }
+.alert i { margin-top: 1px; }
+.auth-theme-toggle i, .sort-btn i { font-size: 14px !important; }
+.doc-icon i { font-size: 18px !important; color: var(--text-secondary); }
+.auth-logo i { font-size: 26px !important; color: white; }
+.session-modal-icon i { font-size: 24px !important; }
+.empty-state i { font-size: 32px !important; opacity: 0.4; }
+.sidebar-logo-placeholder i { color: white; }
+.btn-pw-toggle i { pointer-events: none; }
+.step-dot i { font-size: 12px !important; color: var(--text-tertiary); }
+.step.done .step-dot i { color: white; }
+.step.active .step-dot i { color: var(--accent); }
+.auto-table-search i {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--text-tertiary); pointer-events: none;
+}

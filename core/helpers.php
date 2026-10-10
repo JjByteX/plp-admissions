@@ -804,30 +804,74 @@ function audit_log(
 }
 
 
-// -- SVG icon helper -------------------------------------------
-// Loads a Fluent icon from views/partials/icons/ and sets size.
-// $extra = any additional SVG attributes e.g. 'id="foo" class="bar"'
+// -- Icon helper (Phosphor, CDN) --------------------------------
+// <link> tags for the two Phosphor weights we use: bold + fill.
+// Put <?= phosphor_head() ?> in every layout <head>.
+function phosphor_head(): string
+{
+    $b = 'https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src';
+    return '<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>' . "\n"
+         . '    <link rel="stylesheet" href="' . $b . '/bold/style.css">' . "\n"
+         . '    <link rel="stylesheet" href="' . $b . '/fill/style.css">';
+}
+
+// icon('bell', 18)            -> bold  (default)
+// icon('bell:fill', 18)       -> fill
+// icon('ic_fluent_..._24_regular') still works: mapped to Phosphor below.
+// $extra = extra HTML attributes e.g. 'id="foo" class="bar"'
 function icon(string $name, int $size = 16, string $style = '', string $extra = ''): string
 {
-    static $cache = [];
-    if (!isset($cache[$name])) {
-        $path = VIEWS_PATH . '/partials/icons/' . $name . '.svg';
-        $cache[$name] = file_exists($path) ? file_get_contents($path) : '';
+    // Fluent name => Phosphor name (kept so the ~250 existing call sites don't change)
+    static $map = [
+        'add' => 'plus', 'arrow_down' => 'arrow-down', 'arrow_up' => 'arrow-up',
+        'arrow_left' => 'arrow-left', 'arrow_download' => 'download-simple',
+        'arrow_upload' => 'upload-simple', 'arrow_sync' => 'arrows-clockwise',
+        'arrow_undo' => 'arrow-u-up-left', 'building_bank' => 'bank',
+        'calendar' => 'calendar-blank', 'calendar_ltr' => 'calendar-blank',
+        'calendar_add' => 'calendar-plus', 'calendar_cancel' => 'calendar-x',
+        'calendar_checkmark' => 'calendar-check', 'calendar_sync' => 'calendar-dots',
+        'checkmark' => 'check', 'checkmark_circle' => 'check-circle',
+        'chevron_left' => 'caret-left', 'chevron_right' => 'caret-right',
+        'chevron_up_down' => 'caret-up-down', 'clipboard' => 'clipboard-text',
+        'clock' => 'clock', 'delete' => 'trash', 'dismiss' => 'x',
+        'dismiss_circle' => 'x-circle', 'document' => 'file-text',
+        'document_checkmark' => 'file-check', 'edit' => 'pencil-simple',
+        'eye' => 'eye', 'eye_show' => 'eye', 'filter' => 'funnel',
+        'home' => 'house', 'hourglass' => 'hourglass', 'image' => 'image',
+        'info' => 'info', 'library' => 'books', 'location' => 'map-pin',
+        'lock_closed' => 'lock', 'mail' => 'envelope-simple',
+        'more_horizontal' => 'dots-three', 'people' => 'users',
+        'question_circle' => 'question', 'ribbon_star' => 'medal',
+        'save' => 'floppy-disk', 'search' => 'magnifying-glass',
+        'settings' => 'gear', 'shield' => 'shield-check', 'sign_out' => 'sign-out',
+        'signed' => 'signature', 'sparkle' => 'sparkle', 'subtract' => 'minus',
+        'text_bullet_list_add' => 'list-plus', 'warning' => 'warning',
+        'weather_moon' => 'moon', 'weather_sunny' => 'sun',
+    ];
+    // Legacy names that read better filled (status / emphasis icons)
+    static $fill = [
+        'checkmark_circle', 'dismiss_circle', 'warning', 'info', 'question_circle',
+        'ribbon_star', 'sparkle', 'building_bank', 'shield', 'lock_closed', 'filter',
+    ];
+
+    if (preg_match('/^ic_fluent_(.+)_24_(?:regular|filled)$/', $name, $m)) {
+        if (!isset($map[$m[1]])) return '';
+        $ph     = $map[$m[1]];
+        $weight = in_array($m[1], $fill, true) ? 'fill' : 'bold';
+    } else {
+        [$ph, $weight] = array_pad(explode(':', $name, 2), 2, 'bold');
+        if ($weight !== 'fill') $weight = 'bold';
     }
-    if (!$cache[$name]) return '';
-    $svg = $cache[$name];
-    $svg = preg_replace_callback('/<svg\b([^>]*)>/', function ($m) use ($size, $style, $extra) {
-        $attrs = $m[1];
-        $attrs = preg_replace('/\s*width="[^"]*"/',  '', $attrs);
-        $attrs = preg_replace('/\s*height="[^"]*"/', '', $attrs);
-        $out  = '<svg';
-        $out .= ' width="' . $size . '" height="' . $size . '"';
-        if ($style) $out .= ' style="' . $style . '"';
-        if ($extra) $out .= ' ' . $extra;
-        $out .= $attrs . '>';
-        return $out;
-    }, $svg, 1);
-    return $svg;
+
+    $cls = 'ph-' . $weight . ' ph-' . $ph;
+    if (preg_match('/\bclass="([^"]*)"/', $extra, $c)) {
+        $cls  .= ' ' . $c[1];
+        $extra = str_replace($c[0], '', $extra);
+    }
+    $out = '<i class="' . $cls . '" aria-hidden="true" style="font-size:' . $size . 'px'
+         . ($style ? ';' . $style : '') . '"';
+    if (trim($extra) !== '') $out .= ' ' . trim($extra);
+    return $out . '></i>';
 }
 
 // -- Pagination -------------------------------------------------

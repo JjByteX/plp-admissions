@@ -128,19 +128,12 @@ ob_start();
                 </div>
                 <div class="q-sess-meta">
                     <div class="q-sess-meta-row">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                            <path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 7v5l3 3"/>
-                        </svg>
+                        <?= icon('clock', 12) ?>
                         <?= $timeLabel ?>
                     </div>
                     <?php if (!empty($s['location_label'])): ?>
                         <div class="q-sess-meta-row">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                      d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
-                                <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2"/>
-                            </svg>
+                            <?= icon('map-pin', 12) ?>
                             <?= e($s['location_label']) ?>
                         </div>
                     <?php endif; ?>
