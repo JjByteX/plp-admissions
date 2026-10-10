@@ -21,7 +21,7 @@ function ai_category_map(): array
         'valid_id'               => ['Government-issued ID (school ID, National ID, PhilHealth, driver\'s license, voter\'s ID or certificate, UMID, PWD ID, PRC ID)', ['valid_id_1', 'valid_id_2'], 'a card with the holder\'s photo and name'],
         'barangay_cert'          => ['Barangay certificate of residence',                       ['barangay_cert'], 'also called certificate of residency, signed by the Punong Barangay'],
         'guardianship_affidavit' => ['Affidavit of guardianship or support',                    ['guardianship_affidavit'], 'a sworn statement, usually notarized'],
-        'passport_photo'         => ['Passport-size photo (one or two photos on a white background)', ['photo_1', 'photo_2'], 'a plain photo of a face, not a document'],
+        'passport_photo'         => ['Passport-size photo (one or two photos on a white background)', ['photo_1'], 'a plain photo of a face, not a document'],
         'form_138_g11'           => ['Certified true copy of Form 138 (Grade 11 report card)',  ['form_138'], 'school report card with subjects and grades'],
         'form_137'               => ['Form 138 (Grade 12 report card) or Form 137 school record', ['form_137'], 'school report card or permanent record with subjects and grades, LRN, school name'],
         'tor'                    => ['Transcript of Records or Certificate of Grades',          ['tor'], 'college grades with units and a school seal'],

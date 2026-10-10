@@ -18,14 +18,14 @@ function rows(array $m): array
 
 // Category names
 check(doc_category_of('valid_id_1') === 'valid_id', 'valid_id_1 category');
-check(doc_category_of('photo_2') === 'photo', 'photo_2 category');
+check(doc_category_of('photo_1') === 'photo', 'photo_1 category');
 check(doc_category_of('form_138') === 'form_138', 'form_138 is its own category');
 check(doc_category_of('tor') === 'tor', 'tor is its own category');
 
 // Grouping
 $cats = doc_categories(docs_for_type(TYPE_FRESHMAN, ['grade12' => true]));
 check($cats['valid_id']['slots'] === ['valid_id_1', 'valid_id_2'], 'valid_id has two slots');
-check($cats['photo']['slots'] === ['photo_1', 'photo_2'], 'photo has two slots');
+check($cats['photo']['slots'] === ['photo_1'], 'photo has one slot');
 check($cats['psa_birth_cert']['slots'] === ['psa_birth_cert'], 'psa has one slot');
 check(!str_contains($cats['valid_id']['label'], '(1 of 2)'), 'category label drops the (1 of 2)');
 check(isset($cats['form_138']) && !isset($cats['form_137']), 'only ticked conditional categories');
@@ -39,8 +39,8 @@ check(doc_pick_slot($id, rows(['valid_id_1' => 'uploaded', 'valid_id_2' => 'pend
 // Both filled: a third ID is blocked (two-slot categories never replace)
 $full = doc_pick_slot($id, rows(['valid_id_1' => 'uploaded', 'valid_id_2' => 'uploaded']), false);
 check($full['slot'] === null && str_contains($full['reason'], 'Both'), 'third ID is blocked');
-$ph = doc_pick_slot(['photo_1', 'photo_2'], rows(['photo_1' => 'uploaded', 'photo_2' => 'uploaded']), false);
-check($ph['slot'] === null, 'third photo is blocked');
+$ph = doc_pick_slot(['photo_1'], rows(['photo_1' => 'uploaded']), false);
+check($ph['slot'] === 'photo_1' && $ph['replaced'], 'a new photo replaces the earlier one');
 
 // Approved
 $ok = doc_pick_slot(['psa_birth_cert'], rows(['psa_birth_cert' => 'approved']), false);

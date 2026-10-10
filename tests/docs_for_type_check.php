@@ -17,7 +17,7 @@ function slots(string $type, $flags = null): array
 }
 function expect(array $list): array { sort($list); return $list; }
 
-$base = ['psa_birth_cert','valid_id_1','valid_id_2','barangay_cert','photo_1','photo_2'];
+$base = ['psa_birth_cert','valid_id_1','valid_id_2','barangay_cert','photo_1'];
 
 // No flags: only always-required slots
 check(slots(TYPE_FRESHMAN)   === expect($base), 'freshman, no flags');

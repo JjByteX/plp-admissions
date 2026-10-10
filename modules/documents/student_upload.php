@@ -292,13 +292,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fresh = [];
             foreach ($stmt->fetchAll() as $row) $fresh[$row['doc_type']] = $row;
 
-            // One image with two photos fills both photo slots with the same file.
-            $want = ($cat === 'photo' && (int)($r['fields']['photos'] ?? 0) === 2) ? 2 : 1;
-            $pick = doc_pick_slots($slots, $fresh, $isSubmitted, $want);
+            $pick = doc_pick_slots($slots, $fresh, $isSubmitted);
             if (!$pick['slots']) {
                 $db->rollBack();
                 $out['status']  = 'blocked';
                 $out['message'] = $pick['reason'];
+                $out['can_replace'] = !$isSubmitted && in_array('uploaded', array_column($fresh, 'status'), true);
                 $reply($out);
             }
             $slot = $pick['slots'][0];
@@ -345,9 +344,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $out['slots']      = $pick['slots'];
         $out['slot_label'] = $requiredDocs[$slot];
         $out['replaced']   = $pick['replaced'];
-        if (count($pick['slots']) === 2) {
-            $out['message'] = $categories[$cat]['label'] . ' saved to both slots.';
-        } elseif ($pick['replaced']) {
+        if ($pick['replaced']) {
             $out['message'] = $requiredDocs[$slot] . ' replaced your earlier file.';
         } else {
             $out['message'] = $requiredDocs[$slot] . ' saved.';
@@ -1653,7 +1650,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 r.guess = res.guess || '';
                 r.guessCat = res.guess_category || '';
                 if (res.status === 'passed') sorted(r, res.message || 'Saved.');
-                else if (res.status === 'blocked') { done(r, 'Blocked', 'badge-error', res.message); window.refreshSlotList && window.refreshSlotList(); }
+                else if (res.status === 'blocked') {
+                    done(r, 'Blocked', 'badge-error', res.message);
+                    if (res.can_replace) r.$el.append($('<div class="batch-tip">').text('To replace a saved file, ').append($('<a class="batch-link">').attr('href', MANUAL_URL).text('upload your documents manually.')));
+                    window.refreshSlotList && window.refreshSlotList();
+                }
                 else if (res.status === 'failed') { r.tries++; offer(r, 'failed', res.message, res.categories); }
                 else { r.tries++; offer(r, 'uncertain', res.message, res.categories); }
             }
