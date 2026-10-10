@@ -476,20 +476,31 @@ window.FontSize = FontSize;
 // which row sits first on the page, that row can be a different
 // height, which recomputes the page size again, flipping forever).
 //
+// Same math as the hook: the region measured is the WHOLE
+// .auto-table-wrap (card + the pagination bar under it), and the
+// pagination bar is always reserved (--height-table-footer, 40px =
+// 32px bar + 8px gap) whether or not it is showing:
+//
+//   rows = floor((wrap - toolbar - header - pagination - 2px card border) / row)
+//
 // This app has no client-side router or in-memory row array —
 // every list page here is a full server render with GET-based
-// LIMIT/OFFSET pagination (core/helpers.php's paginate()). So
-// unlike the React original (which just re-slices an array already
-// in memory), "auto" here means: measure once on load, and if the
-// computed size doesn't match what the server actually rendered
-// with (?per_page=), reload with the corrected value. A ResizeObserver
-// keeps it in sync with real window resizes after that.
+// LIMIT/OFFSET pagination. So unlike the React original (which just
+// re-slices an array already in memory), "auto" here means: measure
+// on load, and if the computed size is not exactly what the server
+// rendered with (?per_page=), reload with the corrected value. The
+// measured size is also kept in a cookie, which the page reads on its
+// next plain visit, so after the first measurement the server already
+// renders the right row count and no reload happens at all. A
+// ResizeObserver keeps it in sync with real window resizes after that.
 const AutoPageSize = (() => {
     const MIN_ROWS = 3;
-    const MAX_ROWS = 200;
-    const FALLBACK_ROW_HEIGHT = 44;
+    const MAX_ROWS = 100;
+    const FALLBACK_ROW_HEIGHT = 56;
     const FALLBACK_HEADER_HEIGHT = 40;
-    const FALLBACK_FOOTER_HEIGHT = 52;
+    const FALLBACK_FOOTER_HEIGHT = 40;
+    // The card's 1px top and bottom border (lakbay's CARD_BORDER).
+    const CARD_BORDER = 2;
     const STORAGE_KEY_PREFIX = 'plp_auto_page_size:';
 
     function cssVar(name, fallback) {
@@ -498,19 +509,17 @@ const AutoPageSize = (() => {
         return Number.isNaN(n) ? fallback : n;
     }
 
-    // Rows that fit = card height - toolbar - header - footer, divided by the
-    // fixed row height. The card is measured because the toolbar and the
-    // pagination footer are siblings of the body inside it.
-    function computeRows(card, toolbar, footer) {
-        const availableH = card.getBoundingClientRect().height;
+    // Rows that fit = wrap height - toolbar - header - pagination bar -
+    // card border, divided by the fixed row height. The toolbar is
+    // measured live because its filters can wrap onto a second line.
+    function computeRows(wrap, toolbar) {
+        const availableH = wrap.getBoundingClientRect().height;
         const toolbarH = toolbar ? toolbar.getBoundingClientRect().height : 0;
         const rowH = cssVar('--height-table-row', FALLBACK_ROW_HEIGHT);
         const headerH = cssVar('--height-table-header', FALLBACK_HEADER_HEIGHT);
-        const footerH = footer
-            ? footer.getBoundingClientRect().height
-            : cssVar('--height-table-footer', FALLBACK_FOOTER_HEIGHT);
+        const footerH = cssVar('--height-table-footer', FALLBACK_FOOTER_HEIGHT);
 
-        const usable = availableH - toolbarH - headerH - footerH;
+        const usable = availableH - toolbarH - headerH - footerH - CARD_BORDER;
         const rows = Math.floor(usable / rowH);
         return Math.max(MIN_ROWS, Math.min(MAX_ROWS, rows));
     }
@@ -519,12 +528,11 @@ const AutoPageSize = (() => {
         const root = document.querySelector('[data-auto-page-size]');
         if (!root) return;
 
-        const container = root.querySelector('.auto-table-body');
-        const toolbar   = root.querySelector('.auto-table-toolbar');
-        const footer    = root.querySelector('.auto-table-pagination');
-        if (!container) return;
+        const toolbar = root.querySelector('.auto-table-toolbar');
 
         const storageKey = STORAGE_KEY_PREFIX + (root.dataset.autoPageSize || 'default');
+        // Cookie name the server reads (modules/audit/log.php): the storage
+        // key with everything but letters, digits and _ turned into _.
         const cookieKey = storageKey.replace(/[^a-zA-Z0-9_]/g, '_');
         const reloadCountKey = storageKey + ':reloads';
         const currentPerPage = parseInt(root.dataset.currentPerPage || '0', 10);
@@ -532,13 +540,16 @@ const AutoPageSize = (() => {
         // then stop — never reload forever.
         const MAX_AUTO_RELOADS = 3;
 
+        function rememberSize(perPage) {
+            document.cookie = `${cookieKey}=${perPage}; path=/; max-age=31536000; samesite=lax`;
+        }
+
         function reloadWithPerPage(perPage) {
             const url = new URL(window.location.href);
             url.searchParams.set('per_page', String(perPage));
             // Preserve pagination clicks. If the resized page number is no
             // longer valid, the server clamps it to the last available page.
-            sessionStorage.setItem(storageKey, String(perPage));
-            document.cookie = `${cookieKey}=${perPage}; path=/; max-age=31536000; samesite=lax`;
+            rememberSize(perPage);
             window.location.href = url.toString();
         }
 
@@ -546,15 +557,18 @@ const AutoPageSize = (() => {
             const reloadsSoFar = parseInt(sessionStorage.getItem(reloadCountKey) || '0', 10);
             if (reloadsSoFar >= MAX_AUTO_RELOADS) return false;
 
-            const rows = computeRows(root, toolbar, footer);
-            // Avoid a reload loop: only navigate if the computed size is
-            // meaningfully different from what the server already rendered.
-            if (Math.abs(rows - currentPerPage) >= 2) {
+            const rows = computeRows(root, toolbar);
+            // Any difference means the table is either overflowing or
+            // leaving a row's worth of empty space at the bottom, so fix
+            // it. The measured value is deterministic (it does not depend
+            // on how many rows were rendered), so after one reload it
+            // matches and this settles.
+            if (rows !== currentPerPage) {
                 sessionStorage.setItem(reloadCountKey, String(reloadsSoFar + 1));
                 reloadWithPerPage(rows);
                 return true;
             }
-            document.cookie = `${cookieKey}=${rows}; path=/; max-age=31536000; samesite=lax`;
+            rememberSize(rows);
             sessionStorage.removeItem(reloadCountKey); // settled — reset for next time
             return false;
         }
@@ -562,13 +576,15 @@ const AutoPageSize = (() => {
         if (measureAndMaybeReload()) return; // navigating away
 
         // Keep it in sync with real resizes (sidebar collapse, window
-        // resize, orientation change) — debounced.
+        // resize, orientation change) and with the toolbar wrapping to
+        // another line — debounced.
         let resizeTimer = null;
         const observer = new ResizeObserver(() => {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(measureAndMaybeReload, 400);
+            resizeTimer = setTimeout(measureAndMaybeReload, 250);
         });
         observer.observe(root);
+        if (toolbar) observer.observe(toolbar);
 
         recheckFn = () => { sessionStorage.removeItem(reloadCountKey); measureAndMaybeReload(); };
     }

@@ -228,14 +228,26 @@ foreach ($slots as $s) {
     }
 }
 
+// Pagination — same auto-fit scheme as the audit log: AutoPageSize (app.js)
+// measures how many fixed-height rows fit and reloads with ?per_page=. Only
+// the slots to cancel are paged; $replacements stays whole because every
+// row's "Move everyone to…" list is built from all of them.
+$perPage  = auto_per_page('exam-cancel-slot');
+$total    = count($cancellable);
+$pages    = max(1, (int)ceil($total / $perPage));
+$page     = min(max(1, (int)($_GET['page'] ?? 1)), $pages);
+$result   = ['total' => $total, 'current_page' => $page, 'last_page' => $pages, 'per_page' => $perPage];
+$pageRows = array_slice($cancellable, ($page - 1) * $perPage, $perPage);
+$pageUrl  = fn(int $p): string => url('/staff/exam/cancel-slot') . '?' . http_build_query(['per_page' => $perPage, 'page' => $p]);
+
 ob_start();
 ?>
 
-<div style="margin-bottom:var(--space-5)">
+<div style="margin-bottom:var(--space-5);flex-shrink:0">
     <a href="<?= url('/staff/exam/slots') ?>" class="btn btn-ghost btn-sm">← Back to Exam Slots</a>
 </div>
 
-<div class="card" style="padding:var(--space-6);margin-bottom:var(--space-5)">
+<div class="card" style="padding:var(--space-6);margin-bottom:var(--space-5);flex-shrink:0">
     <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin:0 0 var(--space-2)">
         Cancel an exam slot
     </h2>
@@ -248,25 +260,32 @@ ob_start();
     </p>
 </div>
 
-<?php if (empty($cancellable)): ?>
-    <div class="card" style="padding:var(--space-8);text-align:center;color:var(--text-tertiary)">
-        No upcoming exam slots with bookings to cancel.
-    </div>
-<?php else: ?>
-    <div class="card" style="padding:0;overflow:hidden">
-        <table class="table" style="width:100%;border-collapse:collapse">
+<?php
+// Same structure as the audit log (and lakbay-pasig's AdminDataTable): one
+// .auto-table-wrap that AutoPageSize measures, the card with the fixed-height
+// table, and the pagination bar under the card. Each row is ONE line: the
+// replacement picker, the reason and the button sit in their own columns, tied
+// to that row's <form> with the form="" attribute.
+?>
+<div class="auto-table-wrap" data-auto-page-size="exam-cancel-slot" data-current-per-page="<?= (int)$perPage ?>">
+
+<div class="auto-table-card">
+    <div class="auto-table-body">
+        <table class="auto-table">
             <thead>
-                <tr style="background:var(--bg-subtle);text-align:left;font-size:var(--text-xs);
-                            color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em">
-                    <th style="padding:var(--space-3) var(--space-4)">Slot</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Room</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Department</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Filled</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Move everyone to…</th>
+                <tr>
+                    <th style="width:230px">Slot</th>
+                    <th style="width:100px">Room</th>
+                    <th style="width:110px">Department</th>
+                    <th style="width:70px">Filled</th>
+                    <th style="width:230px">Move everyone to…</th>
+                    <th style="min-width:180px">Reason</th>
+                    <th style="width:190px">Action</th>
                 </tr>
             </thead>
+            <?php if (!empty($pageRows)): ?>
             <tbody>
-            <?php foreach ($cancellable as $s):
+            <?php foreach ($pageRows as $s):
                 $needed   = (int)$s['filled'];
                 $srcExam  = $s['exam_id'] !== null ? (int)$s['exam_id'] : null;
                 $options  = array_filter($replacements, function($r) use ($s, $needed, $srcExam) {
@@ -277,62 +296,83 @@ ob_start();
                     if ($srcExam !== null && $rExam !== null && $srcExam !== $rExam) return false;
                     return true;
                 });
+                $formId = 'cancel-slot-' . (int)$s['id'];
             ?>
-                <tr style="border-top:1px solid var(--border);font-size:var(--text-sm);vertical-align:top">
-                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
+                <tr>
+                    <td style="font-size:var(--text-sm)">
                         <?php // Single-line slot label: "May 14, 2026 · 9:00 AM – 11:00 AM" ?>
-                        <span style="font-weight:var(--weight-medium)"><?= format_date($s['exam_date']) ?></span>
-                        <?php if ($s['slot_time']): ?>
-                            <span style="color:var(--text-tertiary)"> · <?= format_time($s['slot_time']) ?><?= $s['end_time'] ? '–' . format_time($s['end_time']) : '' ?></span>
-                        <?php endif; ?>
+                        <span class="auto-table-clip">
+                            <span style="font-weight:var(--weight-medium)"><?= format_date($s['exam_date']) ?></span>
+                            <?php if ($s['slot_time']): ?>
+                                <span style="color:var(--text-tertiary)"> · <?= format_time($s['slot_time']) ?><?= $s['end_time'] ? '–' . format_time($s['end_time']) : '' ?></span>
+                            <?php endif; ?>
+                        </span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4)"><?= e($s['room_label'] ?: '—') ?></td>
-                    <td style="padding:var(--space-3) var(--space-4)"><?= e($s['department'] ?: 'any') ?></td>
-                    <td style="padding:var(--space-3) var(--space-4)">
+                    <td style="font-size:var(--text-sm)"><span class="auto-table-clip"><?= e($s['room_label'] ?: '—') ?></span></td>
+                    <td style="font-size:var(--text-sm)"><span class="auto-table-clip"><?= e($s['department'] ?: 'any') ?></span></td>
+                    <td style="font-size:var(--text-sm)">
                         <strong><?= (int)$s['filled'] ?></strong> / <?= (int)$s['capacity'] ?>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4)">
-                        <?php if (empty($options)): ?>
-                            <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                                No open slot has enough capacity yet — create one first.
-                            </div>
-                        <?php else: ?>
-                            <form method="POST" style="display:flex;flex-direction:column;gap:var(--space-2)"
-                                  onsubmit="return confirm('Cancel this slot and move all <?= (int)$s['filled'] ?> applicant(s)?')">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="action" value="cancel_slot">
-                                <input type="hidden" name="source_slot_id" value="<?= (int)$s['id'] ?>">
-                                <select name="target_slot_id" required class="form-control"
-                                        style="font-size:var(--text-xs);height:30px;min-height:30px;padding:0 var(--space-2)">
-                                    <option value="">Pick a replacement slot…</option>
-                                    <?php foreach ($options as $r):
-                                        $left = (int)$r['capacity'] - (int)$r['filled'];
-                                    ?>
-                                        <option value="<?= (int)$r['id'] ?>">
-                                            <?= format_date($r['exam_date']) ?>
-                                            <?php if ($r['slot_time']): ?> <?= format_time($r['slot_time']) ?><?php endif; ?>
-                                            · <?= e($r['room_label'] ?: 'room') ?>
-                                            (<?= $left ?> open)
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <input type="text" name="reason" required maxlength="500"
-                                       placeholder="Reason shown to students (e.g. Typhoon Pepito)"
-                                       class="form-control"
-                                       style="font-size:var(--text-xs);height:30px;min-height:30px;padding:0 var(--space-2)">
-                                <button type="submit" class="btn btn-sm btn-primary"
-                                        style="height:30px;min-height:30px;padding:0 var(--space-3);font-size:var(--text-xs)">
-                                    Cancel slot & move all
-                                </button>
-                            </form>
-                        <?php endif; ?>
+                    <?php if (empty($options)): ?>
+                    <td colspan="3" style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                        <span class="auto-table-clip">No open slot has enough capacity yet — create one first.</span>
                     </td>
+                    <?php else: ?>
+                    <td>
+                        <select name="target_slot_id" form="<?= $formId ?>" required class="form-control"
+                                style="font-size:var(--text-xs);height:30px;min-height:30px;padding:0 var(--space-2)">
+                            <option value="">Pick a replacement slot…</option>
+                            <?php foreach ($options as $r):
+                                $left = (int)$r['capacity'] - (int)$r['filled'];
+                            ?>
+                                <option value="<?= (int)$r['id'] ?>">
+                                    <?= format_date($r['exam_date']) ?>
+                                    <?php if ($r['slot_time']): ?> <?= format_time($r['slot_time']) ?><?php endif; ?>
+                                    · <?= e($r['room_label'] ?: 'room') ?>
+                                    (<?= $left ?> open)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" name="reason" form="<?= $formId ?>" required maxlength="500"
+                               placeholder="Reason shown to students (e.g. Typhoon Pepito)"
+                               class="form-control"
+                               style="font-size:var(--text-xs);height:30px;min-height:30px;padding:0 var(--space-2)">
+                    </td>
+                    <td>
+                        <form id="<?= $formId ?>" method="POST" style="margin:0"
+                              onsubmit="return confirm('Cancel this slot and move all <?= (int)$s['filled'] ?> applicant(s)?')">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="cancel_slot">
+                            <input type="hidden" name="source_slot_id" value="<?= (int)$s['id'] ?>">
+                            <button type="submit" class="btn btn-sm btn-primary"
+                                    style="height:30px;min-height:30px;padding:0 var(--space-3);font-size:var(--text-xs)">
+                                Cancel slot &amp; move all
+                            </button>
+                        </form>
+                    </td>
+                    <?php endif; ?>
                 </tr>
             <?php endforeach; ?>
             </tbody>
+            <?php endif; ?>
         </table>
+
+        <?php if (empty($pageRows)): ?>
+        <div class="auto-table-empty">
+            <?= icon('ic_fluent_calendar_cancel_24_regular', 32) ?>
+            <div>No upcoming exam slots with bookings to cancel.</div>
+        </div>
+        <?php endif; ?>
     </div>
+</div><!-- /.auto-table-card -->
+
+<?php if ($result['last_page'] > 1): ?>
+    <?= auto_table_footer($result, $pageUrl) ?>
 <?php endif; ?>
+
+</div><!-- /.auto-table-wrap -->
 
 <?php
 $content   = ob_get_clean();

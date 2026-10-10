@@ -19,16 +19,27 @@ $filterUser   = trim($_GET['user']   ?? '');
 $filterDate   = trim($_GET['date']   ?? '');
 $page         = max(1, (int)($_GET['page'] ?? 1));
 
-// Page size — normally driven by AutoPageSize (app.js): it measures
-// the table's actual on-screen height on load and reloads once with
-// ?per_page=<rows that fit>, so the table fills the viewport with no
-// internal scrollbar instead of showing a fixed 50 regardless of
-// window size. 50 is just the pre-JS fallback for the very first
-// render (and for no-JS / print). Clamped to the same [3, 200] range
-// AutoPageSize itself enforces, so a hand-edited URL can't request
-// an unbounded row count.
-$perPage = isset($_GET['per_page']) ? (int)$_GET['per_page'] : 50;
-$perPage = max(3, min(200, $perPage));
+// Page size — driven by AutoPageSize (app.js): it measures how many
+// fixed-height rows fit the table's on-screen region and, if that is not
+// what was rendered, reloads with ?per_page=<rows that fit>, so the table
+// fills the viewport with no empty space at the bottom and no internal
+// scrollbar. Where the size comes from, in order:
+//   1. ?per_page — set by AutoPageSize's own reload, and carried by every
+//      page / filter link on this page.
+//   2. the plp_auto_page_size_audit_log cookie — the last size AutoPageSize
+//      measured in this browser. Without it a plain visit (sidebar link)
+//      would render the fallback below, overflow, and reload every time.
+//   3. 50 — only the very first visit, before anything was measured (and
+//      for no-JS / print).
+// Clamped to [3, 100], the same range AutoPageSize enforces, so a
+// hand-edited URL or cookie can't request an unbounded row count.
+$perPage = isset($_GET['per_page'])
+    ? (int)$_GET['per_page']
+    : (int)($_COOKIE['plp_auto_page_size_audit_log'] ?? 0);
+if ($perPage <= 0) {
+    $perPage = 50;
+}
+$perPage = max(3, min(100, $perPage));
 
 // ----------------------------------------------------------------
 // Action categories for filter dropdown
@@ -141,20 +152,23 @@ $hasFilters = ($filterAction || $filterUser || $filterDate);
 // ----------------------------------------------------------------
 // View
 // ----------------------------------------------------------------
-// Toolbar (search + filters) and table are fused into ONE bordered
-// card — same shape as lakbay-pasig's AdminDataTable, whose `toolbar`
-// slot renders inside the table's own card rather than a separate
-// filter card above it. The card stretches to fill the page height
-// (.page:has(.auto-table-card), app.css) so AutoPageSize (app.js) has
-// a real, bounded height to measure on load; it then reloads once
-// with ?per_page=<rows that fit> so the table fills the screen with
-// no internal scrollbar, the same end result as the React original's
-// client-side row slicing — just done with one reload instead of a
-// re-render, since this app has no in-memory row array to re-slice.
+// Same structure as lakbay-pasig's AdminDataTable: one outer container
+// (.auto-table-wrap) holding the bordered card (toolbar + table fused
+// into it, the `toolbar` slot) and, under the card, the pagination bar.
+// The wrap fills the page height (.page:has(.auto-table-wrap), app.css),
+// so it is the bounded region AutoPageSize (app.js) measures: it works
+// out how many fixed-height rows fit, and if that is not the size this
+// page was rendered with it reloads with ?per_page=<rows that fit>, so
+// the table fills the screen with no empty space at the bottom and no
+// internal scrollbar. Same end result as the React original's
+// client-side row slicing — just via a reload, since this app has no
+// in-memory row array to re-slice.
 ob_start();
 ?>
 
-<div class="auto-table-card" data-auto-page-size="audit-log" data-current-per-page="<?= (int)$perPage ?>">
+<div class="auto-table-wrap" data-auto-page-size="audit-log" data-current-per-page="<?= (int)$perPage ?>">
+
+<div class="auto-table-card">
 
     <!-- Toolbar: search + filters, one row, inside the card -->
     <form method="GET" action="<?= url('/admin/audit-log') ?>" class="auto-table-toolbar">
@@ -189,7 +203,8 @@ ob_start();
         <?php endif; ?>
     </form>
 
-    <!-- Scrollable body — AutoPageSize measures this region's height -->
+    <!-- Table body — sized so the rows AutoPageSize picks fit exactly; it
+         only scrolls as a safety net (e.g. a very narrow window) -->
     <div class="auto-table-body">
         <table class="auto-table">
             <thead>
@@ -251,10 +266,12 @@ ob_start();
         </div>
         <?php endif; ?>
     </div>
-</div>
+</div><!-- /.auto-table-card -->
 
-<!-- Pagination footer — OUTSIDE the card, "Showing X–Y of Z" + Prev/Next,
-     same shape as lakbay-pasig's AdminDataTable footer. -->
+<!-- Pagination bar — under the card, inside the wrap, "Showing X–Y of Z" +
+     Prev/Next, same shape as lakbay-pasig's AdminDataTable footer. Its 40px
+     (32px bar + 8px gap) is reserved in AutoPageSize's math whether or not
+     it renders, so a single page leaves the same room. -->
 <?php if ($pages > 1): ?>
 <div class="auto-table-pagination">
     <p class="auto-table-pagination-info">
@@ -289,6 +306,8 @@ ob_start();
     </div>
 </div>
 <?php endif; ?>
+
+</div><!-- /.auto-table-wrap -->
 
 <?php
 $content   = ob_get_clean();

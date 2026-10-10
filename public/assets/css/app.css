@@ -117,10 +117,15 @@
        that opts into JS-computed page sizing). Every row in such a table
        is forced to exactly this height so the row count that fits a given
        viewport can be computed from the container height alone, without
-       measuring a live row — see AutoPageSize in app.js. */
-   --height-table-row:    48px;
-    --height-table-header: 44px;
-    --height-table-footer: 52px;
+       measuring a live row — see AutoPageSize in app.js.
+       Same values as lakbay-pasig's index.css: 56px row, 40px header.
+       --height-table-footer is the pagination bar (32px buttons) plus the
+       8px gap above it, the same 40px lakbay's use-auto-page-size.ts
+       reserves (PAGINATION_BAR_HEIGHT). It is reserved whether or not the
+       bar is showing, so the row count never depends on it. */
+    --height-table-row:    56px;
+    --height-table-header: 40px;
+    --height-table-footer: 40px;
 
     /* Transitions */
     --transition-fast:   150ms ease;
@@ -3448,39 +3453,56 @@ body.ap-drawer-locked { overflow: hidden; }
    Auto-paginated data table (ported from lakbay-pasig's
    AdminDataTable + AdminFilterBar + useAutoPageSize)
    ------------------------------------------------------------
-   Shape: search row + filters fused into the SAME bordered card
-   as the table (one toolbar strip, border-bottom, no separate
-   filter card above it), a scrollable body with a sticky header,
-   and a "Showing X–Y of Z" + Prev/Next footer OUTSIDE the card.
-   Rows are forced to --height-table-row so AutoPageSize (app.js)
-   can compute how many rows fit the viewport without measuring a
-   live row — see the comment on that var in section 1.
+   Same structure as AdminDataTable's own markup:
+
+     .auto-table-wrap          outer container, flex column, 8px gap.
+                               This is the region AutoPageSize (app.js)
+                               measures, same as lakbay's containerRef.
+       .auto-table-card        bordered card holding toolbar + table,
+                               fills whatever height is left
+         .auto-table-toolbar   search + filters, 8px padding, border-bottom
+         .auto-table-body      scrolls, holds the table
+       .auto-table-pagination  "Showing X–Y of Z" + prev / next, below
+                               the card (only when there is >1 page)
+
+   Every row is --height-table-row (56px) and the header
+   --height-table-header (40px). A cell's content clips instead of
+   growing the row, so rows per page = (wrap height - toolbar - header
+   - pagination bar - card border) / row height, never measured from a
+   live row. See the comment on those vars in section 1.
    ============================================================ */
 
-/* Stretch the card to fill the remaining page height, same trick
-   already used by .results-table-card / .sa-table-card / etc. */
-.page:has(.auto-table-card) { display: flex; flex-direction: column; }
+/* The wrap takes all the height the page has left, so it is a real,
+   bounded region to measure (the pin rules at the end of this file
+   fix the page itself to the viewport). */
+.auto-table-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
 
 .auto-table-card {
     flex: 1;
-    min-height: 300px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     overflow: hidden;
 }
 
-/* Toolbar strip — search input + filter selects, all one row,
-   living inside the card itself (not a separate .card above it). */
+/* Toolbar strip — search input + filter selects, one row (wraps on
+   narrow screens), living inside the card itself. */
 .auto-table-toolbar {
     flex-shrink: 0;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-3);
+    padding: var(--space-2);
     border-bottom: 1px solid var(--border);
     background: var(--bg-elevated);
     z-index: 3;
@@ -3511,19 +3533,27 @@ body.ap-drawer-locked { overflow: hidden; }
     flex: 0 0 auto;
 }
 
-/* Scrollable body region — this is what AutoPageSize measures
-   (minus the toolbar and header heights) to work out row count. */
+/* Scrollable body region. A column flex container so the empty state
+   can centre itself in the space under the header. */
 .auto-table-body {
     flex: 1;
     min-height: 0;
     overflow: auto;
+    display: flex;
+    flex-direction: column;
 }
 
+/* Separate borders (not collapsed) so every row is exactly its set
+   height: with collapsed borders half of each 1px rule lands in the
+   neighbouring row and the sums drift, which is what pushes the last
+   row into a scrollbar. Also keeps the sticky header's rule attached. */
 .auto-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     table-layout: fixed;
     font-size: var(--text-sm);
+    flex-shrink: 0;
 }
 
 .auto-table thead {
@@ -3533,16 +3563,17 @@ body.ap-drawer-locked { overflow: hidden; }
     background: var(--bg-elevated);
 }
 
+/* Header cell — lakbay's TableHead: text-xs, semibold, muted, normal case. */
 .auto-table th {
     height: var(--height-table-header);
     padding: 0 var(--space-3);
     text-align: left;
+    vertical-align: middle;
     font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
     color: var(--text-tertiary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
     white-space: nowrap;
+    background: var(--bg-elevated);
     border-bottom: 1px solid var(--border);
 }
 
@@ -3554,7 +3585,7 @@ body.ap-drawer-locked { overflow: hidden; }
 }
 
 /* Fixed row height — every row is exactly this tall, and a cell's
-   content clips rather than growing the row (see .auto-table-clip). */
+   content clips rather than wrapping (see .auto-table-clip). */
 .auto-table td {
     height: var(--height-table-row);
     padding: 0 var(--space-3);
@@ -3586,19 +3617,24 @@ body.ap-drawer-locked { overflow: hidden; }
     color: var(--text-tertiary);
 }
 
-/* Pagination footer — OUTSIDE the card, "Showing X–Y of Z" left,
-   Prev / Page N of M / Next right. Matches AdminDataTable's footer. */
+/* Pagination bar — below the card, "Showing X–Y of Z" left, Prev /
+   Page N of M / Next right. 32px tall (the buttons) plus the wrap's 8px
+   gap = the 40px AutoPageSize reserves (--height-table-footer). */
 .auto-table-pagination {
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
-    height: var(--height-table-footer);
-    padding: 0 var(--space-3);
+    height: 32px;
+    padding: 0 var(--space-1);
 }
 
 .auto-table-pagination-info {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: var(--text-sm);
     color: var(--text-tertiary);
 }
@@ -3644,20 +3680,26 @@ body.ap-drawer-locked { overflow: hidden; }
 .auto-table td .btn-sm { white-space: nowrap; }
 .auto-table tbody tr.bulk-selected td { background: var(--accent-muted); }
 .auto-table-toolbar .toolbar-spacer { flex: 1 1 auto; }
+/* Toolbar controls are 36px, lakbay's h-9 Input / SelectTrigger. The
+   Filter / Clear buttons match so the row lines up. */
 .auto-table-toolbar .form-input {
-    height: 44px;
-    min-height: 44px;
+    height: 36px;
+    min-height: 36px;
     padding-top: 0;
     padding-bottom: 0;
     line-height: 1.2;
 }
+.auto-table-toolbar .btn { height: 36px; }
 .auto-table-toolbar .auto-table-search .form-input { padding-left: 32px; }
 
 /* Font size presets (Settings > Appearance) */
-html[data-font-size="small"]  { font-size: 16px; --height-table-row: 44px; --height-table-header: 40px; --height-table-footer: 48px; }
-html[data-font-size="medium"] { font-size: 18px; --height-table-row: 48px; --height-table-header: 44px; --height-table-footer: 52px; }
-html[data-font-size="large"]  { font-size: 20px; --height-table-row: 54px; --height-table-header: 48px; --height-table-footer: 56px; }
-html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 60px; --height-table-header: 52px; --height-table-footer: 60px; }
+/* Table row / header heights scale with the text; medium (the default)
+   is lakbay-pasig's 56px row / 40px header. The pagination bar is a fixed
+   32px of buttons, so --height-table-footer stays 40px in every preset. */
+html[data-font-size="small"]  { font-size: 16px; --height-table-row: 52px; --height-table-header: 36px; }
+html[data-font-size="medium"] { font-size: 18px; --height-table-row: 56px; --height-table-header: 40px; }
+html[data-font-size="large"]  { font-size: 20px; --height-table-row: 62px; --height-table-header: 44px; }
+html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --height-table-header: 48px; }
 
 .font-size-slider-wrap {
     margin-top: var(--space-3);
@@ -3774,11 +3816,19 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 60px; --hei
     background: color-mix(in srgb, var(--text-tertiary) 45%, transparent);
     box-shadow: 0 0 0 2px var(--bg-elevated);
 }
-/* Pin auto-table pages to the viewport so the card has a fixed height
-   (AutoPageSize needs a bounded card to count rows against) */
-.main:has(.auto-table-card) { height: 100vh; overflow: hidden; }
-.page:has(.auto-table-card) { flex: 1; min-height: 0; overflow: hidden; }
-.auto-table-card { min-height: 0; height: 100%; }
+/* Pin auto-table pages to the viewport so .auto-table-wrap has a fixed
+   height (AutoPageSize needs a bounded region to count rows against).
+   Bottom padding is 24px, lakbay's p-6, instead of the page's usual 32px,
+   so the table reaches closer to the bottom edge. */
+.main:has(.auto-table-wrap) { height: 100vh; overflow: hidden; }
+.page:has(.auto-table-wrap) {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: var(--space-6);
+}
 
 /* Keep every row one line tall: clip instead of wrapping */
 .auto-table td { white-space: nowrap; text-overflow: ellipsis; }

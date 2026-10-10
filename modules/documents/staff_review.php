@@ -854,6 +854,10 @@ $orderCol = $colMap[$sortCol] ?? 'a.created_at';
 $orderDir = strtoupper($sortDir);
 $orderBy  = "$orderCol $orderDir";
 
+// Rows per page — AutoPageSize (app.js) measures how many fixed-height rows
+// fit the table and reloads with ?per_page=; see auto_per_page() in helpers.php.
+$perPage = auto_per_page('doc-review');
+
 $result = paginate(
     $db,
     "SELECT COUNT(*) FROM applicants a JOIN users u ON u.id=a.user_id WHERE $whereStr",
@@ -862,7 +866,7 @@ $result = paginate(
             (SELECT COUNT(*) FROM documents d WHERE d.applicant_id=a.id AND d.status='uploaded') as pending_review
      FROM applicants a JOIN users u ON u.id=a.user_id
      WHERE $whereStr ORDER BY $orderBy",
-    $params, $page, 25
+    $params, $page, $perPage
 );
 
 // Course list for the Course filter — merged PLP + admin custom courses.
@@ -879,11 +883,11 @@ ob_start();
     <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 
-<!-- ============================================================
-     TOP BAR: Search + Filter
-============================================================ -->
 <?php
-$docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $courseFilter, $search, $sortCol, $sortDir): string {
+// URL helper — keeps every current filter + sort + per_page while overriding
+// just the given keys (page links, the Clear link). Same idea as the audit
+// log's auditUrl().
+$docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $courseFilter, $search, $sortCol, $sortDir, $perPage): string {
     $base = [
         'status'   => $statusFilter,
         'type'     => $typeFilter,
@@ -891,195 +895,108 @@ $docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $c
         'q'        => $search,
         'sort_col' => $sortCol,
         'sort_dir' => $sortDir,
+        'per_page' => $perPage,
     ];
     return '?' . http_build_query(array_merge($base, $merge));
 };
+
+// Carried by the sortable column headers (sortable_th, core/helpers.php).
+$sortParams = [
+    'status'   => $statusFilter,
+    'type'     => $typeFilter,
+    'course'   => $courseFilter,
+    'q'        => $search,
+    'per_page' => $perPage,
+];
+
+$typeOptions = [
+    ''           => 'All Types',
+    'freshman'   => 'Freshman',
+    'transferee' => 'Transferee',
+    'foreign'    => 'Foreign Student',
+];
+$hasFilters = ($typeFilter || $courseFilter || $search);
+
+// Same structure as the audit log (and lakbay-pasig's AdminDataTable): one
+// .auto-table-wrap that AutoPageSize measures, the card with the toolbar and
+// the fixed-height table fused together, and the pagination bar under the card.
 ?>
-<div style="
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:var(--space-4);
-    margin-bottom:var(--space-5);
-    flex-wrap:wrap;
-">
-    <!-- Search + Filter (LEFT) -->
-    <form method="GET" action="<?= url('/staff/applicants') ?>" style="display:flex;align-items:center;gap:var(--space-2);flex-shrink:0">
+<div class="auto-table-wrap" data-auto-page-size="doc-review" data-current-per-page="<?= (int)$perPage ?>">
+
+<div class="auto-table-card">
+
+    <!-- Toolbar: search + filters, one row, inside the card -->
+    <form method="GET" action="<?= url('/staff/applicants') ?>" class="auto-table-toolbar">
         <input type="hidden" name="status"   value="<?= e($statusFilter) ?>">
-        <input type="hidden" name="type"     value="<?= e($typeFilter) ?>">
-        <input type="hidden" name="course"   value="<?= e($courseFilter) ?>">
         <input type="hidden" name="sort_col" value="<?= e($sortCol) ?>">
         <input type="hidden" name="sort_dir" value="<?= e($sortDir) ?>">
+        <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
 
-        <!-- Search -->
-        <div style="position:relative">
-            <?= icon('ic_fluent_search_24_filled', 14, 'position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);pointer-events:none') ?>
-            <input type="text" name="q" value="<?= e($search) ?>" class="form-control"
-                   style="padding:0 var(--space-3) 0 32px;height:32px;min-height:32px;font-size:var(--text-sm);width:220px;border-radius:var(--radius-sm)"
-                   placeholder="Search name, email, course…">
+        <div class="auto-table-search">
+            <?= icon('ic_fluent_search_24_filled', 14) ?>
+            <input type="text" name="q" class="form-input" placeholder="Search name, email, course…" value="<?= e($search) ?>">
         </div>
 
-        <!-- Filter dropdown -->
-        <?php $activeFilterCount = ($typeFilter ? 1 : 0) + ($courseFilter ? 1 : 0) + ($search ? 1 : 0); ?>
-        <div style="position:relative" id="filter-dropdown-wrapper">
-            <button type="button" id="filter-toggle-btn" onclick="toggleFilterDropdown()" style="
-                display:flex;align-items:center;gap:var(--space-2);
-                height:32px;padding:0 var(--space-3);
-                border:1px solid var(--border);border-radius:var(--radius-sm);
-                background:var(--bg-elevated);color:var(--text-secondary);
-                font-size:var(--text-sm);cursor:pointer;white-space:nowrap;
-                transition:border-color var(--transition-fast),color var(--transition-fast);
-            " aria-haspopup="true" aria-expanded="false">
-                <?= icon('ic_fluent_filter_24_filled', 14) ?>
-                Filter
-                <?php if ($activeFilterCount > 0): ?>
-                    <span style="
-                        display:inline-flex;align-items:center;justify-content:center;
-                        width:16px;height:16px;border-radius:50%;
-                        background:var(--accent);color:var(--accent-text);
-                        font-size:var(--text-xs);font-weight:var(--weight-semibold);
-                    "><?= $activeFilterCount ?></span>
-                <?php endif; ?>
-            </button>
+        <select name="type" class="form-input" style="width:160px" onchange="this.form.submit()" aria-label="Applicant type">
+            <?php foreach ($typeOptions as $val => $label): ?>
+                <option value="<?= e($val) ?>" <?= $typeFilter === $val ? 'selected' : '' ?>><?= e($label) ?></option>
+            <?php endforeach; ?>
+        </select>
 
-            <div id="filter-dropdown" style="
-                display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:200;
-                background:var(--bg-elevated);border:1px solid var(--border);
-                border-radius:var(--radius-md);box-shadow:var(--shadow-md);
-                min-width:260px;max-height:480px;overflow-y:auto;padding:var(--space-3);
-            ">
-                <!-- Applicant Type -->
-                <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2);padding:0 var(--space-1)">Applicant Type</div>
-                <?php
-                $typeOptions = [
-                    ''           => 'All Types',
-                    'freshman'   => 'Freshman',
-                    'transferee' => 'Transferee',
-                    'foreign'    => 'Foreign Student',
-                ];
-                foreach ($typeOptions as $val => $label):
-                    $isActive = ($typeFilter === $val);
-                ?>
-                <a href="<?= e($docFilterUrl(['type' => $val, 'page' => 1])) ?>" style="
-                    display:flex;align-items:center;justify-content:space-between;
-                    width:100%;padding:var(--space-2) var(--space-3);
-                    border-radius:var(--radius-sm);
-                    background:<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>;
-                    color:<?= $isActive ? 'var(--accent)' : 'var(--text-secondary)' ?>;
-                    font-size:var(--text-sm);
-                    font-weight:<?= $isActive ? 'var(--weight-semibold)' : 'var(--weight-regular)' ?>;
-                    text-decoration:none;
-                    transition:background var(--transition-fast);
-                " onmouseover="this.style.background='var(--bg-overlay)'"
-                   onmouseout="this.style.background='<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>'">
-                    <?= e($label) ?>
-                    <?php if ($isActive): ?>
-                        <?= icon('ic_fluent_checkmark_24_regular', 13) ?>
-                    <?php endif; ?>
-                </a>
-                <?php endforeach; ?>
+        <select name="course" class="form-input" style="width:240px" onchange="this.form.submit()" aria-label="Course">
+            <option value="">All Courses</option>
+            <?php foreach ($courseList as $c): ?>
+                <option value="<?= e($c) ?>" <?= $courseFilter === $c ? 'selected' : '' ?>><?= e($c) ?></option>
+            <?php endforeach; ?>
+        </select>
 
-                <!-- Course -->
-                <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin:var(--space-3) 0 var(--space-2);padding:0 var(--space-1)">Course</div>
-                <?php
-                $courseOpts = array_merge([''], $courseList);
-                foreach ($courseOpts as $val):
-                    $isActive = ($courseFilter === $val);
-                    $label    = $val === '' ? 'All Courses' : $val;
-                ?>
-                <a href="<?= e($docFilterUrl(['course' => $val, 'page' => 1])) ?>" style="
-                    display:flex;align-items:center;justify-content:space-between;
-                    width:100%;padding:var(--space-2) var(--space-3);
-                    border-radius:var(--radius-sm);
-                    background:<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>;
-                    color:<?= $isActive ? 'var(--accent)' : 'var(--text-secondary)' ?>;
-                    font-size:var(--text-sm);
-                    font-weight:<?= $isActive ? 'var(--weight-semibold)' : 'var(--weight-regular)' ?>;
-                    text-decoration:none;
-                    transition:background var(--transition-fast);
-                " onmouseover="this.style.background='var(--bg-overlay)'"
-                   onmouseout="this.style.background='<?= $isActive ? 'var(--accent-muted)' : 'transparent' ?>'">
-                    <?= e($label) ?>
-                    <?php if ($isActive): ?>
-                        <?= icon('ic_fluent_checkmark_24_regular', 13) ?>
-                    <?php endif; ?>
-                </a>
-                <?php endforeach; ?>
-
-                <?php if ($typeFilter || $courseFilter || $search): ?>
-                    <div style="border-top:1px solid var(--border);margin-top:var(--space-2);padding-top:var(--space-2)">
-                        <a href="<?= e($docFilterUrl(['type' => '', 'course' => '', 'q' => '', 'page' => 1])) ?>" style="
-                            display:flex;align-items:center;gap:var(--space-2);
-                            padding:var(--space-2) var(--space-3);font-size:var(--text-sm);
-                            color:var(--text-tertiary);border-radius:var(--radius-sm);text-decoration:none;
-                            transition:background var(--transition-fast);
-                        " onmouseover="this.style.background='var(--bg-overlay)'" onmouseout="this.style.background='transparent'">
-                            <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
-                            Clear filters
-                        </a>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <button type="submit" style="position:absolute;width:0;height:0;overflow:hidden;padding:0;border:0;opacity:0" aria-hidden="true"></button>
+        <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        <?php if ($hasFilters): ?>
+            <a href="<?= e($docFilterUrl(['type' => '', 'course' => '', 'q' => '', 'page' => 1])) ?>" class="btn btn-ghost btn-sm">Clear</a>
+        <?php endif; ?>
     </form>
 
-</div>
-
-<?php
-// Helper: render a sortable column header
-// Sortable header for this page's filters (status, type, search).
-// Shared implementation lives in core/helpers.php as sortable_th().
-?>
-
-<style>
-/* Make the table card stretch to fill the .page area so the gap below the
-   card matches the .page horizontal padding (var(--space-8) = 32px). */
-.page:has(.applicants-table-card) { display:flex; flex-direction:column; }
-.applicants-table-card { flex:1; min-height:300px; }
-</style>
-
-<!-- Table -->
-<div class="card applicants-table-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
-    <table class="table" id="applicants-table">
-        <thead>
-            <tr>
-                <th style="width:40px;padding-left:var(--space-3)">
-                    <input type="checkbox" id="bulk-select-all" onchange="bulkToggleAll(this)"
-                           style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
-                </th>
-                <?= sortable_th('applicant',    'Applicant',    $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
-                <?= sortable_th('type',         'Type',         $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
-                <?= sortable_th('course',       'Course',       $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
-                <?= sortable_th('status',       'Status',       $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
-                <?= sortable_th('docs_pending', 'Docs Pending', $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
-                <?= sortable_th('applied',      'Applied',      $sortCol, $sortDir, ['status' => $statusFilter, 'type' => $typeFilter, 'q' => $search]) ?>
-                <th style="width:80px">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        <?php if (!empty($result['data'])): ?>
-            <?php foreach ($result['data'] as $row):
-                $hasPending = (int)$row['pending_review'] > 0;
-            ?>
+    <!-- Table body — sized so the rows AutoPageSize picks fit exactly; it
+         only scrolls as a safety net (e.g. a very narrow window) -->
+    <div class="auto-table-body">
+        <table class="auto-table" id="applicants-table">
+            <thead>
+                <tr>
+                    <th class="col-check">
+                        <input type="checkbox" id="bulk-select-all" onchange="bulkToggleAll(this)"
+                               style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                    </th>
+                    <?= sortable_th('applicant',    'Applicant',    $sortCol, $sortDir, $sortParams) ?>
+                    <?= sortable_th('type',         'Type',         $sortCol, $sortDir, $sortParams, 'width:120px') ?>
+                    <?= sortable_th('course',       'Course',       $sortCol, $sortDir, $sortParams, 'width:220px') ?>
+                    <?= sortable_th('status',       'Status',       $sortCol, $sortDir, $sortParams, 'width:130px') ?>
+                    <?= sortable_th('docs_pending', 'Docs Pending', $sortCol, $sortDir, $sortParams, 'width:150px') ?>
+                    <?= sortable_th('applied',      'Applied',      $sortCol, $sortDir, $sortParams, 'width:130px') ?>
+                    <th style="width:100px">Actions</th>
+                </tr>
+            </thead>
+            <?php if (!empty($result['data'])): ?>
+            <tbody>
+                <?php foreach ($result['data'] as $row):
+                    $hasPending = (int)$row['pending_review'] > 0;
+                ?>
                 <tr class="bulk-row <?= $hasPending ? 'has-pending-docs' : '' ?>" data-id="<?= (int)$row['id'] ?>">
-                    <td style="padding-left:var(--space-3)">
+                    <td class="col-check">
                         <input type="checkbox" class="bulk-check" value="<?= (int)$row['id'] ?>"
                                onchange="bulkUpdateSelection()"
                                style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
                     </td>
                     <td>
-                        <?php // Single-line row — email lives in the review detail
-                              // page; tooltip surfaces it on hover for quick context. ?>
-                        <span style="font-weight:var(--weight-medium)" title="<?= e($row['email']) ?>"><?= e(format_full_name($row)) ?></span>
+                        <?php // Single-line row — the email lives in the review detail
+                              // page; the tooltip surfaces it on hover for quick context. ?>
+                        <span class="auto-table-clip" style="font-weight:var(--weight-medium)" title="<?= e($row['email']) ?>"><?= e(format_full_name($row)) ?></span>
                     </td>
                     <td><span class="badge badge-neutral"><?= e(ucfirst($row['applicant_type'])) ?></span></td>
-                    <td style="font-size:var(--text-sm)"><?= e($row['course_applied']) ?></td>
-                    <td><span class="badge badge-<?= $row['overall_status'] ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span></td>
+                    <td style="font-size:var(--text-sm)"><span class="auto-table-clip" title="<?= e($row['course_applied']) ?>"><?= e($row['course_applied']) ?></span></td>
+                    <td><span class="badge badge-<?= e($row['overall_status']) ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span></td>
                     <td>
                         <?php if ($hasPending): ?>
-                            <span style="color:var(--warning);font-weight:var(--weight-semibold);font-size:var(--text-sm)"><?= $row['pending_review'] ?> to review</span>
+                            <span style="color:var(--warning);font-weight:var(--weight-semibold);font-size:var(--text-sm)"><?= (int)$row['pending_review'] ?> to review</span>
                         <?php else: ?>
                             <span style="color:var(--text-tertiary);font-size:var(--text-sm)">—</span>
                         <?php endif; ?>
@@ -1089,33 +1006,27 @@ $docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $c
                         <a href="<?= url('/staff/applicants/' . $row['id']) ?>" class="btn btn-secondary btn-sm">Review</a>
                     </td>
                 </tr>
-            <?php endforeach; ?>
-        <?php endif; ?>
-        </tbody>
-    </table>
+                <?php endforeach; ?>
+            </tbody>
+            <?php endif; ?>
+        </table>
 
-    <?php if (empty($result['data'])): ?>
-        <!-- Empty state — fills remaining card height, centered both axes, no hover -->
-        <div class="empty-state" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-3);color:var(--text-tertiary);padding:var(--space-8)">
+        <?php if (empty($result['data'])): ?>
+        <div class="auto-table-empty">
             <?= icon('ic_fluent_people_24_regular', 32) ?>
-            <div>No applicants found.</div>
+            <div><?= $hasFilters ? 'No applicants match your filters.' : 'No applicants found.' ?></div>
         </div>
-    <?php else: ?>
-        <!-- Filler below the last row so the empty space inherits a top divider line -->
-        <div style="flex:1;border-top:1px solid var(--border)"></div>
-    <?php endif; ?>
-</div>
-
-<!-- Pagination -->
-<?php if ($result['last_page'] > 1): ?>
-    <div style="display:flex;justify-content:center;gap:var(--space-2);margin-top:var(--space-6)">
-        <?php for ($i = 1; $i <= $result['last_page']; $i++): ?>
-            <a href="?status=<?= urlencode($statusFilter) ?>&type=<?= urlencode($typeFilter) ?>&q=<?= urlencode($search) ?>&sort_col=<?= urlencode($sortCol) ?>&sort_dir=<?= urlencode($sortDir) ?>&page=<?= $i ?>"
-               class="btn <?= $i === $result['current_page'] ? 'btn-primary' : 'btn-ghost' ?> btn-sm"
-               style="min-width:36px"><?= $i ?></a>
-        <?php endfor; ?>
+        <?php endif; ?>
     </div>
+</div><!-- /.auto-table-card -->
+
+<!-- Pagination bar — under the card, inside the wrap, same as the audit log.
+     Its 40px is reserved in AutoPageSize's math whether or not it renders. -->
+<?php if ($result['last_page'] > 1): ?>
+    <?= auto_table_footer($result, fn(int $p): string => $docFilterUrl(['page' => $p])) ?>
 <?php endif; ?>
+
+</div><!-- /.auto-table-wrap -->
 
 <!-- ============================================================
      BULK ACTION TOOLBAR (floating, appears on selection)
@@ -1243,8 +1154,8 @@ function bulkExportCsv() {
         if (!tr) return;
         var cells = tr.querySelectorAll('td');
         rows.push([
-            (cells[1]?.querySelector('div')?.textContent||'').trim(),
-            (cells[1]?.querySelectorAll('div')[1]?.textContent||'').trim(),
+            (cells[1]?.textContent||'').trim(),
+            (cells[1]?.querySelector('[title]')?.getAttribute('title')||'').trim(),
             (cells[2]?.textContent||'').trim(),
             (cells[3]?.textContent||'').trim(),
             (cells[4]?.textContent||'').trim(),
@@ -1259,29 +1170,6 @@ function bulkExportCsv() {
     a.click();
 }
 
-</script>
-
-<script>
-function toggleFilterDropdown() {
-    var dd      = document.getElementById('filter-dropdown');
-    var btn     = document.getElementById('filter-toggle-btn');
-    var chevron = document.getElementById('filter-chevron');
-    var isOpen  = dd.style.display === 'block';
-    dd.style.display  = isOpen ? 'none' : 'block';
-    btn.setAttribute('aria-expanded', String(!isOpen));
-    chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
-}
-document.addEventListener('click', function(e) {
-    var wrapper = document.getElementById('filter-dropdown-wrapper');
-    if (wrapper && !wrapper.contains(e.target)) {
-        var dd = document.getElementById('filter-dropdown');
-        var btn = document.getElementById('filter-toggle-btn');
-        var chevron = document.getElementById('filter-chevron');
-        if (dd) dd.style.display = 'none';
-        if (btn) btn.setAttribute('aria-expanded','false');
-        if (chevron) chevron.style.transform = '';
-    }
-});
 </script>
 
 

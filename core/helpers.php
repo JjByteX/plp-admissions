@@ -1136,17 +1136,38 @@ function sortable_th(string $col, string $label, string $currentCol, string $cur
 // ================================================================
 
 /**
- * Rows per page. AutoPageSize (app.js) reloads once with ?per_page=<rows that fit>.
- * Clamped to [3, 200] so a hand-edited URL can't request an unbounded row count.
+ * Rows per page for an auto-paginated table. AutoPageSize (app.js) measures
+ * how many fixed-height rows fit and reloads with ?per_page=<rows that fit>.
+ *
+ * $key is the table's data-auto-page-size value (e.g. 'doc-review'). Order:
+ *   1. ?per_page (AutoPageSize's own reload, carried by every page link)
+ *   2. the plp_auto_page_size_<key> cookie, the last size AutoPageSize
+ *      measured in this browser, so a plain visit renders at the right size
+ *      instead of at the fallback and then reloading
+ *   3. $fallback, only the very first visit
+ * The cookie name is built exactly as app.js builds it: 'plp_auto_page_size:'
+ * + key, with every character but letters, digits and _ turned into _.
+ * Clamped to [3, 100], the range AutoPageSize enforces, so a hand-edited URL
+ * or cookie can't request an unbounded row count.
  */
-function auto_per_page(int $fallback = 25): int
+function auto_per_page(string $key, int $fallback = 50): int
 {
-    $n = isset($_GET['per_page']) ? (int) $_GET['per_page'] : $fallback;
-    return max(3, min(200, $n));
+    if (isset($_GET['per_page'])) {
+        $n = (int) $_GET['per_page'];
+    } else {
+        $cookie = preg_replace('/[^a-zA-Z0-9_]/', '_', 'plp_auto_page_size:' . $key);
+        $n = (int) ($_COOKIE[$cookie] ?? 0);
+    }
+    if ($n <= 0) {
+        $n = $fallback;
+    }
+    return max(3, min(100, $n));
 }
 
 /**
- * Pagination footer rendered INSIDE the .auto-table-card.
+ * Pagination bar for an auto-paginated table: "Showing X–Y of Z" + prev / next.
+ * Render it UNDER the .auto-table-card but INSIDE the .auto-table-wrap, and only
+ * when there is more than one page (its 40px is reserved by AutoPageSize either way).
  * $result = paginate()'s return value. $urlFor = fn(int $page): string.
  */
 function auto_table_footer(array $result, callable $urlFor, string $noun = 'records'): string
