@@ -260,6 +260,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'file'        => $f['name'],
             'guess'       => $r['guess'],
             'guess_label' => $categories[$cat ?? '']['label'] ?? null,
+            'guess_category' => $cat,
             'confidence'  => $r['confidence'],
             'reason'      => $r['reason'],
         ];
@@ -828,8 +829,8 @@ ob_start();
     <input type="file" id="batch-input" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple style="display:none">
     <input type="file" id="batch-camera" accept="image/*" capture="environment" style="display:none">
     <input type="file" id="batch-replace" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none">
-    <div id="batch-rows" style="display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)"></div>
     <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:var(--space-3)">Prefer to do it one by one? <a class="batch-link" href="<?= e(url('/student/documents/manual')) ?>">Upload your documents manually</a></div>
+    <div id="batch-rows" style="display:flex;flex-direction:column;margin-top:var(--space-3)"></div>
     </div>
 <?php endif; ?>
 
@@ -1569,7 +1570,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return $('<button type="button" class="btn btn-sm">').addClass(primary ? 'btn-primary' : 'btn-ghost').text(text).on('click', fn);
     }
 
-    function dropdown(r, cats) {
+    function dropdown(r, cats, pre) {
         var $sel = $('<select class="form-select batch-select" style="min-height:32px;font-size:var(--text-sm)">').append($('<option value="">').text('Choose document type…'));
         $.each(cats, function (_, c) {
             var $o = $('<option>').val(c.category).text(c.label + (c.note ? ' — ' + c.note : ''));
@@ -1578,6 +1579,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var $go = actionBtn('Use this type', function () { pick(r, $sel.val()); }, true).prop('disabled', true);
         $sel.on('change', function () { $go.prop('disabled', !$sel.val()); });
+        // The AI's guess is already picked, so confirming it is one tap.
+        var g = $.grep(cats, function (c) { return c.category === pre && c.available; })[0];
+        if (g) { $sel.val(g.category); $go.prop('disabled', false); }
         return [$sel, $go];
     }
 
@@ -1591,7 +1595,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (kind === 'uncertain') $a.append(actionBtn('Replace file', function () { replaceId = r.id; $('#batch-replace').removeAttr('capture').val('').trigger('click'); }));
         else if (kind === 'failed') $a.append(actionBtn('Retake', function () { replaceId = r.id; $('#batch-replace').attr('capture', 'environment').val('').trigger('click'); }));
         else $a.append(actionBtn('Try again', function () { r.tries = 0; enqueue(r); }));
-        if (cats && cats.length) $a.prepend.apply($a, dropdown(r, cats));
+        if (cats && cats.length) $a.prepend.apply($a, dropdown(r, cats, kind === 'uncertain' ? r.guessCat : ''));
         $a.append(actionBtn('Remove', function () { r.$el.remove(); delete rows[r.id]; }));
         tip(r);
     }
@@ -1600,6 +1604,14 @@ document.addEventListener('DOMContentLoaded', function () {
         show(r, cls, label, msg);
         r.blob = null; r.file = null;
         r.$el.find('.batch-actions').append(actionBtn('Dismiss', function () { r.$el.remove(); delete rows[r.id]; }));
+    }
+
+    // A sorted file now shows as Uploaded in the document list, so its result row goes away once the list has refreshed.
+    // If the refresh fails, keep the row so the applicant still sees what happened.
+    function sorted(r, msg) {
+        r.blob = null; r.file = null;
+        window.refreshSlotList().done(function () { r.$el.remove(); delete rows[r.id]; })
+            .fail(function () { done(r, 'Sorted', 'badge-success', msg); });
     }
 
     // jQuery calls fail() for a timeout, a 5xx and a connection drop alike; tell them apart for the applicant.
@@ -1639,7 +1651,8 @@ document.addEventListener('DOMContentLoaded', function () {
             else if (res.categories && res.categories.length) lastCats = res.categories;
             if (res && res.ok !== false) {
                 r.guess = res.guess || '';
-                if (res.status === 'passed') { done(r, 'Sorted', 'badge-success', res.message || 'Saved.'); window.refreshSlotList && window.refreshSlotList(); }
+                r.guessCat = res.guess_category || '';
+                if (res.status === 'passed') sorted(r, res.message || 'Saved.');
                 else if (res.status === 'blocked') { done(r, 'Blocked', 'badge-error', res.message); window.refreshSlotList && window.refreshSlotList(); }
                 else if (res.status === 'failed') { r.tries++; offer(r, 'failed', res.message, res.categories); }
                 else { r.tries++; offer(r, 'uncertain', res.message, res.categories); }
@@ -1660,7 +1673,7 @@ document.addEventListener('DOMContentLoaded', function () {
         fd.append('doc_file', r.blob, r.blob.name || r.file.name);
         send(r, fd).done(function (res) {
             r.$el.find('.batch-bar').hide();
-            if (res && res.ok) { done(r, 'Sorted', 'badge-success', (res.message || 'Saved.') + ' Staff will double check the type.'); window.refreshSlotList && window.refreshSlotList(); }
+            if (res && res.ok) sorted(r, res.message || 'Saved.');
             else offer(r, 'error', (res && res.message) || 'Could not save this file.', lastCats);
         }).fail(function (xhr, status) {
             r.$el.find('.batch-bar').hide();
