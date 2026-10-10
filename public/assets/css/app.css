@@ -3293,8 +3293,6 @@ body.ap-drawer-locked { overflow: hidden; }
     gap: var(--space-3);
     height: var(--height-table-footer);
     padding: 0 var(--space-3);
-    border-top: 1px solid var(--border);
-    background: var(--bg-elevated);
 }
 
 .auto-table-pagination-info {
@@ -3505,4 +3503,32 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 60px; --hei
 .auto-table-search i {
     position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
     color: var(--text-tertiary); pointer-events: none;
+}
+
+/* ── School Year: one card, fits the viewport ─────────────────
+   Same pinning trick as .auto-table-card. Two columns of sections
+   separated by hairlines; Applicant History scrolls inside itself. */
+.main:has(.sy-card) { height: 100vh; overflow: hidden; }
+.page:has(.sy-card) { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.sy-card {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 1.15fr 1fr;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.sy-col { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.sy-col + .sy-col { border-left: 1px solid var(--border); }
+.sy-sec { padding: var(--space-5) var(--space-6); flex-shrink: 0; }
+.sy-sec + .sy-sec { border-top: 1px solid var(--border); }
+.sy-sec.sy-grow { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.sy-sec.sy-danger { margin-top: auto; }
+.sy-sec.sy-danger .card-title { color: var(--error); }
+@media (max-width: 960px) {
+    .main:has(.sy-card) { height: auto; overflow: visible; }
+    .page:has(.sy-card) { overflow: visible; }
+    .sy-card { grid-template-columns: 1fr; overflow: visible; }
+    .sy-col + .sy-col { border-left: 0; border-top: 1px solid var(--border); }
+    .sy-sec.sy-grow { overflow: visible; }
 }

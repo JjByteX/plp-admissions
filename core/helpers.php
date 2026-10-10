@@ -806,7 +806,7 @@ function audit_log(
 
 // -- Icon helper (Phosphor, CDN) --------------------------------
 // <link> tags for the two Phosphor weights we use: bold + fill.
-// Put <?= phosphor_head() ?> in every layout <head>.
+// Echo phosphor_head() inside the <head> of every layout.
 function phosphor_head(): string
 {
     $b = 'https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src';

@@ -324,10 +324,11 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div class="admin-form-stack">
+<div class="sy-card">
+<div class="sy-col">
 
     <!-- Admissions window -->
-    <div class="card">
+    <div class="sy-sec">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
             <div class="card-title" style="margin:0">Admissions Window</div>
             <?php if ($isOpen): ?>
@@ -407,7 +408,7 @@ ob_start();
     </div>
 
     <!-- Enrollment schedule -->
-    <div class="card">
+    <div class="sy-sec">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
             <div class="card-title" style="margin:0">Enrollment Schedule</div>
             <?php if ($enrollmentDate && $enrollmentTime && $enrollmentVenue): ?>
@@ -448,8 +449,11 @@ ob_start();
         </form>
     </div>
 
+</div><!-- /sy-col -->
+<div class="sy-col">
+
     <!-- ── Import Historical Records ──────────────────────────────── -->
-    <div class="card">
+    <div class="sy-sec">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2)">
             <div class="card-title" style="margin:0">Import Historical Records</div>
             <button class="btn btn-secondary" onclick="openLegacyImportModal()" style="display:flex;align-items:center;gap:6px">
@@ -466,7 +470,7 @@ ob_start();
 
     <!-- Historical summary -->
     <?php if (!empty($statsByYear)): ?>
-    <div class="card">
+    <div class="sy-sec sy-grow">
         <div class="card-title" style="margin-bottom:var(--space-5)">Applicant History</div>
         <div style="display:flex;flex-direction:column;gap:var(--space-4)">
         <?php foreach ($statsByYear as $year => $statuses):
@@ -502,7 +506,7 @@ ob_start();
     <?php endif; ?>
 
     <!-- New cycle — danger zone -->
-    <div class="card card-danger">
+    <div class="sy-sec sy-danger">
         <div class="card-title" style="color:var(--error);margin-bottom:var(--space-1)">Start New Admission Cycle</div>
         <p class="card-description" style="margin-bottom:var(--space-5)">
             Starts a new admissions cycle. The current exam is deactivated and all previous applicant data is preserved.
@@ -521,7 +525,8 @@ ob_start();
         </form>
     </div>
 
-</div>
+</div><!-- /sy-col -->
+</div><!-- /sy-card -->
 
 <!-- ════════════════════════════════════════════════════════════
      AI IMPORT MODAL — Legacy Records
@@ -1414,5 +1419,6 @@ async function saveLegacyRows() {
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Admissions';
+$pageWide  = true;
 $activeNav = 'school-year';
 include VIEWS_PATH . '/layouts/app.php';
