@@ -653,9 +653,9 @@ if ($_examResult) {
     }
 }
 
-// Two pages share this module (both are still the Submit Documents step):
-//   /student/documents          upload many files (AI sorting) + a read-only checklist
-//   /student/documents/manual   the per-document list with Upload / Resubmit buttons
+// Two pages share this module (both are still the Submit Documents step), each one card:
+//   /student/documents          drop box (AI sorting) + the document list as read-only status
+//   /student/documents/manual   no drop box, no AI: the list with Upload / Resubmit buttons
 // Applicants who cannot use the batch box (foreign, or past the documents step) get the full list on the main page.
 $manualPage = str_ends_with(rtrim((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/'), '/student/documents/manual');
 $hasBatch   = $applicant['applicant_type'] !== 'foreign' && !$pastDocuments && !$docDeadlinePassed;
@@ -742,7 +742,6 @@ ob_start();
 <div style="margin-bottom:var(--space-4)">
     <a href="<?= url('/student/documents') ?>" style="font-size:var(--text-sm);color:var(--accent);text-decoration:underline">&larr; Back to Upload many files</a>
     <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin:var(--space-2) 0 var(--space-1);color:var(--text-primary)">Upload documents manually</h2>
-    <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">Upload one document at a time. Use Upload or Resubmit on the document you want to send.</p>
 </div>
 <?php endif; ?>
 
@@ -800,11 +799,10 @@ ob_start();
 <?php endif; ?>
 
 <?php if (!$manualPage && $hasBatch): ?>
-<!-- Upload many files (AI sorting). One-by-one upload lives on its own page, linked below the box. -->
 <style>
 .batch-drop { border:2px dashed var(--border); border-radius:var(--radius-lg); padding:var(--space-6) var(--space-4); text-align:center; cursor:pointer; transition:border-color var(--transition-fast), background var(--transition-fast); }
 .batch-drop:hover, .batch-drop:focus, .batch-drop.drag-over { border-color:var(--accent); background:var(--bg-subtle); outline:none; }
-.batch-row { border:1px solid var(--border); border-radius:var(--radius-md); padding:var(--space-3) var(--space-4); background:var(--bg-surface, transparent); }
+.batch-row { border-top:1px solid var(--border); padding:var(--space-3) 0; }
 .batch-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); }
 .batch-name { font-weight:var(--weight-medium); font-size:var(--text-sm); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .batch-msg { font-size:var(--text-sm); color:var(--text-secondary); margin-top:var(--space-1); }
@@ -816,9 +814,12 @@ ob_start();
 .batch-bar > span { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
 .batch-tip { font-size:var(--text-xs); color:var(--warning); margin-top:var(--space-2); }
 </style>
-<div class="card" id="batch-box" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)">
-    <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Upload many files</div>
-    <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">Pick all your documents at once. We sort them into the right slots for you. Anything we are not sure about, you can fix below.</div>
+<?php endif; ?>
+
+<!-- Documents: one card. Drop box (AI sorting) on top, the required documents below it. -->
+<div class="card" id="docs-card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)">
+<?php if (!$manualPage && $hasBatch): ?>
+    <div id="batch-box">
     <div class="batch-drop" id="batch-drop" role="button" tabindex="0" aria-label="Choose files to upload">
         <p style="font-weight:var(--weight-medium);margin:0">Drop your files here</p>
         <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:var(--space-1) 0 var(--space-3)">or click to choose files · PDF, JPG, PNG or WEBP · max 4 MB each</p>
@@ -829,11 +830,12 @@ ob_start();
     <input type="file" id="batch-replace" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none">
     <div id="batch-rows" style="display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)"></div>
     <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:var(--space-3)">Prefer to do it one by one? <a class="batch-link" href="<?= e(url('/student/documents/manual')) ?>">Upload your documents manually</a></div>
-</div>
+    </div>
 <?php endif; ?>
 
 <!-- Document list -->
-<div id="doc-list" style="display:flex;flex-direction:column;gap:var(--space-3)">
+<style>#doc-list > div:first-child { border-top:0; padding-top:0; }</style>
+<div id="doc-list" style="display:flex;flex-direction:column;<?= (!$manualPage && $hasBatch) ? 'margin-top:var(--space-4)' : '' ?>">
 <?php foreach ($requiredDocs as $slug => $label):
     $doc    = $docRows[$slug] ?? null;
     $status = $doc['status'] ?? 'pending';
@@ -851,9 +853,9 @@ ob_start();
         : in_array($status, ['pending', 'rejected', 'resubmission_required', 'uploaded'], true);
     $uploadLabel = $status === 'pending' ? 'Upload' : 'Resubmit';
     $isApproved = $status === 'approved';
-    $showUpload = $fullList && $canUpload;   // the checklist on the main page is read-only
+    $showUpload = $fullList && $canUpload;   // the list on the main page is read-only
 ?>
-    <div class="card" style="padding:var(--space-4) var(--space-5)">
+    <div style="padding:var(--space-3) 0;border-top:1px solid var(--border)">
         <div style="display:flex;align-items:center;gap:var(--space-4)">
 
             <!-- Icon -->
@@ -868,20 +870,9 @@ ob_start();
             <!-- Info -->
             <div style="flex:1;min-width:0">
                 <div style="font-weight:var(--weight-medium);color:var(--text-primary)"><?= e($label) ?></div>
-                <?php if ($status === 'resubmission_required'): ?>
-                    <div style="font-size:var(--text-sm);color:var(--error);margin-top:2px;font-weight:var(--weight-semibold)">
-                        ⚠ Resubmission required<?php if ($doc && $doc['staff_remarks']): ?>: <?= e($doc['staff_remarks']) ?><?php endif; ?>
-                    </div>
-                    <div style="font-size:var(--text-xs);color:var(--warning);margin-top:2px">
-                        Please upload a corrected version of this document to continue your application.
-                    </div>
-                <?php elseif ($doc && $doc['staff_remarks']): ?>
+                <?php if ($doc && $doc['staff_remarks']): ?>
                     <div style="font-size:var(--text-sm);color:var(--error);margin-top:2px">
                         Staff note: <?= e($doc['staff_remarks']) ?>
-                    </div>
-                <?php elseif ($status === 'approved'): ?>
-                    <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:2px">
-                        Approved by admissions staff
                     </div>
                 <?php endif; ?>
             </div>
@@ -915,6 +906,7 @@ ob_start();
         </div>
     </div>
 <?php endforeach; ?>
+</div>
 </div>
 
 <!-- Upload modal -->
@@ -1382,7 +1374,6 @@ function updateDropLabel(name) {
 <div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4)">
     <div style="flex:1">
         <div style="font-weight:var(--weight-medium);color:var(--text-primary)">Ready to submit</div>
-        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:2px">All documents uploaded. Submit your application for staff review.</div>
     </div>
     <button class="btn btn-primary" type="button" onclick="submitApplication()">Submit Application</button>
 </div>
@@ -1394,14 +1385,12 @@ function updateDropLabel(name) {
     </div>
     <div style="text-align:right;flex-shrink:0">
         <button class="btn btn-ghost btn-sm" type="button" onclick="withdrawSubmission()">Withdraw Submission</button>
-        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">You can re-submit after making changes.</div>
     </div>
 </div>
 <?php elseif (!$allUploaded && !$isSubmitted): ?>
 <div class="card" style="margin-top:var(--space-4);padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4);opacity:.6">
     <div style="flex:1">
-        <div style="font-weight:var(--weight-medium);color:var(--text-primary)">Submit Application</div>
-        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:2px">Upload all required documents to enable submission.</div>
+        <div style="font-size:var(--text-sm);color:var(--text-secondary)">Upload all required documents to enable submission.</div>
     </div>
     <button class="btn btn-primary" disabled style="cursor:not-allowed">Submit Application</button>
 </div>
