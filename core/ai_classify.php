@@ -196,9 +196,13 @@ function ai_decide(?array $parsed, ?float $confidence, array $categories, array 
     $units = (float)($f['units'] ?? 0);
     $name = $str('name');
 
-    // The back of an ID has no name, so asking for one only confuses the applicant. Say what to do instead.
-    if ($slug === 'valid_id' && $name === '' && strtolower($str('id_side')) === 'back') {
-        return ai_result('uncertain', $slug, $conf, 'This looks like the back of an ID. Please upload the front, which shows your photo and name.', $f, $slots);
+    // The back of an ID has no name, so "name not found" only confuses the applicant. Say what to do instead.
+    // A small model does not always flag id_side, so any ID with no readable name gets this message.
+    if ($slug === 'valid_id' && $name === '') {
+        $isBack = strtolower($str('id_side')) === 'back';
+        return ai_result('uncertain', $slug, $conf, $isBack
+            ? 'This looks like the back of an ID. Please upload the front, which shows your photo and name.'
+            : 'We could not find a name on this ID. If this is the back of the ID, please upload the front, which shows your photo and name.', $f, $slots);
     }
 
     // Key fields that must not be blank

@@ -69,7 +69,9 @@ define('SUPABASE_BUCKET_BRANDING',  getenv('SUPABASE_BUCKET_BRANDING')  ?: 'bran
 // -- AI document sorting (local model PC through a Cloudflare Tunnel) --
 // Empty AI_MODEL_URL = AI off; uploads use the category dropdown.
 define('AI_MODEL_URL', getenv('AI_MODEL_URL') ?: '');
-define('AI_TIMEOUT',   (int) (getenv('AI_TIMEOUT') ?: 25));
+// Capped at 25 s: the Vercel function dies at 60 s, and a dead function shows the applicant an error
+// instead of the "pick the document type" fallback. A bigger value in Vercel is ignored.
+define('AI_TIMEOUT',   max(5, min(25, (int) (getenv('AI_TIMEOUT') ?: 25))));
 define('AI_MODEL_KEY', getenv('AI_MODEL_KEY') ?: '');
 
 // -- Roles -------------------------------------------------------

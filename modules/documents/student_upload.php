@@ -653,6 +653,14 @@ if ($_examResult) {
     }
 }
 
+// Two pages share this module (both are still the Submit Documents step):
+//   /student/documents          upload many files (AI sorting) + a read-only checklist
+//   /student/documents/manual   the per-document list with Upload / Resubmit buttons
+// Applicants who cannot use the batch box (foreign, or past the documents step) get the full list on the main page.
+$manualPage = str_ends_with(rtrim((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/'), '/student/documents/manual');
+$hasBatch   = $applicant['applicant_type'] !== 'foreign' && !$pastDocuments && !$docDeadlinePassed;
+$fullList   = $manualPage || !$hasBatch;
+
 // Build viewable files for modal
 $viewableFiles = [];
 foreach ($requiredDocs as $slug => $label) {
@@ -729,7 +737,16 @@ ob_start();
     <p style="margin:0">Qualifying applicants shall take the admission exam. The schedule of examination will be posted on the PLP Official Facebook Page.</p>
 </div>
 
-<?php if (!$isSubmitted && $applicant['overall_status'] === 'documents'): ?>
+<?php if ($manualPage): ?>
+<!-- Manual upload page: same step, one document at a time -->
+<div style="margin-bottom:var(--space-4)">
+    <a href="<?= url('/student/documents') ?>" style="font-size:var(--text-sm);color:var(--accent);text-decoration:underline">&larr; Back to Upload many files</a>
+    <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin:var(--space-2) 0 var(--space-1);color:var(--text-primary)">Upload documents manually</h2>
+    <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">Upload one document at a time. Use Upload or Resubmit on the document you want to send.</p>
+</div>
+<?php endif; ?>
+
+<?php if (!$manualPage && !$isSubmitted && $applicant['overall_status'] === 'documents'): ?>
 <!-- Applicant type selector -->
 <div class="card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
     <div>
@@ -749,7 +766,7 @@ ob_start();
 </div>
 <?php endif; ?>
 
-<?php if ($canEditFlags && !$isSubmitted): ?>
+<?php if (!$manualPage && $canEditFlags && !$isSubmitted): ?>
 <!-- Conditional ticks: change until submit; jQuery refreshes the slot list below -->
 <div class="card" style="padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)">
     <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-2)">Which of these apply to you?</div>
@@ -782,8 +799,8 @@ ob_start();
 </div>
 <?php endif; ?>
 
-<?php if ($applicant['applicant_type'] !== 'foreign' && !$pastDocuments && !$docDeadlinePassed): ?>
-<!-- Upload many files (AI sorting). The slot list below and its Upload buttons stay. -->
+<?php if (!$manualPage && $hasBatch): ?>
+<!-- Upload many files (AI sorting). One-by-one upload lives on its own page, linked below the box. -->
 <style>
 .batch-drop { border:2px dashed var(--border); border-radius:var(--radius-lg); padding:var(--space-6) var(--space-4); text-align:center; cursor:pointer; transition:border-color var(--transition-fast), background var(--transition-fast); }
 .batch-drop:hover, .batch-drop:focus, .batch-drop.drag-over { border-color:var(--accent); background:var(--bg-subtle); outline:none; }
@@ -793,6 +810,8 @@ ob_start();
 .batch-msg { font-size:var(--text-sm); color:var(--text-secondary); margin-top:var(--space-1); }
 .batch-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); margin-top:var(--space-2); }
 .batch-actions:empty { display:none; }
+.batch-actions .batch-select { flex:1 1 100%; width:100%; max-width:100%; min-width:0; text-overflow:ellipsis; }
+.batch-link { color:var(--accent); text-decoration:underline; }
 .batch-bar { height:4px; border-radius:2px; background:var(--bg-subtle); margin-top:var(--space-2); overflow:hidden; }
 .batch-bar > span { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
 .batch-tip { font-size:var(--text-xs); color:var(--warning); margin-top:var(--space-2); }
@@ -809,7 +828,7 @@ ob_start();
     <input type="file" id="batch-camera" accept="image/*" capture="environment" style="display:none">
     <input type="file" id="batch-replace" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none">
     <div id="batch-rows" style="display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)"></div>
-    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-3)">Prefer to do it one by one? Use the Upload button on each document below.</div>
+    <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:var(--space-3)">Prefer to do it one by one? <a class="batch-link" href="<?= e(url('/student/documents/manual')) ?>">Upload your documents manually</a></div>
 </div>
 <?php endif; ?>
 
@@ -832,6 +851,7 @@ ob_start();
         : in_array($status, ['pending', 'rejected', 'resubmission_required', 'uploaded'], true);
     $uploadLabel = $status === 'pending' ? 'Upload' : 'Resubmit';
     $isApproved = $status === 'approved';
+    $showUpload = $fullList && $canUpload;   // the checklist on the main page is read-only
 ?>
     <div class="card" style="padding:var(--space-4) var(--space-5)">
         <div style="display:flex;align-items:center;gap:var(--space-4)">
@@ -867,7 +887,7 @@ ob_start();
             </div>
 
             <!-- Status badge — hide when Replace is shown (redundant) -->
-            <?php if (!($canUpload && $status !== 'pending')): ?>
+            <?php if (!($showUpload && $status !== 'pending')): ?>
                 <span class="badge <?= $badge['class'] ?>"><?= $badge['label'] ?></span>
             <?php endif; ?>
 
@@ -885,7 +905,7 @@ ob_start();
             <?php endif; ?>
 
             <!-- Upload / Replace button -->
-            <?php if ($canUpload): ?>
+            <?php if ($showUpload): ?>
                 <button class="btn btn-secondary btn-sm"
                         onclick="openUploadModal('<?= $slug ?>', <?= htmlspecialchars(json_encode($label), ENT_QUOTES) ?>)">
                     <?= $uploadLabel ?>
@@ -1442,6 +1462,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!$ || !$('#batch-box').length) return;
 
     var URL_  = <?= json_encode(url('/student/documents')) ?>;
+    var MANUAL_URL = <?= json_encode(url('/student/documents/manual')) ?>;
     var CSRF  = $('#flags-form [name=_csrf], #upload-form [name=_csrf]').first().val() || <?= json_encode(csrf_token()) ?>;
     var MAX   = 4 * 1024 * 1024;
     var BODY  = 4.3 * 1024 * 1024;   // Vercel rejects request bodies over 4.5 MB; the PDF and its preview travel together
@@ -1552,7 +1573,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function tip(r) {
         // 5.10: after 2 failed tries, point to one by one upload.
-        if (r.tries >= 2) r.$el.append($('<div class="batch-tip">').text('Still not working? Use the Upload button on that document in the list below to upload it one by one.'));
+        if (r.tries >= 2) r.$el.append($('<div class="batch-tip">').text('Still not working? ').append($('<a class="batch-link">').attr('href', MANUAL_URL).text('Upload your documents manually.')));
     }
 
     function actionBtn(text, fn, primary) {
@@ -1560,7 +1581,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function dropdown(r, cats) {
-        var $sel = $('<select class="form-select" style="width:auto;min-height:32px;font-size:var(--text-sm)">').append($('<option value="">').text('Choose document type…'));
+        var $sel = $('<select class="form-select batch-select" style="min-height:32px;font-size:var(--text-sm)">').append($('<option value="">').text('Choose document type…'));
         $.each(cats, function (_, c) {
             var $o = $('<option>').val(c.category).text(c.label + (c.note ? ' — ' + c.note : ''));
             if (!c.available) $o.prop('disabled', true);
@@ -1590,6 +1611,13 @@ document.addEventListener('DOMContentLoaded', function () {
         show(r, cls, label, msg);
         r.blob = null; r.file = null;
         r.$el.find('.batch-actions').append(actionBtn('Dismiss', function () { r.$el.remove(); delete rows[r.id]; }));
+    }
+
+    // jQuery calls fail() for a timeout, a 5xx and a connection drop alike; tell them apart for the applicant.
+    function failMessage(xhr, status) {
+        if (status === 'timeout' || (xhr && [502, 503, 504].indexOf(xhr.status) >= 0)) return 'This took too long. Please try again.';
+        if (xhr && xhr.status > 0) return 'Something went wrong on the server. Please try again.';
+        return 'Could not reach the server. Check your connection and try again.';
     }
 
     function send(r, data) {
@@ -1627,9 +1655,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 else if (res.status === 'failed') { r.tries++; offer(r, 'failed', res.message, res.categories); }
                 else { r.tries++; offer(r, 'uncertain', res.message, res.categories); }
             }
-        }).fail(function () {
+        }).fail(function (xhr, status) {
             r.$el.find('.batch-bar').hide(); r.tries++;
-            offer(r, 'error', 'Could not reach the server. Check your connection and try again.');
+            offer(r, 'error', failMessage(xhr, status));
         }).always(function () { d.resolve(); });
         return d.promise();
     }
@@ -1645,9 +1673,9 @@ document.addEventListener('DOMContentLoaded', function () {
             r.$el.find('.batch-bar').hide();
             if (res && res.ok) { done(r, 'Sorted', 'badge-success', (res.message || 'Saved.') + ' Staff will double check the type.'); window.refreshSlotList && window.refreshSlotList(); }
             else offer(r, 'error', (res && res.message) || 'Could not save this file.', lastCats);
-        }).fail(function () {
+        }).fail(function (xhr, status) {
             r.$el.find('.batch-bar').hide();
-            offer(r, 'error', 'Could not reach the server. Check your connection and try again.', lastCats);
+            offer(r, 'error', failMessage(xhr, status), lastCats);
         });
     }
 
@@ -1712,7 +1740,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <?php
 $content     = ob_get_clean();
-$pageTitle   = 'My Documents';
+$pageTitle   = $manualPage ? 'Upload Documents Manually' : 'My Documents';
 $activeNav   = 'documents';
 $showStepper = true;
 include VIEWS_PATH . '/layouts/app.php';

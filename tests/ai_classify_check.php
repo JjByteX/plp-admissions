@@ -67,7 +67,7 @@ $back = ai_decide($ok(['name' => '', 'id_type' => 'Philippine National ID', 'id_
 check($back['status'] === 'uncertain' && str_contains($back['reason'], 'back of an ID'), 'back of an ID gets its own message');
 check(ai_decide($ok(array_merge($idf, ['id_side' => 'front']), $id), 95, $cat, $me, $t80)['status'] === 'passed', 'front of an ID still passes');
 check(ai_decide($ok(array_merge($idf, ['id_side' => 'back']), $id), 95, $cat, $me, $t80)['status'] === 'passed', 'a read name wins over a wrong back flag');
-check(str_contains(ai_decide($ok(['name' => '', 'id_type' => 'Driver\'s License'], $id), 95, $cat, $me, $t80)['reason'], 'name not found'), 'blank name without a back flag still says name not found');
+check(str_contains(ai_decide($ok(['name' => '', 'id_type' => 'Driver\'s License'], $id), 95, $cat, $me, $t80)['reason'], 'upload the front'), 'blank name on an ID asks for the front even without a back flag');
 
 // the one Form 138 / 137 category passes at normal confidence
 $frm = $num('form_137');

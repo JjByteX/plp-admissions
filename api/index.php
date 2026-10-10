@@ -27,6 +27,7 @@ $router->post('/verify-pending',  'auth/verify_pending');
 // -- Student -----------------------------------------------------
 $router->get('/student/documents',  'documents/student_upload');
 $router->post('/student/documents', 'documents/student_upload');
+$router->get('/student/documents/manual', 'documents/student_upload');
 $router->get('/student/exam',       'exam/take');
 $router->post('/student/exam',      'exam/take');
 $router->get('/student/interview',  'interview/student_view');
