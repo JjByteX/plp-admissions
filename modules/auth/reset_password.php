@@ -121,7 +121,7 @@ ob_start();
     </form>
 
     <div class="auth-footer">
-        <a href="<?= url('/forgot-password?new=1') ?>" aria-label="Start over" title="Start over"><?= icon('ic_fluent_arrow_left_24_regular', 18) ?></a>
+        <a href="<?= url('/forgot-password?new=1') ?>"><?= icon('ic_fluent_arrow_left_24_regular', 14, 'display:inline-block;vertical-align:-2px') ?> Start over</a>
     </div>
 
 </div>

@@ -87,6 +87,8 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
+<?php $pageActions = back_button('javascript:history.back()'); ?>
+
 <div style="display:flex;flex-direction:column;gap:var(--space-6);max-width:560px;margin:0 auto">
 
        <!-- Appearance (per-device text size) -->
@@ -106,7 +108,7 @@ ob_start();
                     <div>
                         <label class="form-label">Current Logo</label>
                         <img src="<?= str_starts_with($schoolLogo, 'http') ? e($schoolLogo) : e(url('/'. $schoolLogo)) ?>" alt="Logo"
-                             style="height:48px;border-radius:var(--radius);display:block">
+                             style="height:48px;border-radius:var(--radius-sm);display:block">
                     </div>
                 <?php endif; ?>
                 <div>
@@ -122,7 +124,7 @@ ob_start();
                     <label class="form-label">Accent Color</label>
                     <div style="display:flex;align-items:center;gap:var(--space-3)">
                         <input type="color" name="accent_color" value="<?= e($accentColor) ?>"
-                               style="width:44px;height:36px;padding:2px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;background:none"
+                               style="width:44px;height:36px;padding:2px;border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;background:none"
                                id="color-picker">
                         <input type="text" class="form-control" style="max-width:120px"
                                value="<?= e($accentColor) ?>" id="hex-input"
@@ -173,6 +175,6 @@ document.getElementById('color-picker').addEventListener('input', function() {
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Settings';
-$pageActions = '<a href="javascript:history.back()" class="btn-icon" aria-label="Back" title="Back">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>';
 $activeNav = 'settings';
+$pageHeading = 'Settings';
 include VIEWS_PATH . '/layouts/app.php';

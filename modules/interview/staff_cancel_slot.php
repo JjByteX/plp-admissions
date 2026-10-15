@@ -288,10 +288,9 @@ $pageUrl  = fn(int $p): string => url('/staff/interviews/cancel-slot') . '?' . h
 ob_start();
 ?>
 
+<?php $pageActions = back_button(url('/staff/interviews/setup'), 'Back to Interview Slots'); ?>
+
 <div class="card" style="padding:var(--space-6);margin-bottom:var(--space-5);flex-shrink:0">
-    <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin:0 0 var(--space-2)">
-        Cancel an interview slot
-    </h2>
     <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
         Use this for typhoon closures or any time you need to move
         everyone in a slot at once. Pick the slot to cancel, pick a
@@ -438,7 +437,7 @@ ob_start();
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Cancel Interview Slot (Bulk)';
-$pageActions = '<a href="' . e(url('/staff/interviews/setup')) . '" class="btn-icon" aria-label="Back to interview slots" title="Back to interview slots">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>';
 $activeNav = 'interview';
 $pageWide  = true; // table-heavy page — match staff_slots / staff_review / staff_manage
+$pageHeading = 'Cancel Interview Slot';
 include VIEWS_PATH . '/layouts/app.php';

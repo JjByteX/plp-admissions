@@ -228,15 +228,14 @@ if ($format === 'print') {
 <style>
   /* ── Screen styles ──────────────────────────────────────── */
   :root {
-        --radius: 8px;
     --ink: #111827;
     --muted: #6b7280;
     --line: #d1d5db;
+    --radius: 8px; /* same value as the shared --radius token in app.css (this sheet is standalone) */
     --accent: <?= e(school_setting('accent_color', '#2d6a4f')) ?>;
     --bg: #f9fafb;
   }
   * { box-sizing: border-box; }
-    :where(*) { border-radius:var(--radius) !important; }
   body { margin:0; padding:0; background:var(--bg); color:var(--ink);
          font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
          font-size: 12pt; line-height: 1.45; }
@@ -307,19 +306,12 @@ if ($format === 'print') {
     .toolbar, .no-print { display: none !important; }
     .pagewrap { margin: 0; padding: 0; max-width: none; }
     .room-sheet {
-    border: none; border-radius: var(--radius); padding: 0;
+      border: none; border-radius: 0; padding: 0;
       margin: 0; page-break-after: always;
     }
     .room-sheet:last-child { page-break-after: auto; }
     @page { size: A4; margin: 18mm 16mm; }
   }
-    @media (max-width:600px) {
-        .toolbar { padding:10px 12px; }
-        .toolbar .right { margin-left:0; }
-        .pagewrap { margin:16px auto; padding:0 10px; }
-        .room-sheet { padding:20px 16px; }
-        .room-info { grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }
-    }
 </style>
 </head>
 <body>
@@ -327,30 +319,7 @@ if ($format === 'print') {
 <!-- ── Toolbar (hidden when printing) ──────────────────────── -->
 <div class="toolbar no-print">
     <div class="left">
-        <a href="<?= url('/staff/exam/slots') ?>" class="btn">← Back to Slots</a>
-        <form method="GET" action="" style="display:flex;gap:8px;align-items:center;margin-left:8px">
-            <label style="font-size:10pt;color:var(--muted)">Date:</label>
-            <select name="date" onchange="this.form.submit()">
-                <option value="">All upcoming</option>
-                <?php foreach ($datesAvail as $d): ?>
-                    <option value="<?= e($d) ?>" <?= $filterDate === $d ? 'selected' : '' ?>>
-                        <?= e(date('M j, Y (D)', strtotime($d))) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <?php if ($isAdmin && $deptsAvail): ?>
-                <label style="font-size:10pt;color:var(--muted);margin-left:8px">College:</label>
-                <select name="dept" onchange="this.form.submit()">
-                    <option value="">All colleges</option>
-                    <?php foreach ($deptsAvail as $d): ?>
-                        <option value="<?= e($d) ?>" <?= $filterDept === $d ? 'selected' : '' ?>>
-                            <?= e($d) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            <?php endif; ?>
-            <noscript><button class="btn" type="submit">Apply</button></noscript>
-        </form>
+        <a href="<?= e($backUrl) ?>" class="btn" title="Back to Roster" aria-label="Back to Roster" style="display:inline-flex;align-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></a>
     </div>
     <div class="right">
         <a class="btn" href="<?= e($csvUrl) ?>"
@@ -554,9 +523,7 @@ $hasFilters = ($search !== '' || $filterDate !== '' || ($isAdmin && $filterDept 
 ob_start();
 ?>
 
-<div style="margin-bottom:var(--space-5);flex-shrink:0">
-    <a href="<?= url('/staff/exam/slots') ?>" class="btn btn-ghost btn-sm"><?= icon('arrow-left', 14) ?> Back to Exam Slots</a>
-</div>
+<?php $pageActions = back_button(url('/staff/exam/slots'), 'Back to Exam Slots'); ?>
 
 <?php
 // Same structure as the audit log (and lakbay-pasig's AdminDataTable): one
@@ -690,4 +657,5 @@ $content   = ob_get_clean();
 $pageTitle = 'Exam Room Roster';
 $activeNav = 'exam';
 $pageWide  = true; // table-heavy page — match staff_slots / staff_review / staff_manage
+$pageHeading = 'Exam Room Roster';
 include VIEWS_PATH . '/layouts/app.php';

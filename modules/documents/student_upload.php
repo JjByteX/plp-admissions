@@ -742,11 +742,8 @@ ob_start();
 </div>
 
 <?php if ($manualPage): ?>
-<!-- Manual upload page: same step, one document at a time -->
-<div style="margin-bottom:var(--space-4)">
-    <a href="<?= url('/student/documents') ?>" style="font-size:var(--text-sm);color:var(--accent);text-decoration:underline"><?= icon('arrow-left', 14) ?> Back to Upload many files</a>
-    <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin:var(--space-2) 0 var(--space-1);color:var(--text-primary)">Upload documents manually</h2>
-</div>
+<!-- Manual upload page: same step, one document at a time (heading + back button come from the layout) -->
+<?php $pageActions = back_button(url('/student/documents'), 'Back to Upload many files'); ?>
 <?php endif; ?>
 
 <?php if (!$manualPage && !$isSubmitted && $applicant['overall_status'] === 'documents'): ?>
@@ -811,7 +808,7 @@ ob_start();
 
 <?php if (!$manualPage && $hasBatch): ?>
 <style>
-.batch-drop { border:2px dashed var(--border); border-radius:var(--radius); padding:var(--space-6) var(--space-4); text-align:center; cursor:pointer; transition:border-color var(--transition-fast), background var(--transition-fast); }
+.batch-drop { border:2px dashed var(--border); border-radius:var(--radius-lg); padding:var(--space-6) var(--space-4); text-align:center; cursor:pointer; transition:border-color var(--transition-fast), background var(--transition-fast); }
 .batch-drop:hover, .batch-drop:focus, .batch-drop.drag-over { border-color:var(--accent); background:var(--bg-subtle); outline:none; }
 .batch-row { border-top:1px solid var(--border); padding:var(--space-3) 0; }
 .batch-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); }
@@ -821,7 +818,7 @@ ob_start();
 .batch-actions:empty { display:none; }
 .batch-actions .batch-select { flex:1 1 100%; width:100%; max-width:100%; min-width:0; text-overflow:ellipsis; }
 .batch-link { color:var(--accent); text-decoration:underline; }
-.batch-bar { height:4px; border-radius:var(--radius); background:var(--bg-subtle); margin-top:var(--space-2); overflow:hidden; }
+.batch-bar { height:4px; border-radius:var(--radius-full); background:var(--bg-subtle); margin-top:var(--space-2); overflow:hidden; }
 .batch-bar > span { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
 .batch-tip { font-size:var(--text-xs); color:var(--warning); margin-top:var(--space-2); }
 </style>
@@ -870,7 +867,7 @@ ob_start();
         <div style="display:flex;align-items:center;gap:var(--space-4)">
 
             <!-- Icon -->
-            <div style="width:40px;height:40px;border-radius:var(--radius);background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;flex-shrink:0;<?= $isApproved ? 'background:var(--success-bg)' : '' ?>">
+            <div style="width:40px;height:40px;border-radius:var(--radius-md);background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;flex-shrink:0;<?= $isApproved ? 'background:var(--success-bg)' : '' ?>">
                 <?php if ($isApproved): ?>
                     <?= icon('ic_fluent_checkmark_circle_24_regular', 18, 'color:var(--success)') ?>
                 <?php else: ?>
@@ -963,7 +960,7 @@ ob_start();
 <div id="result-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
     <div class="modal" style="max-width:380px;text-align:center">
         <div class="modal-body" style="padding:var(--space-8) var(--space-6)">
-            <div id="result-icon" style="margin:0 auto var(--space-4);width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center"></div>
+            <div id="result-icon" style="margin:0 auto var(--space-4);width:56px;height:56px;border-radius:var(--radius);display:flex;align-items:center;justify-content:center"></div>
             <div id="result-title" style="font-size:var(--text-lg);font-weight:var(--weight-semibold);color:var(--text-primary);margin-bottom:var(--space-2)"></div>
             <div id="result-msg" style="font-size:var(--text-sm);color:var(--text-secondary)"></div>
         </div>
@@ -1160,7 +1157,7 @@ function updateDropLabel(name) {
         width:min(94vw,1100px);
         height:min(90vh,860px);
         background:var(--bg-elevated);
-        border-radius:var(--radius);
+        border-radius:var(--radius-lg);
         box-shadow:var(--shadow-lg);
         display:flex;flex-direction:column;
         overflow:hidden;
@@ -1174,7 +1171,7 @@ function updateDropLabel(name) {
         ">
             <button id="fv-prev" onclick="fvNavigate(-1)" type="button" style="
                 display:flex;align-items:center;justify-content:center;
-                width:32px;height:32px;border-radius:var(--radius);
+                width:32px;height:32px;border-radius:var(--radius-sm);
                 border:1px solid var(--border);background:var(--bg);
                 color:var(--text-secondary);cursor:pointer;flex-shrink:0;
                 transition:background var(--transition-fast),color var(--transition-fast);
@@ -1187,7 +1184,7 @@ function updateDropLabel(name) {
             </div>
             <button id="fv-next" onclick="fvNavigate(1)" type="button" style="
                 display:flex;align-items:center;justify-content:center;
-                width:32px;height:32px;border-radius:var(--radius);
+                width:32px;height:32px;border-radius:var(--radius-sm);
                 border:1px solid var(--border);background:var(--bg);
                 color:var(--text-secondary);cursor:pointer;flex-shrink:0;
                 transition:background var(--transition-fast),color var(--transition-fast);
@@ -1228,7 +1225,7 @@ function updateDropLabel(name) {
             <div id="fv-hint" style="
                 position:absolute;bottom:var(--space-2);left:50%;transform:translateX(-50%);
                 background:rgba(0,0,0,0.55);color:#fff;
-                font-size:var(--text-xs);padding:var(--space-1) var(--space-4);border-radius:var(--radius);
+                font-size:var(--text-xs);padding:var(--space-1) var(--space-4);border-radius:var(--radius-full);
                 pointer-events:none;opacity:0;transition:opacity .4s ease;white-space:nowrap;
             ">Scroll to zoom · Drag to pan when zoomed in</div>
         </div>
@@ -1242,7 +1239,7 @@ function updateDropLabel(name) {
 <style>
 .fv-ctrl-btn {
     display:flex;align-items:center;justify-content:center;
-    width:30px;height:30px;border-radius:var(--radius);
+    width:30px;height:30px;border-radius:var(--radius-sm);
     border:1px solid var(--border);background:var(--bg);
     color:var(--text-secondary);cursor:pointer;
     transition:background var(--transition-fast),color var(--transition-fast);
@@ -1293,9 +1290,9 @@ function updateDropLabel(name) {
         var wrap=document.getElementById('fv-transform-wrap');
         var isPdf=f.url.toLowerCase().split('?')[0].endsWith('.pdf');
         if(isPdf){
-            wrap.innerHTML='<iframe src="'+f.url+'" style="width:100%;height:78vh;border:none;border-radius:var(--radius);background:#fff;"></iframe>';
+            wrap.innerHTML='<iframe src="'+f.url+'" style="width:100%;height:78vh;border:none;border-radius:var(--radius-sm);background:#fff;"></iframe>';
         } else {
-            wrap.innerHTML='<img src="'+f.url+'" alt="Document preview" style="max-width:100%;max-height:78vh;border-radius:var(--radius);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;">';
+            wrap.innerHTML='<img src="'+f.url+'" alt="Document preview" style="max-width:100%;max-height:78vh;border-radius:var(--radius-sm);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;">';
         }
         document.getElementById('fv-label').textContent=f.label;
         document.getElementById('fv-counter').textContent=(_idx+1)+' of '+_files.length;
@@ -1323,7 +1320,7 @@ function updateDropLabel(name) {
         _files.forEach(function(f,i){
             var b=document.createElement('button');
             b.type='button';
-            b.style.cssText='width:8px;height:8px;border-radius:50%;border:none;padding:0;cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s;';
+            b.style.cssText='width:8px;height:8px;border-radius:var(--radius);border:none;padding:0;cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s;';
             b.style.background=(i===_idx)?'var(--accent)':'var(--border-strong)';
             b.style.transform=(i===_idx)?'scale(1.35)':'scale(1)';
             b.title=f.label;
@@ -1760,11 +1757,11 @@ document.addEventListener('DOMContentLoaded', function () {
 <div class="step-nav">
     <span></span>
     <?php if ($allApproved && $_examResult): ?>
-        <a href="<?= url('/student/interview') ?>" class="btn btn-primary">Interview <?= icon('ic_fluent_arrow_right_24_regular', 16) ?></a>
+        <a href="<?= url('/student/interview') ?>" class="btn btn-primary">Interview <?= icon('ic_fluent_arrow_right_24_regular', 15) ?></a>
     <?php elseif ($allApproved && !$_examResult): ?>
-        <a href="<?= url('/student/exam') ?>" class="btn btn-primary">Entrance Exam <?= icon('ic_fluent_arrow_right_24_regular', 16) ?></a>
+        <a href="<?= url('/student/exam') ?>" class="btn btn-primary">Entrance Exam <?= icon('ic_fluent_arrow_right_24_regular', 15) ?></a>
     <?php else: ?>
-        <span class="btn btn-primary" style="opacity:.4;cursor:not-allowed" title="All documents must be approved first">Entrance Exam <?= icon('ic_fluent_arrow_right_24_regular', 16) ?></span>
+        <span class="btn btn-primary" style="opacity:.4;cursor:not-allowed" title="All documents must be approved first">Entrance Exam <?= icon('ic_fluent_arrow_right_24_regular', 15) ?></span>
     <?php endif; ?>
 </div>
 
@@ -1773,4 +1770,5 @@ $content     = ob_get_clean();
 $pageTitle   = $manualPage ? 'Upload Documents Manually' : 'My Documents';
 $activeNav   = 'documents';
 $showStepper = true;
+$pageHeading = $pageTitle;
 include VIEWS_PATH . '/layouts/app.php';

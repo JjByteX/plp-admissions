@@ -380,7 +380,7 @@ ob_start();
 .section-header {
     display: flex; align-items: center; gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius); margin-bottom: var(--space-2);
+    border-radius: var(--radius-md); margin-bottom: var(--space-2);
     border: 1.5px solid transparent;
     position: relative;
 }
@@ -391,13 +391,13 @@ ob_start();
 /* ── Inline editing ──────────────────────────────── */
 .inline-edit-wrap { position: relative; display: inline-block; }
 .inline-editable {
-    cursor: pointer; border-radius: var(--radius);
+    cursor: pointer; border-radius: var(--radius-sm);
     transition: background .12s;
 }
 .inline-editable:hover { background: var(--bg-overlay); }
 .inline-edit-input {
     font-family: inherit; font-size: inherit; font-weight: inherit;
-    border: 2px solid var(--accent); border-radius: var(--radius);
+    border: 2px solid var(--accent); border-radius: var(--radius-sm);
     padding: 2px 6px; background: var(--bg-elevated); color: var(--text-primary);
     outline: none; width: 100%; box-sizing: border-box;
 }
@@ -405,12 +405,12 @@ ob_start();
     display: flex; gap: var(--space-1); margin-top: 4px;
 }
 .inline-save-btn {
-    padding: 2px 10px; font-size: var(--text-xs); border-radius: var(--radius);
+    padding: 2px 10px; font-size: var(--text-xs); border-radius: var(--radius-sm);
     background: var(--accent); color: #fff; border: none; cursor: pointer;
     font-weight: var(--weight-medium);
 }
 .inline-cancel-btn {
-    padding: 2px 10px; font-size: var(--text-xs); border-radius: var(--radius);
+    padding: 2px 10px; font-size: var(--text-xs); border-radius: var(--radius-sm);
     background: transparent; color: var(--text-secondary); border: 1px solid var(--border);
     cursor: pointer;
 }
@@ -426,7 +426,7 @@ ob_start();
 .type-option {
     display:flex; flex-direction:column; align-items:center; gap:4px;
     padding: var(--space-3); border: 2px solid var(--border);
-    border-radius: var(--radius); cursor: pointer;
+    border-radius: var(--radius-md); cursor: pointer;
     font-size: var(--text-xs); color: var(--text-secondary);
     text-align: center; transition: border-color .15s, background .15s;
     user-select: none;
@@ -451,7 +451,7 @@ ob_start();
 }
 .toggle-slider:before {
     content:''; position:absolute; width:14px; height:14px;
-    left:3px; top:3px; border-radius:50%; background:var(--bg-elevated); transition:.2s;
+    left:3px; top:3px; border-radius:var(--radius); background:var(--bg-elevated); transition:.2s;
 }
 .toggle input:checked + .toggle-slider { background:var(--accent); }
 .toggle input:checked + .toggle-slider:before { transform:translateX(16px); }
@@ -460,7 +460,7 @@ ob_start();
 .scale-preview { display:flex; gap:var(--space-2); flex-wrap:wrap; }
 .scale-btn {
     width:36px; height:36px; border:2px solid var(--border);
-    border-radius:var(--radius); display:flex; align-items:center; justify-content:center;
+    border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center;
     font-size:var(--text-sm); font-weight:var(--weight-medium);
     background:var(--surface); color:var(--text-primary);
 }
@@ -471,7 +471,7 @@ ob_start();
     box-shadow: var(--shadow-sm);
 }
 .section-block .section-header {
-    border-radius: var(--radius) var(--radius) 0 0 !important;
+    border-radius: var(--radius-md) var(--radius-md) 0 0 !important;
     border-bottom: 1px solid rgba(0,0,0,.06);
 }
 .section-questions { padding: var(--space-4); }
@@ -479,7 +479,7 @@ ob_start();
 /* ── Inline question creator ─────────────────────── */
 .inline-question-creator {
     border: 1.5px solid var(--accent);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     background: var(--bg-elevated);
     overflow: hidden;
     animation: creator-slide-in .15s ease;
@@ -499,7 +499,7 @@ ob_start();
 .exam-meta-strip {
     display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5);
     padding: var(--space-3) var(--space-4);
-    background: var(--bg-subtle); border-radius: var(--radius);
+    background: var(--bg-subtle); border-radius: var(--radius-md);
     font-size: var(--text-xs); color: var(--text-secondary);
     margin-top: var(--space-3);
 }
@@ -530,7 +530,7 @@ ob_start();
     padding: var(--space-10) var(--space-6);
     background: var(--bg-elevated);
     border: 1.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     text-decoration: none;
     color: var(--text-primary);
     transition: border-color .18s, box-shadow .18s, transform .15s;
@@ -543,7 +543,7 @@ ob_start();
 }
 .exam-landing-icon {
     width: 60px; height: 60px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     background: var(--accent-muted);
     display: flex; align-items: center; justify-content: center;
     color: var(--accent);
@@ -590,7 +590,7 @@ ob_start();
     padding: var(--space-5);
     background: var(--bg-elevated);
     border: 1.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     text-decoration: none;
     color: var(--text-primary);
     transition: border-color .15s, box-shadow .15s;
@@ -708,11 +708,13 @@ elseif ($selectedExamId) $view = 'editor';
 ════════════════════════════════════════════════════ */ ?>
 <?php elseif ($view === 'exams'): ?>
 
+<?php $pageActions = back_button(url('/staff/exam')); ?>
+
 <?php if (empty($exams)): ?>
     <div class="exam-dir-grid" style="max-width:320px;margin:var(--space-10) auto 0">
         <div class="exam-dir-card" onclick="openModal('create-exam-modal')"
              style="align-items:center;justify-content:center;min-height:220px;border-style:dashed;cursor:pointer">
-            <div style="width:56px;height:56px;border-radius:50%;background:var(--accent-muted);
+            <div style="width:56px;height:56px;border-radius:var(--radius);background:var(--accent-muted);
                         display:flex;align-items:center;justify-content:center;color:var(--accent)">
                 <?= icon('plus:fill', 28) ?>
             </div>
@@ -762,7 +764,7 @@ elseif ($selectedExamId) $view = 'editor';
         <!-- New Exam card (always last in grid) -->
         <div class="exam-dir-card" onclick="openModal('create-exam-modal')"
              style="align-items:center;justify-content:center;min-height:200px;border-style:dashed;cursor:pointer">
-            <div style="width:48px;height:48px;border-radius:50%;background:var(--accent-muted);
+            <div style="width:48px;height:48px;border-radius:var(--radius);background:var(--accent-muted);
                         display:flex;align-items:center;justify-content:center;color:var(--accent)">
                 <?= icon('plus:fill', 24) ?>
             </div>
@@ -776,6 +778,11 @@ elseif ($selectedExamId) $view = 'editor';
 ════════════════════════════════════════════════════ */ ?>
 <?php else: ?>
 
+<!-- Back (the exam's own header card below is its heading) -->
+<div class="page-actions page-actions-row">
+    <?= back_button(url('/staff/exam') . '?view=exams') ?>
+</div>
+
 <?php if ($selectedExam): ?>
 
         <!-- Exam header card: read-only auto-derived title + editable description and shuffle flags. -->
@@ -788,7 +795,7 @@ elseif ($selectedExamId) $view = 'editor';
                 color: inherit;
                 background: transparent;
                 border: 1px solid transparent;
-                border-radius: var(--radius);
+                border-radius: var(--radius-sm);
                 padding: 4px 8px;
                 margin: 0 -8px;
                 box-sizing: border-box;
@@ -943,7 +950,7 @@ elseif ($selectedExamId) $view = 'editor';
                                         <?php elseif ($q['question_type'] === 'checkboxes'): ?>
                                             <span style="width:13px;height:13px;border:1.5px solid var(--border);border-radius:var(--radius);display:inline-block;flex-shrink:0"></span>
                                         <?php else: ?>
-                                            <span style="width:13px;height:13px;border:1.5px solid var(--border);border-radius:50%;display:inline-block;flex-shrink:0"></span>
+                                            <span style="width:13px;height:13px;border:1.5px solid var(--border);border-radius:var(--radius);display:inline-block;flex-shrink:0"></span>
                                         <?php endif; ?>
                                         <span style="color:<?= $isCorrect ? 'var(--success)' : 'var(--text-secondary)' ?>"><?= e($choice) ?></span>
                                     </div>
@@ -997,7 +1004,7 @@ elseif ($selectedExamId) $view = 'editor';
                 $secJson   = htmlspecialchars(json_encode($sec));
             ?>
                 <div class="card section-block" style="margin-bottom:var(--space-5);padding:0;overflow:visible" data-section-id="<?= $sec['id'] ?>">
-                    <div class="section-header" style="background:<?= $sc['bg'] ?>;border-color:<?= $sc['border'] ?>;border-radius:var(--radius) var(--radius) 0 0;margin-bottom:0;align-items:flex-start">
+                    <div class="section-header" style="background:<?= $sc['bg'] ?>;border-color:<?= $sc['border'] ?>;border-radius:var(--radius-md) var(--radius-md) 0 0;margin-bottom:0;align-items:flex-start">
                         <?php /* Stack title row + description vertically inside one flex
                                  cell so a long description wraps below the title instead
                                  of getting laid out alongside it (which used to push the
@@ -1045,7 +1052,7 @@ elseif ($selectedExamId) $view = 'editor';
 
                     <div class="section-questions" id="sec-questions-<?= $sec['id'] ?>" style="display:flex;flex-direction:column;padding:0">
                         <?php if (empty($secQs)): ?>
-                            <div id="sec-empty-<?= $sec['id'] ?>" style="padding:var(--space-4) var(--space-5);border:1.5px dashed var(--border);border-radius:var(--radius);text-align:center;color:var(--text-tertiary);font-size:var(--text-sm)">
+                            <div id="sec-empty-<?= $sec['id'] ?>" style="padding:var(--space-4) var(--space-5);border:1.5px dashed var(--border);border-radius:var(--radius-md);text-align:center;color:var(--text-tertiary);font-size:var(--text-sm)">
                                 No questions yet — click <strong>Add question</strong> below to get started.
                             </div>
                         <?php else: ?>
@@ -1110,7 +1117,7 @@ elseif ($selectedExamId) $view = 'editor';
             <input type="hidden" name="action" value="create_exam">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
                 <div style="font-size:var(--text-sm);color:var(--text-secondary);background:var(--bg-subtle);
-                            padding:var(--space-3) var(--space-4);border-radius:var(--radius)">
+                            padding:var(--space-3) var(--space-4);border-radius:var(--radius-md)">
                     Title will be set automatically:
                     <strong>PLP Admissions Test (<?= e($schoolYear) ?>)</strong>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
@@ -1162,7 +1169,7 @@ elseif ($selectedExamId) $view = 'editor';
             <input type="hidden" name="exam_id" id="edit-exam-id">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
                 <div style="font-size:var(--text-sm);color:var(--text-secondary);background:var(--bg-subtle);
-                            padding:var(--space-3) var(--space-4);border-radius:var(--radius)">
+                            padding:var(--space-3) var(--space-4);border-radius:var(--radius-md)">
                     Title is set automatically:
                     <strong>PLP Admissions Test (<?= e($schoolYear) ?>)</strong>
                     <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
@@ -1934,32 +1941,32 @@ function togglePassingPanel() {
 <style>
 @keyframes ai-spin { to { transform: rotate(360deg); } }
 @keyframes ai-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-.ai-status-bar { display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius);font-size:var(--text-sm);border:1px solid; }
+.ai-status-bar { display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius-md);font-size:var(--text-sm);border:1px solid; }
 .ai-status-bar.connected { background:#f0faf4;border-color:#a7d9b8;color:#1a5c32; }
 .ai-status-bar.disconnected { background:#fafafa;border-color:var(--border);color:var(--text-secondary); }
-.ai-status-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+.ai-status-dot { width:8px;height:8px;border-radius:var(--radius);flex-shrink:0; }
 .ai-status-bar.connected .ai-status-dot { background:#22c55e; }
 .ai-status-bar.disconnected .ai-status-dot { background:var(--neutral-400);animation:ai-pulse 2s ease-in-out infinite; }
-.ai-dropzone { border:2px dashed var(--border);border-radius:var(--radius);padding:var(--space-6) var(--space-5);text-align:center;cursor:pointer;transition:border-color .15s,background .15s; }
+.ai-dropzone { border:2px dashed var(--border);border-radius:var(--radius-md);padding:var(--space-6) var(--space-5);text-align:center;cursor:pointer;transition:border-color .15s,background .15s; }
 .ai-dropzone:hover,.ai-dropzone.dragover { border-color:var(--accent);background:rgba(45,106,79,.03); }
 .ai-dropzone.has-file { border-style:solid;border-color:var(--accent);background:rgba(45,106,79,.04); }
-.ai-dropzone-icon { width:40px;height:40px;margin:0 auto var(--space-2);border-radius:var(--radius);background:var(--neutral-100);display:flex;align-items:center;justify-content:center; }
-.ai-file-tag { display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border-radius:var(--radius);padding:4px 10px;font-size:var(--text-xs);font-weight:var(--weight-medium);margin-top:var(--space-2); }
+.ai-dropzone-icon { width:40px;height:40px;margin:0 auto var(--space-2);border-radius:var(--radius-md);background:var(--neutral-100);display:flex;align-items:center;justify-content:center; }
+.ai-file-tag { display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border-radius:var(--radius-sm);padding:4px 10px;font-size:var(--text-xs);font-weight:var(--weight-medium);margin-top:var(--space-2); }
 .ai-file-tag .rm { cursor:pointer;opacity:.7;background:none;border:none;color:#fff;padding:0;font-size:14px;display:flex;align-items:center;line-height:1; }
 .ai-file-tag .rm:hover { opacity:1; }
 .ai-progress-wrap { padding: var(--space-2) 0; }
 .ai-progress-track { height:5px;background:var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:var(--space-3); }
 .ai-progress-fill { height:100%;background:var(--accent);border-radius:var(--radius);width:0%;transition:width .4s cubic-bezier(.4,0,.2,1); }
 .ai-progress-step { font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px; }
-.ai-q-card { border:1px solid #e5e7eb;border-radius:var(--radius);overflow:hidden;background:#fff;flex-shrink:0; }
+.ai-q-card { border:1px solid #e5e7eb;border-radius:var(--radius-md);overflow:hidden;background:#fff;flex-shrink:0; }
 .ai-q-card-head { display:flex;align-items:center;gap:8px;padding:9px 14px;background:#f9fafb;font-size:var(--text-xs);color:#6b7280; }
 .ai-q-card-body { padding:12px 14px;background:#fff; }
 .ai-q-text { font-size:var(--text-sm);font-weight:var(--weight-medium);color:#111827;margin-bottom:8px;line-height:1.45; }
 .ai-choice-row { display:flex;align-items:center;gap:7px;padding:3px 0;font-size:var(--text-sm);color:#374151; }
 .ai-choice-row.correct { color:#16a34a;font-weight:var(--weight-medium); }
-.ai-choice-ind { width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1.5px solid var(--border); }
+.ai-choice-ind { width:14px;height:14px;border-radius:var(--radius);flex-shrink:0;border:1.5px solid var(--border); }
 .ai-choice-row.correct .ai-choice-ind { background:#16a34a;border-color:#16a34a;display:flex;align-items:center;justify-content:center; }
-.ai-warn-strip { display:flex;align-items:flex-start;gap:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--radius);padding:10px 12px;font-size:var(--text-xs);color:#92400e;line-height:1.5; }
+.ai-warn-strip { display:flex;align-items:flex-start;gap:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--radius-md);padding:10px 12px;font-size:var(--text-xs);color:#92400e;line-height:1.5; }
 </style>
 
 <div id="ai-import-modal" class="modal-backdrop" style="display:none">
@@ -1967,7 +1974,7 @@ function togglePassingPanel() {
         <?= csrf_field() ?>
         <div class="modal-header" style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)">
             <div style="display:flex;align-items:center;gap:var(--space-3)">
-                <div style="width:34px;height:34px;border-radius:var(--radius);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <div style="width:34px;height:34px;border-radius:var(--radius-md);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
                     <?= icon('sparkle', 17, 'color:#fff') ?>
                 </div>
                 <div>
@@ -1983,8 +1990,8 @@ function togglePassingPanel() {
             <div id="ai-puter-status" class="ai-status-bar disconnected">
                 <div class="ai-status-dot"></div>
                 <div id="ai-puter-status-text" style="flex:1">Checking Puter connection…</div>
-                <a id="ai-puter-link" href="https://puter.com" target="_blank" style="display:none;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);text-decoration:none;white-space:nowrap">Create account <?= icon('ic_fluent_arrow_right_24_regular', 14) ?></a>
-                <button id="ai-puter-signin-btn" onclick="puterSignIn()" style="display:none;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;white-space:nowrap">Sign in <?= icon('ic_fluent_arrow_right_24_regular', 14) ?></button>
+                <a id="ai-puter-link" href="https://puter.com" target="_blank" style="display:none;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);text-decoration:none;white-space:nowrap">Create account <?= icon('ic_fluent_arrow_right_24_regular', 11, 'display:inline-block;vertical-align:-2px') ?></a>
+                <button id="ai-puter-signin-btn" onclick="puterSignIn()" style="display:none;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;white-space:nowrap">Sign in <?= icon('ic_fluent_arrow_right_24_regular', 11, 'display:inline-block;vertical-align:-2px') ?></button>
                 <button id="ai-puter-signout-btn" onclick="puterSignOut()" style="display:none;font-size:var(--text-xs);color:var(--text-tertiary);background:none;border:none;cursor:pointer;padding:0">Sign out</button>
             </div>
             <div id="ai-step-upload">
@@ -2020,7 +2027,7 @@ function togglePassingPanel() {
             <div id="ai-step-preview" style="display:none;flex-direction:column;gap:var(--space-3)">
                 <div style="display:flex;align-items:center;justify-content:space-between">
                     <div style="font-size:var(--text-sm);font-weight:var(--weight-semibold)" id="ai-preview-count"></div>
-                    <button class="btn btn-ghost btn-sm" onclick="resetAiImport()"><?= icon('ic_fluent_arrow_left_24_regular', 16) ?> Try again</button>
+                    <button class="btn btn-ghost btn-sm" onclick="resetAiImport()"><?= icon('ic_fluent_arrow_left_24_regular', 14, '') ?> Try again</button>
                 </div>
                 <div class="ai-warn-strip">
                     <?= icon('warning:fill', 14, 'margin-top:1px;color:#d97706') ?>
@@ -2029,11 +2036,11 @@ function togglePassingPanel() {
                 <div id="ai-questions-preview" style="display:flex;flex-direction:column;gap:var(--space-2);max-height:320px;overflow-y:auto"></div>
             </div>
             <div id="ai-step-error" style="display:none;flex-direction:column;gap:var(--space-3)">
-                <div style="display:flex;align-items:flex-start;gap:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--radius);padding:12px 14px;font-size:var(--text-sm);color:#991b1b">
+                <div style="display:flex;align-items:flex-start;gap:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--radius-md);padding:12px 14px;font-size:var(--text-sm);color:#991b1b">
                     <?= icon('warning-circle:fill', 16, 'margin-top:1px') ?>
                     <span id="ai-error-msg"></span>
                 </div>
-                <button class="btn btn-ghost btn-sm" style="align-self:flex-start" onclick="resetAiImport()"><?= icon('ic_fluent_arrow_left_24_regular', 16) ?> Try again</button>
+                <button class="btn btn-ghost btn-sm" style="align-self:flex-start" onclick="resetAiImport()"><?= icon('ic_fluent_arrow_left_24_regular', 14, '') ?> Try again</button>
             </div>
         </div>
         <div class="modal-footer" id="ai-modal-footer" style="border-top:1px solid var(--border)">
@@ -2595,8 +2602,8 @@ function renderAiPreview(sections) {
                 choices='<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px">'+q.choices.map((c,ci)=>{
                     const ok=q.question_type==='checkboxes'?(q.correct_indices||[]).includes(ci):ci===parseInt(q.correct_index);
                     const dot=ok
-                        ? `<span style="width:14px;height:14px;border-radius:50%;background:#15803d;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"><i class="ph-bold ph-check" aria-hidden="true" style="font-size:8px;color:#fff"></i></span>`
-                        : `<span style="width:14px;height:14px;border-radius:50%;border:1.5px solid #d1d5db;flex-shrink:0;display:inline-block"></span>`;
+                        ? `<span style="width:14px;height:14px;border-radius:var(--radius);background:#15803d;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"><i class="ph-bold ph-check" aria-hidden="true" style="font-size:8px;color:#fff"></i></span>`
+                        : `<span style="width:14px;height:14px;border-radius:var(--radius);border:1.5px solid #d1d5db;flex-shrink:0;display:inline-block"></span>`;
                     return`<div style="display:flex;align-items:center;gap:7px;padding:2px 0;font-size:13px;color:${ok?'#15803d':'#374151'};${ok?'font-weight:500':''}">${dot}${escHtml(c)}</div>`;
                 }).join('')+'</div>';
             } else if(q.question_type==='short_answer'){
@@ -2669,10 +2676,7 @@ async function saveAiQuestions(){
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Entrance Exam';
-$pageActions = $view === 'exams'
-    ? '<a href="' . e(url('/staff/exam')) . '" class="btn-icon" aria-label="Back to exam overview" title="Back to exam overview">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>'
-    : ($view === 'editor'
-        ? '<a href="' . e(url('/staff/exam') . '?view=exams') . '" class="btn-icon" aria-label="Back to exam list" title="Back to exam list">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>'
-        : '');
 $activeNav = 'exam';
+if ($view === 'landing')    $pageHeading = 'Entrance Exam';
+elseif ($view === 'exams')  $pageHeading = 'Exam Builder';
 include VIEWS_PATH . '/layouts/app.php';

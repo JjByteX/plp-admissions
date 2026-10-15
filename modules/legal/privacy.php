@@ -83,7 +83,7 @@ ob_start();
     </div>
 
     <div class="auth-footer">
-        <a href="<?= url('/login') ?>">← Back to sign in</a>
+        <a href="<?= url('/login') ?>"><?= icon('ic_fluent_arrow_left_24_regular', 14, 'display:inline-block;vertical-align:-2px') ?> Back to sign in</a>
     </div>
 
 </div>

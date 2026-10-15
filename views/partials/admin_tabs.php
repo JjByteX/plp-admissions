@@ -10,10 +10,12 @@ $currentPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $basePath    = parse_url(BASE_URL, PHP_URL_PATH);
 $relPath     = $basePath ? substr($currentPath, strlen($basePath)) : $currentPath;
 ?>
-<nav class="segmented-control" aria-label="Admin settings" style="margin-bottom:var(--space-6);flex-wrap:wrap">
-    <?php foreach ($adminTabs as $tabPath => $tabLabel):
-        $isActive = ($relPath === $tabPath);
+<div style="margin-bottom:var(--space-6)">
+    <?php
+    $adminTabItems = [];
+    foreach ($adminTabs as $tabPath => $tabLabel) {
+        $adminTabItems[] = ['label' => $tabLabel, 'href' => url($tabPath), 'active' => ($relPath === $tabPath)];
+    }
+    echo seg_control($adminTabItems, 'Admin settings');
     ?>
-        <a href="<?= url($tabPath) ?>" class="<?= $isActive ? 'is-active' : '' ?>" <?= $isActive ? 'aria-current="page"' : '' ?>><?= e($tabLabel) ?></a>
-    <?php endforeach; ?>
-</nav>
+</div>

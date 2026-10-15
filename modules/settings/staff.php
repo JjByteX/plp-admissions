@@ -52,6 +52,8 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
+<?php $pageActions = back_button('javascript:history.back()'); ?>
+
 <div style="display:flex;flex-direction:column;gap:var(--space-6);max-width:560px;margin:0 auto">
 
     <!-- Appearance: theme toggle -->
@@ -138,6 +140,6 @@ document.addEventListener('DOMContentLoaded', function() {
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Settings';
-$pageActions = '<a href="javascript:history.back()" class="btn-icon" aria-label="Back" title="Back">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>';
 $activeNav = 'settings';
+$pageHeading = 'Settings';
 include VIEWS_PATH . '/layouts/app.php';

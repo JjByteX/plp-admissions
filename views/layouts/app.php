@@ -16,24 +16,6 @@ $activeNav    = $activeNav ?? '';
 $showStepper  = $showStepper ?? false;
 $pageWide     = $pageWide ?? false;
 $isStudent    = ($userRole === 'student');
-// True when the page already draws its own heading (an <h1> or .page-title).
-$hasPageHeading = !empty($content) && preg_match('/<h1\b|class=["\'][^"\']*\bpage-title\b/i', $content);
-
-// Page heading. Title only, no subtitle.
-//   $pageHeading = 'Text'  -> override the heading text (defaults to $pageTitle)
-//   $pageHeading = false   -> no heading for this page
-//   $pageActions = '<html>' -> buttons shown at the top right of the heading row
-//   data-page-action / data-page-actions in the page body are also moved up there.
-// Pages that already draw their own heading / .page-header are left alone.
-// Staff / admin pages get the .page-head row; students get the simpler
-// .page-header-generated row (same $pageActions slot).
-$pageHeading    = $pageHeading ?? $pageTitle;
-$pageActions    = $pageActions ?? '';
-$showPageHead   = !$isStudent
-    && $pageHeading !== false
-    && !$hasPageHeading
-    && !str_contains((string)($content ?? ''), 'class="page-header"');
-$showStudentHead = $isStudent && $pageHeading !== false && !$hasPageHeading;
 
 // Sidebar (staff / admin / SSO / dean / proctor), ported from lakbay-pasig's
 // SidebarProvider. Lakbay keeps the desktop open/closed state in a cookie so
@@ -195,7 +177,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                         background:var(--border);transition:background .2s;flex-shrink:0;pointer-events:none;">
                         <div style="
                             position:absolute;top:3px;left:3px;width:12px;height:12px;
-                            border-radius:50%;background:#fff;
+                            border-radius:var(--radius);background:#fff;
                             transition:transform .2s;
                             transform:translateX(0);">
                         </div>
@@ -312,7 +294,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                                 background:var(--border);transition:background .2s;flex-shrink:0;pointer-events:none;">
                                 <div style="
                                     position:absolute;top:3px;left:3px;width:12px;height:12px;
-                                    border-radius:50%;background:#fff;
+                                    border-radius:var(--radius);background:#fff;
                                     transition:transform .2s;
                                     transform:translateX(0);">
                                 </div>
@@ -385,37 +367,18 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 
         <!-- Page content injected here -->
         <main class="page <?= $pageWide ? 'page-wide' : '' ?>" id="main-content">
-            <?php if ($showPageHead): ?>
-            <div class="page-head">
-                <h1 class="page-heading"><?= e($pageHeading) ?></h1>
-                <div class="page-head-actions" id="page-head-actions"><?= $pageActions ?></div>
-            </div>
-            <?php elseif ($showStudentHead): ?>
-            <header class="page-header page-header-generated">
+            <?php if (!empty($pageHeading)): ?>
+            <!-- Page heading (no subtitle) with the page's buttons at the top right.
+                 Pages set $pageHeading and, optionally, $pageActions (HTML). -->
+            <div class="page-header page-header-row">
                 <h1 class="page-title"><?= e($pageHeading) ?></h1>
-                <?php if (!empty($pageActions)): ?><div class="page-header-actions"><?= $pageActions ?></div><?php endif; ?>
-            </header>
+                <?php if (!empty($pageActions)): ?>
+                <div class="page-actions"><?= $pageActions ?></div>
+                <?php endif; ?>
+            </div>
             <?php endif; ?>
             <?= $content ?? '' ?>
         </main>
-        <?php if ($showPageHead): ?>
-        <script>
-        // Move any element marked data-page-action (the element itself) or
-        // data-page-actions (its children) into the heading row, top right.
-        (function () {
-            var slot = document.getElementById('page-head-actions');
-            if (!slot) return;
-            document.querySelectorAll('#main-content [data-page-action]').forEach(function (el) {
-                el.removeAttribute('data-page-action');
-                slot.appendChild(el);
-            });
-            document.querySelectorAll('#main-content [data-page-actions]').forEach(function (wrap) {
-                while (wrap.firstElementChild) slot.appendChild(wrap.firstElementChild);
-                wrap.remove();
-            });
-        })();
-        </script>
-        <?php endif; ?>
 
     </div><!-- /.main -->
 
@@ -549,7 +512,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="withdraw">
             <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div style="background:#fff7ed;border:1px solid #f97316;border-radius:var(--radius);padding:var(--space-4)">
+                <div style="background:#fff7ed;border:1px solid #f97316;border-radius:var(--radius-md);padding:var(--space-4)">
                     <div style="display:flex;gap:var(--space-3);align-items:flex-start">
                         <?= icon('warning-circle:fill', 18, 'margin-top:1px;color:#f97316') ?>
                         <div>

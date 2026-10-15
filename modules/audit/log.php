@@ -314,4 +314,5 @@ $content   = ob_get_clean();
 $pageTitle = 'Audit Log';
 $activeNav = 'audit-log';
 $pageWide  = true;
+$pageHeading = 'Audit Log';
 include VIEWS_PATH . '/layouts/app.php';

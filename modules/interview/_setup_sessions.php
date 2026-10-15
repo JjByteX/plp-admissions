@@ -25,26 +25,20 @@ function _session_expired(string $date, ?string $endTime, string $today, string 
     <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 
-<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4)">
-    <div>
-        <h1 class="page-title" style="margin:0 0 var(--space-1) 0"><?= e($college) ?></h1>
-        <p class="page-subtitle">Interview Sessions</p>
-    </div>
-    <div style="display:flex;align-items:center;gap:var(--space-2)">
-        <?php if ($canManage): ?>
-            <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('add-session-modal').style.display='flex'">
-                <?= icon('ic_fluent_add_24_regular', 15) ?> Add Session
-            </button>
-        <?php endif; ?>
-        <?php if ($canManage && !empty($byDate)): ?>
-            <button type="button" id="sess-select-toggle" class="btn btn-ghost btn-sm" onclick="toggleSessSelectMode()">Select</button>
-        <?php endif; ?>
-        <?php if ($canManage): ?>
-            <a href="<?= url('/staff/interviews/setup') ?>" class="btn-icon" aria-label="Back to interview setup" title="Back to interview setup"><?= icon('ic_fluent_arrow_left_24_regular', 18) ?></a>
-        <?php else: ?>
-            <a href="<?= url('/staff/interviews') ?>" class="btn-icon" aria-label="Back to interviews" title="Back to interviews"><?= icon('ic_fluent_arrow_left_24_regular', 18) ?></a>
-        <?php endif; ?>
-    </div>
+<!-- Header -->
+<div class="page-actions page-actions-row">
+    <?php if ($canManage && !empty($byDate)): ?>
+        <button type="button" id="sess-select-toggle" class="btn btn-ghost btn-sm"
+                onclick="toggleSessSelectMode()">
+            Select
+        </button>
+    <?php endif; ?>
+    <?= back_button($canManage ? url('/staff/interviews/setup') : url('/staff/interviews')) ?>
+</div>
+
+<div class="page-header" style="text-align:center;margin-bottom:var(--space-4)">
+    <h1 class="page-title" style="margin:0 0 var(--space-1) 0"><?= e($college) ?></h1>
+    <p class="page-subtitle" style="text-align:center">Interview Sessions</p>
 </div>
 
 <?php
@@ -71,7 +65,7 @@ $totalSessCount = array_sum(array_column($sessDateMap, 'count'));
     <select id="sess-date-filter" class="form-control"
             title="Filter by session date"
             style="height:32px;min-height:32px;font-size:var(--text-xs);max-width:280px;
-                   border:1px solid var(--border);border-radius:var(--radius);
+                   border:1px solid var(--border);border-radius:var(--radius-sm);
                    padding:0 var(--space-2);background:var(--bg-elevated);color:var(--text-primary)">
         <option value="" data-count="<?= (int)$totalSessCount ?>">
             All dates · <?= (int)$totalSessCount ?> session<?= (int)$totalSessCount === 1 ? '' : 's' ?>
@@ -105,7 +99,7 @@ $totalSessCount = array_sum(array_column($sessDateMap, 'count'));
     padding: var(--space-5);
     background: var(--bg-elevated);
     border: 1.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     text-decoration: none;
     color: var(--text-primary);
     transition: border-color .15s, box-shadow .15s;
@@ -152,7 +146,7 @@ $totalSessCount = array_sum(array_column($sessDateMap, 'count'));
 .sess-bulk-bar {
     position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
     background:var(--bg-elevated);border:1px solid var(--border);
-    border-radius:var(--radius);box-shadow:var(--shadow-lg);
+    border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);
     padding:var(--space-3) var(--space-4);
     display:none;align-items:center;gap:var(--space-3);z-index:50;
     font-size:var(--text-sm);
@@ -281,9 +275,9 @@ foreach ($byDate as $date => $dateSlots) {
          role="button" tabindex="0"
          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
          style="align-items:center;justify-content:center;min-height:200px;border-style:dashed;cursor:pointer">
-        <div style="width:48px;height:48px;border-radius:50%;background:var(--accent-muted);
+        <div style="width:48px;height:48px;border-radius:var(--radius);background:var(--accent-muted);
                     display:flex;align-items:center;justify-content:center;color:var(--accent)">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+            <?= icon('plus:fill', 24) ?>
         </div>
         <div style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--accent);margin-top:var(--space-2)">Add Session</div>
     </div>

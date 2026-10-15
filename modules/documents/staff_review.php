@@ -130,12 +130,12 @@ if ($applicantId) {
     ob_start();
 ?>
 <div id="doc-review">
-<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-6)">
-    <a href="<?= url('/staff/applicants') ?>" class="btn btn-ghost btn-sm">
-        <?= icon('ic_fluent_arrow_left_24_regular', 16) ?>
-        Back
-    </a>
-    <div style="margin-left:auto"></div>
+<?php ob_start(); ?>
+    <?php if ($flaggedPending > 0): ?>
+        <span style="font-size:var(--text-sm);color:var(--text-tertiary)">
+            <?= $flaggedPending ?> AI-flagged document<?= $flaggedPending != 1 ? 's' : '' ?> skipped by Approve All
+        </span>
+    <?php endif; ?>
     <?php if ($approvableCount > 0): ?>
         <button type="button" class="btn btn-success btn-sm" id="approve-all-btn"
                 onclick="approveAllAjax()">
@@ -143,7 +143,8 @@ if ($applicantId) {
             Approve All (<?= $approvableCount ?>)
         </button>
     <?php endif; ?>
-</div>
+    <?= back_button(url('/staff/applicants')) ?>
+<?php $pageActions = ob_get_clean(); ?>
 
 <?php if ($msg = Session::getFlash('success')): ?>
     <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
@@ -318,7 +319,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
         width:min(96vw,1400px);
         height:min(92vh,900px);
         background:var(--bg-elevated);
-        border-radius:var(--radius);
+        border-radius:var(--radius-lg);
         box-shadow:var(--shadow-lg);
         display:flex;flex-direction:column;
         overflow:hidden;
@@ -333,7 +334,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
             <!-- Prev -->
             <button id="fv-prev" onclick="fvNavigate(-1)" type="button" style="
                 display:flex;align-items:center;justify-content:center;
-                width:32px;height:32px;border-radius:var(--radius);
+                width:32px;height:32px;border-radius:var(--radius-sm);
                 border:1px solid var(--border);background:var(--bg);
                 color:var(--text-secondary);cursor:pointer;flex-shrink:0;
                 transition:background var(--transition-fast),color var(--transition-fast);
@@ -350,7 +351,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
             <!-- Next -->
             <button id="fv-next" onclick="fvNavigate(1)" type="button" style="
                 display:flex;align-items:center;justify-content:center;
-                width:32px;height:32px;border-radius:var(--radius);
+                width:32px;height:32px;border-radius:var(--radius-sm);
                 border:1px solid var(--border);background:var(--bg);
                 color:var(--text-secondary);cursor:pointer;flex-shrink:0;
                 transition:background var(--transition-fast),color var(--transition-fast);
@@ -399,7 +400,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                     <div id="fv-hint" style="
                         position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
                         background:rgba(0,0,0,0.55);color:#fff;
-                        font-size:var(--text-xs);padding:5px 14px;border-radius:var(--radius);
+                        font-size:var(--text-xs);padding:5px 14px;border-radius:var(--radius-full);
                         pointer-events:none;opacity:0;transition:opacity .4s ease;white-space:nowrap;
                     ">Scroll to zoom · Drag to pan when zoomed in</div>
                 </div>
@@ -497,7 +498,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 <style>
 .fv-ctrl-btn {
     display:flex;align-items:center;justify-content:center;
-    width:30px;height:30px;border-radius:var(--radius);
+    width:30px;height:30px;border-radius:var(--radius-sm);
     border:1px solid var(--border);background:var(--bg);
     color:var(--text-secondary);cursor:pointer;
     transition:background var(--transition-fast),color var(--transition-fast);
@@ -551,7 +552,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
         if(isPdf){
             wrap.innerHTML='<iframe src="'+f.url+'" style="width:100%;height:100%;border:none;background:#fff;"></iframe>';
         } else {
-            wrap.innerHTML='<img src="'+f.url+'" alt="Document preview" style="max-width:100%;max-height:100%;border-radius:var(--radius);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;">';
+            wrap.innerHTML='<img src="'+f.url+'" alt="Document preview" style="max-width:100%;max-height:100%;border-radius:var(--radius-sm);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;">';
         }
         document.getElementById('fv-label').textContent=f.label;
         document.getElementById('fv-counter').textContent=(_idx+1)+' of '+_files.length;
@@ -606,7 +607,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
         _files.forEach(function(f,i){
             var b=document.createElement('button');
             b.type='button';
-            b.style.cssText='width:8px;height:8px;border-radius:50%;border:none;padding:0;cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s;';
+            b.style.cssText='width:8px;height:8px;border-radius:var(--radius);border:none;padding:0;cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s;';
             b.style.background=(i===_idx)?'var(--accent)':'var(--border-strong)';
             b.style.transform=(i===_idx)?'scale(1.35)':'scale(1)';
             b.title=f.label;
@@ -753,9 +754,9 @@ function showUndoToast(msg) {
 
     var toast = document.createElement('div');
     toast.id = 'undo-toast';
-    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:12px 20px;display:flex;align-items:center;gap:12px;font-size:var(--text-sm);min-width:320px;animation:slideUp .25s ease';
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:12px 20px;display:flex;align-items:center;gap:12px;font-size:var(--text-sm);min-width:320px;animation:slideUp .25s ease';
     toast.innerHTML = '<span style="flex:1">' + msg + '</span>'
-        + '<button onclick="undoApproveAll()" style="background:none;border:1px solid var(--border);border-radius:var(--radius);padding:4px 14px;cursor:pointer;font-size:var(--text-sm);color:var(--text-primary);font-weight:500">Undo</button>'
+        + '<button onclick="undoApproveAll()" style="background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 14px;cursor:pointer;font-size:var(--text-sm);color:var(--text-primary);font-weight:500">Undo</button>'
         + '<button onclick="dismissToast()" style="background:none;border:none;cursor:pointer;color:var(--text-tertiary);font-size:16px;padding:0 4px">&times;</button>';
     document.body.appendChild(toast);
 
@@ -794,9 +795,8 @@ function undoApproveAll() {
 <?php
     $content   = ob_get_clean();
     $pageTitle = 'Review: ' . format_full_name($applicant);
-    $pageActions = '<a href="' . e(url('/staff/applicants')) . '" class="btn-icon" aria-label="Back to applicants" title="Back to applicants">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>'
-        . ($approvableCount > 0 ? '<button type="button" class="btn btn-success btn-sm" id="approve-all-btn" onclick="approveAllAjax()">' . icon('ic_fluent_checkmark_circle_24_regular', 15) . ' Approve All (' . (int)$approvableCount . ')</button>' : '');
     $activeNav = 'documents';
+    $pageHeading = 'Document Review';
     include VIEWS_PATH . '/layouts/app.php';
     return;
 }
@@ -874,10 +874,10 @@ ob_start();
 ?>
 
 <?php if ($msg = Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
+    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
+    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
 <?php endif; ?>
 
 <?php
@@ -897,21 +897,26 @@ $docFilterUrl = function (array $merge = []) use ($statusFilter, $typeFilter, $c
     return '?' . http_build_query(array_merge($base, $merge));
 };
 
-// Pieces the toolbar and the sortable headers below need.
+// Carried by the sortable column headers (sortable_th, core/helpers.php).
+$sortParams = [
+    'status'   => $statusFilter,
+    'type'     => $typeFilter,
+    'course'   => $courseFilter,
+    'q'        => $search,
+    'per_page' => $perPage,
+];
+
 $typeOptions = [
     ''           => 'All Types',
     'freshman'   => 'Freshman',
     'transferee' => 'Transferee',
     'foreign'    => 'Foreign Student',
 ];
-$hasFilters = ($typeFilter !== '' || $courseFilter !== '' || $search !== '');
-// Carried by every sortable header link: the filters + page size, back to page 1.
-$sortParams = ['status' => $statusFilter, 'type' => $typeFilter, 'course' => $courseFilter, 'q' => $search, 'per_page' => $perPage, 'page' => 1];
-?>
-<?php
-// Same structure as the audit log and the results page: one .auto-table-wrap
-// that AutoPageSize measures, the card with the toolbar and the fixed-height
-// table fused together, and the pagination bar under the card.
+$hasFilters = ($typeFilter || $courseFilter || $search);
+
+// Same structure as the audit log (and lakbay-pasig's AdminDataTable): one
+// .auto-table-wrap that AutoPageSize measures, the card with the toolbar and
+// the fixed-height table fused together, and the pagination bar under the card.
 ?>
 <div class="auto-table-wrap" data-auto-page-size="doc-review" data-current-per-page="<?= (int)$perPage ?>">
 
@@ -1027,7 +1032,7 @@ $sortParams = ['status' => $statusFilter, 'type' => $typeFilter, 'course' => $co
     display:none;
     position:fixed;bottom:var(--space-6);left:50%;transform:translateX(-50%);z-index:500;
     background:var(--bg-elevated);border:1px solid var(--border);
-    border-radius:var(--radius);box-shadow:var(--shadow-lg);
+    border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);
     padding:var(--space-3) var(--space-5);
     display:none;align-items:center;gap:var(--space-4);
     animation:bulkToolbarSlideUp .2s ease-out;
@@ -1036,7 +1041,7 @@ $sortParams = ['status' => $statusFilter, 'type' => $typeFilter, 'course' => $co
         <span id="bulk-count" style="
             display:inline-flex;align-items:center;justify-content:center;
             min-width:24px;height:24px;padding:0 var(--space-2);
-            border-radius:var(--radius);
+            border-radius:var(--radius-full);
             background:var(--accent);color:var(--accent-text);
             font-size:var(--text-xs);font-weight:var(--weight-semibold);
         ">0</span>
@@ -1170,4 +1175,5 @@ $content   = ob_get_clean();
 $pageTitle = 'Documents';
 $activeNav = 'documents';
 $pageWide  = true;
+$pageHeading = 'Documents';
 include VIEWS_PATH . '/layouts/app.php';

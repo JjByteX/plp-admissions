@@ -92,15 +92,15 @@
     --leading-normal: 1.5;
     --leading-relaxed:1.65;
 
-    /* Border radius — ONE shared token. Every component uses 8px.
-       The older sm/md/lg/xl/full names are aliases so existing rules keep working;
-       change --radius here to restyle every corner in the app. */
+    /* Border radius — ONE shared token. Every corner in the app is 8px.
+       Change --radius here and everything follows. The size aliases below
+       exist only so older rules keep working; they all resolve to --radius. */
     --radius:     8px;
-    --radius-sm: var(--radius);
-    --radius-md: var(--radius);
-    --radius-lg: var(--radius);
-    --radius-xl: var(--radius);
-    --radius-full: var(--radius);
+    --radius-sm:  var(--radius);
+    --radius-md:  var(--radius);
+    --radius-lg:  var(--radius);
+    --radius-xl:  var(--radius);
+    --radius-full:var(--radius);
 
     /* Shadows — minimal, functional */
     --shadow-xs:  0 1px 2px rgba(0,0,0,0.06);
@@ -360,7 +360,7 @@ button { cursor: pointer; }
     height: 32px;
     padding: 0;
     border: 0;
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     background: transparent;
     color: var(--text-secondary);
     transition: color var(--transition-fast), background-color var(--transition-fast);
@@ -386,7 +386,7 @@ button { cursor: pointer; }
     height: 32px;
     padding: 0;
     border: 0;
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     background: transparent;
     color: var(--text-secondary);
     transition: color var(--transition-fast), background-color var(--transition-fast);
@@ -444,7 +444,7 @@ button { cursor: pointer; }
     color: var(--text-primary);
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
     pointer-events: none;
 }
@@ -545,7 +545,7 @@ button { cursor: pointer; }
         right: 0;
         width: 8px;
         height: 8px;
-        border-radius: 50%;
+        border-radius: var(--radius);
         background: var(--accent);
         pointer-events: none;
     }
@@ -563,7 +563,7 @@ button { cursor: pointer; }
 .sidebar-logo {
     width: 40px;
     height: 40px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     object-fit: contain;
     flex-shrink: 0;
 }
@@ -571,7 +571,7 @@ button { cursor: pointer; }
 .sidebar-logo-placeholder {
     width: 40px;
     height: 40px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     background: var(--accent);
     display: flex;
     align-items: center;
@@ -625,7 +625,7 @@ button { cursor: pointer; }
     font-weight: var(--weight-medium);
     line-height: 1.4;
     color: var(--text-secondary);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     text-decoration: none;
     transition: width var(--transition-fast), height var(--transition-fast), padding var(--transition-fast),
                 color var(--transition-fast), background-color var(--transition-fast);
@@ -668,7 +668,7 @@ button { cursor: pointer; }
     width: 6px;
     height: 6px;
     margin-left: auto;
-    border-radius: 50%;
+    border-radius: var(--radius);
 }
 .nav-dot--alert   { background: var(--error); }
 .nav-dot--pending { background: #f59e0b; }
@@ -694,7 +694,7 @@ button { cursor: pointer; }
     width: 20px;
     height: 20px;
     margin-right: var(--space-3);
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     background: transparent;
     border: none;
     color: var(--text-tertiary);
@@ -725,7 +725,7 @@ button { cursor: pointer; }
     height: 40px;
     padding: 0 var(--space-2) 0 0;
     overflow: hidden;
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     cursor: pointer;
     transition: background-color var(--transition-fast);
     text-decoration: none;
@@ -746,7 +746,7 @@ button { cursor: pointer; }
 .user-avatar {
     width: 32px;
     height: 32px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     background: var(--accent-muted);
     color: var(--accent);
     display: flex;
@@ -821,7 +821,6 @@ button { cursor: pointer; }
     max-width: var(--content-max-width);
     width: 100%;
     margin: 0 auto;
-    min-width:0;
 }
 
 /* Full-width page — for tables and data-heavy pages */
@@ -833,27 +832,51 @@ button { cursor: pointer; }
     margin-bottom: var(--space-8);
 }
 
-.page-header-generated {
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:var(--space-4);
-}
-
-.page-header-actions {
-    display:flex;
-    align-items:center;
-    justify-content:flex-end;
-    gap:var(--space-2);
-    flex-wrap:wrap;
-}
-
 .page-title {
     font-size: var(--text-2xl);
     font-weight: var(--weight-semibold);
     color: var(--text-primary);
     letter-spacing: -0.02em;
     line-height: var(--leading-tight);
+}
+
+/* Heading row: title on the left, the page's buttons on the right */
+.page-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    margin-bottom: var(--space-5);
+}
+.page-header-row .page-title { margin: 0; }
+.page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+/* Right-aligned button row for pages that keep their own centered heading */
+.page-actions-row {
+    width: 100%;
+    margin: 0 0 var(--space-3);
+}
+
+/* Buttons in the heading row share one 32px height, whatever size class they carry */
+.page-actions .btn {
+    height: 32px;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: var(--text-sm);
+}
+/* Square icon-only button (back arrows) */
+.btn-icon-only,
+.page-actions .btn-icon-only {
+    width: 32px;
+    padding: 0;
 }
 
 .page-description {
@@ -904,7 +927,7 @@ button { cursor: pointer; }
 .step-dot {
     width: 24px;
     height: 24px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     border: 2px solid var(--border-strong);
     background: var(--bg);
     display: flex;
@@ -960,7 +983,7 @@ a.step-dot:hover { opacity: 0.8; transform: scale(1.12); }
 .card {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--space-6);
 }
 
@@ -1017,7 +1040,7 @@ a.step-dot:hover { opacity: 0.8; transform: scale(1.12); }
     padding: 10px var(--space-4);
     background: var(--bg-elevated);
     border: 1.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     color: var(--text-primary);
     font-size: var(--text-sm);
     font-family: var(--font-sans);
@@ -1121,16 +1144,13 @@ textarea:-ms-input-placeholder {
 
 /* ── Select — custom chevron ───────────────────────────────── */
 .form-select,
-select {
+select.form-control {
     cursor: pointer;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%239a9a92' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right var(--space-3) center;
     background-size: 16px 16px;
     padding-right: calc(var(--space-3) + 24px);
-    border-radius:var(--radius);
-    background-color:var(--bg-elevated);
-    color:var(--text-primary);
 }
 
 /* ── Exam take — short answer & paragraph inputs ────────────── */
@@ -1140,7 +1160,7 @@ select {
     padding: 10px var(--space-4);
     background: var(--bg-elevated);
     border: 1.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     color: var(--text-primary);
     font-size: var(--text-sm);
     font-family: var(--font-sans);
@@ -1307,7 +1327,7 @@ select {
 /* File upload */
 .file-drop {
     border: 2px dashed var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--space-8);
     text-align: center;
     cursor: pointer;
@@ -1334,7 +1354,7 @@ select {
     justify-content: center;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-4);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
     line-height: 1;
@@ -1439,7 +1459,7 @@ select {
     height: 14px;
     border: 2px solid currentColor;
     border-top-color: transparent;
-    border-radius: 50%;
+    border-radius: var(--radius);
     animation: spin 0.6s linear infinite;
     color: white;
 }
@@ -1453,7 +1473,7 @@ select {
     align-items: center;
     gap: 4px;
     padding: 2px var(--space-2);
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     font-size: var(--text-xs);
     font-weight: var(--weight-medium);
     white-space: nowrap;
@@ -1463,7 +1483,7 @@ select {
     content: '';
     width: 5px;
     height: 5px;
-    border-radius: 50%;
+    border-radius: var(--radius);
     background: currentColor;
     flex-shrink: 0;
 }
@@ -1484,7 +1504,7 @@ select {
     display: flex;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     font-size: var(--text-sm);
     line-height: var(--leading-relaxed);
     border: 1px solid transparent;
@@ -1504,7 +1524,7 @@ select {
 .table-wrap {
     overflow-x: auto;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
 }
 
 table {
@@ -1615,7 +1635,7 @@ tbody tr:hover { background: var(--bg-overlay); }
     max-width: 440px;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: 34px 32px 28px;
     box-shadow: 0 24px 60px rgba(0,0,0,.38);
     position: relative;
@@ -1630,7 +1650,7 @@ tbody tr:hover { background: var(--bg-overlay); }
 .privacy-body li { margin-bottom: var(--space-2); }
 .privacy-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .privacy-meta { color: var(--text-secondary); }
-.privacy-todo { background: #fff3bf; color: #5c4400; padding: 0 4px; border-radius: 3px; font-weight: var(--weight-semibold); }
+.privacy-todo { background: #fff3bf; color: #5c4400; padding: 0 4px; border-radius: var(--radius); font-weight: var(--weight-semibold); }
 [data-theme="dark"] .privacy-todo { background: #5c4400; color: #fff3bf; }
 /* Footer link under the card on the auth layout */
 .auth-legal { padding: 14px var(--space-4) 20px; text-align: center; font-size: .82rem; background: #0c2a1a; }
@@ -1662,7 +1682,7 @@ tbody tr:hover { background: var(--bg-overlay); }
     right: var(--space-8);
     width: 24px;
     height: 24px;
-    border-radius: 50%;
+    border-radius: var(--radius);
     border: none;
     background: transparent;
     display: flex;
@@ -1690,7 +1710,7 @@ tbody tr:hover { background: var(--bg-overlay); }
 .auth-logo {
     width: 52px;
     height: 52px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     background: var(--accent);
     display: flex;
     align-items: center;
@@ -1705,7 +1725,7 @@ tbody tr:hover { background: var(--bg-overlay); }
     width: auto;
     object-fit: contain;
     flex-shrink: 0;
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
 }
 
 .auth-header-text {
@@ -1771,7 +1791,7 @@ tbody tr:hover { background: var(--bg-overlay); }
     padding: var(--space-4);
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     transition: border-color var(--transition-fast);
 }
 
@@ -1781,7 +1801,7 @@ tbody tr:hover { background: var(--bg-overlay); }
 .doc-icon {
     width: 36px;
     height: 36px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     background: var(--bg-subtle);
     display: flex;
     align-items: center;
@@ -1818,7 +1838,7 @@ tbody tr:hover { background: var(--bg-overlay); }
 .theme-toggle {
     width: 36px;
     height: 36px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     background: transparent;
     border: 1px solid var(--border);
     display: flex;
@@ -1861,7 +1881,7 @@ tbody tr:hover { background: var(--bg-overlay); }
     min-width: 180px;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     padding: var(--space-2) 0;
     z-index: 100;
@@ -1870,9 +1890,6 @@ tbody tr:hover { background: var(--bg-overlay); }
     transform: translateY(-4px);
     transition: all var(--transition-fast);
 }
-
-/* All interface elements use the single shared corner token. */
-:where(*) { border-radius:var(--radius) !important; }
 
 .dropdown.open .sidebar-footer .dropdown-menu { bottom: calc(100% + var(--space-2)); top: auto; }
 
@@ -1903,71 +1920,6 @@ tbody tr:hover { background: var(--bg-overlay); }
 
 .dropdown-item svg { width: 15px; height: 15px; flex-shrink: 0; }
 
-.segmented-control {
-    display:inline-flex;
-    align-items:center;
-    gap:var(--space-1);
-    padding:var(--space-1);
-    border:1px solid var(--border);
-    background:var(--bg-subtle);
-}
-
-.segmented-control > a,
-.segmented-control > button {
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    gap:var(--space-1);
-    padding:var(--space-2) var(--space-3);
-    border:0;
-    background:transparent;
-    color:var(--text-secondary);
-    font:inherit;
-    font-size:var(--text-sm);
-    font-weight:var(--weight-medium);
-    line-height:1.2;
-    text-decoration:none;
-    white-space:nowrap;
-    cursor:pointer;
-}
-
-.segmented-control > .is-active {
-    background:var(--bg-elevated);
-    color:var(--text-primary);
-    box-shadow:var(--shadow-xs);
-}
-
-.segmented-control > a:hover,
-.segmented-control > button:hover { color:var(--text-primary); opacity:1; }
-
-.results-toolbar {
-    display:flex;
-    align-items:center;
-    gap:var(--space-3);
-    flex-wrap:nowrap;
-    padding:var(--space-3);
-    border-bottom:1px solid var(--border);
-    background:var(--bg-elevated);
-}
-
-.results-toolbar .segmented-control { flex:1;min-width:0;max-width:100%;overflow-x:auto; }
-.results-toolbar-search { flex:0 0 250px;min-width:0; }
-.results-toolbar-search form { width:100%; }
-.results-close-cycle { color:var(--error); }
-
-@media (max-width:760px) {
-    .results-toolbar { align-items:stretch;flex-wrap:wrap; }
-    .results-toolbar .segmented-control { flex:1 0 100%; }
-    .results-toolbar-search { flex:1 1 100%; }
-    .results-toolbar-search input { width:100% !important; }
-}
-
-.segmented-control-count {
-    color:var(--text-tertiary);
-    font-size:var(--text-sm);
-    font-variant-numeric:tabular-nums;
-}
-
 .dropdown-separator {
     height: 1px;
     background: var(--border);
@@ -1991,7 +1943,7 @@ tbody tr:hover { background: var(--bg-overlay); }
 .metric-card {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--space-5);
 }
 
@@ -2039,7 +1991,7 @@ tbody tr:hover { background: var(--bg-overlay); }
 .quick-action-card {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--space-6);
     border-left-width: 3px;
 }
@@ -2056,7 +2008,7 @@ tbody tr:hover { background: var(--bg-overlay); }
     margin-bottom: var(--space-8);
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     overflow: hidden;
 }
 
@@ -2204,16 +2156,13 @@ textarea:focus-visible {
     z-index: 50;
 }
 
-/* The student top bar is frozen: it keeps the spacing, weight, radius and size
-   values it had before the token cleanup, so nothing in it moves or changes. */
+/* The student top bar is frozen: it keeps the spacing, weight and size
+   values it had before the token cleanup, so nothing in it moves or changes.
+   Radius is no longer overridden here — it follows the shared --radius token. */
 .student-header {
     --space-3:       12px;
     --space-5:       20px;
     --weight-medium: 500;
-    --radius-sm: var(--radius);
-    --radius-md: var(--radius);
-    --radius-lg: var(--radius);
-    --radius-xl: var(--radius);
     --text-lg:       1.125rem;
     --text-2xl:      1.5rem;
     --text-3xl:      1.875rem;
@@ -2254,7 +2203,7 @@ textarea:focus-visible {
     background: none;
     border: none;
     padding: var(--space-1);
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     cursor: pointer;
     transition: background-color var(--transition-fast);
 }
@@ -2325,7 +2274,7 @@ textarea:focus-visible {
 @media (max-width: 480px) {
     .auth-card {
         padding: var(--space-6) var(--space-5);
-        border-radius: var(--radius);
+        border-radius: var(--radius-lg);
     }
     .auth-bar-title { font-size: 1.2rem; }
 
@@ -2353,7 +2302,7 @@ textarea:focus-visible {
 .modal {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-xl);
     box-shadow: var(--shadow-lg);
     width: 100%;
     max-width: 460px;
@@ -2393,7 +2342,7 @@ textarea:focus-visible {
 
 .file-drop-zone {
     border: 2px dashed var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--space-8) var(--space-4);
     text-align: center;
     cursor: pointer;
@@ -2427,7 +2376,7 @@ textarea:focus-visible {
     justify-content: center;
     width: 32px;
     height: 32px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     border: none;
     background: transparent;
     color: var(--text-tertiary);
@@ -2502,7 +2451,7 @@ textarea:focus-visible {
 .stat-card {
     background: var(--bg-elevated);
     border: 0.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     padding: var(--space-4) var(--space-4);
 }
 
@@ -2553,7 +2502,7 @@ textarea:focus-visible {
 .chart-card {
     background: var(--bg-elevated);
     border: 0.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     padding: var(--space-4) var(--space-4);
 }
 
@@ -2631,7 +2580,7 @@ textarea:focus-visible {
 .step-card {
     background: var(--bg-elevated);
     border: 0.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     padding: var(--space-3);
     text-align: center;
 }
@@ -2779,7 +2728,7 @@ textarea:focus-visible {
 /* Search input in filter bar */
 .filter-search {
     padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     border: 0.5px solid var(--border);
     background: var(--bg-elevated);
     color: var(--text-primary);
@@ -2818,7 +2767,7 @@ textarea:focus-visible {
 .legend-dot {
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: var(--radius);
     flex-shrink: 0;
 }
 
@@ -2844,7 +2793,7 @@ textarea:focus-visible {
     padding: var(--space-2) var(--space-4);
     background: var(--info-bg);
     border: 0.5px solid var(--info);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     margin-bottom: var(--space-2);
     font-size: var(--text-xs);
     color: var(--info);
@@ -2856,7 +2805,7 @@ textarea:focus-visible {
     background: var(--color-high-bg);
     color: var(--color-high-text);
     padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     font-size: 0.75rem;
     cursor: pointer;
     font-weight: var(--weight-medium);
@@ -2867,7 +2816,7 @@ textarea:focus-visible {
     background: var(--color-avg-bg);
     color: var(--color-avg-text);
     padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     font-size: 0.75rem;
     cursor: pointer;
     font-weight: var(--weight-medium);
@@ -2878,7 +2827,7 @@ textarea:focus-visible {
     background: var(--color-low-bg);
     color: var(--color-low-text);
     padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     font-size: 0.75rem;
     cursor: pointer;
     font-weight: var(--weight-medium);
@@ -2888,7 +2837,7 @@ textarea:focus-visible {
 .table-card {
     background: var(--bg-elevated);
     border: 0.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     overflow: hidden;
 }
 
@@ -2962,7 +2911,7 @@ textarea:focus-visible {
 .status-select {
     font-size: var(--text-xs);
     padding: var(--space-1) var(--space-1);
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     border: 0.5px solid var(--border);
     background: var(--bg-elevated);
     color: var(--text-primary);
@@ -3019,7 +2968,7 @@ textarea:focus-visible {
     align-items: center;
     gap: var(--space-1);
     padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     border: 1px solid transparent;
     background: transparent;
     font-size: var(--text-xs);
@@ -3053,7 +3002,7 @@ textarea:focus-visible {
 .tab-strip-count {
     font-size: var(--text-xs);
     padding: 1px var(--space-1);
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     background: var(--bg-overlay);
     color: var(--text-tertiary);
     min-width: 18px;
@@ -3066,17 +3015,19 @@ textarea:focus-visible {
 }
 
 /* ============================================================
-   SEGMENTED CONTROL — page tabs and mode toggles
-   Sits as the first item in a table toolbar (left of the search box).
-   Items can be <a>, <button> — one shared look.
+   SEGMENTED CONTROL — the one component for page-level tabs
+   Inside a table card it is the FIRST child of .auto-table-toolbar
+   (left of the search box). Also used for two-way mode toggles in modals.
+   Render page tabs with seg_control() in core/helpers.php.
    ============================================================ */
 
 .seg-control {
     display: inline-flex;
-    align-items: stretch;
+    align-items: center;
     gap: 2px;
-    padding: 3px;
-    flex-shrink: 0;
+    padding: 2px;
+    max-width: 100%;
+    overflow-x: auto;
     background: var(--bg-subtle);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -3086,29 +3037,34 @@ textarea:focus-visible {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    min-height: 32px;
-    padding: 0 var(--space-4);
-    border: 0;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
+    height: 30px;
+    padding: 0 var(--space-3);
+    font: inherit;
     font-size: var(--text-sm);
-    font-weight: var(--weight-regular);
+    color: var(--text-secondary);
     text-decoration: none;
     white-space: nowrap;
     cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius);
     transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.seg-control-item:hover { color: var(--text-primary); }
+.seg-control-item:hover,
+.seg-control-item:focus-visible {
+    color: var(--text-primary);
+    background: var(--bg-overlay);
+    opacity: 1;
+}
 
 .seg-control-item:focus-visible {
     outline: 2px solid var(--accent);
-    outline-offset: 1px;
+    outline-offset: -2px;
 }
 
-.seg-control-item.active {
+.seg-control-item.active,
+.seg-control-item.active:hover {
     background: var(--bg-elevated);
     color: var(--text-primary);
     font-weight: var(--weight-semibold);
@@ -3116,20 +3072,159 @@ textarea:focus-visible {
 }
 
 .seg-control-count {
-    min-width: 20px;
-    padding: 1px var(--space-1);
-    border-radius: var(--radius);
-    background: var(--bg-overlay);
-    color: var(--text-secondary);
+    min-width: 18px;
+    padding: 0 var(--space-1);
     font-size: var(--text-xs);
+    font-weight: var(--weight-regular);
+    line-height: 18px;
     text-align: center;
+    color: var(--text-tertiary);
+    background: var(--bg-overlay);
+    border-radius: var(--radius);
 }
-.seg-control-count--warning { background: var(--warning-bg); color: var(--warning); }
-.seg-control-item.active .seg-control-count { background: var(--bg-subtle); }
 
-@media (max-width: 640px) {
-    .auto-table-toolbar .seg-control { width: 100%; }
-    .auto-table-toolbar .seg-control-item { flex: 1; justify-content: center; }
+.seg-control-count.is-warning {
+    color: var(--warning);
+    background: var(--warning-bg);
+}
+
+/* In a table toolbar the control matches the 36px inputs and buttons next to it. */
+.auto-table-toolbar .seg-control {
+    flex: 0 0 auto;
+    height: 36px;
+    box-sizing: border-box;
+}
+
+/* ============================================================
+   DROPDOWN (select replacement) — same look as the dashboard's
+   date picker: bordered button with a caret, popover menu below.
+   Built by SelectMenu in app.js; the real <select> stays hidden
+   inside the form so submits and onchange keep working.
+   ============================================================ */
+
+.dd {
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.dd-native {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    clip: rect(0 0 0 0) !important;
+    background-image: none !important;
+}
+
+.dd-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    width: 100%;
+    height: 32px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.dd-trigger:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+.dd-trigger:focus-visible,
+.dd.is-open .dd-trigger {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    outline: none;
+}
+
+.dd-trigger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.dd-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dd-caret {
+    font-size: 10px !important;
+    color: var(--text-tertiary);
+    transition: transform var(--transition-fast);
+}
+
+.dd.is-open .dd-caret { transform: rotate(180deg); }
+
+/* Selects that were form fields (.form-control / .form-select) keep field height */
+.dd--field .dd-trigger {
+    height: auto;
+    min-height: 42px;
+    padding: 10px var(--space-4);
+    border-width: 1.5px;
+    color: var(--text-primary);
+    line-height: var(--leading-normal);
+}
+.dd--upper .dd-label { text-transform: uppercase; }
+.dd--error .dd-trigger { border-color: var(--error); }
+
+/* In a table toolbar the dropdown matches the 36px inputs and buttons */
+.auto-table-toolbar .dd { flex: 0 0 auto; }
+.auto-table-toolbar .dd-trigger { height: 36px; }
+
+.dd-menu {
+    position: fixed;
+    z-index: 1200;
+    min-width: 176px;
+    max-width: min(420px, calc(100vw - 16px));
+    max-height: 320px;
+    overflow-y: auto;
+    padding: var(--space-1) 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+}
+.dd-menu--upper .dd-item { text-transform: uppercase; }
+
+.dd-item {
+    display: block;
+    width: 100%;
+    padding: var(--space-2) var(--space-4);
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: 1.35;
+    text-align: left;
+    cursor: pointer;
+}
+.dd-item:hover,
+.dd-item.hl { background: var(--bg-subtle); color: var(--text-primary); }
+.dd-item.active { color: var(--accent); font-weight: var(--weight-medium); }
+.dd-item:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.dd-group {
+    padding: var(--space-2) var(--space-4) var(--space-1);
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
 }
 
 /* ============================================================
@@ -3150,7 +3245,7 @@ textarea:focus-visible {
 .session-modal {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-xl);
     padding: var(--space-8);
     max-width: 360px;
     width: 90%;
@@ -3161,7 +3256,7 @@ textarea:focus-visible {
 .session-modal-icon {
     width: 48px;
     height: 48px;
-    border-radius: 50%;
+    border-radius: var(--radius);
     background: var(--warning-bg);
     display: flex;
     align-items: center;
@@ -3187,7 +3282,7 @@ textarea:focus-visible {
 .status-icon-lg {
     width: 72px;
     height: 72px;
-    border-radius: 50%;
+    border-radius: var(--radius);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3196,7 +3291,7 @@ textarea:focus-visible {
 
 .result-info-grid {
     background: var(--bg-subtle);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     padding: var(--space-5);
     text-align: left;
     margin-bottom: var(--space-6);
@@ -3235,7 +3330,7 @@ textarea:focus-visible {
     padding: var(--space-3) var(--space-4);
     background: var(--warning-bg);
     border: 1px solid var(--warning);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     font-size: var(--text-sm);
 }
 .idle-alert-count {
@@ -3306,7 +3401,7 @@ body.ap-drawer-locked { overflow: hidden; }
     color: var(--text-secondary);
     cursor: pointer;
     padding: 4px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     line-height: 0;
 }
 .ap-drawer-close:hover {
@@ -3351,7 +3446,7 @@ body.ap-drawer-locked { overflow: hidden; }
 }
 .ap-avatar {
     width: 48px; height: 48px;
-    border-radius: 50%;
+    border-radius: var(--radius);
     background: var(--accent-soft, var(--bg-subtle));
     color: var(--accent, var(--text-primary));
     font-weight: var(--weight-semibold);
@@ -3424,7 +3519,7 @@ body.ap-drawer-locked { overflow: hidden; }
     flex-direction: column;
     gap: 4px;
     background: var(--bg-subtle);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     padding: var(--space-3);
 }
 .ap-doc-row {
@@ -3445,7 +3540,7 @@ body.ap-drawer-locked { overflow: hidden; }
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     color: var(--text-secondary);
     text-decoration: none;
 }
@@ -3459,7 +3554,7 @@ body.ap-drawer-locked { overflow: hidden; }
     margin-top: var(--space-3);
     padding: var(--space-3);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     background: var(--bg-subtle);
     display: flex;
     flex-direction: column;
@@ -3541,7 +3636,7 @@ body.ap-drawer-locked { overflow: hidden; }
     text-align: left;
     padding: 4px 6px;
     margin: -4px -6px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     cursor: pointer;
     color: inherit;
     font: inherit;
@@ -3609,7 +3704,7 @@ body.ap-drawer-locked { overflow: hidden; }
     flex-direction: column;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     overflow: hidden;
 }
 
@@ -3775,7 +3870,7 @@ body.ap-drawer-locked { overflow: hidden; }
     justify-content: center;
     width: 32px;
     height: 32px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     color: var(--text-secondary);
     background: transparent;
     border: 1px solid transparent;
@@ -3869,12 +3964,12 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
 .font-size-slider:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 4px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
 }
 
 .font-size-slider::-webkit-slider-runnable-track {
     height: 8px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     background: linear-gradient(
         to right,
         var(--accent) 0,
@@ -3889,7 +3984,7 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
     height: 24px;
     margin-top: -8px;
     border: 2px solid var(--bg-elevated);
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     background: var(--accent);
     box-shadow: var(--shadow-sm);
     appearance: none;
@@ -3898,13 +3993,13 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
 
 .font-size-slider::-moz-range-track {
     height: 8px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     background: var(--bg-subtle);
 }
 
 .font-size-slider::-moz-range-progress {
     height: 8px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     background: var(--accent);
 }
 
@@ -3912,7 +4007,7 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
     width: 22px;
     height: 22px;
     border: 2px solid var(--bg-elevated);
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     background: var(--accent);
     box-shadow: var(--shadow-sm);
 }
@@ -3931,7 +4026,7 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
 .font-size-ticks span {
     width: 4px;
     height: 4px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-full);
     background: color-mix(in srgb, var(--text-tertiary) 45%, transparent);
     box-shadow: 0 0 0 2px var(--bg-elevated);
 }
@@ -3979,8 +4074,8 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
 }
 
 /* ── School Year: one card, fits the viewport ─────────────────
-   Two equal columns (so the single vertical divider sits dead centre).
-   No horizontal dividers between sections; each column scrolls on its own. */
+   Same pinning trick as .auto-table-card. Two columns of sections
+   split by one centered vertical divider; each column scrolls inside itself. */
 .main:has(.sy-card) { height: 100vh; overflow: hidden; }
 .page:has(.sy-card) { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .sy-card {
@@ -3988,115 +4083,20 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
     display: grid; grid-template-columns: 1fr 1fr;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     overflow: hidden;
 }
 .sy-col { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow-y: auto; }
 .sy-col + .sy-col { border-left: 1px solid var(--border); }
 .sy-sec { padding: var(--space-5) var(--space-6); flex-shrink: 0; }
-.sy-sec.sy-grow { flex: 1 1 auto; }
+.sy-sec.sy-grow { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.sy-sec.sy-danger { margin-top: auto; }
 .sy-sec.sy-danger .card-title { color: var(--error); }
 @media (max-width: 960px) {
     .main:has(.sy-card) { height: auto; overflow: visible; }
     .page:has(.sy-card) { overflow: visible; }
     .sy-card { grid-template-columns: 1fr; overflow: visible; }
     .sy-col { overflow: visible; }
-    .sy-col + .sy-col { border-left: 0; }
-}
-
-
-/* ============================================================
-   SHARED DROPDOWN (<select>) — same look as the dashboard's
-   School Year dropdown: 1px border, elevated surface, 8px radius,
-   small text, custom chevron. Applies to every <select>.
-   ============================================================ */
-
-select:not([multiple]):not([size]) {
-    appearance: none;
-    -webkit-appearance: none;
-    padding: 0 calc(var(--space-3) + 20px) 0 var(--space-3);
-    background-color: var(--bg-elevated);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%239a9a92' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right var(--space-2) center;
-    background-size: 16px 16px;
-    color: var(--text-primary);
-    font-family: var(--font-sans);
-    font-size: var(--text-sm);
-    line-height: 1.2;
-    text-transform: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-}
-/* Standalone dropdowns (filters, header controls) are 32px like the dashboard */
-select:not([multiple]):not([size]):not(.form-input):not(.form-control):not(.form-select) {
-    height: 32px;
-    border: 1px solid var(--border);
-}
-/* Dropdowns inside forms keep the height of the fields next to them */
-select.form-input:not([multiple]),
-select.form-control:not([multiple]),
-select.form-select:not([multiple]) {
-    min-height: 42px;
-}
-select:not([multiple]):not([size]):hover:not(:disabled) { border-color: var(--border-strong); }
-select:not([multiple]):not([size]):disabled { opacity: .6; cursor: not-allowed; }
-
-/* ============================================================
-   PAGE HEADER — heading on the left, page buttons on the right.
-   Rendered by views/layouts/app.php. A page can put buttons here
-   with $pageActions, or mark an element data-page-action /
-   data-page-actions (see app.js) to have it moved up here.
-   ============================================================ */
-
-.page-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-    flex-shrink: 0;
-    margin-bottom: var(--space-6);
-}
-.page-heading {
-    margin: 0;
-    font-size: var(--text-xl);
-    font-weight: var(--weight-semibold);
-    letter-spacing: -0.02em;
-    line-height: var(--leading-tight);
-    color: var(--text-primary);
-}
-.page-head-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-left: auto;
-}
-.page-head-actions:empty { display: none; }
-@media (max-width: 640px) {
-    .page-head { align-items: flex-start; }
-    .page-head-actions { width: 100%; margin-left: 0; justify-content: flex-start; }
-}
-
-/* Links that carry an arrow icon (Back / Next) line up like buttons */
-.page a:not(.btn):has(> svg),
-.auth-card a:has(> svg),
-.ap-section-link {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-}
-
-/* ============================================================
-   RESPONSIVE — tablet: tighter page padding. (The sidebar also
-   auto-collapses to its icon rail on tablets; see Sidebar in app.js.)
-   ============================================================ */
-@media (max-width: 1100px) {
-    .page { padding: var(--space-6); }
-}
-@media (max-width: 640px) {
-    .page { padding: var(--space-4); }
-    .mobile-bar { padding: 0 var(--space-4); }
+    .sy-col + .sy-col { border-left: 0; border-top: 1px solid var(--border); }
+    .sy-sec.sy-grow { overflow: visible; }
 }

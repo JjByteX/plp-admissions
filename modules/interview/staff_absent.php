@@ -554,15 +554,20 @@ $absUrl = function (array $merge = []) use ($activeTab, $search, $filterDept, $f
     ));
 };
 
+// Page tabs as a segmented control — rendered inside each tab's table toolbar,
+// left of the search box. A Dean only sees Absent Students, so no control then.
+$absentTabsHtml = '';
+if (!$isDean) {
+    $absentTabsHtml = seg_control([
+        ['label' => 'Absent Students',     'href' => url('/staff/interviews/absent?tab=absent'),
+         'active' => $activeTab === 'absent',   'count' => $absentTotal > 0 ? $absentTotal : null],
+        ['label' => 'Reschedule Requests', 'href' => url('/staff/interviews/absent?tab=requests'),
+         'active' => $activeTab === 'requests', 'count' => $reschedTotal > 0 ? $reschedTotal : null, 'tone' => 'warning'],
+    ], 'Absent students and reschedule requests');
+}
+
 ob_start();
 ?>
-
-<style>
-.page:has(.sa-table-card) { display:flex; flex-direction:column; }
-.sa-table-card { flex:1; min-height:300px; display:flex; flex-direction:column; }
-.sa-table-card table { flex:0 0 auto; }
-.sa-table-card .sa-filler { flex:1; border-top:1px solid var(--border); }
-</style>
 
 <?php foreach ($errors as $err): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($err) ?></div>
@@ -571,13 +576,23 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<?php
-// Page tabs — shown as a segmented control inside each table toolbar.
-$segTabs = ['absent' => ['label' => 'Absent Students', 'href' => url('/staff/interviews/absent?tab=absent'), 'count' => $absentTotal]];
-if (!$isDean) {
-    $segTabs['requests'] = ['label' => 'Reschedule Requests', 'href' => url('/staff/interviews/absent?tab=requests'), 'count' => $reschedTotal, 'tone' => 'warning'];
-}
-?>
+<?php ob_start(); ?>
+    <?php if (!$canReschedule): ?>
+        <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
+            <?= $activeTab === 'requests'
+                ? 'Only SSO and Admin can approve or deny reschedule requests.'
+                : 'Only SSO and Admin can reschedule students.' ?>
+        </span>
+    <?php endif; ?>
+    <?php if ($canReschedule): ?>
+        <a href="<?= url('/staff/interviews/cancel-slot') ?>" class="btn btn-ghost btn-sm">
+            Cancel a slot (bulk move)
+            <?= icon('ic_fluent_arrow_right_24_regular', 15) ?>
+        </a>
+    <?php endif; ?>
+    <?= back_button(url('/staff/interviews')) ?>
+<?php $pageActions = ob_get_clean(); ?>
+
 <?php if ($activeTab === 'absent'): ?>
 <!-- ============================================================
      TAB 1: ABSENT STUDENTS
@@ -605,7 +620,7 @@ if (!$isDean) {
         <input type="hidden" name="tab"      value="absent">
         <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
 
-        <?= segmented_tabs($segTabs, 'absent', 'Interview reschedules') ?>
+        <?= $absentTabsHtml ?>
 
         <div class="auto-table-search">
             <?= icon('ic_fluent_search_24_filled', 14) ?>
@@ -765,7 +780,7 @@ if (!$isDean) {
         <input type="hidden" name="tab"      value="requests">
         <input type="hidden" name="per_page" value="<?= (int)$perPage ?>">
 
-        <?= segmented_tabs($segTabs, 'requests', 'Interview reschedules') ?>
+        <?= $absentTabsHtml ?>
 
         <div class="auto-table-search">
             <?= icon('ic_fluent_search_24_filled', 14) ?>
@@ -910,13 +925,11 @@ if (!$isDean) {
 
 </div><!-- /.auto-table-wrap -->
 <?php endif; /* end activeTab */ ?>
-</div>
 
 <?php
 $content   = ob_get_clean();
 $pageTitle = $activeTab === 'requests' ? 'Reschedule Requests' : 'Absent Students';
-$pageActions = '<a href="' . e(url('/staff/interviews')) . '" class="btn-icon" aria-label="Back to interviews" title="Back to interviews">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>'
-    . ($canReschedule ? '<a href="' . e(url('/staff/interviews/cancel-slot')) . '" class="btn btn-ghost btn-sm">Cancel a slot (bulk move) ' . icon('ic_fluent_arrow_right_24_regular', 16) . '</a>' : '');
 $activeNav = $activeTab === 'requests' ? 'reschedule' : 'interviews';
 $pageWide  = true; // table-heavy page — match staff_slots / staff_review / staff_manage
+$pageHeading = 'Interview Reschedules';
 include VIEWS_PATH . '/layouts/app.php';

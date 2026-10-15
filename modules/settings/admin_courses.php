@@ -253,6 +253,16 @@ ob_start();
     <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
 <?php endforeach; ?>
 
+<?php if ($canManageCourses): ?>
+<?php ob_start(); ?>
+<button class="btn btn-primary btn-sm"
+        onclick="document.getElementById('add-course-modal').style.display='flex'">
+    <?= icon('ic_fluent_add_24_regular', 15) ?>
+    Add Course
+</button>
+<?php $pageActions = ob_get_clean(); ?>
+<?php endif; ?>
+
 <div>
 
     <!-- ── Unified Courses Table ────────────────────────────────── -->
@@ -325,7 +335,7 @@ ob_start();
                 ?>
                 <?php if ($needsCap): ?>
                     <span title="Max slots not set" style="position:absolute;top:8px;right:10px;
-                                 width:8px;height:8px;border-radius:50%;background:var(--error)"></span>
+                                 width:8px;height:8px;border-radius:var(--radius);background:var(--error)"></span>
                 <?php endif; ?>
                 <?= $maxSlots !== null ? $maxSlots : '∞' ?>
             </div>
@@ -405,18 +415,12 @@ ob_start();
                 Additional programs you've added. They appear in dropdowns and strand-match suggestions.
             </div>
         </div>
-        <?php if ($canManageCourses): ?>
-            <button class="btn btn-primary btn-sm"
-                    onclick="document.getElementById('add-course-modal').style.display='flex'">
-                + Add Course
-            </button>
-        <?php endif; ?>
     </div>
     <div class="card" style="padding:var(--space-5);margin-bottom:var(--space-6)">
 
         <?php if (!$customCourses): ?>
             <div style="text-align:left;padding:var(--space-8);color:var(--text-tertiary);font-size:var(--text-sm)">
-                No custom courses yet. Click <strong>+ Add Course</strong> to add a new program.
+                No custom courses yet. Click <strong>Add Course</strong> (top right) to add a new program.
             </div>
         <?php else: ?>
         <div style="display:flex;flex-direction:column;gap:var(--space-3)">
@@ -682,4 +686,5 @@ $content   = ob_get_clean();
 $pageTitle = 'Courses & Strands';
 $activeNav = 'courses';
 $pageWide  = true;
+$pageHeading = 'Courses & Strands';
 include VIEWS_PATH . '/layouts/app.php';

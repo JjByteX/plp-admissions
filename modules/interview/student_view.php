@@ -216,7 +216,7 @@ ob_start();
         ============================================================ -->
         <div class="card" style="padding:var(--space-6)">
             <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5)">
-                <div style="width:48px;height:48px;border-radius:var(--radius);
+                <div style="width:48px;height:48px;border-radius:var(--radius-lg);
                              background:var(--success-bg);display:flex;align-items:center;justify-content:center">
                     <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?>
                 </div>
@@ -264,7 +264,7 @@ ob_start();
                 </div>
             <?php else: ?>
                 <div style="display:inline-flex;align-items:center;gap:var(--space-2);
-                            background:var(--success-bg);color:var(--success);border-radius:var(--radius);
+                            background:var(--success-bg);color:var(--success);border-radius:var(--radius-md);
                             padding:var(--space-2) var(--space-4);margin-bottom:var(--space-4);font-weight:var(--weight-semibold)">
                     <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
                     Checked In
@@ -284,7 +284,7 @@ ob_start();
 
             <!-- Desk instructions -->
             <?php if ($myEntry['desk_label']): ?>
-                <div style="background:var(--bg-subtle);border-radius:var(--radius);
+                <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
                              padding:var(--space-4) var(--space-5);text-align:left;margin-bottom:var(--space-4)">
                     <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
                                  color:var(--text-tertiary);margin-bottom:var(--space-2)">Proceed to</div>
@@ -331,7 +331,7 @@ ob_start();
                 </div>
                 <?php if (!empty($myReschedule['reason'])): ?>
                     <div style="margin-top:var(--space-3);padding:var(--space-3) var(--space-4);background:var(--bg-subtle);
-                                 border-radius:var(--radius);font-size:var(--text-sm);white-space:pre-line;color:var(--text-secondary)">
+                                 border-radius:var(--radius-md);font-size:var(--text-sm);white-space:pre-line;color:var(--text-secondary)">
                         <?= e($myReschedule['reason']) ?>
                     </div>
                 <?php endif; ?>
@@ -372,7 +372,7 @@ ob_start();
         ============================================================ -->
         <div class="card" style="padding:var(--space-6)">
             <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5)">
-                <div style="width:48px;height:48px;border-radius:var(--radius);
+                <div style="width:48px;height:48px;border-radius:var(--radius-lg);
                              background:var(--success-bg);display:flex;align-items:center;justify-content:center">
                     <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?>
                 </div>
@@ -390,7 +390,7 @@ ob_start();
 
             <!-- Desk location — show even before interview day -->
             <?php if ($myEntry['desk_label']): ?>
-                <div style="background:var(--bg-subtle);border-radius:var(--radius);
+                <div style="background:var(--bg-subtle);border-radius:var(--radius-md);
                              padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)">
                     <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
                                  color:var(--text-tertiary);margin-bottom:var(--space-1)">Report to</div>
@@ -409,7 +409,7 @@ ob_start();
                 <!-- Pending review — the page has "changed" the moment they
                      submitted, so they see status instead of the form. -->
                 <div style="margin-top:var(--space-4);padding:var(--space-4) var(--space-5);
-                             background:var(--warning-bg);border-radius:var(--radius);
+                             background:var(--warning-bg);border-radius:var(--radius-md);
                              display:flex;align-items:flex-start;gap:var(--space-3)">
                     <?= icon('ic_fluent_hourglass_24_regular', 18, 'color:var(--warning)') ?>
                     <div style="flex:1">
@@ -473,7 +473,7 @@ ob_start();
                     </summary>
                     <div style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
                         <?php foreach ($pastReschedules as $h): ?>
-                            <div style="padding:var(--space-3);background:var(--bg-subtle);border-radius:var(--radius);
+                            <div style="padding:var(--space-3);background:var(--bg-subtle);border-radius:var(--radius-md);
                                          font-size:var(--text-xs)">
                                 <div style="display:flex;justify-content:space-between;gap:var(--space-3);align-items:flex-start">
                                     <div style="color:var(--text-tertiary)">
@@ -532,7 +532,7 @@ ob_start();
 
 <!-- Step navigation -->
 <div class="step-nav">
-    <a href="<?= url('/student/documents') ?>" class="btn btn-ghost"><?= icon('ic_fluent_arrow_left_24_regular', 16) ?> Documents</a>
+    <a href="<?= url('/student/documents') ?>" class="btn btn-ghost"><?= icon('ic_fluent_arrow_left_24_regular', 15) ?> Documents</a>
     <?php
         // Only expose a real "My Result" link once the admissions office has
         // actually released a decision. Before that, show the same button in a
@@ -542,7 +542,7 @@ ob_start();
         $interviewDone  = $myEntry && ($myEntry['interview_status'] ?? 'pending') === 'completed';
     ?>
     <?php if ($interviewDone && $resultReleased): ?>
-        <a href="<?= url('/student/result') ?>" class="btn btn-primary">My Result <?= icon('ic_fluent_arrow_right_24_regular', 16) ?></a>
+        <a href="<?= url('/student/result') ?>" class="btn btn-primary">My Result <?= icon('ic_fluent_arrow_right_24_regular', 15) ?></a>
     <?php elseif ($interviewDone): ?>
         <button type="button" class="btn btn-primary" disabled
                 title="Result not released yet. You'll be notified."
@@ -560,4 +560,5 @@ $content     = ob_get_clean();
 $pageTitle   = 'My Interview';
 $activeNav   = 'interview';
 $showStepper = true;
+$pageHeading = 'My Interview';
 include VIEWS_PATH . '/layouts/app.php';

@@ -449,11 +449,6 @@ ob_start();
         </form>
     </div>
 
-</div><!-- /sy-col -->
-<div class="sy-col">
-
-    <div class="school-year-history-layout">
-        <div class="school-year-history-tools">
     <!-- ── Import Historical Records ──────────────────────────────── -->
     <div class="sy-sec">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2)">
@@ -471,7 +466,7 @@ ob_start();
     </div>
 
     <!-- New cycle — danger zone -->
-    <div class="card card-danger">
+    <div class="sy-sec sy-danger">
         <div class="card-title" style="color:var(--error);margin-bottom:var(--space-1)">Start New Admission Cycle</div>
         <p class="card-description" style="margin-bottom:var(--space-5)">
             Starts a new admissions cycle. The current exam is deactivated and all previous applicant data is preserved.
@@ -489,9 +484,10 @@ ob_start();
             </div>
         </form>
     </div>
-        </div>
 
-        <div class="school-year-history-summary">
+</div><!-- /sy-col -->
+<div class="sy-col">
+
     <!-- Historical summary -->
     <?php if (!empty($statsByYear)): ?>
     <div class="sy-sec sy-grow">
@@ -500,7 +496,7 @@ ob_start();
         <?php foreach ($statsByYear as $year => $statuses):
             $total = array_sum($statuses);
         ?>
-            <div style="padding:var(--space-4);background:var(--bg-subtle);border-radius:var(--radius)">
+            <div style="padding:var(--space-4);background:var(--bg-subtle);border-radius:var(--radius-md)">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3)">
                     <div>
                         <span style="font-weight:var(--weight-semibold)"><?= e($year) ?></span>
@@ -529,9 +525,6 @@ ob_start();
     </div>
     <?php endif; ?>
 
-        </div><!-- /school-year-history-summary -->
-    </div><!-- /school-year-history-layout -->
-
 </div><!-- /sy-col -->
 </div><!-- /sy-card -->
 
@@ -541,52 +534,24 @@ ob_start();
 ════════════════════════════════════════════════════════════ -->
 <style>
 @keyframes ai-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-.school-year-history-layout {
-    display:grid;
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-    gap:var(--space-6);
-    position:relative;
-    align-items:start;
-}
-.school-year-history-layout::before {
-    content:'';
-    position:absolute;
-    top:0;
-    bottom:0;
-    left:50%;
-    border-left:1px solid var(--border);
-    pointer-events:none;
-}
-.school-year-history-tools,
-.school-year-history-summary {
-    display:flex;
-    flex-direction:column;
-    gap:var(--space-4);
-    min-width:0;
-}
-.school-year-history-summary .card { border-bottom:0; }
-@media (max-width:760px) {
-    .school-year-history-layout { grid-template-columns:1fr; }
-    .school-year-history-layout::before { display:none; }
-}
-.ai-status-bar { display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius);font-size:var(--text-sm);border:1px solid; }
+.ai-status-bar { display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius-md);font-size:var(--text-sm);border:1px solid; }
 .ai-status-bar.connected { background:#f0faf4;border-color:#a7d9b8;color:#1a5c32; }
 .ai-status-bar.disconnected { background:#fafafa;border-color:var(--border);color:var(--text-secondary); }
-.ai-status-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+.ai-status-dot { width:8px;height:8px;border-radius:var(--radius);flex-shrink:0; }
 .ai-status-bar.connected .ai-status-dot { background:#22c55e; }
 .ai-status-bar.disconnected .ai-status-dot { background:var(--neutral-400);animation:ai-pulse 2s ease-in-out infinite; }
-.ai-dropzone { border:2px dashed var(--border);border-radius:var(--radius);padding:var(--space-6) var(--space-5);text-align:center;cursor:pointer;transition:border-color .15s,background .15s; }
+.ai-dropzone { border:2px dashed var(--border);border-radius:var(--radius-md);padding:var(--space-6) var(--space-5);text-align:center;cursor:pointer;transition:border-color .15s,background .15s; }
 .ai-dropzone:hover,.ai-dropzone.dragover { border-color:var(--accent);background:rgba(45,106,79,.03); }
 .ai-dropzone.has-file { border-style:solid;border-color:var(--accent);background:rgba(45,106,79,.04); }
-.ai-dropzone-icon { width:40px;height:40px;margin:0 auto var(--space-2);border-radius:var(--radius);background:var(--neutral-100);display:flex;align-items:center;justify-content:center; }
-.ai-file-tag { display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border-radius:var(--radius);padding:4px 10px;font-size:var(--text-xs);font-weight:var(--weight-medium);margin-top:var(--space-2); }
+.ai-dropzone-icon { width:40px;height:40px;margin:0 auto var(--space-2);border-radius:var(--radius-md);background:var(--neutral-100);display:flex;align-items:center;justify-content:center; }
+.ai-file-tag { display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border-radius:var(--radius-sm);padding:4px 10px;font-size:var(--text-xs);font-weight:var(--weight-medium);margin-top:var(--space-2); }
 .ai-file-tag .rm { cursor:pointer;opacity:.7;background:none;border:none;color:#fff;padding:0;font-size:14px;display:flex;align-items:center;line-height:1; }
 .ai-file-tag .rm:hover { opacity:1; }
 .ai-progress-wrap { padding:var(--space-2) 0; }
 .ai-progress-track { height:5px;background:var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:var(--space-3); }
 .ai-progress-fill { height:100%;background:var(--accent);border-radius:var(--radius);width:0%;transition:width .4s cubic-bezier(.4,0,.2,1); }
 .ai-progress-step { font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px; }
-.ai-warn-strip { display:flex;align-items:flex-start;gap:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--radius);padding:10px 12px;font-size:var(--text-xs);color:#92400e;line-height:1.5; }
+.ai-warn-strip { display:flex;align-items:flex-start;gap:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--radius-md);padding:10px 12px;font-size:var(--text-xs);color:#92400e;line-height:1.5; }
 </style>
 
 <div id="legacy-import-modal" class="modal-backdrop" style="display:none">
@@ -596,7 +561,7 @@ ob_start();
         <!-- Header — same accent-box + subtitle pattern as exam import -->
         <div class="modal-header" style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)">
             <div style="display:flex;align-items:center;gap:var(--space-3)">
-                <div style="width:34px;height:34px;border-radius:var(--radius);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <div style="width:34px;height:34px;border-radius:var(--radius-md);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
                     <?= icon('sparkle', 17, 'color:#fff') ?>
                 </div>
                 <div>
@@ -616,8 +581,8 @@ ob_start();
             <div id="legacy-puter-status" class="ai-status-bar disconnected">
                 <div class="ai-status-dot"></div>
                 <div id="legacy-puter-status-text" style="flex:1">Checking Puter connection…</div>
-                <a id="legacy-puter-link" href="https://puter.com" target="_blank" style="display:none;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);text-decoration:none;white-space:nowrap">Create account <?= icon('ic_fluent_arrow_right_24_regular', 14) ?></a>
-                <button id="legacy-puter-signin-btn" onclick="legacyPuterSignIn()" style="display:none;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;white-space:nowrap">Sign in <?= icon('ic_fluent_arrow_right_24_regular', 14) ?></button>
+                <a id="legacy-puter-link" href="https://puter.com" target="_blank" style="display:none;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);text-decoration:none;white-space:nowrap">Create account <?= icon('ic_fluent_arrow_right_24_regular', 11, 'display:inline-block;vertical-align:-2px') ?></a>
+                <button id="legacy-puter-signin-btn" onclick="legacyPuterSignIn()" style="display:none;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;white-space:nowrap">Sign in <?= icon('ic_fluent_arrow_right_24_regular', 11, 'display:inline-block;vertical-align:-2px') ?></button>
                 <button id="legacy-puter-signout-btn" onclick="legacyPuterSignOut()" style="display:none;font-size:var(--text-xs);color:var(--text-tertiary);background:none;border:none;cursor:pointer;padding:0">Sign out</button>
             </div>
 
@@ -682,7 +647,7 @@ ob_start();
             <div id="legacy-step-preview" style="display:none;flex-direction:column;gap:var(--space-3)">
                 <div style="display:flex;align-items:center;justify-content:space-between">
                     <div style="font-size:var(--text-sm);font-weight:var(--weight-semibold)" id="legacy-preview-count"></div>
-                    <button class="btn btn-ghost btn-sm" onclick="resetLegacyImport()"><?= icon('ic_fluent_arrow_left_24_regular', 16) ?> Try again</button>
+                    <button class="btn btn-ghost btn-sm" onclick="resetLegacyImport()"><?= icon('ic_fluent_arrow_left_24_regular', 14, '') ?> Try again</button>
                 </div>
                 <div class="ai-warn-strip">
                     <?= icon('warning:fill', 14, 'margin-top:1px;color:#d97706') ?>
@@ -693,7 +658,7 @@ ob_start();
                         <input type="checkbox" id="legacy-check-all" checked onchange="toggleAllLegacyRows(this.checked)"> Select all
                     </label>
                 </div>
-                <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)">
+                <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md)">
                     <table style="width:100%;border-collapse:collapse;font-size:var(--text-sm)">
                         <thead>
                             <tr style="background:var(--bg-subtle);position:sticky;top:0;z-index:1">
@@ -712,11 +677,11 @@ ob_start();
 
             <!-- Step: error -->
             <div id="legacy-step-error" style="display:none;flex-direction:column;gap:var(--space-3)">
-                <div style="display:flex;align-items:flex-start;gap:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--radius);padding:12px 14px;font-size:var(--text-sm);color:#991b1b">
+                <div style="display:flex;align-items:flex-start;gap:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--radius-md);padding:12px 14px;font-size:var(--text-sm);color:#991b1b">
                     <?= icon('warning-circle:fill', 16, 'margin-top:1px') ?>
                     <span id="legacy-error-msg"></span>
                 </div>
-                <button class="btn btn-ghost btn-sm" style="align-self:flex-start" onclick="resetLegacyImport()"><?= icon('ic_fluent_arrow_left_24_regular', 16) ?> Try again</button>
+                <button class="btn btn-ghost btn-sm" style="align-self:flex-start" onclick="resetLegacyImport()"><?= icon('ic_fluent_arrow_left_24_regular', 14, '') ?> Try again</button>
             </div>
 
         </div><!-- /modal-body -->
@@ -1454,7 +1419,7 @@ async function saveLegacyRows() {
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Admissions';
-$pageHeading = 'School Year';
 $pageWide  = true;
+$pageHeading = 'Admissions';
 $activeNav = 'school-year';
 include VIEWS_PATH . '/layouts/app.php';

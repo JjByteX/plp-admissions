@@ -38,6 +38,8 @@ try {
 ob_start();
 ?>
 
+<?php $pageActions = back_button(url('/staff/interviews')); ?>
+
 <style>
 @keyframes q-pulse-dot {
     0%,100% { opacity: 1; transform: scale(1); }
@@ -54,7 +56,7 @@ ob_start();
     display: flex; flex-direction: column; align-items: center; text-align: center;
     gap: var(--space-3); padding: var(--space-8) var(--space-5);
     background: var(--bg-elevated); border: 1.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     text-decoration: none; color: var(--text-primary);
     transition: border-color .18s, box-shadow .18s, transform .15s;
     cursor: pointer;
@@ -66,7 +68,7 @@ ob_start();
 }
 .q-college-card.is-live { border-color: var(--accent); }
 .q-college-card-icon {
-    width: 50px; height: 50px; border-radius: var(--radius);
+    width: 50px; height: 50px; border-radius: var(--radius-lg);
     background: var(--accent-muted); color: var(--accent);
     display: flex; align-items: center; justify-content: center;
 }
@@ -86,7 +88,7 @@ ob_start();
     text-transform: uppercase; letter-spacing: .05em;
 }
 .q-college-card-live .dot {
-    width: 6px; height: 6px; border-radius: 50%;
+    width: 6px; height: 6px; border-radius: var(--radius);
     background: var(--accent);
     animation: q-pulse-dot 1.4s infinite;
 }
@@ -125,7 +127,7 @@ ob_start();
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Live Queue';
-$pageActions = '<a href="' . e(url('/staff/interviews')) . '" class="btn-icon" aria-label="Back to interviews" title="Back to interviews">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>';
 $activeNav = 'interviews';
 $pageWide  = true;
+$pageHeading = 'Live Queue';
 include VIEWS_PATH . '/layouts/app.php';

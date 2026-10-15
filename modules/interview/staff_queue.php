@@ -433,18 +433,7 @@ ob_start();
        (this IS their primary view), so no back button.
 ============================================================ -->
 <?php if ($canSeeAll): ?>
-    <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-5);flex-wrap:wrap">
-        <a href="<?= e(url('/staff/interviews/queue')) ?>" class="btn btn-ghost btn-sm">
-            <?= icon('arrow-left', 14) ?> Back to colleges
-        </a>
-        <span style="font-size:var(--text-sm);color:var(--text-secondary)">
-            <?php if ($showAll): ?>
-                <strong>All colleges</strong>
-            <?php else: ?>
-                <strong><?= e($collegeFilter) ?></strong>
-            <?php endif; ?>
-        </span>
-    </div>
+    <?php $pageActions = back_button(url('/staff/interviews/queue'), 'Back to colleges'); ?>
 <?php endif; ?>
 
 <!-- ============================================================
@@ -457,7 +446,7 @@ ob_start();
     <div style="display:flex;align-items:center;gap:var(--space-3);flex-shrink:0;
                  padding:var(--space-3) var(--space-4);margin-bottom:var(--space-4);
                  background:var(--bg-elevated);border:1px solid var(--border);
-                 border-radius:var(--radius);font-size:var(--text-sm)">
+                 border-radius:var(--radius-md);font-size:var(--text-sm)">
         <?= icon('ic_fluent_location_24_regular', 13, 'color:var(--text-tertiary);flex-shrink:0') ?>
         <span style="font-weight:var(--weight-medium)"><?= e($deskLabel) ?></span>
         <?php if ($deskNotes): ?>
@@ -495,7 +484,7 @@ ob_start();
     -->
     <div class="card iq-table-card"
          style="padding:var(--space-12) var(--space-8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-3);text-align:center">
-        <div style="width:56px;height:56px;border-radius:var(--radius);background:var(--bg-subtle);color:var(--text-tertiary);display:flex;align-items:center;justify-content:center">
+        <div style="width:56px;height:56px;border-radius:var(--radius-lg);background:var(--bg-subtle);color:var(--text-tertiary);display:flex;align-items:center;justify-content:center">
             <?= icon('ic_fluent_calendar_ltr_24_regular', 28) ?>
         </div>
         <div style="font-size:var(--text-base);font-weight:var(--weight-semibold);color:var(--text-primary)">
@@ -661,7 +650,7 @@ ob_start();
                         <span class="badge <?= $statusBadgeClass ?>" style="font-size:var(--text-xs)"
                               <?= ($isFinal && $existing !== '') ? 'title="' . e($existing) . '"' : '' ?>>
                             <?php if ($isInProg): ?>
-                                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
+                                <span style="display:inline-block;width:6px;height:6px;border-radius:var(--radius);
                                              background:#fff;animation:pulse-dot 1.4s infinite;margin-right:4px"></span>
                             <?php endif; ?>
                             <?= e($statusBadgeText) ?>
@@ -951,8 +940,6 @@ if ($canSeeAll) {
     $pageTitle = 'Live Queue';
 }
 $activeNav = 'interviews';
-$pageActions = $canSeeAll
-    ? '<a href="' . e(url('/staff/interviews/queue')) . '" class="btn-icon" aria-label="Back to college selection" title="Back to college selection">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>'
-    : '';
 $pageWide  = true;
+$pageHeading = $pageTitle; // college context ('Live Queue · <college>') now lives in the heading
 include VIEWS_PATH . '/layouts/app.php';

@@ -152,7 +152,7 @@ ob_start();
        <?php if ($queueDisabled): ?>aria-disabled="true" title="<?= e($queueTitle) ?>"<?php endif; ?>>
         <div class="intv-landing-icon">
             <?php if ($todayActive > 0 && !$queueDisabled): ?>
-                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                <span style="display:inline-block;width:10px;height:10px;border-radius:var(--radius);
                               background:var(--accent);animation:pulse-dot 1.8s ease-in-out infinite;
                               position:absolute;top:12px;right:12px"></span>
             <?php endif; ?>
@@ -171,7 +171,7 @@ ob_start();
                 <?= icon('ic_fluent_lock_closed_24_regular', 13) ?>
                 Setup required
             <?php elseif ($todayActive > 0): ?>
-                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
+                <span style="display:inline-block;width:6px;height:6px;border-radius:var(--radius);
                               background:var(--accent);animation:pulse-dot 1.8s ease-in-out infinite"></span>
                 <?= $todayWaiting ?> waiting · <?= $todayInProgress ?> in progress
             <?php else: ?>
@@ -188,4 +188,5 @@ ob_start();
 $content   = ob_get_clean();
 $pageTitle = 'Interview Sessions';
 $activeNav = 'interviews';
+$pageHeading = 'Interviews';
 include VIEWS_PATH . '/layouts/app.php';

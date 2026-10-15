@@ -237,7 +237,7 @@ $schoolLogo = school_setting('school_logo', '');
     <?php endif; ?>
 
     <div class="auth-footer">
-        <a href="<?= url('/login') ?>" aria-label="Back to sign in" title="Back to sign in"><?= icon('ic_fluent_arrow_left_24_regular', 18) ?></a>
+        <a href="<?= url('/login') ?>"><?= icon('ic_fluent_arrow_left_24_regular', 14, 'display:inline-block;vertical-align:-2px') ?> Back to sign in</a>
     </div>
 
 </div>

@@ -30,6 +30,8 @@ $sessions = $stmt->fetchAll();
 ob_start();
 ?>
 
+<?php $pageActions = back_button(url('/staff/interviews/queue')); ?>
+
 <style>
 @keyframes q-pulse-dot {
     0%,100% { opacity: 1; transform: scale(1); }
@@ -44,7 +46,7 @@ ob_start();
     display: flex; flex-direction: column;
     gap: var(--space-3); padding: var(--space-5);
     background: var(--bg-elevated); border: 1.5px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     text-decoration: none; color: var(--text-primary);
     transition: border-color .15s, box-shadow .15s;
     position: relative; cursor: pointer; min-height: 220px;
@@ -85,7 +87,7 @@ ob_start();
     text-transform: uppercase; letter-spacing: .05em;
 }
 .q-sess-live-badge .dot {
-    width: 6px; height: 6px; border-radius: 50%;
+    width: 6px; height: 6px; border-radius: var(--radius);
     background: #fff;
     animation: q-pulse-dot 1.4s infinite;
 }
@@ -93,7 +95,7 @@ ob_start();
 
 <?php if (empty($sessions)): ?>
     <div style="padding:var(--space-8) var(--space-4);background:var(--bg-subtle);
-                 border-radius:var(--radius);text-align:center;color:var(--text-tertiary)">
+                 border-radius:var(--radius-md);text-align:center;color:var(--text-tertiary)">
         <?= icon('ic_fluent_calendar_24_regular', 32, 'color:var(--text-tertiary)') ?>
         <div style="margin-top:var(--space-3);font-size:var(--text-sm)">
             No sessions scheduled for <?= e($selectedCollege) ?> today.
@@ -101,7 +103,7 @@ ob_start();
         <div style="margin-top:var(--space-2);font-size:var(--text-xs)">
             <a href="<?= url('/staff/interviews/setup') ?>?college=<?= urlencode($selectedCollege) ?>"
                style="color:var(--accent)">
-                Add a session in setup <?= icon('arrow-right', 14) ?>
+                Add a session in setup <?= icon('ic_fluent_arrow_right_24_regular', 12, 'display:inline-block;vertical-align:-2px') ?>
             </a>
         </div>
     </div>
@@ -160,6 +162,6 @@ ob_start();
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Live Queue · ' . $selectedCollege;
-$pageActions = '<a href="' . e(url('/staff/interviews/queue')) . '" class="btn-icon" aria-label="Back to queue" title="Back to queue">' . icon('ic_fluent_arrow_left_24_regular', 18) . '</a>';
 $activeNav = 'interviews';
+$pageHeading = $pageTitle; // 'Live Queue · <college>'
 include VIEWS_PATH . '/layouts/app.php';

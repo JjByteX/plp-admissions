@@ -863,7 +863,7 @@ function icon(string $name, int $size = 16, string $style = '', string $extra = 
     // Fluent name => Phosphor name (kept so the ~250 existing call sites don't change)
     static $map = [
         'add' => 'plus', 'arrow_down' => 'arrow-down', 'arrow_up' => 'arrow-up',
-        'arrow_left' => 'arrow-left', 'arrow_download' => 'download-simple',
+        'arrow_left' => 'arrow-left', 'arrow_right' => 'arrow-right', 'arrow_download' => 'download-simple',
         'arrow_upload' => 'upload-simple', 'arrow_sync' => 'arrows-clockwise',
         'arrow_undo' => 'arrow-u-up-left', 'building_bank' => 'bank',
         'calendar' => 'calendar-blank', 'calendar_ltr' => 'calendar-blank',
@@ -1261,4 +1261,43 @@ function auto_table_footer(array $result, callable $urlFor, string $noun = 'reco
          . '<span style="padding:0 var(--space-1);font-size:var(--text-sm);color:var(--text-tertiary);white-space:nowrap">Page <strong ' . $strong . '>' . $page . '</strong> of <strong ' . $strong . '>' . $pages . '</strong></span>'
          . $btn($page < $pages, $page + 1, 'ic_fluent_chevron_right_24_regular', 'Next page')
          . '</div></div>';
+}
+
+/**
+ * Segmented control — the one component for page-level tabs.
+ * Put it INSIDE .auto-table-toolbar, as the first child (left of the search box).
+ *
+ * $items = [ ['label' => 'Absent Students', 'href' => '/x?tab=absent', 'active' => true,
+ *             'count' => 3, 'tone' => 'warning'], ... ]
+ *   - href   a URL; it is escaped here, so pass it as-is
+ *   - count  optional number shown in a small badge (omit / null to hide; 0 is shown)
+ *   - tone   optional 'warning' to tint the badge
+ * $ariaLabel names the group for screen readers.
+ */
+function seg_control(array $items, string $ariaLabel = 'Views'): string
+{
+    $out = '<nav class="seg-control" role="tablist" aria-label="' . e($ariaLabel) . '">';
+    foreach ($items as $it) {
+        $active = !empty($it['active']);
+        $out .= '<a href="' . e((string)($it['href'] ?? '#')) . '"'
+              . ' class="seg-control-item' . ($active ? ' active' : '') . '"'
+              . ' role="tab" aria-selected="' . ($active ? 'true' : 'false') . '">'
+              . e((string)($it['label'] ?? ''));
+        if (isset($it['count'])) {
+            $tone = (($it['tone'] ?? '') === 'warning') ? ' is-warning' : '';
+            $out .= '<span class="seg-control-count' . $tone . '">' . (int)$it['count'] . '</span>';
+        }
+        $out .= '</a>';
+    }
+    return $out . '</nav>';
+}
+
+/**
+ * Icon-only back button for the page header's action area (top right).
+ * The label stays as the tooltip and screen-reader name.
+ */
+function back_button(string $href, string $label = 'Back'): string
+{
+    return '<a href="' . e($href) . '" class="btn btn-ghost btn-icon-only" title="' . e($label) . '" aria-label="' . e($label) . '">'
+         . icon('ic_fluent_arrow_left_24_regular', 16) . '</a>';
 }

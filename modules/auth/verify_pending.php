@@ -213,7 +213,7 @@ ob_start();
     </div>
 
     <div style="margin-top:var(--space-3);text-align:center">
-        <a href="<?= url('/login') ?>" class="btn-icon" aria-label="Back to login" title="Back to login" style="margin:0 auto"><?= icon('ic_fluent_arrow_left_24_regular', 18) ?></a>
+        <a href="<?= url('/login') ?>" style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= icon('ic_fluent_arrow_left_24_regular', 12, 'display:inline-block;vertical-align:-2px') ?> Back to login</a>
     </div>
 </div>
 

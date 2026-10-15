@@ -79,6 +79,13 @@ $years = $db->query(
 ob_start();
 ?>
 
+<?php ob_start(); ?>
+<a href="?export=csv&sy=<?= urlencode($schoolYear) ?>" class="btn btn-primary">
+    <?= icon('ic_fluent_arrow_download_24_regular', 16) ?>
+    Export CSV
+</a>
+<?php $pageActions = ob_get_clean(); ?>
+
 <!-- Year filter -->
 <div style="display:flex;gap:var(--space-2);margin-bottom:var(--space-6);flex-wrap:wrap">
     <?php foreach ($years as $yr): ?>
@@ -123,8 +130,8 @@ ob_start();
                 <span style="font-size:var(--text-sm);font-weight:var(--weight-medium)"><?= $label ?></span>
                 <span style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= $cnt ?> (<?= $pct ?>%)</span>
             </div>
-            <div style="height:10px;background:var(--bg-subtle);border-radius:var(--radius);overflow:hidden">
-                <div style="height:100%;width:<?= $pct ?>%;background:<?= $color ?>;border-radius:var(--radius)"></div>
+            <div style="height:10px;background:var(--bg-subtle);border-radius:var(--radius-full);overflow:hidden">
+                <div style="height:100%;width:<?= $pct ?>%;background:<?= $color ?>;border-radius:var(--radius-full)"></div>
             </div>
         </div>
     <?php endforeach; ?>
@@ -138,7 +145,7 @@ ob_start();
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Results Export';
-$pageActions = '<a href="?export=csv&amp;sy=' . urlencode($schoolYear) . '" class="btn btn-primary">' . icon('ic_fluent_arrow_download_24_regular', 16) . ' Export CSV</a>';
 $activeNav = 'results-export';
 $pageWide  = true;
+$pageHeading = 'Results Export';
 include VIEWS_PATH . '/layouts/app.php';

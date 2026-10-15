@@ -104,7 +104,7 @@ ob_start();
         <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2);color:var(--text-primary)">Application Withdrawn</h2>
         <p style="color:var(--text-secondary);margin-bottom:var(--space-6)">You have voluntarily withdrawn your application.</p>
 
-        <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
+        <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)">
                 <div>
                     <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Name</div>
@@ -122,7 +122,7 @@ ob_start();
                 </div>
                 <div>
                     <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Status</div>
-                    <span style="display:inline-flex;align-items:center;gap:var(--space-1);padding:var(--space-1) var(--space-2);border-radius:var(--radius);font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);background:var(--bg-subtle)">Withdrawn</span>
+                    <span style="display:inline-flex;align-items:center;gap:var(--space-1);padding:var(--space-1) var(--space-2);border-radius:var(--radius-full);font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);background:var(--bg-subtle)">Withdrawn</span>
                 </div>
             </div>
             <?php if ($applicant['withdrawn_reason']): ?>
@@ -175,7 +175,7 @@ ob_start();
         </p>
 
         <!-- Enrollment schedule -->
-        <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);margin-bottom:var(--space-5)">
+        <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
             <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);font-weight:var(--weight-semibold);margin-bottom:var(--space-3)">Enrollment Schedule</div>
             <?php if ($enrollmentDate && $enrollmentTime && $enrollmentVenue): ?>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-3)">
@@ -200,7 +200,7 @@ ob_start();
         </div>
 
         <!-- Documents to bring -->
-        <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);margin-bottom:var(--space-5)">
+        <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
             <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Bring the originals of</div>
             <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-3)">matches what you uploaded</div>
             <?php if (!empty($myDocs)): ?>
@@ -209,7 +209,7 @@ ob_start();
                         $slug  = (string)$d['doc_type'];
                         $label = $docLabels[$slug] ?? ucwords(str_replace('_', ' ', $slug));
                     ?>
-                        <li style="display:flex;align-items:flex-start;gap:var(--space-3);background:white;border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-2) var(--space-3)">
+                        <li style="display:flex;align-items:flex-start;gap:var(--space-3);background:white;border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--space-2) var(--space-3)">
                             <?= icon('ic_fluent_document_24_regular', 16, 'color:var(--text-tertiary);flex-shrink:0;margin-top:var(--space-1)') ?>
                             <span style="font-size:var(--text-sm);line-height:1.4"><?= e($label) ?></span>
                         </li>
@@ -243,7 +243,7 @@ ob_start();
         <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2)"><?= $cfg['title'] ?></h2>
         <p style="color:var(--text-secondary);margin-bottom:var(--space-6)"><?= $cfg['sub'] ?></p>
 
-        <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
+        <div style="background:var(--bg-subtle);border-radius:var(--radius-md);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)">
                 <div>
                     <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Name</div>
@@ -278,9 +278,9 @@ ob_start();
 
         <!-- Course suggestion from staff -->
         <?php if ($suggestion && $suggestion['status'] === 'pending'): ?>
-        <div style="border:1.5px solid #f59e0b;background:#fffbeb;border-radius:var(--radius);padding:var(--space-5);margin-bottom:var(--space-5)">
+        <div style="border:1.5px solid #f59e0b;background:#fffbeb;border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
             <div style="display:flex;align-items:flex-start;gap:var(--space-3)">
-                <div style="width:36px;height:36px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <div style="width:36px;height:36px;border-radius:var(--radius);background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
                     <?= icon('lightbulb', 16, 'color:#f59e0b') ?>
                 </div>
                 <div style="flex:1">
@@ -288,7 +288,7 @@ ob_start();
                     <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">
                         Admissions suggested an alternative course:
                     </p>
-                    <div style="background:white;border:1px solid #fde68a;border-radius:var(--radius);padding:var(--space-3) var(--space-4);font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-3)">
+                    <div style="background:white;border:1px solid #fde68a;border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-3)">
                         <?= e($suggestion['suggested_course']) ?>
                     </div>
                     <?php if ($suggestion['note']): ?>
@@ -323,9 +323,9 @@ ob_start();
             $altCourses = strand_qualified_courses($studentRank, $applicant['course_applied'], $studentStrand);
         ?>
         <?php if (!empty($altCourses)): ?>
-        <div style="border:1.5px solid #6366f1;background:#eef2ff;border-radius:var(--radius);padding:var(--space-5);margin-bottom:var(--space-5)">
+        <div style="border:1.5px solid #6366f1;background:#eef2ff;border-radius:var(--radius-md);padding:var(--space-5);margin-bottom:var(--space-5)">
             <div style="display:flex;align-items:flex-start;gap:var(--space-3)">
-                <div style="width:36px;height:36px;border-radius:50%;background:#e0e7ff;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <div style="width:36px;height:36px;border-radius:var(--radius);background:#e0e7ff;display:flex;align-items:center;justify-content:center;flex-shrink:0">
                     <?= icon('crosshair', 18, 'color:#6366f1') ?>
                 </div>
                 <div style="flex:1">
@@ -342,14 +342,14 @@ ob_start();
                     <ul style="margin:0 0 var(--space-4) 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--space-2)">
                         <?php foreach ($altCourses as $ac): ?>
                         <li style="display:flex;align-items:center;gap:var(--space-3);
-                                   background:white;border:1px solid #c7d2fe;border-radius:var(--radius);
+                                   background:white;border:1px solid #c7d2fe;border-radius:var(--radius-md);
                                    padding:var(--space-2) var(--space-3)">
                             <?= icon('check-circle:fill', 14, 'color:#6366f1') ?>
                             <span style="font-size:var(--text-sm);font-weight:var(--weight-medium)"><?= e($ac) ?></span>
                         </li>
                         <?php endforeach; ?>
                     </ul>
-                    <div style="background:#e0e7ff;border-radius:var(--radius);padding:var(--space-3);font-size:var(--text-xs);color:#3730a3">
+                    <div style="background:#e0e7ff;border-radius:var(--radius-sm);padding:var(--space-3);font-size:var(--text-xs);color:#3730a3">
                         <strong>What to do next:</strong> Visit the admissions office to apply for one of these programs — no re-exam needed.
                     </div>
                 </div>
@@ -357,7 +357,7 @@ ob_start();
         </div>
         <?php else: ?>
         <!-- Rejected with no qualifying alternatives — still be kind -->
-        <div style="border:1px solid var(--border);background:var(--bg-subtle);border-radius:var(--radius);
+        <div style="border:1px solid var(--border);background:var(--bg-subtle);border-radius:var(--radius-md);
                     padding:var(--space-4);margin-bottom:var(--space-5)">
             <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
                 We understand this isn't the news you hoped for. There are no qualifying alternatives for your strand and
@@ -374,7 +374,7 @@ ob_start();
 
 <!-- Step navigation -->
 <div class="step-nav">
-    <a href="<?= url('/student/interview') ?>" class="btn-icon" aria-label="Back to interview" title="Back to interview"><?= icon('ic_fluent_arrow_left_24_regular', 18) ?></a>
+    <a href="<?= url('/student/interview') ?>" class="btn btn-ghost"><?= icon('ic_fluent_arrow_left_24_regular', 15) ?> Back</a>
     <span></span>
 </div>
 
@@ -385,4 +385,5 @@ $content     = ob_get_clean();
 $pageTitle   = 'Admission Result';
 $activeNav   = 'result';
 $showStepper = true;
+$pageHeading = 'Admission Result';
 include VIEWS_PATH . '/layouts/app.php';

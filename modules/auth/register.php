@@ -33,7 +33,7 @@ if (!admissions_is_open()) {
             </div>
         </div>
         <div class="alert alert-error" style="margin-bottom:var(--space-5)"><?= e($closedMsg) ?></div>
-        <a href="<?= url('/login') ?>" class="btn btn-ghost btn-block" aria-label="Back to login" title="Back to login"><?= icon('ic_fluent_arrow_left_24_regular', 18) ?></a>
+        <a href="<?= url('/login') ?>" class="btn btn-ghost btn-block"><?= icon('ic_fluent_arrow_left_24_regular', 15) ?> Back to Login</a>
     </div>
     <?php
     $content   = ob_get_clean();
@@ -893,7 +893,7 @@ document.addEventListener('DOMContentLoaded', function () {
 .sex-btn {
     width: 48px;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     background: var(--bg-elevated);
     color: var(--text-secondary);
     font-size: var(--text-sm);
@@ -911,7 +911,7 @@ document.addEventListener('DOMContentLoaded', function () {
 .qual-box {
     background: var(--bg-subtle);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     padding: var(--space-3) var(--space-4);
     margin-bottom: var(--space-4);
     font-size: var(--text-sm);

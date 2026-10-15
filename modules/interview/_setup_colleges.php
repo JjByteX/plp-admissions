@@ -2,20 +2,23 @@
 // _setup_colleges.php — College card grid for admin
 // Variables: $departments, $collegeCounts
 //
-// The "← Back" target (the two-card /staff/interviews landing) is only
+// The Back target (the two-card /staff/interviews landing) is only
 // reachable for Admin. SSO lands here directly from the sidebar and
 // has nowhere to go back to, so we hide the button for them.
 $_isSSO_picker = (Auth::role() === ROLE_SSO);
 ?>
 
-<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-6)">
-    <div>
-        <h1 class="page-title" style="margin:0 0 var(--space-1) 0">Interview Setup</h1>
-        <p class="page-subtitle">Pick a college to manage its interview sessions.</p>
-    </div>
-    <?php if (!$_isSSO_picker): ?>
-        <a href="<?= url('/staff/interviews') ?>" class="btn-icon" aria-label="Back to interviews" title="Back to interviews"><?= icon('ic_fluent_arrow_left_24_regular', 18) ?></a>
-    <?php endif; ?>
+<?php if (!$_isSSO_picker): ?>
+<div class="page-actions page-actions-row">
+    <?= back_button(url('/staff/interviews')) ?>
+</div>
+<?php endif; ?>
+
+<div class="page-header" style="text-align:center;margin-bottom:var(--space-6)">
+    <h1 class="page-title" style="margin:0 0 var(--space-1) 0">Interview Setup</h1>
+    <p class="page-subtitle" style="text-align:center">
+        Pick a college to manage its interview sessions.
+    </p>
 </div>
 
 <style>
@@ -27,14 +30,14 @@ $_isSSO_picker = (Auth::role() === ROLE_SSO);
         display:flex;flex-direction:column;align-items:center;text-align:center;
         gap:var(--space-3);padding:var(--space-8) var(--space-5);
         background:var(--bg-elevated);border:1.5px solid var(--border);
-        border-radius:var(--radius);text-decoration:none;color:var(--text-primary);
+        border-radius:var(--radius-lg);text-decoration:none;color:var(--text-primary);
         transition:border-color .18s,box-shadow .18s,transform .15s;cursor:pointer;
     }
     .college-card:hover {
         border-color:var(--accent);box-shadow:0 6px 20px rgba(0,0,0,.07);transform:translateY(-3px);
     }
     .college-card-icon {
-        width:50px;height:50px;border-radius:var(--radius);
+        width:50px;height:50px;border-radius:var(--radius-lg);
         background:var(--accent-muted);color:var(--accent);
         display:flex;align-items:center;justify-content:center;
     }
@@ -48,7 +51,7 @@ $_isSSO_picker = (Auth::role() === ROLE_SSO);
     }
     .college-card-dot {
         position:absolute;top:var(--space-3);right:var(--space-3);
-        width:8px;height:8px;border-radius:50%;background:var(--error);
+        width:8px;height:8px;border-radius:var(--radius);background:var(--error);
     }
     .college-card { position:relative; }
 </style>

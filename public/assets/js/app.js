@@ -611,6 +611,271 @@ const AutoPageSize = (() => {
 window.AutoPageSize = AutoPageSize;
 
 // ============================================================
+// SelectMenu — every <select> gets the dashboard dropdown look
+//
+// The native <select> stays in the DOM (hidden), so form posts, `required`,
+// inline onchange="…", .value / .selectedIndex and option changes keep working.
+// A button + popover menu (same look as the dashboard's date picker) is shown
+// instead. Opt out with data-native on a <select>; <select multiple> and
+// <select size="n"> are left alone.
+// ============================================================
+const SelectMenu = (() => {
+    const SKIP      = 'select[multiple], select[size]:not([size="1"]), select[data-native]';
+    const enhanced  = new WeakMap();           // select -> { wrap, trigger, refresh }
+    const valueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+    const indexDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'selectedIndex');
+    let   open      = null;                    // { sel, trigger, menu, items, hl }
+
+    function optText(o) { return (o.label || o.textContent || '').replace(/\s+/g, ' ').trim(); }
+
+    function enhance(sel) {
+        if (enhanced.has(sel) || sel.matches(SKIP)) return;
+        sel.classList.remove('dd-native');
+
+        const cs      = getComputedStyle(sel);
+        const isField = sel.classList.contains('form-control') || sel.classList.contains('form-select');
+        const upper   = sel.classList.contains('form-control');
+
+        const wrap = document.createElement('div');
+        wrap.className = 'dd' + (isField ? ' dd--field' : '') + (upper ? ' dd--upper' : '');
+        ['width', 'minWidth', 'maxWidth', 'flex', 'flexShrink', 'alignSelf', 'gridColumn',
+         'margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight'].forEach(function (k) {
+            if (sel.style[k]) wrap.style[k] = sel.style[k];
+        });
+        if (!sel.style.width) {
+            if (isField) wrap.style.width = '100%';
+            else if (cs.width && cs.width !== 'auto') wrap.style.width = cs.width;
+        }
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'dd-trigger';
+        trigger.setAttribute('aria-haspopup', 'listbox');
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.innerHTML = '<span class="dd-label"></span><i class="ph-bold ph-caret-down dd-caret" aria-hidden="true"></i>';
+        wrap.appendChild(trigger);
+
+        sel.classList.add('dd-native');
+        sel.tabIndex = -1;
+        sel.after(wrap);
+
+        const labelEl = trigger.querySelector('.dd-label');
+        function refresh() {
+            const o = sel.options[sel.selectedIndex];
+            labelEl.textContent = o ? optText(o) : '';
+            trigger.disabled = sel.disabled;
+            wrap.classList.toggle('dd--error', sel.classList.contains('error'));
+            wrap.style.display = (sel.hidden || sel.style.display === 'none') ? 'none' : '';
+            const aria = sel.getAttribute('aria-label'); if (aria) trigger.setAttribute('aria-label', aria);
+            if (sel.title) trigger.title = sel.title;
+        }
+        refresh();
+
+        // Keep the label in step when scripts assign .value / .selectedIndex directly.
+        Object.defineProperty(sel, 'value', {
+            configurable: true,
+            get: function () { return valueDesc.get.call(this); },
+            set: function (v) { valueDesc.set.call(this, v); refresh(); },
+        });
+        Object.defineProperty(sel, 'selectedIndex', {
+            configurable: true,
+            get: function () { return indexDesc.get.call(this); },
+            set: function (v) { indexDesc.set.call(this, v); refresh(); },
+        });
+
+        new MutationObserver(refresh).observe(sel, {
+            childList: true, subtree: true, characterData: true,
+            attributes: true, attributeFilter: ['disabled', 'class', 'style', 'hidden', 'label'],
+        });
+        sel.addEventListener('change', refresh);
+        sel.addEventListener('focus',  function () { trigger.focus(); });
+        sel.addEventListener('invalid', function () { wrap.classList.add('dd--error'); trigger.focus(); });
+        if (sel.form) sel.form.addEventListener('reset', function () { setTimeout(refresh, 0); });
+
+        trigger.addEventListener('click', function () {
+            if (open && open.sel === sel) closeMenu(); else openMenu(sel, trigger);
+        });
+        trigger.addEventListener('keydown', function (e) { onKey(e, sel, trigger); });
+
+        enhanced.set(sel, { wrap: wrap, trigger: trigger, refresh: refresh });
+    }
+
+    function buildMenu(sel) {
+        const menu = document.createElement('div');
+        menu.className = 'dd-menu' + (sel.classList.contains('form-control') ? ' dd-menu--upper' : '');
+        menu.setAttribute('role', 'listbox');
+        const items = [];
+        function addOption(o) {
+            if (o.hidden) return;
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'dd-item' + (o.index === sel.selectedIndex ? ' active' : '');
+            b.setAttribute('role', 'option');
+            b.setAttribute('aria-selected', o.index === sel.selectedIndex ? 'true' : 'false');
+            b.disabled = o.disabled;
+            b.dataset.index = String(o.index);
+            b.textContent = optText(o) || '\u00a0';
+            menu.appendChild(b);
+            items.push(b);
+        }
+        Array.from(sel.children).forEach(function (ch) {
+            if (ch.tagName === 'OPTGROUP') {
+                const g = document.createElement('div');
+                g.className = 'dd-group';
+                g.textContent = ch.label;
+                menu.appendChild(g);
+                Array.from(ch.children).forEach(function (o) { if (o.tagName === 'OPTION') addOption(o); });
+            } else if (ch.tagName === 'OPTION') {
+                addOption(ch);
+            }
+        });
+        return { menu: menu, items: items };
+    }
+
+    function place(menu, trigger) {
+        const r      = trigger.getBoundingClientRect();
+        const gap    = 4;
+        menu.style.minWidth  = r.width + 'px';
+        menu.style.left      = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+        const below  = window.innerHeight - r.bottom - gap - 8;
+        const above  = r.top - gap - 8;
+        const h      = Math.min(menu.scrollHeight, 320);
+        if (h > below && above > below) {
+            menu.style.maxHeight = Math.min(320, above) + 'px';
+            menu.style.top = Math.max(8, r.top - gap - Math.min(h, above)) + 'px';
+        } else {
+            menu.style.maxHeight = Math.min(320, below) + 'px';
+            menu.style.top = (r.bottom + gap) + 'px';
+        }
+    }
+
+    function openMenu(sel, trigger) {
+        closeMenu();
+        if (sel.disabled) return;
+        const built = buildMenu(sel);
+        document.body.appendChild(built.menu);
+        place(built.menu, trigger);
+        const cur = built.items.findIndex(function (b) { return b.classList.contains('active'); });
+        open = { sel: sel, trigger: trigger, menu: built.menu, items: built.items, hl: cur };
+        enhanced.get(sel).wrap.classList.add('is-open');
+        trigger.setAttribute('aria-expanded', 'true');
+        highlight(cur);
+        built.menu.addEventListener('mousedown', function (e) { e.preventDefault(); });
+        built.menu.addEventListener('click', function (e) {
+            const b = e.target.closest('.dd-item');
+            if (b && !b.disabled) choose(sel, parseInt(b.dataset.index, 10));
+        });
+    }
+
+    function closeMenu() {
+        if (!open) return;
+        const o = open; open = null;
+        o.menu.remove();
+        const e = enhanced.get(o.sel);
+        if (e) e.wrap.classList.remove('is-open');
+        o.trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function highlight(i) {
+        if (!open) return;
+        open.items.forEach(function (b, k) { b.classList.toggle('hl', k === i); });
+        open.hl = i;
+        if (i >= 0 && open.items[i]) open.items[i].scrollIntoView({ block: 'nearest' });
+    }
+
+    function choose(sel, index) {
+        const changed = index !== sel.selectedIndex;
+        const e = enhanced.get(sel);
+        const trigger = e && e.trigger;
+        closeMenu();
+        if (!changed) return;
+        indexDesc.set.call(sel, index);
+        if (e) e.refresh();
+        sel.dispatchEvent(new Event('input',  { bubbles: true }));
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        if (trigger) trigger.focus();
+    }
+
+    function step(dir) {
+        if (!open) return;
+        const n = open.items.length; if (!n) return;
+        let i = open.hl;
+        for (let k = 0; k < n; k++) {
+            i = (i + dir + n) % n;
+            if (!open.items[i].disabled) break;
+        }
+        highlight(i);
+    }
+
+    function onKey(e, sel, trigger) {
+        const k = e.key;
+        if (!open || open.sel !== sel) {
+            if (k === 'ArrowDown' || k === 'ArrowUp' || k === 'Enter' || k === ' ') {
+                e.preventDefault(); openMenu(sel, trigger);
+            }
+            return;
+        }
+        if (k === 'ArrowDown')      { e.preventDefault(); step(1); }
+        else if (k === 'ArrowUp')   { e.preventDefault(); step(-1); }
+        else if (k === 'Home')      { e.preventDefault(); highlight(0); }
+        else if (k === 'End')       { e.preventDefault(); highlight(open.items.length - 1); }
+        else if (k === 'Enter' || k === ' ') {
+            e.preventDefault();
+            const b = open.items[open.hl];
+            if (b && !b.disabled) choose(sel, parseInt(b.dataset.index, 10)); else closeMenu();
+        }
+        else if (k === 'Escape')    { e.preventDefault(); closeMenu(); }
+        else if (k === 'Tab')       { closeMenu(); }
+        else if (k.length === 1) {
+            const c = k.toLowerCase();
+            const start = open.hl + 1;
+            for (let j = 0; j < open.items.length; j++) {
+                const idx = (start + j) % open.items.length;
+                if (open.items[idx].textContent.trim().toLowerCase().startsWith(c)) { highlight(idx); break; }
+            }
+        }
+    }
+
+    function scan(root) {
+        if (root.nodeType !== 1) return;
+        if (root.matches && root.matches('select')) enhance(root);
+        if (root.querySelectorAll) root.querySelectorAll('select').forEach(enhance);
+    }
+
+    function init() {
+        scan(document.body);
+
+        // Selects added later (modals built in JS, cloned rows, …) and removed ones.
+        new MutationObserver(function (muts) {
+            muts.forEach(function (m) {
+                m.addedNodes.forEach(function (n) {
+                    if (n.nodeType === 1 && !n.classList.contains('dd') && !n.classList.contains('dd-menu')) scan(n);
+                });
+                m.removedNodes.forEach(function (n) {
+                    if (n.nodeType !== 1) return;
+                    const list = n.matches && n.matches('select') ? [n] : Array.from(n.querySelectorAll ? n.querySelectorAll('select') : []);
+                    list.forEach(function (s) {
+                        const e = enhanced.get(s);
+                        if (e && e.wrap.isConnected && !s.isConnected) { e.wrap.remove(); enhanced.delete(s); }
+                    });
+                });
+            });
+        }).observe(document.body, { childList: true, subtree: true });
+
+        document.addEventListener('mousedown', function (e) {
+            if (open && !e.target.closest('.dd-menu') && !e.target.closest('.dd.is-open')) closeMenu();
+        });
+        window.addEventListener('resize', closeMenu);
+        window.addEventListener('scroll', function (e) {
+            if (open && !(e.target.closest && e.target.closest('.dd-menu'))) closeMenu();
+        }, true);
+    }
+
+    return { init: init, scan: scan };
+})();
+window.SelectMenu = SelectMenu;
+
+// ============================================================
 // Bootstrap
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -623,6 +888,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initForms();
     initConfirm();
     AutoPageSize.init();
+    SelectMenu.init();
 
     // Poll for new notifications every 30 seconds
     if (document.getElementById('notif-dropdown')) {
