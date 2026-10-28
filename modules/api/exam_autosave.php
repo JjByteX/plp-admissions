@@ -7,24 +7,15 @@
 require_once CORE_PATH . '/bootstrap.php';
 Auth::requireRole(ROLE_STUDENT);
 
-header('Content-Type: application/json');
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['ok' => false, 'error' => 'POST only']);
-    exit;
-}
+require_method('POST');
 csrf_check();
 
 $userId = Auth::id();
 $db = db();
 
-$stmt = $db->prepare('SELECT id FROM applicants WHERE user_id = ? ORDER BY id DESC LIMIT 1');
-$stmt->execute([$userId]);
-$applicant = $stmt->fetch();
+$applicant = applicant_for_user((int)$userId, 'id');
 if (!$applicant) {
-    echo json_encode(['ok' => false, 'error' => 'No applicant']);
-    exit;
+    json_response(['ok' => false, 'error' => 'No applicant']);
 }
 
 $examId  = (int)($_POST['exam_id'] ?? 0);
@@ -32,29 +23,24 @@ $slotId  = (int)($_POST['slot_id'] ?? 0);
 $answers = $_POST['answers'] ?? '{}';
 
 if (!$examId || !$slotId) {
-    echo json_encode(['ok' => false, 'error' => 'Missing exam_id or slot_id']);
-    exit;
+    json_response(['ok' => false, 'error' => 'Missing exam_id or slot_id']);
 }
 if (!is_string($answers) || !is_array(json_decode($answers, true))) {
-    echo json_encode(['ok' => false, 'error' => 'Invalid answers']);
-    exit;
+    json_response(['ok' => false, 'error' => 'Invalid answers']);
 }
 
 // The slot must be this applicant's own
 $stmt = $db->prepare('SELECT 1 FROM applicant_exam_slots WHERE applicant_id = ? AND slot_id = ? LIMIT 1');
 $stmt->execute([$applicant['id'], $slotId]);
 if (!$stmt->fetchColumn()) {
-    http_response_code(403);
-    echo json_encode(['ok' => false, 'error' => 'Invalid slot']);
-    exit;
+    json_error('Invalid slot', 403);
 }
 
 // Check not already submitted
 $stmt = $db->prepare('SELECT id FROM exam_results WHERE applicant_id = ? AND exam_id = ? LIMIT 1');
 $stmt->execute([$applicant['id'], $examId]);
 if ($stmt->fetch()) {
-    echo json_encode(['ok' => false, 'error' => 'Already submitted']);
-    exit;
+    json_response(['ok' => false, 'error' => 'Already submitted']);
 }
 
 // One statement: write only while the slot is open, judged by the database
@@ -72,8 +58,7 @@ $stmt->execute([$applicant['id'], $examId, $answers, $slotId]);
 $savedAt = $stmt->fetchColumn();
 
 if ($savedAt === false) {
-    echo json_encode(['ok' => false, 'closed' => true, 'error' => 'Exam closed']);
-    exit;
+    json_response(['ok' => false, 'closed' => true, 'error' => 'Exam closed']);
 }
 
-echo json_encode(['ok' => true, 'saved_at' => $savedAt]);
+json_response(['ok' => true, 'saved_at' => $savedAt]);

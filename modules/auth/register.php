@@ -65,19 +65,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
     $old = [
-        'first_name'     => trim($_POST['first_name']     ?? ''),
-        'middle_name'    => trim($_POST['middle_name']    ?? ''),
-        'last_name'      => trim($_POST['last_name']      ?? ''),
-        'suffix'         => trim($_POST['suffix']         ?? ''),
-        'birthdate'      => trim($_POST['birthdate']      ?? ''),
-        'sex'            => trim($_POST['sex']            ?? ''),
-        'street_address' => trim($_POST['street_address'] ?? ''),
-        'barangay'       => trim($_POST['barangay']       ?? ''),
-        'phone'          => trim($_POST['phone']          ?? ''),
-        'email'          => $googleMode ? $googlePending['email'] : trim($_POST['email'] ?? ''),
-        'applicant_type' => trim($_POST['applicant_type'] ?? ''),
-        'course_applied' => trim($_POST['course_applied'] ?? ''),
-        'shs_strand'     => trim($_POST['shs_strand']     ?? ''),
+        'first_name'     => post_str('first_name'),
+        'middle_name'    => post_str('middle_name'),
+        'last_name'      => post_str('last_name'),
+        'suffix'         => post_str('suffix'),
+        'birthdate'      => post_str('birthdate'),
+        'sex'            => post_str('sex'),
+        'street_address' => post_str('street_address'),
+        'barangay'       => post_str('barangay'),
+        'phone'          => post_str('phone'),
+        'email'          => $googleMode ? $googlePending['email'] : post_str('email'),
+        'applicant_type' => post_str('applicant_type'),
+        'course_applied' => post_str('course_applied'),
+        'shs_strand'     => post_str('shs_strand'),
     ];
     $old['doc_flags'] = doc_flags_from_input($old['applicant_type'], $_POST['flags'] ?? []);
     $password        = $_POST['password']        ?? '';

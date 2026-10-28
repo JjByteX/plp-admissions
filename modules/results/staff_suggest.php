@@ -10,13 +10,12 @@ csrf_check();
 
 $db          = db();
 $applicantId = (int)($_GET['id'] ?? 0);
-$course      = trim($_POST['suggest_course'] ?? '');
-$note        = trim($_POST['suggest_note']   ?? '');
+$course      = post_str('suggest_course');
+$note        = post_str('suggest_note');
 $staffId     = Auth::id();
 
 if (!$applicantId || !in_array($course, get_all_courses(), true)) {
-    Session::flash('error', 'Invalid suggestion data.');
-    redirect('/staff/results');
+    fail('Invalid suggestion data.', '/staff/results');
 }
 
 // Verify the applicant exists and failed the exam
@@ -30,8 +29,7 @@ $stmt->execute([$applicantId]);
 $app = $stmt->fetch();
 
 if (!$app) {
-    Session::flash('error', 'Applicant not found.');
-    redirect('/staff/results');
+    fail('Applicant not found.', '/staff/results');
 }
 
 // Verify the applicant's rank actually qualifies for the suggested course.
@@ -42,8 +40,7 @@ $rank      = isset($app['rank_score']) && $app['rank_score'] !== null
     : score_to_rank((int)$app['score'], (int)($app['total_items'] ?: 1));
 $threshold = COURSE_PASSING_SCORES[$course]['pass_from'] ?? 4;
 if ($rank < $threshold) {
-    Session::flash('error', "Applicant's rank ({$rank}) does not meet the passing threshold ({$threshold}) for {$course}.");
-    redirect('/staff/results');
+    fail("Applicant's rank ({$rank}) does not meet the passing threshold ({$threshold}) for {$course}.", '/staff/results');
 }
 
 // Upsert course suggestion record
@@ -72,5 +69,4 @@ audit_log(
     $applicantId
 );
 
-Session::flash('success', "Course suggestion sent: {$course}.");
-redirect('/staff/results');
+ok("Course suggestion sent: {$course}.", '/staff/results');

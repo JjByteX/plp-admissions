@@ -22,184 +22,118 @@ Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 $db      = db();
 $staffId = Auth::id();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     if ($action === 'cancel_slot') {
-        $sourceId = (int)($_POST['source_slot_id'] ?? 0);
-        $targetId = (int)($_POST['target_slot_id'] ?? 0);
-        $reason   = trim($_POST['reason'] ?? '');
+        cancel_slot_and_move([
+            'noun'      => 'exam',
+            'redirect'  => '/staff/exam/cancel-slot',
+            'lockTable' => 'exam_slot_schedule',
 
-        if ($sourceId <= 0 || $targetId <= 0) {
-            Session::flash('error', 'Pick both a slot to cancel and a replacement slot.');
-            redirect('/staff/exam/cancel-slot');
-        }
-        if ($sourceId === $targetId) {
-            Session::flash('error', 'The replacement slot must be different from the slot you\'re cancelling.');
-            redirect('/staff/exam/cancel-slot');
-        }
-        if ($reason === '') {
-            Session::flash('error', 'Please enter a reason - it\'s shown to the affected students.');
-            redirect('/staff/exam/cancel-slot');
-        }
+            'loadSlot' => function (PDO $db, int $id): ?array {
+                $stmt = $db->prepare(
+                    'SELECT id, exam_date, slot_time, room_label, exam_id, capacity, filled
+                       FROM exam_slot_schedule WHERE id = ? LIMIT 1'
+                );
+                $stmt->execute([$id]);
+                $row = $stmt->fetch();
+                return $row ?: null;
+            },
 
-        $today    = date('Y-m-d');
-        $movedIds = [];
-        $newSlot  = null;
-        $errMsg   = null;
+            'capacityOf' => fn(array $slot): int => (int)$slot['capacity'],
+            'bookedOf'   => fn(array $slot): int => (int)$slot['filled'],
 
-        try {
-            $db->beginTransaction();
-
-            // Lock both slot rows up front (lowest id first to avoid deadlocks).
-            $lockIds = [$sourceId, $targetId];
-            sort($lockIds);
-            $lockStmt = $db->prepare(
-                'SELECT id FROM exam_slot_schedule WHERE id IN (?, ?) FOR UPDATE'
-            );
-            $lockStmt->execute($lockIds);
-            $lockStmt->fetchAll();
-
-            $src = $db->prepare(
-                'SELECT id, exam_date, slot_time, room_label, exam_id, filled
-                   FROM exam_slot_schedule WHERE id = ? LIMIT 1'
-            );
-            $src->execute([$sourceId]);
-            $oldSlot = $src->fetch();
-            if (!$oldSlot) {
-                $errMsg = 'The slot you wanted to cancel no longer exists.';
-                throw new \RuntimeException($errMsg);
-            }
-
-            $tgt = $db->prepare(
-                'SELECT id, exam_date, slot_time, room_label, exam_id, capacity, filled
-                   FROM exam_slot_schedule WHERE id = ? LIMIT 1'
-            );
-            $tgt->execute([$targetId]);
-            $newSlot = $tgt->fetch();
-            if (!$newSlot) {
-                $errMsg = 'The replacement slot you picked no longer exists.';
-                throw new \RuntimeException($errMsg);
-            }
-            if ((string)$newSlot['exam_date'] < $today) {
-                $errMsg = 'The replacement slot is already in the past.';
-                throw new \RuntimeException($errMsg);
-            }
-
-            // Same-exam guard: a multi-exam school can't accidentally
-            // move students between different exams during a bulk
-            // cancel. NULL exam_id means "any exam" so it's allowed.
-            $srcExamId = $oldSlot['exam_id'] !== null ? (int)$oldSlot['exam_id'] : null;
-            $tgtExamId = $newSlot['exam_id'] !== null ? (int)$newSlot['exam_id'] : null;
-            if ($srcExamId !== null && $tgtExamId !== null && $srcExamId !== $tgtExamId) {
-                $errMsg = 'The replacement slot is for a different exam than the one you\'re cancelling.';
-                throw new \RuntimeException($errMsg);
-            }
-
-            // Gather affected applicants.
-            $aStmt = $db->prepare(
-                'SELECT id, applicant_id FROM applicant_exam_slots WHERE slot_id = ? FOR UPDATE'
-            );
-            $aStmt->execute([$sourceId]);
-            $rows = $aStmt->fetchAll();
-            $needed = count($rows);
-
-            $spotsLeft = (int)$newSlot['capacity'] - (int)$newSlot['filled'];
-            if ($needed > $spotsLeft) {
-                $errMsg = "Replacement slot only has {$spotsLeft} open seat(s) but {$needed} student(s) need to move. "
-                        . 'Pick a slot with more capacity, or create one first.';
-                throw new \RuntimeException($errMsg);
-            }
-
-            if ($needed > 0) {
-                // Move them all.
-                $db->prepare(
-                    'UPDATE applicant_exam_slots
-                        SET slot_id = ?, assigned_at = NOW()
-                      WHERE slot_id = ?'
-                )->execute([$targetId, $sourceId]);
-
-                $db->prepare(
-                    'UPDATE exam_slot_schedule
-                        SET filled = filled + ?
-                      WHERE id = ?'
-                )->execute([$needed, $targetId]);
-
-                $db->prepare(
-                    'UPDATE exam_slot_schedule
-                        SET filled = GREATEST(filled - ?, 0)
-                      WHERE id = ?'
-                )->execute([$needed, $sourceId]);
-
-                foreach ($rows as $r) {
-                    $movedIds[] = (int)$r['applicant_id'];
+            'validateTarget' => function (array $oldSlot, array $newSlot, string $today): ?string {
+                if ((string)$newSlot['exam_date'] < $today) {
+                    return 'The replacement slot is already in the past.';
                 }
 
-                // Bulk-log into exam_reschedule_requests so the
-                // student-facing history view shows what happened.
-                $logStmt = $db->prepare(
-                    'INSERT INTO exam_reschedule_requests
-                        (applicant_id, slot_id, reason, status, reviewed_by, reviewed_at)
-                      VALUES (?, ?, ?, \'approved\', ?, NOW())'
+                // Same-exam guard: a multi-exam school can't accidentally
+                // move students between different exams during a bulk
+                // cancel. NULL exam_id means "any exam" so it's allowed.
+                $srcExamId = $oldSlot['exam_id'] !== null ? (int)$oldSlot['exam_id'] : null;
+                $tgtExamId = $newSlot['exam_id'] !== null ? (int)$newSlot['exam_id'] : null;
+                if ($srcExamId !== null && $tgtExamId !== null && $srcExamId !== $tgtExamId) {
+                    return 'The replacement slot is for a different exam than the one you\'re cancelling.';
+                }
+
+                return null;
+            },
+
+            'moveApplicants' => function (PDO $db, int $sourceId, int $targetId, int $staffId, string $reason): array {
+                $movedIds = [];
+
+                // Gather affected applicants.
+                $aStmt = $db->prepare(
+                    'SELECT id, applicant_id FROM applicant_exam_slots WHERE slot_id = ? FOR UPDATE'
                 );
-                foreach ($rows as $r) {
-                    // Postgres aborts the whole transaction on any error, so a
-                    // savepoint keeps this log insert non-fatal like it was in MySQL.
-                    $db->exec('SAVEPOINT bulk_log');
-                    try {
-                        $logStmt->execute([
-                            (int)$r['applicant_id'],
-                            $sourceId,
-                            '[Bulk reschedule by staff] ' . $reason,
-                            $staffId,
-                        ]);
-                        $db->exec('RELEASE SAVEPOINT bulk_log');
-                    } catch (\Throwable) {
-                        // Non-fatal.
-                        $db->exec('ROLLBACK TO SAVEPOINT bulk_log');
+                $aStmt->execute([$sourceId]);
+                $rows = $aStmt->fetchAll();
+                $needed = count($rows);
+
+                if ($needed > 0) {
+                    // Move them all.
+                    $db->prepare(
+                        'UPDATE applicant_exam_slots
+                            SET slot_id = ?, assigned_at = NOW()
+                          WHERE slot_id = ?'
+                    )->execute([$targetId, $sourceId]);
+
+                    $db->prepare(
+                        'UPDATE exam_slot_schedule
+                            SET filled = filled + ?
+                          WHERE id = ?'
+                    )->execute([$needed, $targetId]);
+
+                    $db->prepare(
+                        'UPDATE exam_slot_schedule
+                            SET filled = GREATEST(filled - ?, 0)
+                          WHERE id = ?'
+                    )->execute([$needed, $sourceId]);
+
+                    foreach ($rows as $r) {
+                        $movedIds[] = (int)$r['applicant_id'];
+                    }
+
+                    // Bulk-log into exam_reschedule_requests so the
+                    // student-facing history view shows what happened.
+                    $logStmt = $db->prepare(
+                        'INSERT INTO exam_reschedule_requests
+                            (applicant_id, slot_id, reason, status, reviewed_by, reviewed_at)
+                          VALUES (?, ?, ?, \'approved\', ?, NOW())'
+                    );
+                    foreach ($rows as $r) {
+                        // Postgres aborts the whole transaction on any error, so a
+                        // savepoint keeps this log insert non-fatal like it was in MySQL.
+                        $db->exec('SAVEPOINT bulk_log');
+                        try {
+                            $logStmt->execute([
+                                (int)$r['applicant_id'],
+                                $sourceId,
+                                '[Bulk reschedule by staff] ' . $reason,
+                                $staffId,
+                            ]);
+                            $db->exec('RELEASE SAVEPOINT bulk_log');
+                        } catch (\Throwable) {
+                            // Non-fatal.
+                            $db->exec('ROLLBACK TO SAVEPOINT bulk_log');
+                        }
                     }
                 }
-            }
 
-            $db->commit();
-        } catch (\Throwable $e) {
-            if ($db->inTransaction()) $db->rollBack();
-            if (!$errMsg) {
-                error_log('bulk cancel_slot (exam) failed: ' . $e->getMessage());
-                $errMsg = 'Could not cancel that slot - please try again.';
-            }
-            Session::flash('error', $errMsg);
-            redirect('/staff/exam/cancel-slot');
-        }
+                return $movedIds;
+            },
 
-        // Notify outside the transaction.
-        if (!empty($movedIds) && $newSlot) {
-            $when = trim(
-                format_date((string)$newSlot['exam_date'])
-                . (!empty($newSlot['slot_time']) ? ', ' . format_time((string)$newSlot['slot_time']) : '')
-            );
-            $extra = "Your new exam slot is {$when}"
-                   . (!empty($newSlot['room_label']) ? ' at ' . $newSlot['room_label'] : '')
-                   . ($reason !== '' ? '. Reason: ' . $reason : '.');
-            foreach ($movedIds as $aid) {
-                notify_reschedule_decision($aid, 'exam', 'approved', $extra);
-            }
-        }
+            'describeSlot' => function (array $slot): string {
+                $when = trim(
+                    format_date((string)$slot['exam_date'])
+                    . (!empty($slot['slot_time']) ? ', ' . format_time((string)$slot['slot_time']) : '')
+                );
+                return $when . (!empty($slot['room_label']) ? ' at ' . $slot['room_label'] : '');
+            },
 
-        audit_log(
-            'exam_slot_cancelled_bulk',
-            "Cancelled exam slot #{$sourceId} and moved " . count($movedIds)
-            . " applicant(s) to slot #{$targetId} - {$reason}",
-            'exam_slot',
-            $sourceId
-        );
-
-        Session::flash(
-            'success',
-            'Cancelled slot and moved ' . count($movedIds) . ' student(s) to the replacement slot. They have been notified.'
-        );
-        redirect('/staff/exam/cancel-slot');
+            'auditAction' => 'exam_slot_cancelled_bulk',
+        ]);
     }
 }
 

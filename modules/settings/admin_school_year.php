@@ -12,14 +12,12 @@ $db      = db();
 $errors  = [];
 $success = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     if ($action === 'set_admissions_window') {
-        $open        = trim($_POST['admissions_open']    ?? '');
-        $close       = trim($_POST['admissions_close']   ?? '');
-        $docDeadline = trim($_POST['document_deadline']  ?? '');
+        $open        = post_str('admissions_open');
+        $close       = post_str('admissions_close');
+        $docDeadline = post_str('document_deadline');
 
         if (!$open || !$close || !$docDeadline) {
             $errors[] = 'Admissions opens, closes, and document deadline are all required.';
@@ -48,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'new_cycle') {
-        $confirm = trim($_POST['confirm_text'] ?? '');
+        $confirm = post_str('confirm_text');
         if (strcasecmp($confirm, 'Start new cycle') !== 0) {
             $errors[] = 'Type "Start new cycle" to confirm.';
         } else {
@@ -68,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $rows      = json_decode($_POST['rows'] ?? '[]', true);
-        $targetSY  = trim($_POST['school_year'] ?? '');
+        $targetSY  = post_str('school_year');
         $adminId   = Auth::id();
 
         if (!$rows || !is_array($rows) || count($rows) === 0) {
@@ -134,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // One query to find all already-existing emails
-            $placeholders = implode(',', array_fill(0, count($generatedEmails), '?'));
+            [$placeholders] = sql_in($generatedEmails);
             $existStmt = $db->prepare("SELECT email FROM users WHERE email IN ({$placeholders})");
             $existStmt->execute(array_values($generatedEmails));
             $existingEmails = array_flip($existStmt->fetchAll(PDO::FETCH_COLUMN));
@@ -696,14 +694,7 @@ function loadPuterIfNeeded() {
     );
 }
 function loadPdfJsIfNeeded() {
-    return loadScriptOnce(
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-        () => !!window.pdfjsLib,
-        () => {
-            pdfjsLib.GlobalWorkerOptions.workerSrc =
-                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        }
-    );
+    return PLP.loadPdfJs();
 }
 function loadMammothIfNeeded() {
     return loadScriptOnce(
@@ -1201,7 +1192,7 @@ function renderLegacyPreview(rows) {
     });
 }
 function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return PLP.esc(s);
 }
 function toggleAllLegacyRows(checked) {
     document.querySelectorAll('.legacy-row-check').forEach(cb => cb.checked = checked);

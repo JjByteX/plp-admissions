@@ -26,7 +26,7 @@ Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 $db      = db();
 $staffId = Auth::id();
 $role    = Auth::role();
-$isDean  = ($role === ROLE_DEAN);
+$isDean  = StaffScope::current()->restricted();
 $canReschedule = in_array($role, [ROLE_SSO, ROLE_ADMIN], true);
 
 $errors  = [];
@@ -44,9 +44,7 @@ if ($isDean) {
 // ----------------------------------------------------------------
 // POST — only SSO/Admin may perform scheduling actions
 // ----------------------------------------------------------------
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     if (!$canReschedule) {
         $errors[] = 'Only SSO and Admin can perform scheduling actions.';
@@ -55,16 +53,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Approve a reschedule request ────────────────────────────
     if ($action === 'approve_reschedule') {
-        $requestId    = (int)($_POST['request_id'] ?? 0);
-        $targetSlotId = (int)($_POST['target_slot_id'] ?? 0);
+        $requestId    = post_int('request_id');
+        $targetSlotId = post_int('target_slot_id');
 
         $rr = $db->prepare("SELECT * FROM reschedule_requests WHERE id = ? AND status = 'pending' LIMIT 1");
         $rr->execute([$requestId]);
         $req = $rr->fetch();
 
         if (!$req) {
-            Session::flash('error', 'Reschedule request not found or already processed.');
-            redirect('/staff/interviews/absent?tab=requests');
+            fail('Reschedule request not found or already processed.', '/staff/interviews/absent?tab=requests');
         }
 
         $applicantId = (int)$req['applicant_id'];
@@ -258,8 +255,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Deny a reschedule request ──────────────────────────────
     if ($action === 'deny_reschedule') {
-        $requestId  = (int)($_POST['request_id'] ?? 0);
-        $denyReason = trim($_POST['deny_reason'] ?? '');
+        $requestId  = post_int('request_id');
+        $denyReason = post_str('deny_reason');
 
         $rr = $db->prepare("SELECT * FROM reschedule_requests WHERE id = ? AND status = 'pending' LIMIT 1");
         $rr->execute([$requestId]);
@@ -298,7 +295,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $applicantIds = array_values(array_unique(array_map('intval', $applicantIds)));
         $applicantIds = array_filter($applicantIds, fn($v) => $v > 0);
 
-        $targetSlotId = (int)($_POST['target_slot_id'] ?? 0);
+        $targetSlotId = post_int('target_slot_id');
 
         if (empty($applicantIds)) {
             $errors[] = 'Please select at least one absent applicant to reschedule.';
@@ -353,9 +350,9 @@ if (function_exists('auto_detect_interview_no_shows')) {
 // table and reloads with ?per_page=; see auto_per_page() in helpers.php.
 // Each tab has its own table and its own remembered page size.
 // ----------------------------------------------------------------
-$search     = trim($_GET['q']    ?? '');
-$filterDept = trim($_GET['dept'] ?? '');
-$filterDate = trim($_GET['date'] ?? '');
+$search     = get_str('q');
+$filterDept = get_str('dept');
+$filterDate = get_str('date');
 if ($filterDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterDate)) {
     $filterDate = '';
 }
@@ -513,7 +510,7 @@ $openSlots = array_filter(
 $historyByApplicant = [];
 if (!empty($absent)) {
     $ids  = array_map(fn($r) => (int)$r['applicant_id'], $absent);
-    $in   = implode(',', array_fill(0, count($ids), '?'));
+    [$in] = sql_in($ids);
     $rows = $db->prepare(
         "SELECT applicant_id, from_slot_date, from_slot_time, rescheduled_at
            FROM reschedule_logs

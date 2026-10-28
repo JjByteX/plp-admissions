@@ -39,12 +39,12 @@ $today     = date('Y-m-d');
 $role      = Auth::role();
 $isAdmin   = $role === ROLE_ADMIN;
 $isSSO     = $role === ROLE_SSO;
-$isDean    = $role === ROLE_DEAN;
+$isDean    = StaffScope::current()->restricted();
 // Admin and SSO see every queue row across colleges. Dean sees every
 // row whose slot belongs to their own college (oversight).
 // Professor sees only rows on a session they personally own.
 $canSeeAll = $isAdmin || $isSSO;
-$staffDept = (string) user_department($staffId);
+$staffDept = StaffScope::current()->department(); // '' unless Dean
 
 // ----------------------------------------------------------------
 // College scoping for Admin / SSO

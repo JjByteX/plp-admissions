@@ -44,42 +44,9 @@ $SECTION_COLORS = [
 // to avoid "Cannot redeclare is_ajax_request()" fatals once helpers.php
 // is loaded (bootstrap.php already pulls it in).
 
-// Auto-derive the exam title from the active school year. Shared by
-// create_exam and edit_exam so both stay in sync.
-function buildExamTitle(): string {
-    $autoYear = (string) school_setting('current_school_year', date('Y') . '-' . (date('Y') + 1));
-    return 'PLP Admissions Test (' . $autoYear . ')';
-}
+// buildExamTitle(), exam_in_progress() and exam_has_results() live in core/exam.php.
 
-// An exam is "in progress" while a student is mid-exam: an unsubmitted draft
-// exists, or one of its room slots is open right now (database clock).
-function exam_in_progress(PDO $db, int $examId): bool {
-    if ($examId <= 0) return false;
-    $stmt = $db->prepare(
-        'SELECT EXISTS (SELECT 1 FROM exam_drafts d
-                         WHERE d.exam_id = ?
-                           AND NOT EXISTS (SELECT 1 FROM exam_results r
-                                            WHERE r.applicant_id = d.applicant_id AND r.exam_id = d.exam_id))
-             OR EXISTS (SELECT 1 FROM exam_slot_schedule s
-                         WHERE (s.exam_id = ? OR (s.exam_id IS NULL AND EXISTS (SELECT 1 FROM exams x WHERE x.id = ? AND x.is_active = 1)))
-                           AND now() >= s.exam_date + s.slot_time
-                           AND now() <= ' . slot_close_sql('s') . ')'
-    );
-    $stmt->execute([$examId, $examId, $examId]);
-    return (bool) $stmt->fetchColumn();
-}
-
-// Once any student has submitted, the scoring side of the exam is frozen.
-function exam_has_results(PDO $db, int $examId): bool {
-    if ($examId <= 0) return false;
-    $stmt = $db->prepare('SELECT 1 FROM exam_results WHERE exam_id = ? LIMIT 1');
-    $stmt->execute([$examId]);
-    return (bool) $stmt->fetchColumn();
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     // ── Exam-in-use guard ────────────────────────────────────
     // Locked (has submitted results): no adding or deleting questions, sections
@@ -91,14 +58,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $needsConfirm = false;
     if (in_array($action, ['create_exam', 'activate_exam', 'delete_exam', 'delete_section',
                            'add_question', 'edit_question', 'delete_question'], true)) {
-        $targetExamId = (int)($_POST['exam_id'] ?? 0);
+        $targetExamId = post_int('exam_id');
         if ($action === 'delete_question') {
             $st = $db->prepare('SELECT exam_id FROM questions WHERE id=?');
-            $st->execute([(int)($_POST['question_id'] ?? 0)]);
+            $st->execute([post_int('question_id')]);
             $targetExamId = (int)$st->fetchColumn();
         } elseif ($action === 'delete_section') {
             $st = $db->prepare('SELECT exam_id FROM exam_sections WHERE id=?');
-            $st->execute([(int)($_POST['section_id'] ?? 0)]);
+            $st->execute([post_int('section_id')]);
             $targetExamId = (int)$st->fetchColumn();
         }
         // Creating or activating an exam switches students off the current active exam.
@@ -141,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // (description + shuffle flags). The title is auto-derived
         // server-side from the active school year.
         case 'create_exam':
-            $description    = trim($_POST['description'] ?? '');
+            $description    = post_str('description');
             $shuffleQ       = isset($_POST['shuffle_questions']) ? 1 : 0;
             $shuffleC       = isset($_POST['shuffle_choices'])   ? 1 : 0;
             $title          = buildExamTitle();
@@ -160,8 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
 
         case 'edit_exam':
-            $examId      = (int)($_POST['exam_id'] ?? 0);
-            $description = trim($_POST['description'] ?? '');
+            $examId      = post_int('exam_id');
+            $description = post_str('description');
             $shuffleQ    = isset($_POST['shuffle_questions']) ? 1 : 0;
             $shuffleC    = isset($_POST['shuffle_choices'])   ? 1 : 0;
             $title       = buildExamTitle();
@@ -179,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'activate_exam':
-            $examId = (int)($_POST['exam_id'] ?? 0);
+            $examId = post_int('exam_id');
             $db->prepare('UPDATE exams SET is_active=0')->execute();
             $db->prepare('UPDATE exams SET is_active=1 WHERE id=?')->execute([$examId]);
             $success[] = 'Exam activated.';
@@ -187,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'delete_exam':
-            $examId = (int)($_POST['exam_id'] ?? 0);
+            $examId = post_int('exam_id');
             if (!$examId) { $errors[] = 'Invalid exam.'; break; }
             // CASCADE constraints on exam_sections, questions, and exam_results
             // handle child rows automatically — just delete the parent.
@@ -198,10 +165,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // ── Section CRUD ─────────────────────────────────────────
         case 'create_section':
-            $examId    = (int)($_POST['exam_id'] ?? 0);
-            $secTitle  = trim($_POST['section_title'] ?? '');
+            $examId    = post_int('exam_id');
+            $secTitle  = post_str('section_title');
             $secType   = $_POST['section_type'] ?? 'multiple_choice';
-            $secDesc   = trim($_POST['section_desc'] ?? '');
+            $secDesc   = post_str('section_desc');
             if (!$secTitle) { $errors[] = 'Section title is required.'; break; }
             if (!array_key_exists($secType, $QUESTION_TYPES)) $secType = 'multiple_choice';
             $maxOrd = $db->prepare('SELECT COALESCE(MAX(sort_order),0) FROM exam_sections WHERE exam_id=?');
@@ -220,10 +187,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'edit_section':
-            $secId    = (int)($_POST['section_id'] ?? 0);
-            $secTitle = trim($_POST['section_title'] ?? '');
+            $secId    = post_int('section_id');
+            $secTitle = post_str('section_title');
             $secType  = $_POST['section_type'] ?? 'multiple_choice';
-            $secDesc  = trim($_POST['section_desc'] ?? '');
+            $secDesc  = post_str('section_desc');
             if (!$secTitle) { $errors[] = 'Section title is required.'; break; }
             if (!array_key_exists($secType, $QUESTION_TYPES)) $secType = 'multiple_choice';
             $db->prepare('UPDATE exam_sections SET title=?, description=?, question_type=? WHERE id=?')
@@ -238,7 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'delete_section':
-            $secId = (int)($_POST['section_id'] ?? 0);
+            $secId = post_int('section_id');
             // Delete all questions in section first, then the section itself
             $db->prepare('DELETE FROM questions WHERE section_id=?')->execute([$secId]);
             $db->prepare('DELETE FROM exam_sections WHERE id=?')->execute([$secId]);
@@ -249,13 +216,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'add_question':
         case 'edit_question':
             $isEdit   = ($action === 'edit_question');
-            $examId   = (int)($_POST['exam_id'] ?? 0);
-            $qId      = (int)($_POST['question_id'] ?? 0);
+            $examId   = post_int('exam_id');
+            $qId      = post_int('question_id');
             $sectionId= $_POST['section_id'] !== '' ? (int)$_POST['section_id'] : null;
-            $qText    = trim($_POST['question_text'] ?? '');
-            $qDesc    = trim($_POST['question_desc'] ?? '');
+            $qText    = post_str('question_text');
+            $qDesc    = post_str('question_desc');
             $qType    = $_POST['question_type'] ?? 'multiple_choice';
-            $points   = max(0, (int)($_POST['points'] ?? 1));
+            $points   = max(0, post_int('points', 1));
             $required = isset($_POST['is_required']) ? 1 : 0;
 
             if (!$qText) { $errors[] = 'Question text is required.'; break; }
@@ -283,16 +250,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $corrects = array_values(array_filter($corrects, fn($i) => $i >= 0 && $i < count($rawChoices)));
                     $correctAnswer = json_encode($corrects);
                 } else {
-                    $ci = (int)($_POST['correct_index'] ?? 0);
+                    $ci = post_int('correct_index');
                     $correctIndex = ($ci >= 0 && $ci < count($rawChoices)) ? $ci : 0;
                 }
             } elseif ($qType === 'linear_scale') {
-                $scaleMin = max(0, min(1, (int)($_POST['scale_min'] ?? 1)));
-                $scaleMax = max(2, min(10, (int)($_POST['scale_max'] ?? 5)));
-                $scaleMinLabel = trim($_POST['scale_min_label'] ?? '') ?: null;
-                $scaleMaxLabel = trim($_POST['scale_max_label'] ?? '') ?: null;
+                $scaleMin = max(0, min(1, post_int('scale_min', 1)));
+                $scaleMax = max(2, min(10, post_int('scale_max', 5)));
+                $scaleMinLabel = post_str('scale_min_label') ?: null;
+                $scaleMaxLabel = post_str('scale_max_label') ?: null;
             } elseif ($qType === 'short_answer') {
-                $correctAnswer = trim($_POST['expected_answer'] ?? '') ?: null;
+                $correctAnswer = post_str('expected_answer') ?: null;
             }
 
             if ($isEdit && $qId) {
@@ -334,7 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'delete_question':
-            $qId = (int)($_POST['question_id'] ?? 0);
+            $qId = post_int('question_id');
             $db->prepare('DELETE FROM questions WHERE id=?')->execute([$qId]);
             $success[] = 'Question deleted.';
             break;
@@ -355,8 +322,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         case 'inline_edit_question':
             // Quick inline text edit for a single question
-            $qId   = (int)($_POST['question_id'] ?? 0);
-            $qText = trim($_POST['question_text'] ?? '');
+            $qId   = post_int('question_id');
+            $qText = post_str('question_text');
             if ($qText) {
                 $db->prepare('UPDATE questions SET question_text=? WHERE id=?')->execute([$qText, $qId]);
             }
@@ -429,178 +396,9 @@ foreach ($questions as $q) {
     }
 }
 
-// Type icons helper
-function typeIcon($type, $size = 14) {
-    $icons = [
-        'multiple_choice' => 'radio-button',
-        'checkboxes'      => 'check-square',
-        'dropdown'        => 'caret-circle-down',
-        'short_answer'    => 'text-align-left',
-        'paragraph'       => 'text-align-justify',
-        'linear_scale'    => 'arrows-left-right',
-    ];
-    return icon($icons[$type] ?? 'radio-button', $size);
-}
-
-// Format a datetime for display
-function fmtDateTime($dt) {
-    if (!$dt) return null;
-    try { return (new DateTime($dt))->format('M j, Y g:i A'); } catch(Exception $e) { return $dt; }
-}
-
 ob_start();
 ?>
 
-<style>
-/* ── Question rows (no nested card; dividers extend edge-to-edge) ────── */
-.q-card.card {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--border);
-    transition: background .12s;
-}
-.q-card.card:hover { background: var(--bg-subtle); }
-.q-card.card.dragging { opacity:.5; }
-.section-questions > .q-card.card:last-of-type { border-bottom: none; }
-.drag-handle {
-    cursor: grab; color: var(--text-tertiary);
-    background: transparent; border: none;
-    padding: 4px; line-height: 0;
-}
-.drag-handle:active { cursor: grabbing; }
-.drag-handle:hover { color: var(--text-secondary); }
-
-/* ── Section header bar ──────────────────────────── */
-.section-header {
-    display: flex; align-items: center; gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius); margin-bottom: var(--space-2);
-    border: 1.5px solid transparent;
-    position: relative;
-}
-.section-header .section-actions {
-    display: flex; gap: var(--space-1); margin-left: auto;
-}
-
-/* ── Inline editing ──────────────────────────────── */
-.inline-edit-wrap { position: relative; display: inline-block; }
-.inline-editable {
-    cursor: pointer; border-radius: var(--radius);
-    transition: background .12s;
-}
-.inline-editable:hover { background: var(--bg-overlay); }
-.inline-edit-input {
-    font-family: inherit; font-size: inherit; font-weight: inherit;
-    border: 2px solid var(--accent); border-radius: var(--radius);
-    padding: 2px 6px; background: var(--bg-elevated); color: var(--text-primary);
-    outline: none; width: 100%; box-sizing: border-box;
-}
-.inline-edit-actions {
-    display: flex; gap: var(--space-1); margin-top: 4px;
-}
-.inline-save-btn {
-    padding: 2px 10px; font-size: var(--text-xs); border-radius: var(--radius);
-    background: var(--accent); color: #fff; border: none; cursor: pointer;
-    font-weight: var(--weight-medium);
-}
-.inline-cancel-btn {
-    padding: 2px 10px; font-size: var(--text-xs); border-radius: var(--radius);
-    background: transparent; color: var(--text-secondary); border: 1px solid var(--border);
-    cursor: pointer;
-}
-
-/* ── Type pills ──────────────────────────────────── */
-.type-pill {
-    background: var(--bg-subtle);
-    color: var(--text-secondary);
-}
-.type-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-2); }
-.type-option {
-    display:flex; flex-direction:column; align-items:center; gap:4px;
-    padding: var(--space-3); border: 2px solid var(--border);
-    border-radius: var(--radius); cursor: pointer;
-    font-size: var(--text-xs); color: var(--text-secondary);
-    text-align: center; transition: border-color .15s, background .15s;
-    user-select: none;
-}
-.type-option:hover { border-color: var(--accent); background: rgba(45,106,79,.05); }
-.type-option.selected { border-color: var(--accent); background: rgba(45,106,79,.08); color: var(--accent); }
-.type-option.locked { pointer-events: none; opacity: .7; }
-
-/* ── Points badge ────────────────────────────────── */
-.pts-badge {
-    font-weight: var(--weight-semibold);
-    background: var(--accent); color: #fff;
-}
-
-/* ── Toggle ──────────────────────────────────────── */
-.toggle { position:relative; width:36px; height:20px; }
-.toggle input { opacity:0; width:0; height:0; }
-.toggle-slider {
-    position:absolute; inset:0; border-radius:var(--radius);
-    background:var(--border); cursor:pointer; transition:.2s;
-}
-.toggle-slider:before {
-    content:''; position:absolute; width:14px; height:14px;
-    left:3px; top:3px; border-radius:50%; background:var(--bg-elevated); transition:.2s;
-}
-.toggle input:checked + .toggle-slider { background:var(--accent); }
-.toggle input:checked + .toggle-slider:before { transform:translateX(16px); }
-
-/* ── Scale preview ───────────────────────────────── */
-.scale-preview { display:flex; gap:var(--space-2); flex-wrap:wrap; }
-.scale-btn {
-    width:36px; height:36px; border:2px solid var(--border);
-    border-radius:var(--radius); display:flex; align-items:center; justify-content:center;
-    font-size:var(--text-sm); font-weight:var(--weight-medium);
-    background:var(--surface); color:var(--text-primary);
-}
-
-/* ── Section card container ──────────────────────── */
-.section-block.card {
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow-sm);
-}
-.section-block .section-header {
-    border-radius: var(--radius) var(--radius) 0 0 !important;
-    border-bottom: 1px solid rgba(0,0,0,.06);
-}
-.section-questions { padding: var(--space-4); }
-
-/* ── Inline question creator ─────────────────────── */
-.inline-question-creator {
-    border: 1.5px solid var(--accent);
-    border-radius: var(--radius);
-    background: var(--bg-elevated);
-    overflow: hidden;
-    animation: creator-slide-in .15s ease;
-}
-@keyframes creator-slide-in {
-    from { opacity:0; transform: translateY(-6px); }
-    to   { opacity:1; transform: translateY(0); }
-}
-.iq-body { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
-.iq-footer { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg); }
-.iq-choice-row { display: flex; align-items: center; gap: 8px; }
-.iq-choice-row input[type=text] { flex: 1; }
-.iq-add-choice { font-size: var(--text-xs); color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 0; display: flex; align-items: center; gap: 4px; }
-
-/* ── Schedule / password info strip ─────────────── */
-.exam-meta-strip {
-    display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5);
-    padding: var(--space-3) var(--space-4);
-    background: var(--bg-subtle); border-radius: var(--radius);
-    font-size: var(--text-xs); color: var(--text-secondary);
-    margin-top: var(--space-3);
-}
-.exam-meta-item { display: flex; align-items: center; gap: 5px; }
-.exam-meta-item svg, .exam-meta-item i { flex-shrink: 0; color: var(--text-tertiary); }
-
-/* Landing and directory cards use the shared selector-card layout (app.css). */
-</style>
 
 <?php foreach ($errors as $e): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
@@ -715,33 +513,6 @@ elseif ($selectedExamId) $view = 'editor';
 <?php if ($selectedExam): ?>
 
         <!-- Exam header card: read-only auto-derived title + editable description and shuffle flags. -->
-        <style>
-            #exam-header-card[data-edit-state="read"] .exam-show-edit { display: none !important; }
-            #exam-header-card[data-edit-state="edit"] .exam-show-read { display: none !important; }
-            .exam-inline {
-                width: 100%;
-                font: inherit;
-                color: inherit;
-                background: transparent;
-                border: 1px solid transparent;
-                border-radius: var(--radius);
-                padding: 4px 8px;
-                margin: 0 -8px;
-                box-sizing: border-box;
-                resize: none;
-                transition: border-color .15s, background .15s;
-            }
-            .exam-inline[readonly] { cursor: default; pointer-events: none; }
-            .exam-inline:not([readonly]):hover { border-color: var(--border); }
-            .exam-inline:not([readonly]):focus {
-                outline: none;
-                border-color: var(--accent);
-                background: var(--bg-elevated);
-            }
-            .exam-inline--title { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
-            .exam-inline--desc  { display: block; font-size: var(--text-sm); color: var(--text-secondary); margin-top: var(--space-2); }
-            #exam-header-card[data-edit-state="read"] .exam-inline--desc:placeholder-shown { display: none; }
-        </style>
 
         <form method="POST" id="exam-edit-form">
             <?= csrf_field() ?>
@@ -1189,784 +960,21 @@ elseif ($selectedExamId) $view = 'editor';
 
 
 <script>
-// ── Live-exam prompt ──────────────────────────────────────────
-// While students are taking the exam, changes that affect scoring ask for
-// confirmation first. The server enforces it too (confirm_live).
-(function () {
-    const LIVE = <?= !empty($examLive) ? 'true' : 'false' ?>;
-    const RISKY = ['create_exam','activate_exam','delete_exam','delete_section','add_question','edit_question','delete_question'];
-    const MSG = 'Students are taking the exam right now.\n\nThis change applies to them immediately and can change their score. Continue?';
-
-    if (LIVE) {
-        const origFetch = window.fetch.bind(window);
-        const askLive = () => ui.confirm(MSG, { title: 'Exam in progress', ok: 'Continue' });
-        window.fetch = async function (url, opts) {
-            const body = opts && opts.body;
-            if (body instanceof FormData && RISKY.includes(body.get('action')) && !body.get('confirm_live')) {
-                if (!await askLive()) {
-                    return new Response(JSON.stringify({ ok: false, cancelled: true }), { status: 409 });
-                }
-                body.append('confirm_live', '1');
-            }
-            return origFetch(url, opts);
-        };
-
-        // The dialog is async: a form that needs the prompt is held back, asked, then
-        // sent again with confirm_live set. This listener is registered before app.js's
-        // initConfirm, so this prompt comes first, then any data-confirm on the form.
-        function needsLive(form) {
-            const act = form.querySelector('input[name="action"]');
-            return !!act && RISKY.includes(act.value) && !form.querySelector('input[name="confirm_live"]');
-        }
-        function addLive(form) {
-            const h = document.createElement('input');
-            h.type = 'hidden'; h.name = 'confirm_live'; h.value = '1';
-            form.appendChild(h);
-        }
-        document.addEventListener('submit', e => {
-            const form = e.target;
-            if (!needsLive(form)) return;
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            const submitter = e.submitter;
-            askLive().then(ok => { if (ok) { addLive(form); form.requestSubmit(submitter); } });
-        }, true);
-        const origSubmit = HTMLFormElement.prototype.submit;
-        HTMLFormElement.prototype.submit = function () {
-            if (!needsLive(this)) return origSubmit.call(this);
-            const form = this;
-            askLive().then(ok => { if (ok) { addLive(form); origSubmit.call(form); } });
-        };
-    }
-
-    // Show the server's reason when it blocks a save (locked exam, live delete).
-    const baseFetch = window.fetch.bind(window);
-    window.fetch = function (url, opts) {
-        return baseFetch(url, opts).then(r => {
-            if (r.status === 409) {
-                r.clone().json().then(d => { if (d && d.blocked && d.error) ui.alert(d.error); }).catch(() => {});
-            }
-            return r;
-        });
-    };
-})();
-
-// Per-room access codes are generated on the Exam Slots page — the
-// global Generate / Extend / countdown UI used to live here and has
-// been removed in Chunk 7.
-
-// ── Modal helpers ─────────────────────────────────────────────
-function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-
-// ── Edit exam modal ───────────────────────────────────────────
-// Title is auto-derived server-side from the active school year, so
-// the form only collects description + shuffle flags.
-function openEditExamModal(exam) {
-    document.getElementById('edit-exam-id').value       = exam.id;
-    document.getElementById('edit-exam-desc').value     = exam.description || '';
-    document.getElementById('edit-exam-shuffleQ').checked = exam.shuffle_questions == 1;
-    document.getElementById('edit-exam-shuffleC').checked = exam.shuffle_choices == 1;
-    openModal('edit-exam-modal');
-}
-
-// ── Year → Title auto-generation ──────────────────────────────
-(function() {
-    // Create exam modal
-    var createYear = document.getElementById('create-exam-year');
-    var createPreview = document.getElementById('create-year-preview');
-    var createHidden = document.getElementById('create-exam-title-hidden');
-    if (createYear) {
-        createYear.addEventListener('input', function() {
-            var y = this.value.trim() || 'Year';
-            createPreview.textContent = y;
-            createHidden.value = 'PLP Admissions Test (' + this.value.trim() + ')';
-        });
-        // Set on form submit
-        createYear.closest('form').addEventListener('submit', function() {
-            createHidden.value = 'PLP Admissions Test (' + createYear.value.trim() + ')';
-        });
-    }
-    // Edit exam modal
-    var editYear = document.getElementById('edit-exam-year');
-    var editPreview = document.getElementById('edit-year-preview');
-    var editHidden = document.getElementById('edit-exam-title');
-    if (editYear) {
-        editYear.addEventListener('input', function() {
-            var y = this.value.trim() || 'Year';
-            editPreview.textContent = y;
-            editHidden.value = 'PLP Admissions Test (' + this.value.trim() + ')';
-        });
-        editYear.closest('form').addEventListener('submit', function() {
-            editHidden.value = 'PLP Admissions Test (' + editYear.value.trim() + ')';
-        });
-    }
-})();
-
-// ── Exam header edit mode toggle ──────────────────────────────
-function enterExamEditMode() {
-    document.getElementById('exam-header-card').dataset.editState = 'edit';
-}
-function exitExamEditMode() {
-    document.getElementById('exam-header-card').dataset.editState = 'read';
-}
-
-// ── Inline exam title edit ────────────────────────────────────
-function startInlineExamEdit() {
-    document.getElementById('exam-title-view').style.display = 'none';
-    document.getElementById('exam-title-edit').style.display = '';
-    document.getElementById('exam-title-input').focus();
-    document.getElementById('exam-title-input').select();
-}
-function cancelInlineExamEdit() {
-    document.getElementById('exam-title-edit').style.display = 'none';
-    document.getElementById('exam-title-view').style.display = '';
-}
-function saveInlineExamTitle() {
-    const inp = document.getElementById('exam-title-input');
-    const newTitle = inp.value.trim();
-    if (!newTitle) return;
-    const csrfInput = document.querySelector('input[name^="_csrf"]');
-    const fd = new FormData();
-    fd.append('action', 'edit_exam');
-    fd.append('exam_id', <?= $selectedExam['id'] ?? 0 ?>);
-    fd.append(csrfInput.name, csrfInput.value);
-    fd.append('title', newTitle);
-    fetch(location.href, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} })
-        .then(r => r.json()).then(d => {
-            if (d.ok) {
-                document.getElementById('exam-title-text').textContent = newTitle;
-                cancelInlineExamEdit();
-            }
-        }).catch(() => { location.reload(); });
-}
-
-// ── Inline section title edit ─────────────────────────────────
-function startInlineSecEdit(sid) {
-    document.getElementById(`sec-title-view-${sid}`).style.display = 'none';
-    document.getElementById(`sec-title-edit-${sid}`).style.display = '';
-    document.getElementById(`sec-title-input-${sid}`).focus();
-    document.getElementById(`sec-title-input-${sid}`).select();
-}
-function cancelInlineSecEdit(sid) {
-    document.getElementById(`sec-title-edit-${sid}`).style.display = 'none';
-    document.getElementById(`sec-title-view-${sid}`).style.display = 'flex';
-}
-function saveInlineSecTitle(sid, secType) {
-    const inp = document.getElementById(`sec-title-input-${sid}`);
-    const newTitle = inp.value.trim();
-    if (!newTitle) return;
-    const csrfInput = document.querySelector('input[name^="_csrf"]');
-    const fd = new FormData();
-    fd.append('action', 'edit_section');
-    fd.append('section_id', sid);
-    fd.append('section_title', newTitle);
-    fd.append('section_type', secType);
-    fd.append(csrfInput.name, csrfInput.value);
-    fetch(location.href, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} })
-        .then(r => r.json()).then(d => {
-            if (d.ok) {
-                document.getElementById(`sec-title-text-${sid}`).textContent = newTitle;
-                cancelInlineSecEdit(sid);
-            }
-        }).catch(() => { location.reload(); });
-}
-
-// ── Section modal ─────────────────────────────────────────────
-function selectSectionType(type) {
-    document.getElementById('sec-type-val').value = type;
-    document.querySelectorAll('#sec-type-grid .type-option').forEach(el => {
-        el.classList.toggle('selected', el.dataset.type === type);
-    });
-}
-function openAddSectionModal() {
-    document.getElementById('sec-modal-title').textContent = 'Add Section';
-    document.getElementById('sec-action').value            = 'create_section';
-    document.getElementById('sec-id').value                = '';
-    document.getElementById('sec-title-field').value       = '';
-    document.getElementById('sec-desc-field').value        = '';
-    document.getElementById('sec-submit-btn').textContent  = 'Create Section';
-    selectSectionType('multiple_choice');
-    openModal('section-modal');
-}
-function confirmDeleteSection(form, qCount, title) {
-    if (form.dataset.ok) { delete form.dataset.ok; return true; }   // replay after OK
-    const msg = qCount === 0 ? `Remove "${title}"?`
-        : `Remove "${title}" and its ${qCount} question${qCount !== 1 ? 's' : ''}?`;
-    ui.confirm(msg, { danger: true, ok: 'Remove' })
-        .then(ok => { if (ok) { form.dataset.ok = '1'; form.requestSubmit(); } });
-    return false;
-}
-
-function openEditSectionModal(sec) {
-    document.getElementById('sec-modal-title').textContent = 'Edit Section';
-    document.getElementById('sec-action').value            = 'edit_section';
-    document.getElementById('sec-id').value               = sec.id;
-    document.getElementById('sec-title-field').value      = sec.title;
-    document.getElementById('sec-desc-field').value       = sec.description || '';
-    document.getElementById('sec-submit-btn').textContent  = 'Save Section';
-    selectSectionType(sec.question_type);
-    openModal('section-modal');
-}
-
-// ── Full inline question edit ─────────────────────────────────
-const IQ_EDIT_CHOICES = {};
-
-function startInlineQFullEdit(qid) {
-    const card = document.querySelector(`.q-card[data-qid="${qid}"]`);
-    if (!card || card.dataset.editing === '1') return;
-    card.dataset.editing = '1';
-    card.style.borderColor = 'var(--accent)';
-
-    const q = JSON.parse(card.dataset.q);
-    const CHOICE_TYPES = ['multiple_choice','checkboxes','dropdown'];
-
-    // Parse existing choices into the edit state
-    let choices = [];
-    if (CHOICE_TYPES.includes(q.question_type) && q.choices) {
-        const raw = JSON.parse(q.choices);
-        const correctIndices = (q.question_type === 'checkboxes' && q.correct_answer)
-            ? JSON.parse(q.correct_answer) : [];
-        const singleCorrect = parseInt(q.correct_index ?? 0);
-        choices = raw.map((text, i) => ({
-            text,
-            correct: q.question_type === 'checkboxes' ? correctIndices.includes(i) : i === singleCorrect
-        }));
-    }
-    IQ_EDIT_CHOICES[qid] = choices;
-
-    card.querySelector('.q-view-mode').style.display = 'none';
-    const editEl = document.createElement('div');
-    editEl.className = 'q-edit-mode';
-    editEl.style.cssText = 'padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3);animation:creator-slide-in .15s ease';
-    editEl.innerHTML = buildQEditHTML(q);
-    card.appendChild(editEl);
-    card.querySelector(`#qe-text-${qid}`)?.focus();
-}
-
-function buildQEditHTML(q) {
-    const qid = q.id;
-    const CHOICE_TYPES = ['multiple_choice','checkboxes','dropdown'];
-    const isChoice = CHOICE_TYPES.includes(q.question_type);
-    const choices = IQ_EDIT_CHOICES[qid] || [];
-
-    let answerHTML = '';
-    if (isChoice) {
-        const isCheckbox = q.question_type === 'checkboxes';
-        const rows = choices.map((c, i) => buildEditChoiceRow(c, i, qid, q.question_type)).join('');
-        answerHTML = `
-            <div>
-                <label class="form-label">Answer Choices</label>
-                <div id="qe-choices-${qid}" style="display:flex;flex-direction:column;gap:var(--space-2)">${rows}</div>
-                <button type="button" class="iq-add-choice" onclick="addEditChoice(${qid},'${q.question_type}')">
-                    <?= icon('ic_fluent_add_24_regular', 11) ?>
-                    Add choice
-                </button>
-                <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">${isCheckbox?'Check all correct answers.':'Select the one correct answer.'}</p>
-            </div>`;
-    } else if (q.question_type === 'short_answer') {
-        answerHTML = `
-            <div>
-                <label class="form-label">Expected Answer <span style="font-size:var(--text-xs);font-weight:400;color:var(--text-tertiary)">(optional)</span></label>
-                <input type="text" id="qe-expected-${qid}" class="form-control" value="${escQA(q.correct_answer||'')}" placeholder="Leave blank for manual grading">
-            </div>`;
-    } else if (q.question_type === 'linear_scale') {
-        answerHTML = `
-            <div style="display:grid;grid-template-columns:80px 80px 1fr 1fr;gap:var(--space-3);align-items:end">
-                <div><label class="form-label">Min</label>
-                    <select id="qe-scale-min-${qid}" class="form-control">
-                        <option value="0" ${q.scale_min==0?'selected':''}>0</option>
-                        <option value="1" ${q.scale_min!=0?'selected':''}>1</option>
-                    </select></div>
-                <div><label class="form-label">Max</label>
-                    <select id="qe-scale-max-${qid}" class="form-control">
-                        ${[2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${q.scale_max==n?' selected':''}>${n}</option>`).join('')}
-                    </select></div>
-                <div><label class="form-label">Min label</label>
-                    <input type="text" id="qe-scale-min-label-${qid}" class="form-control" value="${escQA(q.scale_min_label||'')}" placeholder="e.g. Strongly disagree"></div>
-                <div><label class="form-label">Max label</label>
-                    <input type="text" id="qe-scale-max-label-${qid}" class="form-control" value="${escQA(q.scale_max_label||'')}" placeholder="e.g. Strongly agree"></div>
-            </div>`;
-    }
-
-    return `
-        <div>
-            <label class="form-label">Question <span style="color:var(--error)">*</span></label>
-            <textarea id="qe-text-${qid}" class="form-control" rows="2">${escQT(q.question_text)}</textarea>
-        </div>
-        ${answerHTML}
-        <div style="display:flex;gap:var(--space-4);align-items:flex-end">
-            <div style="width:88px">
-                <label class="form-label">Points</label>
-                <input type="number" id="qe-points-${qid}" class="form-control" value="${q.points}" min="0" max="100">
-            </div>
-            <label style="display:flex;align-items:center;gap:var(--space-2);cursor:pointer;padding-bottom:6px;font-size:var(--text-sm)">
-                <input type="checkbox" id="qe-required-${qid}" ${q.is_required?'checked':''} style="accent-color:var(--accent)"> Required
-            </label>
-        </div>
-        <div style="display:flex;gap:var(--space-2);padding-top:var(--space-2);border-top:1px solid var(--border)">
-            <button type="button" class="btn btn-primary btn-sm" onclick="saveInlineQFullEdit(${qid})">Save changes</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="cancelInlineQFullEdit(${qid})">Cancel</button>
-        </div>`;
-}
-
-function buildEditChoiceRow(choice, idx, qid, qType) {
-    const isCheckbox = qType === 'checkboxes';
-    const inputType = isCheckbox ? 'checkbox' : 'radio';
-    const name = isCheckbox ? `qe_cb_${qid}_${idx}` : `qe_rb_${qid}`;
-    const delBtn = idx >= 2
-        ? `<button type="button" class="btn-icon" style="color:var(--error);flex-shrink:0" onclick="removeEditChoice(${qid},${idx},'${qType}')">
-               <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
-           </button>`
-        : '<div style="width:22px"></div>';
-    return `<div class="iq-choice-row" data-choice-idx="${idx}">
-        <input type="${inputType}" class="choice-input" name="${name}" value="${idx}" ${choice.correct?'checked':''} style="accent-color:var(--accent);flex-shrink:0"
-               onchange="syncEditCorrect(${qid},${idx},'${qType}',this)">
-        <input type="text" class="form-control" value="${escQA(choice.text)}" placeholder="Choice ${String.fromCharCode(65+idx)}"
-               oninput="IQ_EDIT_CHOICES[${qid}][${idx}].text=this.value">
-        ${delBtn}
-    </div>`;
-}
-
-function syncEditCorrect(qid, idx, qType, el) {
-    const choices = IQ_EDIT_CHOICES[qid]; if (!choices) return;
-    if (qType === 'checkboxes') choices[idx].correct = el.checked;
-    else choices.forEach((c,i) => c.correct = (i===idx));
-}
-function addEditChoice(qid, qType) {
-    const choices = IQ_EDIT_CHOICES[qid]; if (!choices) return;
-    choices.push({text:'', correct:false});
-    const listEl = document.getElementById(`qe-choices-${qid}`);
-    const idx = choices.length - 1;
-    const div = document.createElement('div');
-    div.innerHTML = buildEditChoiceRow(choices[idx], idx, qid, qType);
-    listEl.appendChild(div.firstElementChild);
-    listEl.lastElementChild.querySelector('input[type=text]')?.focus();
-}
-function removeEditChoice(qid, idx, qType) {
-    const choices = IQ_EDIT_CHOICES[qid]; if (!choices) return;
-    choices.splice(idx, 1);
-    if (choices.length > 0 && !choices.some(c=>c.correct)) choices[0].correct = true;
-    document.getElementById(`qe-choices-${qid}`).innerHTML =
-        choices.map((c,i) => buildEditChoiceRow(c, i, qid, qType)).join('');
-}
-function cancelInlineQFullEdit(qid) {
-    const card = document.querySelector(`.q-card[data-qid="${qid}"]`); if (!card) return;
-    delete card.dataset.editing; delete IQ_EDIT_CHOICES[qid];
-    card.style.borderColor = '';
-    card.querySelector('.q-edit-mode')?.remove();
-    card.querySelector('.q-view-mode').style.display = 'flex';
-}
-async function saveInlineQFullEdit(qid) {
-    const card = document.querySelector(`.q-card[data-qid="${qid}"]`); if (!card) return;
-    const q = JSON.parse(card.dataset.q);
-    const qText = document.getElementById(`qe-text-${qid}`)?.value.trim();
-    if (!qText) { document.getElementById(`qe-text-${qid}`).focus(); return; }
-
-    const saveBtn = card.querySelector('.q-edit-mode .btn-primary');
-    if (saveBtn) { saveBtn.disabled=true; saveBtn.textContent='Saving…'; }
-
-    const examId = <?= $selectedExam['id'] ?? 0 ?>;
-    const csrfInput = document.querySelector('input[name^="_csrf"]');
-    const CHOICE_TYPES = ['multiple_choice','checkboxes','dropdown'];
-    const choices = IQ_EDIT_CHOICES[qid] || [];
-
-    const fd = new FormData();
-    fd.append('action','edit_question'); fd.append('exam_id',examId);
-    fd.append('question_id',qid); fd.append('section_id',q.section_id||'');
-    fd.append(csrfInput.name,csrfInput.value);
-    fd.append('question_text',qText);
-    fd.append('question_type',q.question_type);
-    fd.append('points',document.getElementById(`qe-points-${qid}`)?.value||1);
-    if (document.getElementById(`qe-required-${qid}`)?.checked) fd.append('is_required','1');
-
-    if (CHOICE_TYPES.includes(q.question_type)) {
-        const texts = choices.map(c=>c.text).filter(t=>t.trim());
-        if (texts.length < 2) { ui.alert('Add at least 2 choices.'); if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save changes';} return; }
-        texts.forEach(t=>fd.append('choices[]',t));
-        if (q.question_type==='checkboxes') choices.forEach((c,i)=>{if(c.correct)fd.append('correct_indices[]',i);});
-        else { const ci=choices.findIndex(c=>c.correct); fd.append('correct_index',ci>=0?ci:0); }
-    } else if (q.question_type==='short_answer') {
-        fd.append('expected_answer',document.getElementById(`qe-expected-${qid}`)?.value.trim()||'');
-    } else if (q.question_type==='linear_scale') {
-        fd.append('scale_min',document.getElementById(`qe-scale-min-${qid}`)?.value||1);
-        fd.append('scale_max',document.getElementById(`qe-scale-max-${qid}`)?.value||5);
-        fd.append('scale_min_label',document.getElementById(`qe-scale-min-label-${qid}`)?.value.trim()||'');
-        fd.append('scale_max_label',document.getElementById(`qe-scale-max-label-${qid}`)?.value.trim()||'');
-    }
-    try {
-        const resp = await fetch(location.href,{method:'POST',body:fd});
-        if (resp.ok) window.location.reload();
-        else { if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save changes';} ui.alert('Unable to save. Try again.'); }
-    } catch(e) { window.location.reload(); }
-}
-function escQT(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function escQA(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-
-// ── Inline question creator ───────────────────────────────────
-const CHOICE_TYPE_KEYS = ['multiple_choice','checkboxes','dropdown'];
-
-function showInlineCreator(secId, secType) {
-    // Hide the "Add question" button while creating
-    document.getElementById(`sec-add-btn-${secId}`).style.display = 'none';
-    // Hide empty state if present
-    const emptyEl = document.getElementById(`sec-empty-${secId}`);
-    if (emptyEl) emptyEl.style.display = 'none';
-
-    const container = document.getElementById(`inline-creator-${secId}`);
-    container.dataset.choices = JSON.stringify(
-        CHOICE_TYPE_KEYS.includes(secType)
-            ? [{text:'',correct:true},{text:'',correct:false},{text:'',correct:false},{text:'',correct:false}]
-            : []
-    );
-    renderInlineCreator(container, secId, secType);
-    container.style.display = '';
-    container.querySelector('textarea')?.focus();
-}
-
-function hideInlineCreator(secId) {
-    const container = document.getElementById(`inline-creator-${secId}`);
-    container.style.display = 'none';
-    container.innerHTML = '';
-    document.getElementById(`sec-add-btn-${secId}`).style.display = 'flex';
-    // Restore empty state if no questions exist
-    const emptyEl = document.getElementById(`sec-empty-${secId}`);
-    if (emptyEl) emptyEl.style.display = '';
-}
-
-function renderInlineCreator(container, secId, secType) {
-    const choices = JSON.parse(container.dataset.choices || '[]');
-    const isChoice = CHOICE_TYPE_KEYS.includes(secType);
-    const isCheckbox = secType === 'checkboxes';
-    const typeLabelMap = <?= json_encode(array_map(fn($v) => $v['label'], $QUESTION_TYPES)) ?>;
-    const scColors = <?= json_encode($SECTION_COLORS) ?>;
-    const sc = scColors[secType] || scColors['multiple_choice'];
-
-    let choicesHtml = '';
-    if (isChoice) {
-        choicesHtml = `<div>
-            <label class="form-label" style="margin-bottom:var(--space-2)">Answer Choices</label>
-            <div id="iq-choices-${secId}" style="display:flex;flex-direction:column;gap:var(--space-2)">
-                ${choices.map((c, i) => renderChoiceRow(c, i, secId, secType)).join('')}
-            </div>
-            <button type="button" class="iq-add-choice" onclick="addInlineChoice(${secId}, '${secType}')">
-                <?= icon('ic_fluent_add_24_regular', 11) ?>
-                Add choice
-            </button>
-            <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">${isCheckbox ? 'Check all correct answers.' : 'Select the one correct answer.'}</p>
-        </div>`;
-    } else if (secType === 'short_answer') {
-        choicesHtml = `<div>
-            <label class="form-label">Expected Answer <span style="font-size:var(--text-xs);font-weight:400;color:var(--text-tertiary)">(optional)</span></label>
-            <input type="text" id="iq-expected-${secId}" class="form-control" placeholder="Leave blank for manual grading">
-        </div>`;
-    } else if (secType === 'linear_scale') {
-        choicesHtml = `<div style="display:grid;grid-template-columns:80px 80px 1fr 1fr;gap:var(--space-3);align-items:end">
-            <div>
-                <label class="form-label">Min</label>
-                <select id="iq-scale-min-${secId}" class="form-control"><option value="0">0</option><option value="1" selected>1</option></select>
-            </div>
-            <div>
-                <label class="form-label">Max</label>
-                <select id="iq-scale-max-${secId}" class="form-control">${[2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===5?' selected':''}>${n}</option>`).join('')}</select>
-            </div>
-            <div><label class="form-label">Min label</label><input type="text" id="iq-scale-min-label-${secId}" class="form-control" placeholder="e.g. Strongly disagree"></div>
-            <div><label class="form-label">Max label</label><input type="text" id="iq-scale-max-label-${secId}" class="form-control" placeholder="e.g. Strongly agree"></div>
-        </div>`;
-    }
-
-    container.innerHTML = `
-        <div class="iq-body">
-            <div style="display:flex;align-items:center;gap:var(--space-2)">
-                <span class="iq-type-badge" style="background:${sc.bg};color:${sc.text};border:1px solid ${sc.border}">
-                    ${typeLabelMap[secType] || secType}
-                </span>
-                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">New question</span>
-            </div>
-            <div>
-                <label class="form-label">Question <span style="color:var(--error)">*</span></label>
-                <textarea id="iq-text-${secId}" class="form-control" rows="2" placeholder="Enter your question…"></textarea>
-            </div>
-            ${choicesHtml}
-            <div style="display:flex;gap:var(--space-4);align-items:flex-end">
-                <div style="width:88px">
-                    <label class="form-label">Points</label>
-                    <input type="number" id="iq-points-${secId}" class="form-control" value="1" min="0" max="100">
-                </div>
-                <label style="display:flex;align-items:center;gap:var(--space-2);cursor:pointer;padding-bottom:6px;font-size:var(--text-sm)">
-                    <input type="checkbox" id="iq-required-${secId}" checked style="accent-color:var(--accent)">
-                    Required
-                </label>
-            </div>
-        </div>
-        <div class="iq-footer">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="hideInlineCreator(${secId})">Cancel</button>
-            <button type="button" class="btn btn-primary btn-sm" onclick="saveInlineQuestion(${secId}, '${secType}')">Save question</button>
-        </div>`;
-}
-
-function renderChoiceRow(choice, idx, secId, secType) {
-    const isCheckbox = secType === 'checkboxes';
-    const inputType = isCheckbox ? 'checkbox' : 'radio';
-    const name = isCheckbox ? `iq_correct_${secId}_${idx}` : `iq_correct_${secId}`;
-    const checked = choice.correct ? 'checked' : '';
-    const delBtn = idx >= 2
-        ? `<button type="button" class="btn-icon" style="color:var(--error);flex-shrink:0"
-               onclick="removeInlineChoice(${secId}, ${idx}, '${secType}')">
-               <?= icon('ic_fluent_dismiss_24_regular', 13) ?>
-           </button>`
-        : '<div style="width:22px"></div>';
-    return `<div class="iq-choice-row" data-choice-idx="${idx}">
-        <input type="${inputType}" class="choice-input" name="${name}" value="${idx}" ${checked} style="accent-color:var(--accent);flex-shrink:0"
-               onchange="syncChoiceCorrect(${secId}, ${idx}, '${secType}', this)">
-        <input type="text" class="form-control" value="${escapeHtmlAttr(choice.text)}"
-               placeholder="Choice ${String.fromCharCode(65+idx)}"
-               oninput="syncChoiceText(${secId}, ${idx}, this.value)">
-        ${delBtn}
-    </div>`;
-}
-
-function escapeHtmlAttr(s) {
-    return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function getCreatorChoices(secId) {
-    const container = document.getElementById(`inline-creator-${secId}`);
-    return JSON.parse(container.dataset.choices || '[]');
-}
-function setCreatorChoices(secId, choices) {
-    document.getElementById(`inline-creator-${secId}`).dataset.choices = JSON.stringify(choices);
-}
-
-function syncChoiceText(secId, idx, val) {
-    const choices = getCreatorChoices(secId);
-    if (choices[idx]) choices[idx].text = val;
-    setCreatorChoices(secId, choices);
-}
-function syncChoiceCorrect(secId, idx, secType, el) {
-    const choices = getCreatorChoices(secId);
-    if (secType === 'checkboxes') {
-        choices[idx].correct = el.checked;
-    } else {
-        choices.forEach((c,i) => c.correct = (i === idx));
-    }
-    setCreatorChoices(secId, choices);
-}
-function addInlineChoice(secId, secType) {
-    const choices = getCreatorChoices(secId);
-    choices.push({text:'', correct:false});
-    setCreatorChoices(secId, choices);
-    const listEl = document.getElementById(`iq-choices-${secId}`);
-    const idx = choices.length - 1;
-    const rowDiv = document.createElement('div');
-    rowDiv.innerHTML = renderChoiceRow(choices[idx], idx, secId, secType);
-    listEl.appendChild(rowDiv.firstElementChild);
-    listEl.lastElementChild.querySelector('input[type=text]')?.focus();
-}
-function removeInlineChoice(secId, idx, secType) {
-    const choices = getCreatorChoices(secId);
-    choices.splice(idx, 1);
-    // Reset correct if needed
-    if (!choices.some(c => c.correct) && choices.length > 0) choices[0].correct = true;
-    setCreatorChoices(secId, choices);
-    const container = document.getElementById(`inline-creator-${secId}`);
-    renderInlineCreator(container, secId, secType);
-}
-
-async function saveInlineQuestion(secId, secType) {
-    const qText = document.getElementById(`iq-text-${secId}`)?.value.trim();
-    if (!qText) {
-        document.getElementById(`iq-text-${secId}`).focus();
-        document.getElementById(`iq-text-${secId}`).style.borderColor = 'var(--error)';
-        return;
-    }
-    const choices = getCreatorChoices(secId);
-    const points  = parseInt(document.getElementById(`iq-points-${secId}`)?.value || 1);
-    const required = document.getElementById(`iq-required-${secId}`)?.checked ? 1 : 0;
-    const examId  = <?= $selectedExam['id'] ?? 0 ?>;
-    const csrfInput = document.querySelector('input[name^="_csrf"]');
-
-    const fd = new FormData();
-    fd.append('action', 'add_question');
-    fd.append('exam_id', examId);
-    fd.append('section_id', secId);
-    fd.append('question_text', qText);
-    fd.append('question_type', secType);
-    fd.append('points', points);
-    if (required) fd.append('is_required', '1');
-    fd.append(csrfInput.name, csrfInput.value);
-
-    const isChoice = CHOICE_TYPE_KEYS.includes(secType);
-    if (isChoice) {
-        const texts = choices.map(c => c.text).filter(t => t.trim());
-        if (texts.length < 2) {
-            ui.alert('Add at least 2 choices.');
-            return;
-        }
-        texts.forEach(t => fd.append('choices[]', t));
-        if (secType === 'checkboxes') {
-            choices.forEach((c,i) => { if (c.correct) fd.append('correct_indices[]', i); });
-        } else {
-            const ci = choices.findIndex(c => c.correct);
-            fd.append('correct_index', ci >= 0 ? ci : 0);
-        }
-    } else if (secType === 'short_answer') {
-        const exp = document.getElementById(`iq-expected-${secId}`)?.value.trim();
-        if (exp) fd.append('expected_answer', exp);
-    } else if (secType === 'linear_scale') {
-        fd.append('scale_min', document.getElementById(`iq-scale-min-${secId}`)?.value || 1);
-        fd.append('scale_max', document.getElementById(`iq-scale-max-${secId}`)?.value || 5);
-        const minL = document.getElementById(`iq-scale-min-label-${secId}`)?.value.trim();
-        const maxL = document.getElementById(`iq-scale-max-label-${secId}`)?.value.trim();
-        if (minL) fd.append('scale_min_label', minL);
-        if (maxL) fd.append('scale_max_label', maxL);
-    }
-
-    // Disable save button
-    const saveBtn = document.querySelector(`#inline-creator-${secId} .btn-primary`);
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
-
-    try {
-        const resp = await fetch(location.href, { method: 'POST', body: fd });
-        if (resp.ok) {
-            window.location.reload();
-        } else {
-            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save question'; }
-            ui.alert('Unable to save. Try again.');
-        }
-    } catch(e) {
-        window.location.reload();
-    }
-}
-
-// ── Per-course passing scores panel toggle ────────────────
-function togglePassingPanel() {
-    const panel   = document.getElementById('passing-edit-panel');
-    const summary = document.getElementById('passing-summary');
-    const icon    = document.getElementById('passing-toggle-icon');
-    const btn     = document.getElementById('passing-toggle-btn');
-    const isOpen  = panel.style.display !== 'none';
-    panel.style.display   = isOpen ? 'none' : 'block';
-    summary.style.display = isOpen ? '' : 'none';
-    icon.style.transform  = isOpen ? '' : 'rotate(180deg)';
-    btn.lastChild.textContent = isOpen ? ' Edit tiers' : ' Close';
-}
-
-// Live-update the Low label and enforce high > avg constraints
-(function() {
-    document.addEventListener('input', function(e) {
-        const el = e.target;
-        if (!el.classList.contains('passing-high') && !el.classList.contains('passing-avg')) return;
-        const course = el.dataset.course;
-        if (!course) return;
-        const row   = el.closest('div[style*="grid-template-columns"]');
-        if (!row) return;
-        const highEl = row.querySelector('.passing-high');
-        const avgEl  = row.querySelector('.passing-avg');
-        const lowEl  = row.querySelector('.low-label');
-        if (!highEl || !avgEl || !lowEl) return;
-        const highVal = parseInt(highEl.value, 10) || 7;
-        const avgVal  = parseInt(avgEl.value,  10) || 4;
-        // Enforce avg < high
-        if (el.classList.contains('passing-high') && avgVal >= highVal) {
-            avgEl.value = Math.max(1, highVal - 1);
-        }
-        if (el.classList.contains('passing-avg') && avgVal >= highVal) {
-            highEl.value = Math.min(10, avgVal + 1);
-        }
-        const finalAvg = parseInt(avgEl.value, 10) || 4;
-        lowEl.textContent = finalAvg <= 1 ? '-' : '1–' + (finalAvg - 1);
-    });
-})();
-
-// Section-scoped drag-and-drop (questions stay inside their section)
-(function() {
-    const sectionContainers = document.querySelectorAll('.section-questions');
-    if (!sectionContainers.length) return;
-    let dragged = null;
-    let sourceContainer = null;
-
-    sectionContainers.forEach(container => {
-        container.querySelectorAll('.q-card').forEach(card => {
-            card.draggable = true;
-            card.addEventListener('dragstart', () => {
-                dragged = card;
-                sourceContainer = container;
-                card.classList.add('dragging');
-            });
-            card.addEventListener('dragend', () => {
-                card.classList.remove('dragging');
-                dragged = null;
-                saveOrder();
-            });
-        });
-
-        container.addEventListener('dragover', e => {
-            e.preventDefault();
-            if (!dragged || sourceContainer !== container) return;
-            const after = getDragAfterElement(container, e.clientY);
-            if (after === null) container.appendChild(dragged);
-            else container.insertBefore(dragged, after);
-        });
-    });
-
-    function getDragAfterElement(container, y) {
-        const els = [...container.querySelectorAll('.q-card:not(.dragging)')];
-        return els.reduce((closest, el) => {
-            const box = el.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
-            return offset < 0 && offset > closest.offset ? {offset, el} : closest;
-        }, {offset: Number.NEGATIVE_INFINITY}).el ?? null;
-    }
-
-    function saveOrder() {
-        const order = [];
-        document.querySelectorAll('.section-questions .q-card').forEach(el => {
-            order.push(el.dataset.qid);
-        });
-        const csrfInput = document.querySelector('input[name^="_csrf"]');
-        const fd = new FormData();
-        fd.append('action', 'reorder_questions');
-        fd.append(csrfInput.name, csrfInput.value);
-        order.forEach(id => fd.append('order[]', id));
-        fetch(location.href, {method:'POST', body: fd}).catch(()=>{});
-    }
-})();
+window.PAGE = <?= json_encode([
+    'examId'        => (int)($selectedExam['id'] ?? 0),
+    'live'          => !empty($examLive),
+    'typeLabels'    => array_map(fn($v) => $v['label'], $QUESTION_TYPES),
+    'sectionColors' => $SECTION_COLORS,
+    'icons'         => [
+        'add'     => icon('ic_fluent_add_24_regular', 11),
+        'dismiss' => icon('ic_fluent_dismiss_24_regular', 13),
+    ],
+], JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 </script>
 
 <!-- ════════════════════════════════════════════════════════════
      AI IMPORT MODAL
 ════════════════════════════════════════════════════════════ -->
-<style>
-@keyframes ai-spin { to { transform: rotate(360deg); } }
-@keyframes ai-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-.ai-status-bar { display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius);font-size:var(--text-sm);border:1px solid; }
-.ai-status-bar.connected { background:#f0faf4;border-color:#a7d9b8;color:#1a5c32; }
-.ai-status-bar.disconnected { background:#fafafa;border-color:var(--border);color:var(--text-secondary); }
-.ai-status-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
-.ai-status-bar.connected .ai-status-dot { background:#22c55e; }
-.ai-status-bar.disconnected .ai-status-dot { background:var(--neutral-400);animation:ai-pulse 2s ease-in-out infinite; }
-.ai-dropzone { border:2px dashed var(--border);border-radius:var(--radius);padding:var(--space-6) var(--space-5);text-align:center;cursor:pointer;transition:border-color .15s,background .15s; }
-.ai-dropzone:hover,.ai-dropzone.dragover { border-color:var(--accent);background:rgba(45,106,79,.03); }
-.ai-dropzone.has-file { border-style:solid;border-color:var(--accent);background:rgba(45,106,79,.04); }
-.ai-dropzone-icon { width:40px;height:40px;margin:0 auto var(--space-2);border-radius:var(--radius);background:var(--neutral-100);display:flex;align-items:center;justify-content:center; }
-.ai-file-tag { display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border-radius:var(--radius);padding:4px 10px;font-size:var(--text-xs);font-weight:var(--weight-medium);margin-top:var(--space-2); }
-.ai-file-tag .rm { cursor:pointer;opacity:.7;background:none;border:none;color:#fff;padding:0;font-size:14px;display:flex;align-items:center;line-height:1; }
-.ai-file-tag .rm:hover { opacity:1; }
-.ai-progress-wrap { padding: var(--space-2) 0; }
-.ai-progress-track { height:5px;background:var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:var(--space-3); }
-.ai-progress-fill { height:100%;background:var(--accent);border-radius:var(--radius);width:0%;transition:width .4s cubic-bezier(.4,0,.2,1); }
-.ai-progress-step { font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px; }
-.ai-q-card { border:1px solid #e5e7eb;border-radius:var(--radius);overflow:hidden;background:#fff;flex-shrink:0; }
-.ai-q-card-head { display:flex;align-items:center;gap:8px;padding:9px 14px;background:#f9fafb;font-size:var(--text-xs);color:#6b7280; }
-.ai-q-card-body { padding:12px 14px;background:#fff; }
-.ai-q-text { font-size:var(--text-sm);font-weight:var(--weight-medium);color:#111827;margin-bottom:8px;line-height:1.45; }
-.ai-choice-row { display:flex;align-items:center;gap:7px;padding:3px 0;font-size:var(--text-sm);color:#374151; }
-.ai-choice-row.correct { color:#16a34a;font-weight:var(--weight-medium); }
-.ai-choice-ind { width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1.5px solid var(--border); }
-.ai-choice-row.correct .ai-choice-ind { background:#16a34a;border-color:#16a34a;display:flex;align-items:center;justify-content:center; }
-.ai-warn-strip { display:flex;align-items:flex-start;gap:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--radius);padding:10px 12px;font-size:var(--text-xs);color:#92400e;line-height:1.5; }
-</style>
 
 <div id="ai-import-modal" class="modal-backdrop" style="display:none">
     <div class="modal" style="max-width:500px;max-height:90vh;display:flex;flex-direction:column">
@@ -2059,622 +1067,11 @@ function togglePassingPanel() {
     </div>
 </div>
 
-<script>
-let puterLoaded = false;
-function loadPuter() {
-    return new Promise(res => {
-        if (puterLoaded || window.puter) { puterLoaded=true; res(); return; }
-        const s = document.createElement('script'); s.src = 'https://js.puter.com/v2/';
-        s.onload = () => { puterLoaded=true; res(); }; document.head.appendChild(s);
-    });
-}
-function loadPdfJs() {
-    return new Promise(res => {
-        if (window.pdfjsLib) { res(); return; }
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-        s.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; res(); };
-        document.head.appendChild(s);
-    });
-}
-function loadMammoth() {
-    return new Promise(res => {
-        if (window.mammoth) { res(); return; }
-        const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'; s.onload = res; document.head.appendChild(s);
-    });
-}
-async function refreshPuterStatus() {
-    const bar=document.getElementById('ai-puter-status'), label=document.getElementById('ai-puter-status-text');
-    const linkEl=document.getElementById('ai-puter-link'), signinBtn=document.getElementById('ai-puter-signin-btn'), signoutBtn=document.getElementById('ai-puter-signout-btn');
-    label.textContent='Checking Puter connection…'; [linkEl,signinBtn,signoutBtn].forEach(el=>el.style.display='none');
-    try {
-        await loadPuter();
-        const ok = await puter.auth.isSignedIn();
-        if (ok) {
-            let name=''; try { const u=await puter.auth.getUser(); name=u?.username?' as @'+u.username:''; } catch(_){}
-            bar.className='ai-status-bar connected'; label.textContent='Connected to Puter'+name; signoutBtn.style.display='';
-        } else { bar.className='ai-status-bar disconnected'; label.textContent='Not signed in to Puter'; linkEl.style.display=''; signinBtn.style.display=''; }
-    } catch(_) { bar.className='ai-status-bar disconnected'; label.textContent='Could not reach Puter'; linkEl.style.display=''; signinBtn.style.display=''; }
-}
-async function puterSignIn() { await loadPuter(); try { await puter.auth.signIn(); refreshPuterStatus(); } catch(_){} }
-async function puterSignOut(){ await loadPuter(); try { await puter.auth.signOut(); refreshPuterStatus(); } catch(_){} }
-
-// aiGeneratedSections = [{section_title, section_type, questions:[...]}, ...]
-let aiSelectedFile=null, aiGeneratedSections=[];
-
-function openAiImportModal()  { resetAiImport(true); openModal('ai-import-modal'); refreshPuterStatus(); }
-function closeAiImportModal() { closeModal('ai-import-modal'); }
-function handleAiFileDrop(e)  { e.preventDefault(); document.getElementById('ai-drop-zone').classList.remove('dragover'); if(e.dataTransfer.files[0]) setAiFile(e.dataTransfer.files[0]); }
-function handleAiFileSelect(inp) { if(inp.files[0]) setAiFile(inp.files[0]); }
-function setAiFile(file) {
-    aiSelectedFile=file; document.getElementById('ai-drop-zone').classList.add('has-file');
-    document.getElementById('ai-dropzone-label').style.display='none'; document.getElementById('ai-file-tag-wrap').style.display='';
-    document.getElementById('ai-file-tag-name').textContent=file.name; document.getElementById('ai-process-btn').disabled=false;
-}
-function clearAiFile() {
-    aiSelectedFile=null; document.getElementById('ai-file-input').value='';
-    document.getElementById('ai-drop-zone').classList.remove('has-file','dragover');
-    document.getElementById('ai-dropzone-label').style.display=''; document.getElementById('ai-file-tag-wrap').style.display='none';
-    document.getElementById('ai-process-btn').disabled=true;
-}
-function resetAiImport(clearFile) {
-    if(clearFile) { aiSelectedFile=null; document.getElementById('ai-file-input').value=''; document.getElementById('ai-drop-zone').classList.remove('has-file','dragover'); document.getElementById('ai-dropzone-label').style.display=''; document.getElementById('ai-file-tag-wrap').style.display='none'; }
-    aiGeneratedSections=[];
-    resetProgress();
-    document.getElementById('ai-process-btn').disabled=!aiSelectedFile;
-    ['upload','processing','preview','error'].forEach(s=>{ const el=document.getElementById('ai-step-'+s); if(el) el.style.display=s==='upload'?'':'none'; if(s==='preview'&&el) el.style.flexDirection='column'; });
-    document.getElementById('ai-modal-footer').style.display=''; document.getElementById('ai-save-footer').style.display='none';
-}
-function showAiStep(step) {
-    ['upload','processing','preview','error'].forEach(s=>{ const el=document.getElementById('ai-step-'+s); if(!el) return; el.style.display=s===step?(s==='processing'||s==='preview'?'flex':''):'none'; });
-}
-// ── Progress bar helpers ──────────────────────────────────────
-// ── AI import progress ────────────────────────────────────────
-// The pre-AI steps (file read → text extraction → upload) finish in
-// milliseconds, so the bar used to ping straight to 88% the instant
-// the request was sent and then sit there for the whole AI wait. To
-// make the wait feel steady, we time-lock the 0 → 80% ramp to ~5s of
-// real elapsed time, regardless of how fast the per-step targets
-// arrive. Once the AI returns and we set target=100, we snap to the
-// finish quickly.
-const PROGRESS_RAMP_MS  = 10000;  // 0 → 80% takes this many ms of wall time
-const PROGRESS_RAMP_PCT = 80;     // ceiling for the time-locked phase
-
-let _progressTarget = 0, _progressCurrent = 0, _progressTimer = null;
-let _progressStartedAt = 0;
-
-function setProgress(pct, label, step) {
-    _progressTarget = pct;
-    if (label) document.getElementById('ai-processing-label').textContent = label;
-    if (step)  document.getElementById('ai-progress-step').textContent = step;
-    _tickProgress();
-}
-
-function _tickProgress() {
-    if (_progressTimer) clearInterval(_progressTimer);
-    if (!_progressStartedAt) _progressStartedAt = Date.now();
-
-    _progressTimer = setInterval(() => {
-        const gap = _progressTarget - _progressCurrent;
-        if (gap <= 0) { clearInterval(_progressTimer); return; }
-
-        let next;
-        if (_progressTarget >= 95) {
-            // Closing out — snap home (covers the AI-just-returned case).
-            next = _progressCurrent + Math.max(2, gap * 0.3);
-        } else {
-            // Time-locked steady climb: position purely follows wall clock,
-            // capped at PROGRESS_RAMP_PCT so we never blow past 80% before
-            // the AI actually replies. Targets below the ceiling still cap
-            // the climb (e.g. step says "30%" → bar parks at 30% even if
-            // real time would put it higher).
-            const elapsed = Date.now() - _progressStartedAt;
-            const byTime  = Math.min(PROGRESS_RAMP_PCT, (elapsed / PROGRESS_RAMP_MS) * PROGRESS_RAMP_PCT);
-            const minStep = _progressCurrent + 0.1;
-            next = Math.min(_progressTarget, Math.max(minStep, byTime));
-        }
-
-        if (next >= _progressTarget) {
-            next = _progressTarget;
-            clearInterval(_progressTimer);
-        }
-        _progressCurrent = next;
-
-        const fill = document.getElementById('ai-progress-fill');
-        const pct  = document.getElementById('ai-progress-pct');
-        if (fill) fill.style.width = _progressCurrent.toFixed(1) + '%';
-        if (pct)  pct.textContent  = Math.round(_progressCurrent) + '%';
-    }, 80);
-}
-
-function resetProgress() {
-    if (_progressTimer) clearInterval(_progressTimer);
-    _progressTarget = 0; _progressCurrent = 0;
-    _progressStartedAt = 0;
-    const fill = document.getElementById('ai-progress-fill');
-    const pct  = document.getElementById('ai-progress-pct');
-    if (fill) fill.style.width = '0%';
-    if (pct)  pct.textContent  = '0%';
-    document.getElementById('ai-progress-step').textContent = 'Preparing…';
-    document.getElementById('ai-processing-label').textContent = 'Reading file…';
-}
-
-async function startAiProcessing() {
-    if (!aiSelectedFile) return;
-    resetProgress();
-    showAiStep('processing');
-    document.getElementById('ai-modal-footer').style.display = 'none';
-
-    try {
-        // Pre-flight: empty file would only confuse the AI and waste a call.
-        if (!aiSelectedFile.size || aiSelectedFile.size === 0) {
-            throw new Error('The selected file is empty (0 bytes). Pick a different file and try again.');
-        }
-        await loadPuter();
-        const ext = aiSelectedFile.name.split('.').pop().toLowerCase();
-        let content = null, isImage = false;
-
-        // Step 1 — Read file (0 → 15%)
-        setProgress(15, 'Reading file…', 'Loading file from disk');
-        if (['jpg','jpeg','png'].includes(ext)) {
-            content = aiSelectedFile; isImage = true;
-        } else if (ext === 'pdf') {
-            // Step 2 — Extract PDF (15 → 30%)
-            setProgress(30, 'Extracting text…', 'Parsing PDF pages');
-            await loadPdfJs();
-            content = await extractPdfText(aiSelectedFile);
-        } else if (['docx','doc'].includes(ext)) {
-            // Step 2 — Extract DOCX (15 → 30%)
-            setProgress(30, 'Extracting text…', 'Parsing document');
-            await loadMammoth();
-            content = await extractDocxText(aiSelectedFile);
-        } else {
-            content = await readFileAsText(aiSelectedFile);
-        }
-
-        // Stricter content guard. < 50 chars from a PDF/DOCX almost
-        // always means the file is image-based (scanned, no text layer)
-        // - sending that to the AI just produces a refusal response.
-        if (!content) {
-            throw new Error('Could not read this file. Try a different format.');
-        }
-        if (typeof content === 'string') {
-            const len = content.trim().length;
-            if (len < 5) {
-                throw new Error('Could not extract any readable text from this file. If it is a scanned PDF, save it as JPG/PNG instead and re-upload - the AI can read images.');
-            }
-            if (len < 50 && (ext === 'pdf' || ext === 'doc' || ext === 'docx')) {
-                throw new Error('Only ' + len + ' characters of text could be extracted from this ' + ext.toUpperCase() + '. It is most likely a scanned document with no selectable text. Save the pages as JPG/PNG images and upload one of those instead.');
-            }
-        }
-
-        // Step 3 — Send to AI (→ 40%)
-        setProgress(40, 'Sending to AI…', 'Uploading content to Puter AI');
-
-        // Step 4 — AI processing (40 → 88%, slow crawl while we wait)
-        const pts = parseInt(document.getElementById('ai-default-points').value) || 1;
-        // Kick off slow crawl to 88% — will snap to 100 when done
-        setProgress(88, 'AI is processing…', 'Generating questions from your file');
-
-        const sections = isImage
-            ? await callPuterWithImage(content, pts)
-            : await callPuterWithText(content, pts);
-
-        // Step 5 — Finalizing (88 → 100%)
-        setProgress(100, 'Finalizing…', 'Parsing AI response');
-        await new Promise(r => setTimeout(r, 350)); // let bar finish
-
-        if (!sections || sections.length === 0) throw new Error('No sections or questions were detected.');
-        const totalQ = sections.reduce((sum, s) => sum + s.questions.length, 0);
-        if (totalQ === 0) throw new Error('No questions were detected.');
-
-        // Refusal detection: parseAiResp can succeed on AI apology JSON
-        // (e.g. one section titled "Error" with a single question whose
-        // text says "No exam content was provided…"). Surface those as a
-        // clear error instead of letting them render as a fake exam.
-        const refusal = _detectRefusal(sections);
-        if (refusal) {
-            throw new Error(
-                'The AI didn\u2019t see any actual exam in what was sent. It said:\n\n“' +
-                refusal + '”\n\n' +
-                'Most common cause: the file is a scanned/image-only PDF or a corrupt upload. Save the pages as JPG/PNG and upload one of those, or pick a different file.'
-            );
-        }
-
-        aiGeneratedSections = sections;
-        renderAiPreview(sections);
-        showAiStep('preview');
-        document.getElementById('ai-preview-count').textContent =
-            `${sections.length} section${sections.length !== 1 ? 's' : ''}, ${totalQ} question${totalQ !== 1 ? 's' : ''} detected`;
-        document.getElementById('ai-save-footer').style.display = '';
-    } catch (err) {
-        showAiStep('error');
-        document.getElementById('ai-modal-footer').style.display = '';
-        let msg = typeof err === 'string' ? err : err?.message || err?.error || 'Unknown error';
-        document.getElementById('ai-error-msg').textContent = msg;
-        document.getElementById('ai-process-btn').disabled = !aiSelectedFile;
-    }
-}
-
-function readFileAsText(f) { return new Promise((r,j)=>{ const x=new FileReader(); x.onload=()=>r(x.result); x.onerror=j; x.readAsText(f); }); }
-async function extractPdfText(f) {
-    const b=await f.arrayBuffer(), pdf=await pdfjsLib.getDocument({data:b}).promise; let t='';
-    for(let i=1;i<=Math.min(pdf.numPages,20);i++){const pg=await pdf.getPage(i),tc=await pg.getTextContent(); t+=tc.items.map(it=>it.str).join(' ')+'\n';} return t.trim();
-}
-async function extractDocxText(f) { const b=await f.arrayBuffer(); return(await mammoth.extractRawText({arrayBuffer:b})).value; }
-async function ensurePuterAuth() { await loadPuter(); const ok=await puter.auth.isSignedIn(); if(!ok) await puter.auth.signIn(); }
-function extractPuterText(response) {
-    if(response&&response.success===false) throw new Error('Puter AI error: '+(response.error||'unknown'));
-    const text=response?.message?.content?.[0]?.text||response?.message?.content||'';
-    if(!text) throw new Error('AI returned an empty response.');
-    return text;
-}
-
-// ── AI prompt — extracts sections + questions ─────────────────
-const AI_PROMPT = `You are an expert exam question extractor for Philippine school exams. Extract ALL sections and ALL questions from the exam content.
-
-Return ONLY a valid JSON array of sections - no markdown, no explanation, no extra text.
-
-Structure:
-[
-  {
-    "section_title": "I. Multiple Choice",
-    "section_type": "multiple_choice",
-    "section_description": "Choose the best answer.",
-    "questions": [
-      {
-        "question_text": "What is the capital of France?",
-        "choices": ["London", "Paris", "Berlin", "Rome"],
-        "correct_index": 1,
-        "correct_indices": [],
-        "correct_answer": null,
-        "points": 1
-      }
-    ]
-  }
-]
-
-SECTION TYPE RULES:
-- "multiple_choice" → Multiple Choice, True/False, Matching Type
-- "checkboxes"      → Select all that apply, Multiple correct answers
-- "short_answer"    → Identification, Fill in the blank, Enumeration, Completion
-- "paragraph"       → Essay, Explain, Discuss, Long answer
-
-IDENTIFYING CORRECT ANSWERS (critical - read carefully):
-- In Philippine printed exams, the correct answer is shown in BOLD, UNDERLINED, or ALL-CAPS in the answer choices
-- Look very carefully at each choice - whichever one appears visually emphasized (bold/underlined/caps) is the correct answer
-- correct_index = 0-based position of the correct choice (0=a, 1=b, 2=c, 3=d)
-- If no answer is marked, set correct_index to 0
-- For short_answer/identification: set correct_answer to the expected answer if shown (e.g. "QL", "QUALITATIVE", etc.)
-- Do NOT include any "description", hint, or "correct answer indicated as bold" text in the output - only the fields listed in the schema above
-
-CHOICE FORMATTING:
-- Strip letter/number prefixes from choices (e.g. "a. Paris" → "Paris", "A) Paris" → "Paris", "1. Paris" → "Paris")
-- Keep the choice text only, no labels
-
-TRUE/FALSE SECTIONS - IMPORTANT:
-- Each numbered statement is a SEPARATE question
-- question_text = the statement itself (e.g. "The sky is blue")
-- choices = ["True", "False"] for every question
-- Do NOT extract the instructions ("Write TRUE if...") as a question - that is a direction, not a question
-- correct_index = 0 if True is correct, 1 if False is correct (or 0 if unknown)
-
-IDENTIFICATION/SHORT ANSWER SECTIONS:
-- Each numbered item is a separate question
-- Extract any hint text after the question (like "QL" or "QT") as correct_answer
-- Example: "11. Identify patterns, features, themes QL" → question_text="Identify patterns, features, themes", correct_answer="QUALITATIVE"
-- Expand abbreviations: QL/Q.L. → "QUALITATIVE", QT/Q.T. → "QUANTITATIVE"
-
-GENERAL RULES:
-- Extract EVERY numbered question - do not skip any
-- section_description = copy any directions/instructions shown at the top of that section
-- Do NOT treat section headings or instructions as questions
-- Output ONLY the JSON array, nothing else
-
-OUTPUT FORMAT (strict - failures here break the import):
-- The very first character of your response must be \`[\` and the very last must be \`]\`
-- Do NOT wrap the array in an object (no \`{"sections": [...]}\` - just the bare array)
-- Do NOT include a trailing comma after the last item
-- Do NOT include comments
-- Do NOT include any prose, summary, or markdown fences before/after the array`;
-
-async function callPuterWithText(text, pts) {
-    const trunc=text.length>10000?text.slice(0,10000)+'…[truncated]':text;
-    await ensurePuterAuth();
-    const response=await puter.ai.chat(AI_PROMPT+'\n\nCONTENT:\n\n'+trunc, {model:'claude-sonnet-4-6'});
-    return parseAiResp(extractPuterText(response), pts);
-}
-async function callPuterWithImage(file, pts) {
-    if (!file || !file.size) throw new Error('Image file is empty. Try a different image.');
-    await ensurePuterAuth();
-    const tmpName='exam_import_'+Date.now()+'.'+file.name.split('.').pop();
-    let puterFile;
-    try { puterFile=await puter.fs.write(tmpName,file); }
-    catch(e) { throw new Error('Could not upload image to Puter: '+(e&&e.message||e)); }
-    if (!puterFile || !puterFile.path) {
-        throw new Error('Image upload to Puter returned no file path. Try again or use a different image.');
-    }
-    // If Puter reports the written file size, sanity-check it matches
-    // the source. Zero-byte writes are the usual cause of the AI
-    // responding with "no content was provided".
-    if (typeof puterFile.size === 'number' && puterFile.size === 0) {
-        try{await puter.fs.delete(puterFile.path);}catch(_){}
-        throw new Error('Image upload to Puter wrote 0 bytes. Try again or use a different image.');
-    }
-    let response;
-    try {
-        response=await puter.ai.chat(
-            [{role:'user',content:[{type:'file',puter_path:puterFile.path},{type:'text',text:AI_PROMPT}]}],
-            {model:'claude-sonnet-4-6'}
-        );
-    } finally { try{await puter.fs.delete(puterFile.path);}catch(_){} }
-    return parseAiResp(extractPuterText(response), pts);
-}
-
-// Expand common Philippine exam abbreviations in answers
-function expandAnswer(ans) {
-    if (!ans) return ans;
-    const map = {
-        'QL': 'QUALITATIVE', 'Q.L.': 'QUALITATIVE', 'Ql': 'QUALITATIVE', 'ql': 'QUALITATIVE',
-        'QT': 'QUANTITATIVE', 'Q.T.': 'QUANTITATIVE', 'Qt': 'QUANTITATIVE', 'qt': 'QUANTITATIVE',
-        'T': 'TRUE', 'F': 'FALSE',
-    };
-    const trimmed = ans.trim();
-    return map[trimmed] || ans;
-}
-
-// ── JSON repair helpers ──────────────────────────────────────
-// LLM responses sometimes break the contract in known ways. These
-// helpers try, in order: (1) bare array slice, (2) object-wrapped
-// array unwrap, (3) truncation recovery — walk back to the last
-// complete `}` at array depth 0 and close with `]`.
-
-function _stripFences(s) {
-    return s.trim()
-        .replace(/^```(?:json|javascript|js|json5)?\s*/i, '')
-        .replace(/\s*```\s*$/i, '')
-        .replace(/^~~~(?:json)?\s*/i, '')
-        .replace(/\s*~~~\s*$/i, '')
-        .trim();
-}
-function _stripTrailingCommas(s) {
-    return s.replace(/,(\s*[}\]])/g, '$1');
-}
-function _tryParseArray(s) {
-    const start = s.indexOf('[');
-    const end   = s.lastIndexOf(']');
-    if (start === -1 || end === -1 || end <= start) return null;
-    const sliced = _stripTrailingCommas(s.slice(start, end + 1));
-    try { const a = JSON.parse(sliced); return Array.isArray(a) ? a : null; } catch (_) { return null; }
-}
-function _tryParseObjectWrapper(s) {
-    let obj;
-    try { obj = JSON.parse(_stripTrailingCommas(s)); } catch (_) { return null; }
-    if (!obj || typeof obj !== 'object') return null;
-    for (const k of ['sections','data','result','output','exam','items','questions']) {
-        if (Array.isArray(obj[k])) return obj[k];
-    }
-    // Single-section object → wrap it.
-    if (Array.isArray(obj.questions)) return [obj];
-    return null;
-}
-function _tryRepairTruncated(s) {
-    const start = s.indexOf('[');
-    if (start === -1) return null;
-    const work = s.slice(start);
-    // Walk forward, tracking string state and bracket depth, recording
-    // each position where a section object closes at array-depth 1.
-    let depth = 0, inStr = false, esc = false, lastSafe = -1;
-    for (let i = 0; i < work.length; i++) {
-        const c = work[i];
-        if (esc) { esc = false; continue; }
-        if (c === '\\') { esc = true; continue; }
-        if (c === '"') { inStr = !inStr; continue; }
-        if (inStr) continue;
-        if (c === '{' || c === '[') depth++;
-        else if (c === '}' || c === ']') {
-            depth--;
-            if (depth === 1 && c === '}') lastSafe = i; // a section closed
-        }
-    }
-    if (lastSafe === -1) return null;
-    let candidate = work.slice(0, lastSafe + 1) + ']';
-    candidate = _stripTrailingCommas(candidate);
-    try { const a = JSON.parse(candidate); return Array.isArray(a) ? a : null; } catch (_) { return null; }
-}
-
-// Detect AI "refusal" / apology responses that are technically valid
-// JSON but carry no actual exam content - e.g. one section titled
-// "Error" / "Apology" with a single short_answer question whose text
-// is the AI explaining it couldn't read the file.
-function _detectRefusal(sections) {
-    if (!Array.isArray(sections) || sections.length === 0) return null;
-    const PHRASES = [
-        'no exam content', 'no content was provided', 'no content provided',
-        'temporarily unavailable', 'file storage',
-        'i apologize', 'i cannot read', 'i can\u2019t read', "i can't read",
-        'i am unable', 'i\u2019m unable', "i'm unable",
-        'could not extract', 'couldn\u2019t read', "couldn't read",
-        'appears to be empty', 'no readable text',
-        'no file', 'blank image', 'image is blank',
-        'cannot access', 'unable to access',
-        'no questions were found', 'no questions found'
-    ];
-    const matches = (txt) => {
-        if (!txt) return false;
-        const low = String(txt).toLowerCase();
-        return PHRASES.some(p => low.indexOf(p) !== -1);
-    };
-    // Very strong signal: any section title hints at an error/apology.
-    for (const sec of sections) {
-        const title = String(sec.section_title || '').toLowerCase();
-        if (title === 'error' || title === 'apology' ||
-            title.startsWith('error') || title.startsWith('apology') ||
-            title.indexOf('cannot') !== -1 || title.indexOf('unable') !== -1) {
-            // Find a question text to surface in the error.
-            const q = (sec.questions || []).find(q => q && q.question_text);
-            return q ? String(q.question_text) : 'Error: ' + (sec.section_title || 'unknown');
-        }
-    }
-    // If there is exactly 1 question and its text matches a refusal
-    // phrase, that is also strong enough to surface.
-    const allQuestions = sections.flatMap(s => s.questions || []);
-    if (allQuestions.length === 1 && matches(allQuestions[0].question_text)) {
-        return String(allQuestions[0].question_text);
-    }
-    // Catch the case where every question matches a refusal phrase.
-    if (allQuestions.length > 0 && allQuestions.every(q => matches(q.question_text))) {
-        return String(allQuestions[0].question_text);
-    }
-    return null;
-}
-
-function parseAiResp(raw, dp) {
-    if (typeof raw !== 'string' || raw.trim().length === 0) {
-        throw new Error('AI returned an empty response. Try uploading the file again.');
-    }
-    const s = _stripFences(raw);
-
-    // Three repair strategies in order of fidelity.
-    let arr = _tryParseArray(s);
-    if (!arr) arr = _tryParseObjectWrapper(s);
-    if (!arr) arr = _tryRepairTruncated(s);
-
-    if (!arr) {
-        // All strategies failed — surface the first bit of the raw
-        // response so the user can see what the AI actually returned.
-        const snippet = raw.length > 240 ? raw.slice(0, 240) + '… (+' + (raw.length - 240) + ' more chars)' : raw;
-        throw new Error(
-            'AI response could not be parsed as JSON. The model may have returned prose, ' +
-            'or the response was cut off mid-answer. Try clicking Process again - if it ' +
-            'keeps failing, use a shorter or clearer file.\n\nFirst part of the response:\n' + snippet
-        );
-    }
-    if (!Array.isArray(arr)) throw new Error('AI did not return a list.');
-
-    const VALID_TYPES=['multiple_choice','checkboxes','short_answer','paragraph'];
-    return arr.map(sec=>({
-        section_title: sec.section_title||sec.title||'Untitled Section',
-        section_type: VALID_TYPES.includes(sec.section_type)?sec.section_type:'multiple_choice',
-        section_description: sec.section_description||sec.description||'',
-        questions: (Array.isArray(sec.questions)?sec.questions:[]).map(q=>({
-            question_text:  q.question_text||'Untitled question',
-            question_type:  VALID_TYPES.includes(q.question_type)?q.question_type:
-                            (VALID_TYPES.includes(sec.section_type)?sec.section_type:'multiple_choice'),
-            choices:        Array.isArray(q.choices)?q.choices:[],
-            correct_index:  typeof q.correct_index==='number'?q.correct_index:0,
-            correct_answer: expandAnswer(q.correct_answer)||null,
-            correct_indices:Array.isArray(q.correct_indices)?q.correct_indices:[],
-            points:         typeof q.points==='number'&&q.points>=0?q.points:dp,
-            is_required:    1,
-        }))
-    })).filter(sec=>sec.questions.length>0);
-}
-
-// ── Preview ───────────────────────────────────────────────────
-const AI_SECTION_COLORS = {
-    multiple_choice: {bg:'#dbeafe',text:'#1d4ed8',border:'#93c5fd'},
-    checkboxes:      {bg:'#d1fae5',text:'#065f46',border:'#6ee7b7'},
-    short_answer:    {bg:'#fef3c7',text:'#92400e',border:'#fcd34d'},
-    paragraph:       {bg:'#fce7f3',text:'#9d174d',border:'#f9a8d4'},
-};
-
-function renderAiPreview(sections) {
-    const wrap=document.getElementById('ai-questions-preview'); wrap.innerHTML='';
-    const CT=['multiple_choice','checkboxes','dropdown'];
-    let globalQ=0;
-    sections.forEach(sec=>{
-        const sc=AI_SECTION_COLORS[sec.section_type]||AI_SECTION_COLORS['multiple_choice'];
-        // Section header
-        const secHead=document.createElement('div');
-        secHead.style.cssText=`background:${sc.bg};border:1.5px solid ${sc.border};border-radius:var(--radius);padding:8px 12px;margin-top:8px`;
-        let secDesc = sec.section_description ? `<div style="font-size:var(--text-xs);color:${sc.text};opacity:.75;margin-top:2px">${escHtml(sec.section_description)}</div>` : '';
-        secHead.innerHTML=`<div style="display:flex;align-items:center;gap:8px"><span style="font-size:var(--text-xs);font-weight:600;color:${sc.text}">${escHtml(sec.section_title)}</span><span style="font-size:var(--text-xs);color:${sc.text};opacity:.7;margin-left:auto">${sec.section_type.replace(/_/g,' ')} · ${sec.questions.length} question${sec.questions.length!==1?'s':''}</span></div>${secDesc}`;
-        wrap.appendChild(secHead);
-
-        // Questions
-        sec.questions.forEach(q=>{
-            globalQ++;
-            const card=document.createElement('div'); card.className='ai-q-card'; card.style.marginLeft='12px';
-            let choices='';
-            if(CT.includes(q.question_type)&&q.choices&&q.choices.length){
-                choices='<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px">'+q.choices.map((c,ci)=>{
-                    const ok=q.question_type==='checkboxes'?(q.correct_indices||[]).includes(ci):ci===parseInt(q.correct_index);
-                    const dot=ok
-                        ? `<span style="width:14px;height:14px;border-radius:50%;background:var(--success);flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"><i class="ph-bold ph-check" aria-hidden="true" style="font-size:var(--text-2xs);color:var(--white)"></i></span>`
-                        : `<span style="width:14px;height:14px;border-radius:50%;border:1.5px solid var(--border-strong);flex-shrink:0;display:inline-block"></span>`;
-                    return`<div style="display:flex;align-items:center;gap:8px;padding:var(--space-1) 0;font-size:var(--text-sm);color:${ok?'var(--success)':'var(--text-secondary)'};${ok?'font-weight:600':''}">${dot}${escHtml(c)}</div>`;
-                }).join('')+'</div>';
-            } else if(q.question_type==='short_answer'){
-                choices=`<div style="margin-top:6px;font-size:var(--text-xs);color:var(--text-tertiary)">${q.correct_answer?'Expected: <strong style=\'color:#111827\'">'+escHtml(q.correct_answer)+'</strong>':'Short answer - reviewed manually'}</div>`;
-            } else {
-                choices=`<div style="margin-top:6px;font-size:var(--text-xs);color:var(--text-tertiary)">Paragraph - reviewed manually</div>`;
-            }
-            card.innerHTML=`<div class="ai-q-card-head"><span style="background:var(--accent);color:var(--white);border-radius:var(--radius);padding:1px 7px;font-weight:600;font-size:var(--text-xs)">Q${globalQ}</span><span style="font-size:var(--text-xs);color:var(--text-tertiary)">${q.question_type.replace(/_/g,' ')}</span><span style="margin-left:auto;font-size:var(--text-xs);color:var(--text-tertiary)">${q.points} pt${q.points!==1?'s':''}</span></div><div class="ai-q-card-body"><div class="ai-q-text">${escHtml(q.question_text)}</div>${choices}</div>`;
-            wrap.appendChild(card);
-        });
-    });
-}
-
-function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-
-// ── Save — creates sections first, then adds questions ────────
-async function saveAiQuestions(){
-    const btn=document.getElementById('ai-save-btn'); btn.disabled=true;
-    const examId=<?= $selectedExam['id'] ?? 0 ?>;
-    const csrfInput=document.querySelector('#ai-import-modal input[type="hidden"]');
-    const csrfName=csrfInput?.name||'_csrf_token', csrf=csrfInput?.value||'';
-    if(!examId){ui.alert('Select an exam first.');btn.disabled=false;return;}
-    if(!csrf){ui.alert('Session expired. Refresh and try again.');btn.disabled=false;return;}
-
-    const CT=['multiple_choice','checkboxes','dropdown'];
-    const totalQ=aiGeneratedSections.reduce((sum,s)=>sum+s.questions.length,0);
-    let saved=0;
-
-    for(const sec of aiGeneratedSections){
-        // 1. Create the section
-        const secFd=new FormData();
-        secFd.append('action','create_section');
-        secFd.append('exam_id',examId);
-        secFd.append('section_title',sec.section_title);
-        secFd.append('section_desc', sec.section_description || '');
-        secFd.append('section_type',sec.section_type);
-        secFd.append(csrfName,csrf);
-        let sectionId=null;
-        try {
-            const r=await fetch(location.href,{method:'POST',body:secFd,headers:{'X-Requested-With':'XMLHttpRequest'}});
-            const d=await r.json();
-            if(d.ok) sectionId=d.section_id;
-        } catch(e){}
-        if(!sectionId){ btn.textContent=`Error creating section "${sec.section_title}"`; continue; }
-
-        // 2. Add questions to that section
-        for(const q of sec.questions){
-            const fd=new FormData();
-            fd.append('action','add_question');fd.append('exam_id',examId);fd.append(csrfName,csrf);
-            fd.append('question_text',q.question_text);
-            fd.append('question_type',q.question_type);fd.append('points',q.points);fd.append('is_required','1');
-            fd.append('section_id',sectionId);
-            if(CT.includes(q.question_type)&&q.choices.length){
-                q.choices.forEach(c=>fd.append('choices[]',c));
-                if(q.question_type==='checkboxes')(q.correct_indices||[]).forEach(ci=>fd.append('correct_indices[]',ci));
-                else fd.append('correct_index',q.correct_index);
-            } else if(q.question_type==='short_answer') fd.append('expected_answer',q.correct_answer||'');
-            try{
-                const resp=await fetch(location.href,{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}});
-                const d=await resp.json();
-                if(d.ok) saved++;
-                else console.warn('Failed to save question:', q.question_text);
-            }catch(e){ console.error('Save error:', e); }
-            btn.textContent=`Saving… (${saved}/${totalQ})`;
-        }
-    }
-    window.location.reload();
-}
-</script>
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Entrance Exam';
+$pageStyles  = ['css/pages/exam-manage.css'];
+$pageScripts = ['js/pages/exam-manage.js', 'js/pages/exam-ai-import.js'];
 // Entrance Exam > Exams > Exam Editor (replaces the old back-arrow buttons).
 $pageBreadcrumb = [];
 if ($view === 'exams') {

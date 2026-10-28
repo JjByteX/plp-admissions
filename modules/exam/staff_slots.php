@@ -78,7 +78,7 @@ $defaultDate = date('Y-m-d', strtotime('+1 day'));
 // Routing — read URL params before POST handling so we redirect
 // back to the right URL after every action.
 // ----------------------------------------------------------------
-$collegeParam = trim($_GET['college'] ?? '');
+$collegeParam = get_str('college');
 $slotIdParam  = (int)($_GET['slot']    ?? 0);
 
 // Admin and SSO see the cross-college selector; Dean and Proctor
@@ -116,15 +116,13 @@ function _slots_respond(bool $ok, string $msg, string $college, int $slotId, arr
     _slots_redirect_back($college, $slotId);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     // Most write actions redirect after success; pick the redirect target
     // up front based on the form's hidden context fields (with the URL
     // params as fallback).
-    $ctxCollege = trim((string)($_POST['ctx_college'] ?? $collegeParam));
-    $ctxSlotId  = (int)($_POST['ctx_slot'] ?? $slotIdParam);
+    $ctxCollege = post_str('ctx_college', $collegeParam);
+    $ctxSlotId  = post_int('ctx_slot', $slotIdParam);
 
     // ── Generate / extend per-room access code ───────────────
     //
@@ -134,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // in their own department. Handled before the canManage gate so
     // Proctors are not redirected away.
     if ($action === 'generate_slot_code' || $action === 'extend_slot_code') {
-        $slotId = (int)($_POST['slot_id'] ?? 0);
+        $slotId = post_int('slot_id');
         $stmt   = $db->prepare(
             'SELECT id, department, room_label, access_password
                FROM exam_slot_schedule WHERE id = ? LIMIT 1'
@@ -187,8 +185,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$canManage) {
             _slots_respond(false, 'Read-only access - only SSO and Admin can rename rooms.', $ctxCollege, $ctxSlotId);
         }
-        $slotId  = (int)($_POST['slot_id']    ?? 0);
-        $newRoom = trim((string)($_POST['room_label'] ?? ''));
+        $slotId  = post_int('slot_id');
+        $newRoom = post_str('room_label');
         if (!$slotId || $newRoom === '') {
             if (is_ajax_request()) {
                 _slots_respond(false, 'Room label cannot be empty.', $ctxCollege, $ctxSlotId);
@@ -214,8 +212,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'update_exam_config') {
         $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
                    ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value';
-        $roomCap  = max(1, (int)($_POST['exam_room_capacity'] ?? 35));
-        $dailyCap = max(1, (int)($_POST['exam_daily_cap']     ?? 3000));
+        $roomCap  = max(1, post_int('exam_room_capacity', 35));
+        $dailyCap = max(1, post_int('exam_daily_cap', 3000));
         $db->prepare($upsert)->execute(['exam_room_capacity', $roomCap]);
         $db->prepare($upsert)->execute(['exam_daily_cap',     $dailyCap]);
         audit_log('exam_config_updated', "Room cap={$roomCap}, Daily cap={$dailyCap}");
@@ -225,13 +223,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Add a new exam slot ──────────────────────────────────────
     if ($action === 'add_slot') {
-        $date     = trim($_POST['exam_date']  ?? '');
-        $time     = trim($_POST['slot_time']  ?? '08:00');
-        $endTime  = trim($_POST['end_time']   ?? '');
-        $room     = trim($_POST['room_label'] ?? '');
-        $capacity = (int)($_POST['capacity']  ?? 35);
+        $date     = post_str('exam_date');
+        $time     = post_str('slot_time', '08:00');
+        $endTime  = post_str('end_time');
+        $room     = post_str('room_label');
+        $capacity = post_int('capacity', 35);
         $slotDept = $canManage
-            ? trim($_POST['department'] ?? '')
+            ? post_str('department')
             : user_department($staffId);
 
         // Default close time = opens + 90 minutes if the form didn't
@@ -278,14 +276,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Edit an existing slot ───────────────────────────────────
     if ($action === 'edit_slot') {
-        $slotId   = (int)($_POST['slot_id']   ?? 0);
-        $date     = trim($_POST['exam_date']  ?? '');
-        $time     = trim($_POST['slot_time']  ?? '08:00');
-        $endTime  = trim($_POST['end_time']   ?? '');
-        $room     = trim($_POST['room_label'] ?? '');
-        $capacity = (int)($_POST['capacity']  ?? 35);
+        $slotId   = post_int('slot_id');
+        $date     = post_str('exam_date');
+        $time     = post_str('slot_time', '08:00');
+        $endTime  = post_str('end_time');
+        $room     = post_str('room_label');
+        $capacity = post_int('capacity', 35);
         $slotDept = $canManage
-            ? trim($_POST['department'] ?? '')
+            ? post_str('department')
             : user_department($staffId);
 
         // Default close time = opens + 90 minutes if the form didn't
@@ -330,8 +328,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Edit slot capacity inline ───────────────────────────────
     if ($action === 'edit_capacity') {
-        $slotId = (int)($_POST['slot_id'] ?? 0);
-        $cap    = max(1, (int)($_POST['capacity'] ?? 35));
+        $slotId = post_int('slot_id');
+        $cap    = max(1, post_int('capacity', 35));
         if ($slotId) {
             $stmt = $db->prepare(
                 'SELECT (SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id=?) AS filled'
@@ -352,7 +350,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Delete a slot (only if empty) ───────────────────────────
     if ($action === 'delete_slot') {
-        $slotId = (int)($_POST['slot_id'] ?? 0);
+        $slotId = post_int('slot_id');
         if ($slotId) {
             $stmt = $db->prepare('SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id=?');
             $stmt->execute([$slotId]);
@@ -369,55 +367,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Bulk delete slots (from select-mode bar) ────────────────
     if ($action === 'delete_slots_bulk') {
-        $rawIds = trim($_POST['ids'] ?? '');
-        $ids    = array_values(array_filter(array_map('intval', explode(',', $rawIds)), fn($v) => $v > 0));
+        $rawIds = post_str('ids');
+        $ids    = parse_id_list($rawIds);
         if (empty($ids)) {
             Session::flash('error', 'No slots selected.');
             _slots_redirect_back($ctxCollege);
         }
 
-        $ph     = implode(',', array_fill(0, count($ids), '?'));
         // Skip slots that have at least one applicant assigned — same rule
         // the single-row delete enforces. Only the empty ones are removed.
-        $bkStmt = $db->prepare(
-            "SELECT s.id, COUNT(aes.id) AS filled
-               FROM exam_slot_schedule s
-               LEFT JOIN applicant_exam_slots aes ON aes.slot_id = s.id
-              WHERE s.id IN ({$ph})
-              GROUP BY s.id"
-        );
-        $bkStmt->execute($ids);
-        $deletable = [];
-        $skipped   = 0;
-        foreach ($bkStmt->fetchAll() as $row) {
-            if ((int)$row['filled'] > 0) { $skipped++; continue; }
-            $deletable[] = (int)$row['id'];
-        }
-
-        $deletedCount = 0;
-        if (!empty($deletable)) {
-            $delPh = implode(',', array_fill(0, count($deletable), '?'));
-            $del   = $db->prepare("DELETE FROM exam_slot_schedule WHERE id IN ({$delPh})");
-            $del->execute($deletable);
-            $deletedCount = $del->rowCount();
-            audit_log('exam_slots_bulk_deleted',
-                "Bulk-deleted {$deletedCount} slot(s): " . implode(',', $deletable));
-        }
-
-        if ($deletedCount > 0 && $skipped > 0) {
-            Session::flash('success', "{$deletedCount} slot(s) removed; {$skipped} skipped (have applicants).");
-        } elseif ($deletedCount > 0) {
-            Session::flash('success', "{$deletedCount} slot(s) removed.");
-        } elseif ($skipped > 0) {
-            Session::flash('error', "Nothing removed - all {$skipped} selected slot(s) have applicants.");
-        }
+        $bulkCfg = [
+            'table' => 'exam_slot_schedule', 'child' => 'applicant_exam_slots', 'fk' => 'slot_id',
+            'noun' => 'slot', 'audit' => 'exam_slots_bulk_deleted',
+            'skipNote' => 'have applicants', 'allNote' => 'have applicants',
+        ];
+        flash_bulk_delete_result(bulk_delete_empty($db, $bulkCfg, $ids), $bulkCfg);
         _slots_redirect_back($ctxCollege);
     }
 
     // ── Assign applicant to slot ────────────────────────────────
     if ($action === 'assign') {
-        $applicantId = (int)($_POST['applicant_id'] ?? 0);
-        $slotId      = (int)($_POST['slot_id']      ?? 0);
+        $applicantId = post_int('applicant_id');
+        $slotId      = post_int('slot_id');
         if (!$applicantId || !$slotId) {
             $errors[] = 'Applicant and slot are both required.';
         } else {
@@ -494,15 +465,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── B3: Batch create exam slots ────────────────────────────
     if ($action === 'batch_create_slots') {
-        $bStartDate = trim($_POST['batch_start_date'] ?? '');
-        $bEndDate   = trim($_POST['batch_end_date']   ?? '');
-        $bTime      = trim($_POST['batch_time']       ?? '08:00');
-        $bEndTime   = trim($_POST['batch_end_time']   ?? '');
+        $bStartDate = post_str('batch_start_date');
+        $bEndDate   = post_str('batch_end_date');
+        $bTime      = post_str('batch_time', '08:00');
+        $bEndTime   = post_str('batch_end_time');
         $bRooms     = $_POST['batch_rooms'] ?? [];
         if (!is_array($bRooms)) $bRooms = [$bRooms];
         $bRooms     = array_filter(array_map('trim', $bRooms));
         $bCapacity  = max(1, (int)($_POST['batch_capacity'] ?? $examRoomCap ?? 35));
-        $bDept      = $canManage ? trim($_POST['batch_department'] ?? '') : user_department($staffId);
+        $bDept      = $canManage ? post_str('batch_department') : user_department($staffId);
         $bDays      = array_map('intval', $_POST['batch_days'] ?? [1,2,3,4,5]);
 
         if ($bEndTime === '') {
@@ -535,7 +506,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Unassign applicant from their slot ──────────────────────
     if ($action === 'unassign') {
-        $applicantId = (int)($_POST['applicant_id'] ?? 0);
+        $applicantId = post_int('applicant_id');
         if ($applicantId) {
             // Get the slot_id before deleting so we can decrement filled
             $slotLookup = $db->prepare('SELECT slot_id FROM applicant_exam_slots WHERE applicant_id = ? LIMIT 1');
@@ -623,15 +594,13 @@ if ($mode === 'roster') {
     $slotDetail = $stmt->fetch();
 
     if (!$slotDetail) {
-        Session::flash('error', 'Slot not found.');
-        redirect('/staff/exam/slots');
+        fail('Slot not found.', '/staff/exam/slots');
     }
 
     // Staff can only see slots in their own college (unless they can
     // manage across colleges — admin or SSO).
     if (!$canManage && $slotDetail['department'] !== $staffDept) {
-        Session::flash('error', 'You can only view slots in your own college.');
-        redirect('/staff/exam/slots');
+        fail('You can only view slots in your own college.', '/staff/exam/slots');
     }
 
     // ── Auto-issue access code at the slot's start time ──────────
@@ -678,8 +647,8 @@ if ($mode === 'roster') {
     // Same auto-fit scheme as the audit log: AutoPageSize (app.js) measures how
     // many fixed-height rows fit and reloads with ?per_page=; see
     // auto_per_page() in helpers.php.
-    $rosterSearch = trim($_GET['q'] ?? '');
-    $rosterType   = trim($_GET['type'] ?? '');
+    $rosterSearch = get_str('q');
+    $rosterType   = get_str('type');
     if (!in_array($rosterType, ['freshman', 'transferee', 'foreign'], true)) {
         $rosterType = '';
     }

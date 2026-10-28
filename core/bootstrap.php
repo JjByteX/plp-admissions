@@ -12,8 +12,11 @@ require_once __DIR__ . '/Router.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../views/partials/button.php';   // ui_button(): shared button component
 require_once __DIR__ . '/interview_scheduler.php';
+require_once __DIR__ . '/staff_scope.php';
 require_once __DIR__ . '/automation.php';
 require_once __DIR__ . '/enrollment_handoff.php';
+require_once __DIR__ . '/slot_cancel.php';
+require_once __DIR__ . '/exam.php';
 
 // -- Timezone ----------------------------------------------------
 // Match PHP's tz to the MySQL server's tz so strtotime($db_value) and

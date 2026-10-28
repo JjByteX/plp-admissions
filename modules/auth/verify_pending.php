@@ -27,9 +27,7 @@ $email = trim(strtolower(
 $errors = [];
 $info   = null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? 'verify';
+if (($action = require_post_action('verify')) !== null) {
 
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors['email'] = 'Enter the email you registered with.';

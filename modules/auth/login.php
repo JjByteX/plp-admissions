@@ -28,8 +28,8 @@ $email  = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $email    = trim($_POST['email']    ?? '');
-    $password = trim($_POST['password'] ?? '');
+    $email    = post_str('email');
+    $password = post_str('password');
 
     // Basic validation
     if (!$email)    $errors['email']    = 'Email is required.';
@@ -52,8 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // can enter a fresh code or request a resend.
                 clear_login_attempts($email);
                 Session::set('verify_pending_email', $user['email']);
-                Session::flash('error', 'Verify your email first. Enter the code we sent, or request a new one.');
-                redirect('/verify-pending');
+                fail('Verify your email first. Enter the code we sent, or request a new one.', '/verify-pending');
             } else {
                 clear_login_attempts($email);
                 Auth::login($user, !empty($_POST['remember']));

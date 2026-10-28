@@ -239,7 +239,7 @@ $_panelStatusColor = function (string $s): string {
                     </span>
                 </div>
                 <div><span class="ap-k">Submitted</span>
-                    <?= e(date('M j, Y g:i A', strtotime($_exam['submitted_at']))) ?>
+                    <?= e(format_datetime($_exam['submitted_at'])) ?>
                 </div>
                 <?php if (!empty($_exam['submit_note'])): ?>
                     <div><span class="ap-k">Note</span>
@@ -366,7 +366,7 @@ $_panelStatusColor = function (string $s): string {
                     <span class="badge <?= $_resBadge ?>"><?= e(ucfirst($_res['result'])) ?></span>
                 </div>
                 <div><span class="ap-k">Released</span>
-                    <?= e(date('M j, Y g:i A', strtotime($_res['released_at']))) ?>
+                    <?= e(format_datetime($_res['released_at'])) ?>
                 </div>
                 <?php if (!empty($_res['enrollment_intent'])): ?>
                 <div><span class="ap-k">Intent</span>

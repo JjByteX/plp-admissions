@@ -47,8 +47,7 @@ switch ($action) {
 
         $undoableStatuses = ['submitted', 'documents', 'exam'];
         if (!in_array($appl['overall_status'] ?? '', $undoableStatuses, true) || $examTaken) {
-            Session::flash('error', 'Cannot undo - applicant already in exam stage.');
-            redirect('/staff/applicants/' . $applicantId);
+            fail('Cannot undo - applicant already in exam stage.', '/staff/applicants/' . $applicantId);
         }
 
         $db->prepare(
@@ -61,8 +60,7 @@ switch ($action) {
         )->execute([$applicantId]);
 
         audit_log('document_unapproved', "Undid approval for document ID {$id} (applicant {$applicantId})", 'document', $id);
-        Session::flash('success', 'Approval reverted.');
-        redirect('/staff/applicants/' . $applicantId);
+        ok('Approval reverted.', '/staff/applicants/' . $applicantId);
         break;
 
     case 'approve_all':
@@ -96,8 +94,7 @@ switch ($action) {
             echo json_encode(['ok' => true, 'message' => $msg, 'affected' => $affected, 'skipped' => $skipped, 'ids' => $res['ids']]);
             exit;
         }
-        Session::flash('success', $msg);
-        redirect('/staff/applicants/' . $id);
+        ok($msg, '/staff/applicants/' . $id);
         break;
 
     case 'undo_approve_all':
@@ -125,7 +122,7 @@ switch ($action) {
             $undoReply(false, 'Cannot undo - applicant already took the exam.');
         }
 
-        $in   = implode(',', array_fill(0, count($docIds), '?'));
+        [$in] = sql_in($docIds);
         $stmt = $db->prepare(
             "UPDATE documents SET status='uploaded', staff_remarks=NULL, reviewed_by=NULL
               WHERE applicant_id=? AND status='approved' AND id IN ($in)"
@@ -204,7 +201,7 @@ switch ($action) {
 
     // Phase 6: move a flagged file to another empty slot (review_result = corrected).
     case 'change_type':
-        $target = trim($_POST['target_slot'] ?? '');
+        $target = post_str('target_slot');
         $stmt = $db->prepare(
             'SELECT d.id, d.applicant_id, d.doc_type, d.file_path, d.status,
                     a.applicant_type, a.doc_flags, a.user_id, a.overall_status
@@ -290,8 +287,7 @@ switch ($action) {
     case 'advance_to_exam':
         // Guard: all documents must exist and be approved before advancing
         if (!required_docs_all_approved($db, (int)$id)) {
-            Session::flash('error', 'Approve all documents before advancing.');
-            redirect('/staff/applicants/' . $id);
+            fail('Approve all documents before advancing.', '/staff/applicants/' . $id);
         }
 
         $stmt = $db->prepare(
@@ -310,13 +306,12 @@ switch ($action) {
         auto_assign_exam_slot($id);
 
         audit_log('applicant_advanced_exam', "Manually advanced applicant {$id} to exam stage", 'applicant', $id);
-        Session::flash('success', 'Applicant advanced to exam stage.');
-        redirect('/staff/applicants/' . $id);
+        ok('Applicant advanced to exam stage.', '/staff/applicants/' . $id);
         break;
 
     // A7: Request document resubmission
     case 'request_resubmission':
-        $remarks = trim($_POST['remarks'] ?? '');
+        $remarks = post_str('remarks');
         if (!$remarks) {
             Session::flash('error', 'Provide a reason for resubmission.');
             $stmt = $db->prepare('SELECT applicant_id FROM documents WHERE id=?');

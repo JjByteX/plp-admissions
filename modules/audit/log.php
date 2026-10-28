@@ -222,18 +222,12 @@ ob_start();
                 <?php foreach ($logs as $log): ?>
                 <tr>
                     <td style="font-size:var(--text-xs);color:var(--text-secondary)">
-                        <?= e(date('M j, Y g:i A', strtotime($log['created_at']))) ?>
+                        <?= e(format_datetime($log['created_at'])) ?>
                     </td>
                     <?php if ($isAdmin): ?>
                     <td>
                         <?php
-                            $roleBadge = match ($log['user_role']) {
-                                ROLE_ADMIN   => 'error',
-                                ROLE_DEAN    => 'warning',
-                                ROLE_SSO     => 'success',
-                                ROLE_STAFF   => 'info',
-                                default      => 'neutral',
-                            };
+                            $roleBadge = role_badge_class($log['user_role']);
                             $roleLabel = $log['user_role']
                                 ? Auth::roleLabel($log['user_role'])
                                 : 'System';
@@ -355,55 +349,11 @@ ob_start();
     </div>
 </div>
 
-<style>
-.audit-detail { display: grid; grid-template-columns: 110px 1fr; gap: var(--space-3) var(--space-4); margin: 0; font-size: var(--text-sm); }
-.audit-detail dt { color: var(--text-tertiary); font-weight: var(--weight-medium); }
-.audit-detail dd { margin: 0; color: var(--text-primary); min-width: 0; overflow-wrap: anywhere; }
-.audit-detail-desc { white-space: pre-wrap; line-height: var(--leading-normal); }
-.audit-detail dd:empty::after { content: "-"; color: var(--text-tertiary); }
-@media (max-width: 480px) { .audit-detail { grid-template-columns: 1fr; gap: var(--space-1); } .audit-detail dd { margin-bottom: var(--space-3); } }
-</style>
-
-<script>
-(function () {
-    var m = document.getElementById('audit-modal');
-    if (!m) return;
-    function $(id) { return document.getElementById(id); }
-    function setBadge(el, text, cls) {
-        if (!el) return;
-        el.textContent = text;
-        el.className = 'badge ' + cls;
-    }
-    function openDetail(d) {
-        $('ad-when').textContent = d.when;
-        if ($('ad-user')) {
-            $('ad-user').textContent = d.user;
-            setBadge($('ad-role'), d.role, 'badge-' + d.roleBadge);
-        }
-        setBadge($('ad-action'), d.action, d.actionBadge);
-        $('ad-entity').textContent = d.entity;
-        $('ad-desc').textContent = d.description;
-        $('ad-id').textContent = '#' + d.id;
-        m.style.display = 'flex';
-    }
-    function closeDetail() { m.style.display = 'none'; }
-
-    document.querySelectorAll('.audit-view').forEach(function (b) {
-        b.addEventListener('click', function () {
-            try { openDetail(JSON.parse(b.getAttribute('data-log'))); } catch (e) {}
-        });
-    });
-    m.querySelectorAll('[data-audit-close]').forEach(function (b) { b.addEventListener('click', closeDetail); });
-    m.addEventListener('click', function (e) { if (e.target === m) closeDetail(); });
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && m.style.display !== 'none') closeDetail();
-    });
-})();
-</script>
-
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Audit Log';
+$pageStyles  = ['css/pages/audit-log.css'];
+$pageScripts = ['js/pages/audit-log.js'];
 $activeNav = 'audit-log';
 $pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

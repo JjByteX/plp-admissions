@@ -11,10 +11,7 @@ Auth::requireRole(ROLE_STUDENT);
 $db     = db();
 $userId = Auth::id();
 
-$stmt = $db->prepare('SELECT * FROM applicants WHERE user_id=? ORDER BY id DESC LIMIT 1');
-$stmt->execute([$userId]);
-$applicant = $stmt->fetch();
-if (!$applicant) { redirect('/student/documents'); }
+$applicant = require_applicant();
 $applicantId = $applicant['id'];
 
 $stmt = $db->prepare('SELECT * FROM admission_results WHERE applicant_id=? LIMIT 1');

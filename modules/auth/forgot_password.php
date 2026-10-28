@@ -42,12 +42,10 @@ function reset_send(?array $user): void
     audit_log('password_reset_requested', 'Reset code sent', 'user', (int) $user['id']);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? 'send';
+if (($action = require_post_action('send')) !== null) {
 
     if ($action === 'send') {
-        $email = trim($_POST['email'] ?? '');
+        $email = post_str('email');
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors['email'] = 'Enter a valid email address.';
         } else {

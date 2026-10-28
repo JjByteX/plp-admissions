@@ -56,21 +56,14 @@ if ($action === 'confirm_enrollment') {
 // WITHDRAWAL
 // ─────────────────────────────────────────────────────────────
 if ($action === 'withdraw') {
-    $stmt = $db->prepare(
-        'SELECT id, overall_status, course_applied
-         FROM applicants WHERE user_id = ? ORDER BY id DESC LIMIT 1'
-    );
-    $stmt->execute([$userId]);
-    $applicant = $stmt->fetch();
+    $applicant = applicant_for_user((int)$userId, 'id, overall_status, course_applied');
 
     if (!$applicant) {
-        Session::flash('error', 'No application found.');
-        redirect('/student/result');
+        fail('No application found.', '/student/result');
     }
 
     if ($applicant['overall_status'] === 'withdrawn') {
-        Session::flash('error', 'Your application has already been withdrawn.');
-        redirect('/student/result');
+        fail('Your application has already been withdrawn.', '/student/result');
     }
 
     // Cannot withdraw after enrollment has been confirmed
@@ -80,11 +73,10 @@ if ($action === 'withdraw') {
     $stmt->execute([$applicant['id']]);
     $ar = $stmt->fetch();
     if ($ar && $ar['enrollment_intent'] === 'confirmed') {
-        Session::flash('error', 'Already enrolled. Visit the admissions office to withdraw.');
-        redirect('/student/result');
+        fail('Already enrolled. Visit the admissions office to withdraw.', '/student/result');
     }
 
-    $reason = trim($_POST['withdraw_reason'] ?? '');
+    $reason = post_str('withdraw_reason');
 
     $db->beginTransaction();
     try {
@@ -118,5 +110,4 @@ if ($action === 'withdraw') {
 }
 
 // No other POST actions supported — redirect back
-Session::flash('error', 'Invalid action.');
-redirect('/student/result');
+fail('Invalid action.', '/student/result');

@@ -16,18 +16,9 @@
 
 require_once CORE_PATH . '/bootstrap.php';
 
-header('Content-Type: application/json');
-
-function status_reply(int $code, array $body): never
-{
-    http_response_code($code);
-    echo json_encode($body);
-    exit;
-}
-
 $secret = trim((string) getenv('ENROLLMENT_STATUS_SECRET'));
 if ($secret === '') {
-    status_reply(503, ['error' => 'The status endpoint is not configured.']);
+    json_response(['error' => 'The status endpoint is not configured.'], 503);
 }
 
 // Apache can hide the Authorization header from PHP; Vercel passes it through.
@@ -40,13 +31,13 @@ if ($header === '' && function_exists('getallheaders')) {
     }
 }
 if (!str_starts_with($header, 'Bearer ') || !hash_equals($secret, trim(substr($header, 7)))) {
-    status_reply(401, ['error' => 'Not authorized.']);
+    json_response(['error' => 'Not authorized.'], 401);
 }
 
 $body = json_decode((string) file_get_contents('php://input'), true);
 $parsed = enrollment_status_parse(is_array($body) ? $body : []);
 if (is_string($parsed)) {
-    status_reply(400, ['error' => $parsed]);
+    json_response(['error' => $parsed], 400);
 }
 [$applicantId, $stage, $studentNumber] = $parsed;
 
@@ -63,16 +54,16 @@ try {
 
     if ($stmt->rowCount() > 0) {
         audit_log('enrollment_status_' . $stage, "Applicant {$applicantId}: Enrollment reports {$stage} {$studentNumber}", 'applicant', $applicantId);
-        status_reply(200, ['status' => 'recorded']);
+        json_response(['status' => 'recorded'], 200);
     }
 
     $exists = $db->prepare('SELECT 1 FROM enrollment_handoff_outbox WHERE applicant_id = ?');
     $exists->execute([$applicantId]);
     if (!$exists->fetchColumn()) {
-        status_reply(404, ['error' => 'No such applicant was sent to Enrollment.']);
+        json_response(['error' => 'No such applicant was sent to Enrollment.'], 404);
     }
-    status_reply(200, ['status' => 'unchanged']);
+    json_response(['status' => 'unchanged'], 200);
 } catch (\Throwable $e) {
     error_log('enrollment status error: ' . $e->getMessage());
-    status_reply(500, ['error' => 'The status could not be recorded.']);
+    json_response(['error' => 'The status could not be recorded.'], 500);
 }

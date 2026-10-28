@@ -14,13 +14,11 @@ $user    = Auth::user();
 $errors  = [];
 $success = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     if ($action === 'update_branding') {
-        $schoolName  = trim($_POST['school_name'] ?? '');
-        $accentColor = trim($_POST['accent_color'] ?? '#2d6a4f');
+        $schoolName  = post_str('school_name');
+        $accentColor = post_str('accent_color', '#2d6a4f');
         if (!$schoolName) { $errors[] = 'School name is required.'; }
 
         $logoPath = null;
@@ -166,15 +164,10 @@ ob_start();
 
 </div>
 
-<script>
-document.getElementById('color-picker').addEventListener('input', function() {
-    document.getElementById('hex-input').value = this.value;
-});
-</script>
-
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Settings';
+$pageScripts = ['js/pages/admin-settings.js'];
 require_once VIEWS_PATH . '/partials/page_header.php';
 $pageBreadcrumb = [page_home_crumb()];
 $activeNav = 'settings';

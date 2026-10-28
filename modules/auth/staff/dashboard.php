@@ -20,9 +20,7 @@ if (Auth::role() === ROLE_PROCTOR) {
 finalize_closed_exam_drafts();
 
 // ── A4: Dashboard POST handlers ──────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
     $staffId = Auth::id();
 
     if ($action === 'approve_all_pending_docs') {

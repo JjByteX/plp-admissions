@@ -32,7 +32,7 @@ $departments = departments_list();
 $today       = date('Y-m-d');
 
 // ── Routing ──────────────────────────────────────────────────
-$college    = trim($_GET['college'] ?? '');
+$college    = get_str('college');
 $legacyDesk = (int)($_GET['desk'] ?? 0);
 
 // Legacy desk URL → resolve a department from any session linked to that user
@@ -57,20 +57,18 @@ if (!$canManage && !$college) {
 }
 
 // ── POST handlers ────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     // ─── Add Session ──────────────────────────────────────
     if ($action === 'add_session' || $action === 'create_slot') {
-        $dept       = $canManage ? trim($_POST['department'] ?? $college) : $staffDept;
-        $assignedTo = (int)($_POST['assigned_to'] ?? 0);
-        $label      = trim($_POST['location_label'] ?? '');
-        $notes      = trim($_POST['location_notes'] ?? '');
-        $date       = trim($_POST['slot_date']      ?? '');
-        $time       = trim($_POST['slot_time']      ?? '') ?: null;
-        $endTime    = trim($_POST['slot_end_time']  ?? '') ?: null;
-        $capacity   = max(1, (int)($_POST['capacity'] ?? 30));
+        $dept       = $canManage ? post_str('department', $college) : $staffDept;
+        $assignedTo = post_int('assigned_to');
+        $label      = post_str('location_label');
+        $notes      = post_str('location_notes');
+        $date       = post_str('slot_date');
+        $time       = post_str('slot_time') ?: null;
+        $endTime    = post_str('slot_end_time') ?: null;
+        $capacity   = max(1, post_int('capacity', 30));
 
         if (!$dept)       $errors[] = 'College / department is required.';
         if (!$assignedTo) $errors[] = 'Please assign an interviewer to this session.';
@@ -123,14 +121,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ─── Edit Session ─────────────────────────────────────
     if ($action === 'edit_session' || $action === 'edit_slot') {
-        $slotId     = (int)($_POST['slot_id']      ?? 0);
-        $assignedTo = (int)($_POST['assigned_to']  ?? 0);
-        $label      = trim($_POST['location_label'] ?? '');
-        $notes      = trim($_POST['location_notes'] ?? '');
-        $date       = trim($_POST['slot_date']      ?? '');
-        $time       = trim($_POST['slot_time']      ?? '') ?: null;
-        $endTime    = trim($_POST['slot_end_time']  ?? '') ?: null;
-        $capacity   = max(1, (int)($_POST['capacity'] ?? 30));
+        $slotId     = post_int('slot_id');
+        $assignedTo = post_int('assigned_to');
+        $label      = post_str('location_label');
+        $notes      = post_str('location_notes');
+        $date       = post_str('slot_date');
+        $time       = post_str('slot_time') ?: null;
+        $endTime    = post_str('slot_end_time') ?: null;
+        $capacity   = max(1, post_int('capacity', 30));
 
         if (!$slotId)     $errors[] = 'Invalid session.';
         if (!$assignedTo) $errors[] = 'Please assign an interviewer.';
@@ -160,64 +158,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $assignedTo, $label, ($notes ?: null), $slotId,
                 ]);
                 audit_log('interview_slot_edited', "Edited session #{$slotId}", 'interview_slot', $slotId);
-                Session::flash('success', 'Session updated.');
-                redirect('/staff/interviews/setup?college=' . urlencode($deptVal));
+                ok('Session updated.', '/staff/interviews/setup?college=' . urlencode($deptVal));
             }
         }
     }
 
     // ─── Bulk Delete Sessions (from select-mode bar) ───────
     if ($action === 'delete_sessions_bulk') {
-        $rawIds  = trim($_POST['ids']     ?? '');
-        $deptCtx = trim($_POST['college'] ?? $college);
-        $ids     = array_values(array_filter(array_map('intval', explode(',', $rawIds)), fn($v) => $v > 0));
+        $rawIds  = post_str('ids');
+        $deptCtx = post_str('college', $college);
+        $ids     = parse_id_list($rawIds);
 
         if (empty($ids)) {
             Session::flash('error', 'No sessions selected.');
         } else {
-            $ph     = implode(',', array_fill(0, count($ids), '?'));
             // Skip sessions that have at least one booked applicant — same
             // rule the single-row delete enforces. Only the empty ones are
             // safe to remove.
-            $bkStmt = $db->prepare(
-                "SELECT s.id, COUNT(q.id) AS booked
-                   FROM interview_slots s
-                   LEFT JOIN interview_queue q ON q.slot_id = s.id
-                  WHERE s.id IN ({$ph})
-                  GROUP BY s.id"
-            );
-            $bkStmt->execute($ids);
-            $deletable = [];
-            $skipped   = 0;
-            foreach ($bkStmt->fetchAll() as $row) {
-                if ((int)$row['booked'] > 0) { $skipped++; continue; }
-                $deletable[] = (int)$row['id'];
-            }
-
-            $deletedCount = 0;
-            if (!empty($deletable)) {
-                $delPh  = implode(',', array_fill(0, count($deletable), '?'));
-                $del    = $db->prepare("DELETE FROM interview_slots WHERE id IN ({$delPh})");
-                $del->execute($deletable);
-                $deletedCount = $del->rowCount();
-                audit_log('interview_slots_bulk_deleted',
-                    "Bulk-deleted {$deletedCount} session(s): " . implode(',', $deletable));
-            }
-
-            if ($deletedCount > 0 && $skipped > 0) {
-                Session::flash('success', "{$deletedCount} session(s) removed; {$skipped} skipped (had bookings).");
-            } elseif ($deletedCount > 0) {
-                Session::flash('success', "{$deletedCount} session(s) removed.");
-            } elseif ($skipped > 0) {
-                Session::flash('error', "Nothing removed - all {$skipped} selected session(s) have bookings.");
-            }
+            $bulkCfg = [
+                'table' => 'interview_slots', 'child' => 'interview_queue', 'fk' => 'slot_id',
+                'noun' => 'session', 'audit' => 'interview_slots_bulk_deleted',
+                'skipNote' => 'had bookings', 'allNote' => 'have bookings',
+            ];
+            flash_bulk_delete_result(bulk_delete_empty($db, $bulkCfg, $ids), $bulkCfg);
             redirect('/staff/interviews/setup?college=' . urlencode($deptCtx));
         }
     }
 
     // ─── Delete Session ───────────────────────────────────
     if ($action === 'delete_session' || $action === 'delete_slot') {
-        $slotId = (int)($_POST['slot_id'] ?? 0);
+        $slotId = post_int('slot_id');
         if ($slotId) {
             $deptStmt = $db->prepare('SELECT department FROM interview_slots WHERE id=?');
             $deptStmt->execute([$slotId]);
@@ -240,15 +210,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ─── Batch Create Sessions ────────────────────────────
     if ($action === 'batch_create') {
-        $dept       = $canManage ? trim($_POST['department'] ?? $college) : $staffDept;
-        $assignedTo = (int)($_POST['assigned_to']     ?? 0);
-        $label      = trim($_POST['location_label']   ?? '');
-        $notes      = trim($_POST['location_notes']   ?? '');
-        $startDate  = trim($_POST['start_date'] ?? '');
-        $endDate    = trim($_POST['end_date']   ?? '');
-        $startTime  = trim($_POST['start_time'] ?? '09:00');
-        $endTime    = trim($_POST['end_time']   ?? '16:00');
-        $capacity   = (int)($_POST['capacity']  ?? 30);
+        $dept       = $canManage ? post_str('department', $college) : $staffDept;
+        $assignedTo = post_int('assigned_to');
+        $label      = post_str('location_label');
+        $notes      = post_str('location_notes');
+        $startDate  = post_str('start_date');
+        $endDate    = post_str('end_date');
+        $startTime  = post_str('start_time', '09:00');
+        $endTime    = post_str('end_time', '16:00');
+        $capacity   = post_int('capacity', 30);
         $days       = $_POST['days'] ?? [1, 2, 3, 4, 5];
 
         if (!$dept)       $errors[] = 'College / department is required.';

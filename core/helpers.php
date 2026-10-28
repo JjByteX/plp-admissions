@@ -25,6 +25,263 @@ function redirect(string $path): never
     exit;
 }
 
+// -- Request input + flash-redirect ------------------------------
+function post_str(string $key, string $default = ''): string
+{
+    return trim((string)($_POST[$key] ?? $default));
+}
+
+function post_int(string $key, int $default = 0): int
+{
+    return (int)($_POST[$key] ?? $default);
+}
+
+function get_str(string $key, string $default = ''): string
+{
+    return trim((string)($_GET[$key] ?? $default));
+}
+
+function flash_redirect(string $type, string $message, string $to): never
+{
+    Session::flash($type, $message);
+    redirect($to);
+}
+
+function fail(string $message, string $to): never
+{
+    flash_redirect('error', $message, $to);
+}
+
+function ok(string $message, string $to): never
+{
+    flash_redirect('success', $message, $to);
+}
+
+// POST handler preamble: returns null on non-POST; on POST runs csrf_check()
+// and returns the submitted action (or $default when none was sent).
+function require_post_action(string $default = ''): ?string
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        return null;
+    }
+    csrf_check();
+    return (string)($_POST['action'] ?? $default);
+}
+
+// -- JSON responses (API endpoints) ------------------------------
+function json_response(array $body, int $code = 200): never
+{
+    http_response_code($code);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($body, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+function json_error(string $message, int $code = 400): never
+{
+    json_response(['ok' => false, 'error' => $message], $code);
+}
+
+// Sends 405 (JSON) unless the request uses the given method.
+function require_method(string $method): void
+{
+    if (strtoupper($_SERVER['REQUEST_METHOD'] ?? '') !== strtoupper($method)) {
+        header('Allow: ' . strtoupper($method));
+        json_error(strtoupper($method) . ' only', 405);
+    }
+}
+
+// -- CSV download ------------------------------------------------
+// Streams a CSV (UTF-8 BOM so Excel reads accents) and returns; the caller
+// decides what happens next (audit, exit). $rows may be a generator.
+function csv_download(string $filename, array $header, iterable $rows): void
+{
+    $safe = str_replace(['"', "\r", "\n"], '', $filename);
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $safe . '"');
+    echo "\xEF\xBB\xBF";
+    $out = fopen('php://output', 'w');
+    fputcsv($out, $header);
+    foreach ($rows as $row) {
+        fputcsv($out, array_values($row));
+    }
+    fclose($out);
+}
+
+// -- SQL IN() helpers --------------------------------------------
+// Positional placeholders for an IN() list. Returns [ '?,?,?', [values] ].
+// An empty list gives 'NULL' (IN (NULL) matches nothing), so the query stays valid.
+function sql_in(array $values): array
+{
+    $values = array_values($values);
+    if (!$values) {
+        return ['NULL', []];
+    }
+    return [implode(',', array_fill(0, count($values), '?')), $values];
+}
+
+// "1,2,x,-3" -> [1, 2] (positive ints only).
+function parse_id_list(string $csv): array
+{
+    return array_values(array_filter(array_map('intval', explode(',', $csv)), fn($v) => $v > 0));
+}
+
+// -- Bulk delete of empty slots ----------------------------------
+// Deletes the given slot ids that have no child rows (bookings) and skips the rest.
+// $cfg comes from code constants, never request data:
+//   table, child, fk (child column pointing at table.id), noun, audit,
+//   skipNote (e.g. 'have applicants'), allNote (e.g. 'have bookings')
+// Returns ['deleted' => int, 'skipped' => int].
+function bulk_delete_empty(PDO $db, array $cfg, array $ids): array
+{
+    $result = ['deleted' => 0, 'skipped' => 0];
+    if (!$ids) {
+        return $result;
+    }
+    [$ph, $params] = sql_in($ids);
+    $stmt = $db->prepare(
+        "SELECT s.id, COUNT(c.id) AS filled
+           FROM {$cfg['table']} s
+           LEFT JOIN {$cfg['child']} c ON c.{$cfg['fk']} = s.id
+          WHERE s.id IN ({$ph})
+          GROUP BY s.id"
+    );
+    $stmt->execute($params);
+    $deletable = [];
+    foreach ($stmt->fetchAll() as $row) {
+        if ((int)$row['filled'] > 0) { $result['skipped']++; continue; }
+        $deletable[] = (int)$row['id'];
+    }
+    if ($deletable) {
+        [$delPh, $delParams] = sql_in($deletable);
+        $del = $db->prepare("DELETE FROM {$cfg['table']} WHERE id IN ({$delPh})");
+        $del->execute($delParams);
+        $result['deleted'] = $del->rowCount();
+        audit_log($cfg['audit'],
+            "Bulk-deleted {$result['deleted']} {$cfg['noun']}(s): " . implode(',', $deletable));
+    }
+    return $result;
+}
+
+// Flashes the standard "N removed; M skipped" / "N removed" / "Nothing removed" message.
+function flash_bulk_delete_result(array $r, array $cfg): void
+{
+    $n = $r['deleted'];
+    $m = $r['skipped'];
+    $noun = $cfg['noun'];
+    if ($n > 0 && $m > 0) {
+        Session::flash('success', "{$n} {$noun}(s) removed; {$m} skipped ({$cfg['skipNote']}).");
+    } elseif ($n > 0) {
+        Session::flash('success', "{$n} {$noun}(s) removed.");
+    } elseif ($m > 0) {
+        Session::flash('error', "Nothing removed - all {$m} selected {$noun}(s) {$cfg['allNote']}.");
+    }
+}
+
+// -- Student reschedule request -----------------------------------
+// Shared flow for the interview and exam reschedule endpoints. The module
+// still does its own Auth::requireRole() + csrf_check() first. $cfg comes
+// from code constants (table / column names), never request data:
+//   cols       applicants columns to load (e.g. 'id, overall_status')
+//   redirect   page to return to
+//   table      requests table; inserts applicant_id, reason + resolve() columns
+//   resolve    fn(array $applicant, PDO $db): array  - checks stage / active slot
+//              (call fail() itself) and returns extra insert columns, e.g. ['slot_id' => 5]
+//   pendingMsg flash text when a pending request already exists
+//   auditAction, auditLabel   audit entry, e.g. 'exam_reschedule_requested', 'EXAM reschedule'
+//   roles, notifyType, notifyTitle, notifyMessage, notifyLink   reviewer notification
+//   successMsg
+function submit_reschedule_request(array $cfg): never
+{
+    $db        = db();
+    $applicant = applicant_for_user((int) Auth::id(), $cfg['cols']);
+    if (!$applicant) {
+        fail('No application found.', $cfg['redirect']);
+    }
+
+    $extra = ($cfg['resolve'])($applicant, $db);
+
+    $reason = post_str('reschedule_reason');
+    if (!$reason) {
+        fail('Please provide a reason for rescheduling.', $cfg['redirect']);
+    }
+
+    // One pending request per applicant.
+    $stmt = $db->prepare("SELECT id FROM {$cfg['table']} WHERE applicant_id = ? AND status = 'pending' LIMIT 1");
+    $stmt->execute([$applicant['id']]);
+    if ($stmt->fetch()) {
+        fail($cfg['pendingMsg'], $cfg['redirect']);
+    }
+
+    $cols = array_merge(['applicant_id' => $applicant['id']], $extra, ['reason' => $reason]);
+    $db->prepare(
+        "INSERT INTO {$cfg['table']} (" . implode(', ', array_keys($cols)) . ') VALUES ('
+        . implode(', ', array_fill(0, count($cols), '?')) . ')'
+    )->execute(array_values($cols));
+
+    audit_log(
+        $cfg['auditAction'],
+        "Applicant {$applicant['id']} requested {$cfg['auditLabel']}: {$reason}",
+        'applicant',
+        (int) $applicant['id']
+    );
+
+    notify_roles($cfg['roles'], $cfg['notifyType'], $cfg['notifyTitle'], $cfg['notifyMessage'], $cfg['notifyLink']);
+
+    ok($cfg['successMsg'], $cfg['redirect']);
+}
+
+// -- Badge / label maps ------------------------------------------
+// Badge colour name for a role ('error', 'warning', ...); used as "badge-<name>".
+function role_badge_class(?string $role): string
+{
+    return match ($role) {
+        ROLE_ADMIN   => 'error',
+        ROLE_DEAN    => 'warning',
+        ROLE_SSO     => 'success',
+        ROLE_STAFF, ROLE_PROCTOR => 'info',
+        default      => 'neutral',
+    };
+}
+
+// Label + CSS class for a document status. Unknown statuses read as Pending.
+function doc_status_badge(string $status): array
+{
+    static $map = [
+        'pending'               => ['label' => 'Pending',               'class' => 'badge-pending'],
+        'uploaded'              => ['label' => 'Uploaded',              'class' => 'badge-info'],
+        'under_review'          => ['label' => 'Under Review',          'class' => 'badge-warning'],
+        'approved'              => ['label' => 'Approved',              'class' => 'badge-success'],
+        'rejected'              => ['label' => 'Declined',              'class' => 'badge-error'],
+        'resubmission_required' => ['label' => 'Resubmission Required', 'class' => 'badge-error'],
+    ];
+    return $map[$status] ?? $map['pending'];
+}
+
+// -- Applicant lookup --------------------------------------------
+// Latest applicant row for a user. $cols must be code-defined ('*' or a
+// comma-separated column list), never request data; anything else throws.
+function applicant_for_user(int $userId, string $cols = '*'): ?array
+{
+    if (!preg_match('/^(\*|[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)$/', $cols)) {
+        throw new InvalidArgumentException('Invalid applicant column list.');
+    }
+    $stmt = db()->prepare("SELECT $cols FROM applicants WHERE user_id = ? ORDER BY id DESC LIMIT 1");
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+// The signed-in user's applicant row, or redirect when they have none.
+function require_applicant(string $cols = '*', string $redirectTo = '/student/documents'): array
+{
+    $applicant = applicant_for_user((int)Auth::id(), $cols);
+    if (!$applicant) {
+        redirect($redirectTo);
+    }
+    return $applicant;
+}
+
 // -- Settings modal ----------------------------------------------
 // The settings pages are shown inside the settings modal (an iframe that
 // loads them with ?embed=1; views/partials/settings_modal.php). In embed mode
@@ -678,6 +935,12 @@ function format_date(string $date, string $format = 'F j, Y'): string
 function format_time(string $time): string
 {
     return date('g:i A', strtotime($time));
+}
+
+/** "Oct 28, 2026 11:49 PM" - date and time as shown in tables and panels. */
+function format_datetime(string $dt): string
+{
+    return date('M j, Y g:i A', strtotime($dt));
 }
 
 /**

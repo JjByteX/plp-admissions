@@ -39,27 +39,23 @@ $errors  = [];
 // ----------------------------------------------------------------
 // POST — only SSO / Admin may approve or deny
 // ----------------------------------------------------------------
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     if (!$canReschedule) {
-        Session::flash('error', 'Only SSO and Admin can approve or deny exam reschedule requests.');
-        redirect('/staff/exam/reschedule');
+        fail('Only SSO and Admin can approve or deny exam reschedule requests.', '/staff/exam/reschedule');
     }
 
     // ── Approve a reschedule request ────────────────────────────
     if ($action === 'approve_reschedule') {
-        $requestId    = (int)($_POST['request_id'] ?? 0);
-        $targetSlotId = (int)($_POST['target_slot_id'] ?? 0);
+        $requestId    = post_int('request_id');
+        $targetSlotId = post_int('target_slot_id');
 
         $rr = $db->prepare('SELECT * FROM exam_reschedule_requests WHERE id = ? AND status = \'pending\' LIMIT 1');
         $rr->execute([$requestId]);
         $req = $rr->fetch();
 
         if (!$req) {
-            Session::flash('error', 'Reschedule request not found or already processed.');
-            redirect('/staff/exam/reschedule');
+            fail('Reschedule request not found or already processed.', '/staff/exam/reschedule');
         }
 
         $applicantId = (int)$req['applicant_id'];
@@ -174,8 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($slotErr !== null) {
-            Session::flash('error', $slotErr);
-            redirect('/staff/exam/reschedule');
+            fail($slotErr, '/staff/exam/reschedule');
         }
 
         // ------------------------------------------------------------
@@ -289,8 +284,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Deny a reschedule request ──────────────────────────────
     if ($action === 'deny_reschedule') {
-        $requestId  = (int)($_POST['request_id'] ?? 0);
-        $denyReason = trim($_POST['deny_reason'] ?? '');
+        $requestId  = post_int('request_id');
+        $denyReason = post_str('deny_reason');
 
         $rr = $db->prepare('SELECT * FROM exam_reschedule_requests WHERE id = ? AND status = \'pending\' LIMIT 1');
         $rr->execute([$requestId]);
@@ -328,9 +323,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // AutoPageSize (app.js) measures how many fixed-height rows fit the
 // table and reloads with ?per_page=; see auto_per_page() in helpers.php.
 // ----------------------------------------------------------------
-$search     = trim($_GET['q']    ?? '');
-$filterDept = trim($_GET['dept'] ?? '');
-$filterDate = trim($_GET['date'] ?? '');
+$search     = get_str('q');
+$filterDept = get_str('dept');
+$filterDate = get_str('date');
 if ($filterDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterDate)) {
     $filterDate = '';
 }

@@ -35,8 +35,7 @@ switch ($action) {
         $row = $stmt->fetch();
 
         if (!$row) {
-            Session::flash('error', 'Interview queue entry not found.');
-            redirect('/staff/interviews/queue');
+            fail('Interview queue entry not found.', '/staff/interviews/queue');
         }
 
         $db->prepare("UPDATE interview_queue SET status='completed' WHERE id=?")
@@ -47,20 +46,18 @@ switch ($action) {
         // the Pass/Reject eval. We still leave the applicant in 'interview'
         // so the Results page bucket logic picks it up correctly.
         audit_log('interview_completed', "Marked interview queue ID {$id} as completed", 'interview_queue', $id);
-        Session::flash('success', 'Interview marked as completed.');
-        redirect('/staff/interviews/queue');
+        ok('Interview marked as completed.', '/staff/interviews/queue');
         break;
 
     // ----------------------------------------------------------------
     // Queue: complete with inline evaluation (Pass/Reject + notes)
     // ----------------------------------------------------------------
     case 'complete_with_evaluation':
-        $evalResult = strtolower(trim($_POST['evaluation_result'] ?? ''));
-        $evalNotes  = trim($_POST['interview_notes'] ?? '');
+        $evalResult = strtolower(post_str('evaluation_result'));
+        $evalNotes  = post_str('interview_notes');
 
         if ($evalResult !== 'pass' && $evalResult !== 'reject') {
-            Session::flash('error', 'Please select Pass or Decline before completing.');
-            redirect('/staff/interviews/queue');
+            fail('Please select Pass or Decline before completing.', '/staff/interviews/queue');
         }
 
         $stmt = $db->prepare('SELECT q.applicant_id FROM interview_queue q WHERE q.id = ?');
@@ -68,8 +65,7 @@ switch ($action) {
         $row = $stmt->fetch();
 
         if (!$row) {
-            Session::flash('error', 'Interview queue entry not found.');
-            redirect('/staff/interviews/queue');
+            fail('Interview queue entry not found.', '/staff/interviews/queue');
         }
 
         // Update queue: status, notes, evaluation, attendance
@@ -97,8 +93,7 @@ switch ($action) {
         audit_log('interview_completed_with_eval',
             "Completed interview queue ID {$id}: {$evalResult}",
             'interview_queue', $id);
-        Session::flash('success', 'Interview completed - ' . ucfirst($evalResult) . '.');
-        redirect('/staff/interviews/queue');
+        ok('Interview completed - ' . ucfirst($evalResult) . '.', '/staff/interviews/queue');
         break;
 
     // ----------------------------------------------------------------
@@ -143,8 +138,7 @@ switch ($action) {
                 $rescheduledMsg = ' Auto-rescheduled to a new slot.';
             }
         }
-        Session::flash('success', 'Marked as no-show.' . $rescheduledMsg);
-        redirect('/staff/interviews/queue');
+        ok('Marked as no-show.' . $rescheduledMsg, '/staff/interviews/queue');
         break;
 
     // ----------------------------------------------------------------
@@ -167,15 +161,14 @@ switch ($action) {
                AND  COALESCE(s.assigned_to, s.created_by) = ?"
         )->execute([$id, $staffId]);
         audit_log('interview_started', "Started interview for queue ID {$id}", 'interview_queue', $id);
-        Session::flash('success', 'Interview started.');
-        redirect('/staff/interviews/queue');
+        ok('Interview started.', '/staff/interviews/queue');
         break;
 
     // ----------------------------------------------------------------
     // Queue: save evaluation notes
     // ----------------------------------------------------------------
     case 'save_notes':
-        $notes = trim($_POST['interview_notes'] ?? '');
+        $notes = post_str('interview_notes');
         $db->prepare(
             'UPDATE interview_queue q
              SET    interview_notes = ?
@@ -184,8 +177,7 @@ switch ($action) {
                AND  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?'
         )->execute([$notes ?: null, $id, $staffId]);
         audit_log('interview_notes_saved', "Saved notes for interview queue ID {$id}", 'interview_queue', $id);
-        Session::flash('success', 'Notes saved.');
-        redirect('/staff/interviews/queue');
+        ok('Notes saved.', '/staff/interviews/queue');
         break;
 
     // ----------------------------------------------------------------
@@ -197,8 +189,7 @@ switch ($action) {
         );
         $stmt->execute([$id]);
         if ((int)$stmt->fetchColumn() > 0) {
-            Session::flash('error', 'Cannot delete a session that already has bookings.');
-            redirect('/staff/interviews');
+            fail('Cannot delete a session that already has bookings.', '/staff/interviews');
         }
         // Owner = the assigned interviewer (with created_by fallback for legacy rows)
         $db->prepare(
@@ -206,8 +197,7 @@ switch ($action) {
              WHERE id = ? AND COALESCE(assigned_to, created_by) = ?'
         )->execute([$id, $staffId]);
         audit_log('interview_slot_deleted', "Deleted interview slot ID {$id}", 'interview_slot', $id);
-        Session::flash('success', 'Session deleted.');
-        redirect('/staff/interviews');
+        ok('Session deleted.', '/staff/interviews');
         break;
 
     // ----------------------------------------------------------------
@@ -222,8 +212,7 @@ switch ($action) {
         $ownerId = (int)($own->fetchColumn() ?: 0);
         $isAdmin = (Auth::user()['role'] ?? '') === ROLE_ADMIN;
         if ($ownerId !== $staffId && !$isAdmin) {
-            Session::flash('error', 'You can only close your own sessions.');
-            redirect('/staff/interviews');
+            fail('You can only close your own sessions.', '/staff/interviews');
         }
 
         // Closing a slot means booked applicants need a new one —
@@ -253,8 +242,7 @@ switch ($action) {
              WHERE id=? AND COALESCE(assigned_to, created_by) = ?"
         )->execute([$id, $staffId]);
         audit_log('interview_slot_reopened', "Reopened interview slot ID {$id}", 'interview_slot', $id);
-        Session::flash('success', 'Session reopened.');
-        redirect('/staff/interviews');
+        ok('Session reopened.', '/staff/interviews');
         break;
 
     // ----------------------------------------------------------------
@@ -264,11 +252,10 @@ switch ($action) {
     case 'reassign_desk':
     case 'reassign_session':
         $isAdmin = (Auth::user()['role'] ?? '') === ROLE_ADMIN;
-        $targetSlotId = (int)($_POST['target_slot_id'] ?? 0);
+        $targetSlotId = post_int('target_slot_id');
 
         if (!$isAdmin) {
-            Session::flash('error', 'Only admins can reassign students.');
-            redirect('/staff/interviews/queue');
+            fail('Only admins can reassign students.', '/staff/interviews/queue');
         }
 
         // Load queue entry
@@ -281,8 +268,7 @@ switch ($action) {
         $qEntry = $qStmt->fetch();
 
         if (!$qEntry) {
-            Session::flash('error', 'Queue entry not found or not in a reassignable state.');
-            redirect('/staff/interviews/queue');
+            fail('Queue entry not found or not in a reassignable state.', '/staff/interviews/queue');
         }
 
         // Verify target slot is in the same department and has capacity
@@ -296,13 +282,11 @@ switch ($action) {
         $target = $tStmt->fetch();
 
         if (!$target || $target['department'] !== $qEntry['department']) {
-            Session::flash('error', 'Target slot invalid or not in the same college.');
-            redirect('/staff/interviews/queue');
+            fail('Target slot invalid or not in the same college.', '/staff/interviews/queue');
         }
 
         if ((int)$target['booked'] >= (int)$target['capacity']) {
-            Session::flash('error', 'Target slot is full.');
-            redirect('/staff/interviews/queue');
+            fail('Target slot is full.', '/staff/interviews/queue');
         }
 
         $db->prepare('UPDATE interview_queue SET slot_id = ? WHERE id = ?')
@@ -311,8 +295,7 @@ switch ($action) {
         audit_log('interview_reassigned',
             "Reassigned queue #{$id} from slot #{$qEntry['slot_id']} to slot #{$targetSlotId}",
             'interview_queue', $id);
-        Session::flash('success', 'Student reassigned to new session.');
-        redirect('/staff/interviews/queue');
+        ok('Student reassigned to new session.', '/staff/interviews/queue');
         break;
 
     default:

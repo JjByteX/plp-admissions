@@ -21,7 +21,7 @@
 
 $nav      = $activeNav ?? '';
 $navRole  = Auth::role();
-$isDean   = ($navRole === ROLE_DEAN);
+$isDean   = StaffScope::current()->restricted();
 $isSSO    = ($navRole === ROLE_SSO);
 
 // Readiness checks for red-dot indicators
@@ -116,19 +116,11 @@ try {
                OR iq.evaluation_result IN ('pass','reject') )";
 
     if ($isDean) {
-        $_navDeanDept = function_exists('user_department')
-            ? (string) user_department((int) Auth::id())
-            : '';
-        $_navDeanCourses = ($_navDeanDept !== '' && function_exists('courses_in_department'))
-            ? courses_in_department($_navDeanDept)
-            : [];
-        if (!empty($_navDeanCourses)) {
-            $_navInPh   = implode(',', array_fill(0, count($_navDeanCourses), '?'));
-            $_navResStmt = $_navDb->prepare($_navResSql . " AND a.course_applied IN ($_navInPh)");
-            $_navResStmt->execute($_navDeanCourses);
-            $_navResPending = (int)$_navResStmt->fetchColumn() > 0;
-        }
-        // dean with no department / no courses → no dot
+        // StaffScope returns '1 = 0' for a Dean with no department/courses → no dot.
+        [$_navScopeSql, $_navScopeParams] = StaffScope::current()->courseSql('a.course_applied');
+        $_navResStmt = $_navDb->prepare($_navResSql . ($_navScopeSql !== '' ? " AND {$_navScopeSql}" : ''));
+        $_navResStmt->execute($_navScopeParams);
+        $_navResPending = (int)$_navResStmt->fetchColumn() > 0;
     } else {
         $_navResPending = (int)$_navDb->query($_navResSql)->fetchColumn() > 0;
     }

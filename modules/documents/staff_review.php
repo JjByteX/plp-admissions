@@ -18,8 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
     $ids = array_values(array_unique(array_filter(array_map('intval', $_POST['applicant_ids'] ?? []))));
 
     if (empty($ids)) {
-        Session::flash('error', 'No applicants selected.');
-        redirect('/staff/applicants');
+        fail('No applicants selected.', '/staff/applicants');
     }
 
     $approved  = 0;
@@ -166,14 +165,7 @@ if ($applicantId) {
 <?php foreach ($requiredDocs as $slug => $label):
     $doc    = $docRows[$slug] ?? null;
     $status = $doc['status'] ?? 'pending';
-    $statusMap = [
-        'pending'      => ['label'=>'Pending',      'class'=>'badge-pending'],
-        'uploaded'     => ['label'=>'Uploaded',     'class'=>'badge-uploaded'],
-        'under_review' => ['label'=>'Under Review', 'class'=>'badge-review'],
-        'approved'     => ['label'=>'Approved',     'class'=>'badge-approved'],
-        'rejected'     => ['label'=>'Declined',     'class'=>'badge-rejected'],
-    ];
-    $badge = $statusMap[$status] ?? $statusMap['pending'];
+    $badge = doc_status_badge($status);
     $flag  = $doc ? ($aiFlags[(int)$doc['id']] ?? null) : null;
 
     // Find file index in viewable list for opening modal at correct position

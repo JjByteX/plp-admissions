@@ -36,23 +36,20 @@ $staffId     = Auth::id();
 $role        = Auth::role();
 
 if (!$applicantId) {
-    Session::flash('error', 'Missing applicant.');
-    redirect('/staff/results');
+    fail('Missing applicant.', '/staff/results');
 }
 
 // ── Override (Admin-only) ─────────────────────────────────────
 if ($action === 'override') {
     if ($role !== ROLE_ADMIN) {
-        Session::flash('error', 'Only Admin can override a released result.');
-        redirect('/staff/results');
+        fail('Only Admin can override a released result.', '/staff/results');
     }
     $decision = $_POST['result']  ?? '';
-    $remarks  = trim($_POST['remarks'] ?? '');
+    $remarks  = post_str('remarks');
     $valid    = ['accepted', 'rejected'];
 
     if (!in_array($decision, $valid, true) || $remarks === '') {
-        Session::flash('error', 'Override requires a result and a written reason.');
-        redirect('/staff/results');
+        fail('Override requires a result and a written reason.', '/staff/results');
     }
 
     // Must already be released (override only edits existing rows).
@@ -60,8 +57,7 @@ if ($action === 'override') {
     $exists->execute([$applicantId]);
     $prev = $exists->fetchColumn();
     if ($prev === false) {
-        Session::flash('error', 'Cannot override - applicant has no released result yet.');
-        redirect('/staff/results');
+        fail('Cannot override - applicant has no released result yet.', '/staff/results');
     }
 
     $db->prepare(
@@ -105,24 +101,20 @@ $stmt->execute([$applicantId]);
 $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$row) {
-    Session::flash('error', 'Applicant not found.');
-    redirect('/staff/results');
+    fail('Applicant not found.', '/staff/results');
 }
 if ($row['overall_status'] === 'withdrawn') {
-    Session::flash('error', 'Cannot release a withdrawn applicant.');
-    redirect('/staff/results');
+    fail('Cannot release a withdrawn applicant.', '/staff/results');
 }
 if ($row['existing_result'] !== null) {
-    Session::flash('error', 'Result already released. Admin can override via Edit.');
-    redirect('/staff/results');
+    fail('Result already released. Admin can override via Edit.', '/staff/results');
 }
 
 $decision = $_POST['decision'] ?? '';
-$reason   = trim($_POST['reason'] ?? '');
+$reason   = post_str('reason');
 
 if (!in_array($decision, ['accepted', 'rejected'], true)) {
-    Session::flash('error', 'Pick a result: Accept or Decline.');
-    redirect('/staff/results');
+    fail('Pick a result: Accept or Decline.', '/staff/results');
 }
 
 $examPassed   = isset($row['exam_passed']) ? (int) $row['exam_passed'] : -1;
@@ -132,8 +124,7 @@ $interviewRes = $row['evaluation_result'];
 // can still override later — but only after the Professor records a
 // Pass/Reject so the recommendation is on file.
 if ($interviewRes !== 'pass' && $interviewRes !== 'reject' && $examPassed !== 0) {
-    Session::flash('error', 'Cannot release yet - interview must be evaluated first.');
-    redirect('/staff/results');
+    fail('Cannot release yet - interview must be evaluated first.', '/staff/results');
 }
 
 // Determine the Professor + exam recommendation.
@@ -144,10 +135,8 @@ $recommended = ($examPassed === 0 || $interviewRes === 'reject')
 $isOverride = ($recommended !== null && $recommended !== $decision);
 
 if ($isOverride && $reason === '') {
-    Session::flash('error',
-        'A written reason is required to release this applicant as '
-        . ucfirst($decision) . ' against the Professor\'s recommendation.');
-    redirect('/staff/results');
+    fail('A written reason is required to release this applicant as '
+        . ucfirst($decision) . ' against the Professor\'s recommendation.', '/staff/results');
 }
 
 $remarks = $isOverride ? $reason : null;

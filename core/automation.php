@@ -24,6 +24,40 @@ function create_notification(int $userId, string $type, string $title, string $m
 }
 
 /**
+ * In-app notification + branded email for one user (student).
+ * Looks up the email/name itself. A mail failure is logged, never thrown.
+ * $link is an app path ('/student/exam'); the email button gets the full URL.
+ */
+function notify_student(
+    int $userId,
+    string $type,
+    string $title,
+    string $message,
+    string $link,
+    string $buttonLabel = 'View Details'
+): void {
+    create_notification($userId, $type, $title, $message, $link);
+
+    try {
+        $stmt = db()->prepare('SELECT email, name FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        if ($user && !empty($user['email'])) {
+            $emailBody = '<p>' . e($message) . '</p>'
+                . email_button(rtrim(BASE_URL, '/') . $link, $buttonLabel);
+            send_email(
+                (string) $user['email'],
+                $title . ' - ' . school_setting('school_name', 'PLP Admissions'),
+                email_template($title, $emailBody),
+                (string) $user['name']
+            );
+        }
+    } catch (\Throwable $e) {
+        error_log('notify_student email failed: ' . $e->getMessage());
+    }
+}
+
+/**
  * Get unread notification count for a user.
  */
 function notification_count(int $userId): int
@@ -118,27 +152,7 @@ function notify_stage_transition(int $applicantId, string $newStatus, string $ex
     }
 
     [$title, $message, $link] = $messages[$newStatus];
-    create_notification($userId, 'stage_' . $newStatus, $title, $message, $link);
-
-    // Send email notification
-    try {
-        $userStmt = $pdo->prepare('SELECT email, name FROM users WHERE id = ?');
-        $userStmt->execute([$userId]);
-        $user = $userStmt->fetch();
-        if ($user && !empty($user['email'])) {
-            $fullLink = rtrim(BASE_URL, '/') . $link;
-            $emailBody = '<p>' . e($message) . '</p>'
-                . email_button($fullLink, 'View Details');
-            send_email(
-                $user['email'],
-                $title . ' - ' . school_setting('school_name', 'PLP Admissions'),
-                email_template($title, $emailBody),
-                $user['name']
-            );
-        }
-    } catch (\Throwable $e) {
-        error_log('Stage email failed: ' . $e->getMessage());
-    }
+    notify_student($userId, 'stage_' . $newStatus, $title, $message, $link);
 }
 
 /**
@@ -654,6 +668,24 @@ function auto_release_results(): array
 // ----------------------------------------------------------------
 
 /**
+ * Yield each 'Y-m-d' from $config['start_date'] to $config['end_date'] (inclusive)
+ * whose ISO weekday (1=Mon .. 7=Sun) is in $config['days'] (default Mon-Fri).
+ */
+function iterate_dates(array $config): Generator
+{
+    $current = new DateTime($config['start_date']);
+    $end     = new DateTime($config['end_date']);
+    $days    = $config['days'] ?? [1, 2, 3, 4, 5];
+
+    while ($current <= $end) {
+        if (in_array((int) $current->format('N'), $days, true)) {
+            yield $current->format('Y-m-d');
+        }
+        $current->modify('+1 day');
+    }
+}
+
+/**
  * Create interview sessions in batch based on a template.
  *
  * @param array  $config  ['start_date', 'end_date', 'start_time', 'end_time',
@@ -666,12 +698,9 @@ function batch_create_interview_sessions(array $config, string $department, int 
     $pdo = db();
     $created = 0;
 
-    $startDate = new DateTime($config['start_date']);
-    $endDate   = new DateTime($config['end_date']);
     $startTime = $config['start_time'] ?? '09:00';
     $endTime   = $config['end_time']   ?? '16:00';
     $capacity  = max(1, (int)($config['capacity'] ?? 30));
-    $days      = $config['days'] ?? [1, 2, 3, 4, 5]; // Mon-Fri by default
 
     // After the desk/session merge, sessions carry interviewer + location
     // directly. Callers can pass any of these in $config.
@@ -683,44 +712,35 @@ function batch_create_interview_sessions(array $config, string $department, int 
 
     $departments = $department ? [$department] : departments_list();
 
-    $current = clone $startDate;
-    while ($current <= $endDate) {
-        $dayOfWeek = (int) $current->format('N'); // 1=Mon, 7=Sun
-
-        if (in_array($dayOfWeek, $days, true)) {
-            $dateStr = $current->format('Y-m-d');
-
-            foreach ($departments as $dept) {
-                // Skip if a session already exists for this date/department.
-                $stmt = $pdo->prepare(
-                    'SELECT id FROM interview_slots
-                     WHERE slot_date = ? AND department = ?
-                     LIMIT 1'
-                );
-                $stmt->execute([$dateStr, $dept]);
-                if ($stmt->fetch()) {
-                    continue;
-                }
-
-                $cols   = ['slot_date', 'slot_time', 'end_time', 'capacity', 'department', 'created_by',
-                           'assigned_to', 'location_label', 'location_notes'];
-                $values = [$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId,
-                           $assignedTo, $locationLabel, $locationNotes];
-
-                $placeholders = implode(', ', array_fill(0, count($cols), '?'));
-                $colsSql      = implode(', ', $cols);
-
-                $pdo->prepare(
-                    "INSERT INTO interview_slots ({$colsSql}) VALUES ({$placeholders})"
-                )->execute($values);
-                $created++;
-
-                // Auto-assign pending applicants to this new session
-                bulk_assign_pending_applicants($dept, $staffId);
+    foreach (iterate_dates($config) as $dateStr) {
+        foreach ($departments as $dept) {
+            // Skip if a session already exists for this date/department.
+            $stmt = $pdo->prepare(
+                'SELECT id FROM interview_slots
+                 WHERE slot_date = ? AND department = ?
+                 LIMIT 1'
+            );
+            $stmt->execute([$dateStr, $dept]);
+            if ($stmt->fetch()) {
+                continue;
             }
-        }
 
-        $current->modify('+1 day');
+            $cols   = ['slot_date', 'slot_time', 'end_time', 'capacity', 'department', 'created_by',
+                       'assigned_to', 'location_label', 'location_notes'];
+            $values = [$dateStr, $startTime . ':00', $endTime . ':00', $capacity, $dept, $staffId,
+                       $assignedTo, $locationLabel, $locationNotes];
+
+            $placeholders = implode(', ', array_fill(0, count($cols), '?'));
+            $colsSql      = implode(', ', $cols);
+
+            $pdo->prepare(
+                "INSERT INTO interview_slots ({$colsSql}) VALUES ({$placeholders})"
+            )->execute($values);
+            $created++;
+
+            // Auto-assign pending applicants to this new session
+            bulk_assign_pending_applicants($dept, $staffId);
+        }
     }
 
     if ($created > 0) {
@@ -1051,19 +1071,7 @@ function notify_reschedule_decision(
                    . ($extra ? ' ' . $extra : '');
         }
 
-        create_notification((int)$user['user_id'], 'reschedule_' . $decision, $title, $msg, $link);
-
-        if (!empty($user['email'])) {
-            $fullLink  = rtrim(BASE_URL, '/') . $link;
-            $emailBody = '<p>' . e($msg) . '</p>'
-                       . email_button($fullLink, 'View Details');
-            send_email(
-                (string)$user['email'],
-                $title . ' - ' . school_setting('school_name', 'PLP Admissions'),
-                email_template($title, $emailBody),
-                (string)$user['name']
-            );
-        }
+        notify_student((int)$user['user_id'], 'reschedule_' . $decision, $title, $msg, $link);
     } catch (\Throwable $e) {
         error_log('reschedule decision notify failed: ' . $e->getMessage());
     }
@@ -1074,20 +1082,36 @@ function notify_reschedule_decision(
 // ----------------------------------------------------------------
 
 /**
+ * Notify every active user holding one of the given roles. Pass ROLE_* constants.
+ * Returns how many users were notified (0 on failure or no match).
+ */
+function notify_roles(array $roles, string $type, string $title, string $message = '', string $link = ''): int
+{
+    $roles = array_values(array_unique(array_map('strval', $roles)));
+    if (!$roles) {
+        return 0;
+    }
+    try {
+        [$ph, $params] = sql_in($roles);
+        $stmt = db()->prepare("SELECT id FROM users WHERE role IN ($ph) AND is_active = 1");
+        $stmt->execute($params);
+        $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($ids as $userId) {
+            create_notification((int)$userId, $type, $title, $message, $link);
+        }
+        return count($ids);
+    } catch (\Throwable $e) {
+        error_log('notify_roles error: ' . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
  * Notify all staff/admin users about an event.
  */
 function notify_staff(string $type, string $title, string $message = '', string $link = ''): void
 {
-    try {
-        $staff = db()
-            ->query("SELECT id FROM users WHERE role IN ('staff','admin') AND is_active=1")
-            ->fetchAll(PDO::FETCH_COLUMN);
-        foreach ($staff as $userId) {
-            create_notification((int)$userId, $type, $title, $message, $link);
-        }
-    } catch (\Throwable $e) {
-        error_log('notify_staff error: ' . $e->getMessage());
-    }
+    notify_roles([ROLE_STAFF, ROLE_ADMIN], $type, $title, $message, $link);
 }
 
 /**
@@ -1260,13 +1284,10 @@ function batch_create_exam_slots(array $config, string $department, int $staffId
     $pdo = db();
     $created = 0;
 
-    $startDate = new DateTime($config['start_date']);
-    $endDate   = new DateTime($config['end_date']);
     $time      = $config['slot_time']   ?? '08:00';
     $endTime   = $config['end_time']    ?? '';
     $room      = $config['room_label']  ?? '';
     $capacity  = max(1, (int)($config['capacity'] ?? 35));
-    $days      = $config['days'] ?? [1, 2, 3, 4, 5];
 
     // Default close time = open + 90 min if caller didn't specify one.
     if ($endTime === '') {
@@ -1277,41 +1298,32 @@ function batch_create_exam_slots(array $config, string $department, int $staffId
     $activeExam = $pdo->query('SELECT id FROM exams WHERE is_active=1 LIMIT 1')->fetch();
     $examId     = $activeExam ? (int)$activeExam['id'] : null;
 
-    $current = clone $startDate;
-    while ($current <= $endDate) {
-        $dayOfWeek = (int) $current->format('N');
-
-        if (in_array($dayOfWeek, $days, true)) {
-            $dateStr = $current->format('Y-m-d');
-
-            // Check if slot already exists for this date/dept/room
-            $stmt = $pdo->prepare(
-                'SELECT id FROM exam_slot_schedule
-                 WHERE exam_date = ? AND department = ? AND room_label = ?
-                 LIMIT 1'
-            );
-            $stmt->execute([$dateStr, $department, $room]);
-            if (!$stmt->fetch()) {
-                $pdo->prepare(
-                    'INSERT INTO exam_slot_schedule
-                    (exam_id, exam_date, slot_time, end_time, room_label, department, capacity, school_year, created_by)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-                )->execute([
-                    $examId,
-                    $dateStr,
-                    $time . ':00',
-                    $endTime . ':00',
-                    $room,
-                    $department,
-                    $capacity,
-                    $schoolYear,
-                    $staffId,
-                ]);
-                $created++;
-            }
+    foreach (iterate_dates($config) as $dateStr) {
+        // Check if slot already exists for this date/dept/room
+        $stmt = $pdo->prepare(
+            'SELECT id FROM exam_slot_schedule
+             WHERE exam_date = ? AND department = ? AND room_label = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$dateStr, $department, $room]);
+        if (!$stmt->fetch()) {
+            $pdo->prepare(
+                'INSERT INTO exam_slot_schedule
+                (exam_id, exam_date, slot_time, end_time, room_label, department, capacity, school_year, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            )->execute([
+                $examId,
+                $dateStr,
+                $time . ':00',
+                $endTime . ':00',
+                $room,
+                $department,
+                $capacity,
+                $schoolYear,
+                $staffId,
+            ]);
+            $created++;
         }
-
-        $current->modify('+1 day');
     }
 
     if ($created > 0) {

@@ -10,20 +10,18 @@
 
 require_once CORE_PATH . '/bootstrap.php';
 
-$token = trim($_GET['token'] ?? '');
+$token = get_str('token');
 
 // No token at all → send them to login.
 if ($token === '') {
-    Session::flash('error', 'Invalid verification link.');
-    redirect('/login');
+    fail('Invalid verification link.', '/login');
 }
 
 $user = find_user_by_verify_token($token);
 
 // Token unknown or expired — kick to /verify-pending so the user can request a new code.
 if (!$user) {
-    Session::flash('error', 'Link invalid or expired. Request a new one below.');
-    redirect('/verify-pending');
+    fail('Link invalid or expired. Request a new one below.', '/verify-pending');
 }
 
 // Already verified (rare race) — just log them in.

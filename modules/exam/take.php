@@ -15,10 +15,7 @@ $db     = db();
 $userId = Auth::id();
 warn_if_db_timezone_off();
 
-$stmt = $db->prepare('SELECT * FROM applicants WHERE user_id=? ORDER BY id DESC LIMIT 1');
-$stmt->execute([$userId]);
-$applicant = $stmt->fetch();
-if (!$applicant) { redirect('/student/documents'); }
+$applicant = require_applicant();
 $applicantId = $applicant['id'];
 
 $stepperCurrent = 'exam';
@@ -31,14 +28,14 @@ if (in_array($applicant['overall_status'] ?? '', ['submitted', 'documents'], tru
     $requiredDocs = docs_for_type($applicant['applicant_type'] ?? '', $applicant['doc_flags'] ?? null);
     if (!empty($requiredDocs)) {
         $slugs = array_keys($requiredDocs);
-        $placeholders = implode(',', array_fill(0, count($slugs), '?'));
+        [$placeholders, $slugParams] = sql_in($slugs);
         $stmt = $db->prepare(
             "SELECT COUNT(*) FROM documents
               WHERE applicant_id = ?
                 AND doc_type IN ($placeholders)
                 AND status = 'approved'"
         );
-        $stmt->execute(array_merge([$applicantId], $slugs));
+        $stmt->execute(array_merge([$applicantId], $slugParams));
         $approvedCount = (int)$stmt->fetchColumn();
 
         if ($approvedCount === count($requiredDocs)) {
@@ -65,8 +62,7 @@ if (in_array($applicant['overall_status'] ?? '', ['submitted', 'documents'], tru
 }
 
 if ($applicant['overall_status'] !== 'exam') {
-    Session::flash('error', 'You are not yet eligible to take the entrance exam.');
-    redirect('/student/documents');
+    fail('You are not yet eligible to take the entrance exam.', '/student/documents');
 }
 
 // Background safety-net: if the student is at the exam stage but
@@ -475,7 +471,7 @@ if ($needsPwGate && !$isUnlocked) {
     // Handle password submission
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['exam_access_password'])) {
         csrf_check();
-        $submitted = strtoupper(trim($_POST['exam_access_password'] ?? ''));
+        $submitted = strtoupper(post_str('exam_access_password'));
         $correct   = strtoupper(trim($mySlot['access_password']));
 
         if (!$pwValid) {
@@ -637,8 +633,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $draftJson = $stmt->fetchColumn();
         if ($draftJson === false) {
             // ponytail: no saved draft means nothing to score. Staff handle it, not scored 0.
-            Session::flash('error', 'The exam has closed and no saved answers were found. Please contact the admissions office.');
-            redirect('/student/documents');
+            fail('The exam has closed and no saved answers were found. Please contact the admissions office.', '/student/documents');
         }
         $answers = exam_answers_from_draft((string)$draftJson);
         $note    = EXAM_AUTO_NOTE;

@@ -32,190 +32,119 @@ Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 $db      = db();
 $staffId = Auth::id();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     if ($action === 'cancel_slot') {
-        $sourceId  = (int)($_POST['source_slot_id'] ?? 0);
-        $targetId  = (int)($_POST['target_slot_id'] ?? 0);
-        $reason    = trim($_POST['reason'] ?? '');
+        cancel_slot_and_move([
+            'noun'      => 'interview',
+            'redirect'  => '/staff/interviews/cancel-slot',
+            'lockTable' => 'interview_slots',
 
-        if ($sourceId <= 0 || $targetId <= 0) {
-            Session::flash('error', 'Pick both a slot to cancel and a replacement slot.');
-            redirect('/staff/interviews/cancel-slot');
-        }
-        if ($sourceId === $targetId) {
-            Session::flash('error', 'The replacement slot must be different from the slot you\'re cancelling.');
-            redirect('/staff/interviews/cancel-slot');
-        }
-        if ($reason === '') {
-            Session::flash('error', 'Please enter a reason - it\'s shown to the affected students.');
-            redirect('/staff/interviews/cancel-slot');
-        }
+            'loadSlot' => function (PDO $db, int $id): ?array {
+                $stmt = $db->prepare(
+                    "SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label, s.status, s.capacity,
+                            (SELECT COUNT(*) FROM interview_queue q
+                               WHERE q.slot_id = s.id
+                                 AND q.interview_status IN ('pending','completed')) AS booked
+                       FROM interview_slots s WHERE s.id = ? LIMIT 1"
+                );
+                $stmt->execute([$id]);
+                $row = $stmt->fetch();
+                return $row ?: null;
+            },
 
-        $today   = date('Y-m-d');
-        $nowTime = date('H:i:s');
-        $movedIds  = [];
-        $newSlot   = null;
-        $oldSlot   = null;
-        $errMsg    = null;
+            'capacityOf' => fn(array $slot): int => (int)$slot['capacity'],
+            'bookedOf'   => fn(array $slot): int => (int)$slot['booked'],
 
-        try {
-            $db->beginTransaction();
-
-            // Lock both slots up front (lowest id first to avoid deadlocks).
-            $lockIds = [$sourceId, $targetId];
-            sort($lockIds);
-            $lockStmt = $db->prepare(
-                'SELECT id FROM interview_slots WHERE id IN (?, ?) FOR UPDATE'
-            );
-            $lockStmt->execute($lockIds);
-            $lockStmt->fetchAll();
-
-            $src = $db->prepare(
-                "SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label, s.status,
-                        (SELECT COUNT(*) FROM interview_queue q
-                           WHERE q.slot_id = s.id
-                             AND q.interview_status IN ('pending','completed')) AS booked
-                   FROM interview_slots s WHERE s.id = ? LIMIT 1"
-            );
-            $src->execute([$sourceId]);
-            $oldSlot = $src->fetch();
-            if (!$oldSlot) {
-                $errMsg = 'The slot you wanted to cancel no longer exists.';
-                throw new \RuntimeException($errMsg);
-            }
-
-            $tgt = $db->prepare(
-                "SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.location_label, s.status, s.capacity,
-                        (SELECT COUNT(*) FROM interview_queue q
-                           WHERE q.slot_id = s.id
-                             AND q.interview_status IN ('pending','completed')) AS booked
-                   FROM interview_slots s WHERE s.id = ? LIMIT 1"
-            );
-            $tgt->execute([$targetId]);
-            $newSlot = $tgt->fetch();
-            if (!$newSlot) {
-                $errMsg = 'The replacement slot you picked no longer exists.';
-                throw new \RuntimeException($errMsg);
-            }
-            if ($newSlot['status'] !== 'open'
-                || (string)$newSlot['slot_date'] < $today
-                || ((string)$newSlot['slot_date'] === $today
-                    && !empty($newSlot['end_time'])
-                    && (string)$newSlot['end_time'] <= $nowTime)) {
-                $errMsg = 'The replacement slot is not open or is already in the past.';
-                throw new \RuntimeException($errMsg);
-            }
-
-            $needed = (int)$oldSlot['booked'];
-            $spotsLeft = (int)$newSlot['capacity'] - (int)$newSlot['booked'];
-            if ($needed > $spotsLeft) {
-                $errMsg = "Replacement slot only has {$spotsLeft} open seat(s) but {$needed} student(s) need to move. "
-                        . 'Pick a slot with more capacity, or create one first.';
-                throw new \RuntimeException($errMsg);
-            }
-
-            // Collect the queue rows we need to migrate.
-            $qStmt = $db->prepare(
-                "SELECT id, applicant_id
-                   FROM interview_queue
-                  WHERE slot_id = ?
-                    AND interview_status IN ('pending','completed')
-                  FOR UPDATE"
-            );
-            $qStmt->execute([$sourceId]);
-            $rows = $qStmt->fetchAll();
-
-            // Figure out the starting queue number on the target slot.
-            $nextNumStmt = $db->prepare(
-                'SELECT COALESCE(MAX(q.queue_number), 0) + 1
-                   FROM interview_queue q
-                   JOIN interview_slots s2 ON s2.id = q.slot_id
-                  WHERE s2.slot_date = (SELECT slot_date FROM interview_slots WHERE id = ?)
-                    AND COALESCE(s2.assigned_to, s2.created_by) = (
-                        SELECT COALESCE(assigned_to, created_by)
-                          FROM interview_slots WHERE id = ?
-                    )
-                    AND q.queue_number IS NOT NULL'
-            );
-            $nextNumStmt->execute([$targetId, $targetId]);
-            $nextNum = (int)$nextNumStmt->fetchColumn();
-
-            $updateStmt = $db->prepare(
-                'UPDATE interview_queue
-                    SET slot_id = ?, queue_number = ?
-                  WHERE id = ?'
-            );
-            foreach ($rows as $r) {
-                $updateStmt->execute([$targetId, $nextNum, (int)$r['id']]);
-                $movedIds[] = (int)$r['applicant_id'];
-                $nextNum++;
-            }
-
-            // Close the cancelled slot so future auto-assigns skip it.
-            $db->prepare(
-                "UPDATE interview_slots SET status = 'closed' WHERE id = ?"
-            )->execute([$sourceId]);
-
-            // Log a bulk reschedule_requests row per applicant so the
-            // student-facing history block shows what happened.
-            $logStmt = $db->prepare(
-                "INSERT INTO reschedule_requests
-                    (applicant_id, queue_id, reason, status, reviewed_by, reviewed_at)
-                  VALUES (?, 0, ?, 'approved', ?, NOW())"
-            );
-            foreach ($rows as $r) {
-                try {
-                    $logStmt->execute([
-                        (int)$r['applicant_id'],
-                        '[Bulk reschedule by staff] ' . $reason,
-                        $staffId,
-                    ]);
-                } catch (\Throwable) {
-                    // Non-fatal: history logging is best-effort.
+            'validateTarget' => function (array $oldSlot, array $newSlot, string $today): ?string {
+                $nowTime = date('H:i:s');
+                if ($newSlot['status'] !== 'open'
+                    || (string)$newSlot['slot_date'] < $today
+                    || ((string)$newSlot['slot_date'] === $today
+                        && !empty($newSlot['end_time'])
+                        && (string)$newSlot['end_time'] <= $nowTime)) {
+                    return 'The replacement slot is not open or is already in the past.';
                 }
-            }
+                return null;
+            },
 
-            $db->commit();
-        } catch (\Throwable $e) {
-            if ($db->inTransaction()) $db->rollBack();
-            if (!$errMsg) {
-                error_log('bulk cancel_slot (interview) failed: ' . $e->getMessage());
-                $errMsg = 'Could not cancel that slot - please try again.';
-            }
-            Session::flash('error', $errMsg);
-            redirect('/staff/interviews/cancel-slot');
-        }
+            'moveApplicants' => function (PDO $db, int $sourceId, int $targetId, int $staffId, string $reason): array {
+                $movedIds = [];
 
-        // Notify every affected student outside the transaction.
-        if (!empty($movedIds) && $newSlot) {
-            $when = trim(
-                format_date((string)$newSlot['slot_date'])
-                . (!empty($newSlot['slot_time']) ? ', ' . format_time((string)$newSlot['slot_time']) : '')
-            );
-            $extra = "Your new slot is {$when}"
-                   . (!empty($newSlot['location_label']) ? ' at ' . $newSlot['location_label'] : '')
-                   . ($reason !== '' ? '. Reason: ' . $reason : '.');
-            foreach ($movedIds as $aid) {
-                notify_reschedule_decision($aid, 'interview', 'approved', $extra);
-            }
-        }
+                // Collect the queue rows we need to migrate.
+                $qStmt = $db->prepare(
+                    "SELECT id, applicant_id
+                       FROM interview_queue
+                      WHERE slot_id = ?
+                        AND interview_status IN ('pending','completed')
+                      FOR UPDATE"
+                );
+                $qStmt->execute([$sourceId]);
+                $rows = $qStmt->fetchAll();
 
-        audit_log(
-            'interview_slot_cancelled_bulk',
-            "Cancelled interview slot #{$sourceId} and moved " . count($movedIds)
-            . " applicant(s) to slot #{$targetId} - {$reason}",
-            'interview_slot',
-            $sourceId
-        );
+                // Figure out the starting queue number on the target slot.
+                $nextNumStmt = $db->prepare(
+                    'SELECT COALESCE(MAX(q.queue_number), 0) + 1
+                       FROM interview_queue q
+                       JOIN interview_slots s2 ON s2.id = q.slot_id
+                      WHERE s2.slot_date = (SELECT slot_date FROM interview_slots WHERE id = ?)
+                        AND COALESCE(s2.assigned_to, s2.created_by) = (
+                            SELECT COALESCE(assigned_to, created_by)
+                              FROM interview_slots WHERE id = ?
+                        )
+                        AND q.queue_number IS NOT NULL'
+                );
+                $nextNumStmt->execute([$targetId, $targetId]);
+                $nextNum = (int)$nextNumStmt->fetchColumn();
 
-        Session::flash(
-            'success',
-            'Cancelled slot and moved ' . count($movedIds) . ' student(s) to the replacement slot. They have been notified.'
-        );
-        redirect('/staff/interviews/cancel-slot');
+                $updateStmt = $db->prepare(
+                    'UPDATE interview_queue
+                        SET slot_id = ?, queue_number = ?
+                      WHERE id = ?'
+                );
+                foreach ($rows as $r) {
+                    $updateStmt->execute([$targetId, $nextNum, (int)$r['id']]);
+                    $movedIds[] = (int)$r['applicant_id'];
+                    $nextNum++;
+                }
+
+                // Close the cancelled slot so future auto-assigns skip it.
+                $db->prepare(
+                    "UPDATE interview_slots SET status = 'closed' WHERE id = ?"
+                )->execute([$sourceId]);
+
+                // Log a bulk reschedule_requests row per applicant so the
+                // student-facing history block shows what happened.
+                $logStmt = $db->prepare(
+                    "INSERT INTO reschedule_requests
+                        (applicant_id, queue_id, reason, status, reviewed_by, reviewed_at)
+                      VALUES (?, 0, ?, 'approved', ?, NOW())"
+                );
+                foreach ($rows as $r) {
+                    try {
+                        $logStmt->execute([
+                            (int)$r['applicant_id'],
+                            '[Bulk reschedule by staff] ' . $reason,
+                            $staffId,
+                        ]);
+                    } catch (\Throwable) {
+                        // Non-fatal: history logging is best-effort.
+                    }
+                }
+
+                return $movedIds;
+            },
+
+            'describeSlot' => function (array $slot): string {
+                $when = trim(
+                    format_date((string)$slot['slot_date'])
+                    . (!empty($slot['slot_time']) ? ', ' . format_time((string)$slot['slot_time']) : '')
+                );
+                return $when . (!empty($slot['location_label']) ? ' at ' . $slot['location_label'] : '');
+            },
+
+            'auditAction' => 'interview_slot_cancelled_bulk',
+        ]);
     }
 }
 

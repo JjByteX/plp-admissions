@@ -136,14 +136,20 @@ function viewer_scoped_department(): string
  */
 function viewer_course_filter(string $alias = 'a'): array
 {
+    // Dean: one shared rule (StaffScope) so the "no courses => nothing" case lives in one place.
+    if (Auth::check() && Auth::role() === ROLE_DEAN) {
+        [$sql, $vals] = StaffScope::current()->courseSql("{$alias}.course_applied");
+        return $sql === '' ? ['', []] : [' AND ' . $sql, $vals];
+    }
+
     $dept = viewer_scoped_department();
     if ($dept === '') return ['', []];
 
     $courses = courses_in_department($dept);
     if (empty($courses)) return [' AND 1 = 0', []];
 
-    $marks = implode(',', array_fill(0, count($courses), '?'));
-    return [" AND {$alias}.course_applied IN ({$marks})", array_values($courses)];
+    [$marks, $vals] = sql_in($courses);
+    return [" AND {$alias}.course_applied IN ({$marks})", $vals];
 }
 
 /**
@@ -804,40 +810,7 @@ function _notify_applicant_marked_absent(int $applicantId, string $slotDate, str
            . ($when !== '' ? " on {$when}" : '')
            . '. You can request a reschedule from your interview page.';
 
-    if (function_exists('create_notification')) {
-        try {
-            create_notification(
-                (int)$user['user_id'],
-                'interview_marked_absent',
-                $title,
-                $msg,
-                '/student/interview'
-            );
-        } catch (\Throwable $e) {
-            error_log('create_notification (marked absent) failed: ' . $e->getMessage());
-        }
-    }
-
-    if (!empty($user['email'])
-        && function_exists('send_email')
-        && function_exists('email_template')) {
-        try {
-            $accent = function_exists('school_setting') ? school_setting('accent_color', '#2d6a4f') : '#2d6a4f';
-            $school = function_exists('school_setting') ? school_setting('school_name', 'PLP Admissions') : 'PLP Admissions';
-            $base   = defined('BASE_URL') ? BASE_URL : '';
-            $link   = rtrim((string)$base, '/') . '/student/interview';
-            $body   = '<p>' . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') . '</p>'
-                    . email_button($link, 'Request a reschedule', (string)$accent);
-            send_email(
-                (string)$user['email'],
-                $title . ' - ' . $school,
-                email_template($title, $body),
-                (string)$user['name']
-            );
-        } catch (\Throwable $e) {
-            error_log('send_email (marked absent) failed: ' . $e->getMessage());
-        }
-    }
+    notify_student((int)$user['user_id'], 'interview_marked_absent', $title, $msg, '/student/interview', 'Request a reschedule');
 }
 
 /**

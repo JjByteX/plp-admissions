@@ -46,20 +46,19 @@ $stmt = $db->prepare(
 $stmt->execute([$slotId]);
 $slot = $stmt->fetch();
 if (!$slot) {
-    Session::flash('error', 'Slot not found.');
-    redirect('/staff/interviews');
+    fail('Slot not found.', '/staff/interviews');
 }
 
 $isAdmin   = ($role === ROLE_ADMIN);
 $isSSO     = ($role === ROLE_SSO);
-$isDean    = ($role === ROLE_DEAN);
+$isDean    = StaffScope::current()->restricted();
 // Admin and SSO can open any roster. Dean can open any roster whose
 // slot belongs to their own department. Professor must be the
 // session owner.
 $ownerId   = (int)($slot['assigned_to'] ?? 0) ?: (int)$slot['created_by'];
 $isOwner   = ($ownerId === $staffId);
 $slotDept  = (string)($slot['department'] ?? '');
-$staffDept = (string) user_department($staffId);
+$staffDept = StaffScope::current()->department(); // '' unless Dean
 $canView   = $isAdmin
            || $isSSO
            || ($isDean && $staffDept !== '' && $slotDept === $staffDept)
@@ -69,8 +68,7 @@ $canView   = $isAdmin
 $canEvaluate = $isAdmin || ($isOwner && !$isSSO && !$isDean);
 
 if (!$canView) {
-    Session::flash('error', 'You can only view rosters for sessions in your scope.');
-    redirect('/staff/interviews');
+    fail('You can only view rosters for sessions in your scope.', '/staff/interviews');
 }
 
 $errors  = [];
@@ -79,13 +77,10 @@ $success = [];
 // ----------------------------------------------------------------
 // POST — save evaluations
 // ----------------------------------------------------------------
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     if (!$canEvaluate) {
-        Session::flash('error', 'Read-only access - only the session interviewer can record evaluations.');
-        redirect('/staff/interviews/' . $slotId . '/roster');
+        fail('Read-only access - only the session interviewer can record evaluations.', '/staff/interviews/' . $slotId . '/roster');
     }
 
     if ($action === 'save_evaluations') {

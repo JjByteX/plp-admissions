@@ -11,10 +11,7 @@ $userId = Auth::id();
 $db     = db();
 
 // Fetch applicant
-$stmt = $db->prepare('SELECT * FROM applicants WHERE user_id = ? ORDER BY id DESC LIMIT 1');
-$stmt->execute([$userId]);
-$applicant = $stmt->fetch();
-if (!$applicant) { redirect('/student/documents'); }
+$applicant = require_applicant();
 $applicantId  = $applicant['id'];
 $isSubmitted  = ($applicant['overall_status'] ?? '') === 'submitted';
 
@@ -37,14 +34,14 @@ $stageMissing = $applicant['applicant_type'] === TYPE_FRESHMAN
 // now so the stepper / exam page unblock immediately.
 if (in_array($applicant['overall_status'] ?? '', ['submitted', 'documents'], true) && !empty($requiredDocs)) {
     $slugs = array_keys($requiredDocs);
-    $placeholders = implode(',', array_fill(0, count($slugs), '?'));
+    [$placeholders, $slugParams] = sql_in($slugs);
     $stmt = $db->prepare(
         "SELECT COUNT(*) FROM documents
           WHERE applicant_id = ?
             AND doc_type IN ($placeholders)
             AND status = 'approved'"
     );
-    $stmt->execute(array_merge([$applicantId], $slugs));
+    $stmt->execute(array_merge([$applicantId], $slugParams));
     if ((int)$stmt->fetchColumn() === count($requiredDocs)) {
         $db->prepare(
             'UPDATE applicants
@@ -181,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ---- Change applicant type ----
     if ($action === 'change_type') {
-        $newType = trim($_POST['applicant_type'] ?? '');
+        $newType = post_str('applicant_type');
         $allowedTypes = ['freshman', 'transferee', 'foreign'];
         if (!in_array($newType, $allowedTypes, true)) {
             $errors[] = 'Invalid applicant type.';
@@ -292,7 +289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db->beginTransaction();
         try {
             // Lock this category's rows so two files sent together never take the same slot.
-            $in   = implode(',', array_fill(0, count($slots), '?'));
+            [$in] = sql_in($slots);
             $stmt = $db->prepare("SELECT doc_type, status FROM documents WHERE applicant_id = ? AND doc_type IN ($in) FOR UPDATE");
             $stmt->execute(array_merge([$applicantId], $slots));
             $fresh = [];
@@ -359,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ---- File upload ----
-    $docSlug = trim($_POST['doc_slug'] ?? '');
+    $docSlug = post_str('doc_slug');
 
     // picked=1: the applicant chose the type from the dropdown after the AI was unsure.
     // doc_slug may then be a slot or a category (valid_id, photo); a category follows the 4B slot rules.
@@ -539,7 +536,7 @@ if ($_examResult) {
         $iAction = $_POST['interview_action'];
 
         if ($iAction === 'book') {
-            $slotId = (int)($_POST['slot_id'] ?? 0);
+            $slotId = post_int('slot_id');
             $db->beginTransaction();
             try {
                 $stmt = $db->prepare(
@@ -850,15 +847,7 @@ ob_start();
 <?php foreach ($requiredDocs as $slug => $label):
     $doc    = $docRows[$slug] ?? null;
     $status = $doc['status'] ?? 'pending';
-    $statusMap = [
-        'pending'               => ['label' => 'Pending',              'class' => 'badge-pending'],
-        'uploaded'              => ['label' => 'Uploaded',             'class' => 'badge-info'],
-        'under_review'          => ['label' => 'Under Review',         'class' => 'badge-warning'],
-        'approved'              => ['label' => 'Approved',             'class' => 'badge-success'],
-        'rejected'              => ['label' => 'Declined',             'class' => 'badge-error'],
-        'resubmission_required' => ['label' => 'Resubmission Required','class' => 'badge-error'],
-    ];
-    $badge      = $statusMap[$status] ?? $statusMap['pending'];
+    $badge      = doc_status_badge($status);
     $canUpload  = $isSubmitted
         ? in_array($status, ['rejected', 'resubmission_required'], true)
         : in_array($status, ['pending', 'rejected', 'resubmission_required', 'uploaded'], true);
@@ -1498,22 +1487,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // PDF first page -> JPEG for the AI. pdf.js is loaded only when a PDF is picked.
     // Any failure (script blocked, locked or broken PDF) just means no preview: the applicant picks the type.
-    var pdfLib = null;
     function loadPdfJs() {
-        if (pdfLib) return pdfLib;
-        pdfLib = new Promise(function (resolve, reject) {
-            if (window.pdfjsLib) return resolve(window.pdfjsLib);
-            var s = document.createElement('script');
-            s.src = PDFJS;
-            s.onload = function () {
-                if (!window.pdfjsLib) return reject(new Error('pdf.js missing'));
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-                resolve(window.pdfjsLib);
-            };
-            s.onerror = function () { reject(new Error('pdf.js failed to load')); };
-            document.head.appendChild(s);
-        });
-        return pdfLib;
+        return PLP.loadPdfJs({ src: PDFJS, worker: PDFJS_WORKER });
     }
 
     function renderPdf(file) {

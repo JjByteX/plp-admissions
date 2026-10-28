@@ -14,9 +14,7 @@ $user    = Auth::user();
 $errors  = [];
 $success = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     // -- Password --------------------------------------------------
     if ($action === 'change_password') {

@@ -154,6 +154,9 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     <link rel="stylesheet" href="<?= asset('vendor/bootstrap-icons/bootstrap-icons.min.css') ?>">
     <link rel="stylesheet" href="<?= asset('css/bootstrap-compat.css') ?>">
     <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
+    <?php foreach (($pageStyles ?? []) as $pageStyle): ?>
+    <link rel="stylesheet" href="<?= asset($pageStyle) ?>">
+    <?php endforeach; ?>
     <?php if ($isEmbed && $embedSection !== ''): ?>
     <style>[data-settings-section]:not([data-settings-section="<?= $embedSection ?>"]) { display: none !important; }</style>
     <?php endif; ?>
@@ -269,9 +272,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                 </div>
                 <?php
                 // Check if student has an active application that can be withdrawn
-                $_wdStmt = db()->prepare('SELECT id, overall_status FROM applicants WHERE user_id = ? ORDER BY id DESC LIMIT 1');
-                $_wdStmt->execute([$authUser['id'] ?? 0]);
-                $_wdAppl = $_wdStmt->fetch();
+                $_wdAppl = applicant_for_user((int)($authUser['id'] ?? 0), 'id, overall_status');
                 $_canWithdraw = $_wdAppl && !in_array($_wdAppl['overall_status'] ?? '', ['withdrawn',''], true);
                 ?>
                 <?php if ($_canWithdraw): ?>
@@ -481,6 +482,10 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 </div><!-- /.layout -->
 
 <script>window.__baseUrl = '<?= rtrim(BASE_URL, '/') ?>';</script>
+<?php /* Page scripts load before jquery/app.js, the same point the old inline blocks ran at. */ ?>
+<?php foreach (($pageScripts ?? []) as $pageScript): ?>
+<script src="<?= asset($pageScript) ?>"></script>
+<?php endforeach; ?>
 <script src="<?= asset('js/jquery.min.js') ?>"></script>
 <script src="<?= asset('vendor/bootstrap/bootstrap.bundle.min.js') ?>"></script>
 <script src="<?= asset('js/app.js') ?>"></script>

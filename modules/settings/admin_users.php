@@ -12,18 +12,16 @@ $adminId = Auth::id();
 $errors  = [];
 $success = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     switch ($action) {
 
         case 'create_user':
-            $name  = trim($_POST['name'] ?? '');
-            $email = strtolower(trim($_POST['email'] ?? ''));
+            $name  = post_str('name');
+            $email = strtolower(post_str('email'));
             $role  = $_POST['role'] ?? '';
             $pass  = $_POST['password'] ?? '';
-            $dept  = trim($_POST['department'] ?? '');
+            $dept  = post_str('department');
 
             $allowedRoles = [ROLE_STAFF, ROLE_PROCTOR, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN];
             if (!$name || !$email || !in_array($role, $allowedRoles, true) || strlen($pass) < 8) {
@@ -65,8 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'update_department':
-            $uid  = (int)($_POST['user_id'] ?? 0);
-            $dept = trim($_POST['department'] ?? '');
+            $uid  = post_int('user_id');
+            $dept = post_str('department');
             if ($uid <= 0) {
                 $errors[] = 'Invalid user.';
                 break;
@@ -80,8 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'toggle_active':
-            $uid    = (int)($_POST['user_id'] ?? 0);
-            $active = (int)($_POST['is_active'] ?? 0);
+            $uid    = post_int('user_id');
+            $active = post_int('is_active');
             if ($uid === $adminId) { $errors[] = 'You cannot deactivate your own account.'; break; }
             $db->prepare('UPDATE users SET is_active=? WHERE id=?')->execute([$active ? 0 : 1, $uid]);
             $newStatus = $active ? 'deactivated' : 'activated';
@@ -90,8 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'reset_password':
-            $uid     = (int)($_POST['user_id'] ?? 0);
-            $newPass = trim($_POST['new_password'] ?? '');
+            $uid     = post_int('user_id');
+            $newPass = post_str('new_password');
             if (strlen($newPass) < 8) { $errors[] = 'Password must be at least 8 characters.'; break; }
             $hash = password_hash($newPass, PASSWORD_BCRYPT, ['cost' => 12]);
             $db->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([$hash, $uid]);
@@ -101,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'delete_user':
-            $uid = (int)($_POST['user_id'] ?? 0);
+            $uid = post_int('user_id');
             if ($uid === $adminId) { $errors[] = 'You cannot delete your own account.'; break; }
             $db->prepare('DELETE FROM users WHERE id=? AND role != \'student\'')->execute([$uid]);
             audit_log('user_deleted', "Deleted user ID {$uid}", 'user', $uid);
@@ -223,14 +221,7 @@ ob_start();
                     <td style="font-size:var(--text-sm);color:var(--text-secondary)"><span class="auto-table-clip"><?= e($u['email']) ?></span></td>
                     <td>
                         <?php
-                            $roleBadge = match ($u['role']) {
-                                ROLE_ADMIN   => 'error',
-                                ROLE_DEAN    => 'warning',
-                                ROLE_SSO     => 'success',
-                                ROLE_STAFF   => 'info',
-                                ROLE_PROCTOR => 'info',
-                                default      => 'neutral',
-                            };
+                            $roleBadge = role_badge_class($u['role']);
                         ?>
                         <span class="badge badge-<?= e($roleBadge) ?>"><?= e(Auth::roleLabel($u['role'])) ?></span>
                     </td>
@@ -422,53 +413,12 @@ ob_start();
     </div>
 </div>
 
-<script>
-function openResetModal(uid, name) {
-    document.getElementById('reset-uid').value = uid;
-    document.getElementById('reset-name').textContent = 'Resetting password for: ' + name;
-    document.getElementById('reset-pw-modal').style.display = 'flex';
-}
-[document.getElementById('create-user-modal'), document.getElementById('reset-pw-modal')].forEach(m => {
-    m.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
-});
-
-// Make department required when role is Dean, optional otherwise.
-(function(){
-    var roleSel = document.getElementById('role-select');
-    var deptSel = document.getElementById('dept-select');
-    var deptHint = document.getElementById('dept-hint');
-    if (!roleSel || !deptSel) return;
-    function sync() {
-        var isDean = roleSel.value === '<?= ROLE_DEAN ?>';
-        var isProctor = roleSel.value === '<?= ROLE_PROCTOR ?>';
-        var isStaff = roleSel.value === '<?= ROLE_STAFF ?>';
-        var needsDept = isDean || isProctor || isStaff;
-        var isAdmin = roleSel.value === '<?= ROLE_ADMIN ?>';
-        var isSSO = roleSel.value === '<?= ROLE_SSO ?>';
-        var hideDept = isAdmin || isSSO;
-        var deptRow = deptSel.closest('div');
-        if (hideDept) {
-            deptRow.style.display = 'none';
-            deptSel.required = false;
-            deptSel.value = '';
-        } else {
-            deptRow.style.display = '';
-            deptSel.required = needsDept;
-        }
-        if (deptHint && !hideDept) {
-            deptHint.textContent = needsDept
-                ? ' - required'
-                : '';
-        }
-    }
-    roleSel.addEventListener('change', sync);
-    sync();
-})();
-</script>
+<script>window.PAGE = <?= json_encode(['roles' => ['dean' => ROLE_DEAN, 'proctor' => ROLE_PROCTOR, 'staff' => ROLE_STAFF, 'admin' => ROLE_ADMIN, 'sso' => ROLE_SSO]]) ?>;</script>
 
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'User Management';
+$pageScripts = ['js/pages/admin-users.js'];
 $activeNav = 'users';
 $pageWide  = true;
 include VIEWS_PATH . '/layouts/app.php';

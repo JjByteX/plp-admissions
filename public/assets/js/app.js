@@ -498,7 +498,7 @@ function initExamTimer(totalSeconds, onExpire) {
 // Notifications
 // ============================================================
 function markAllRead() {
-    const csrf = document.querySelector('input[name="_csrf"]')?.value || '';
+    const csrf = PLP.csrf();
     fetch(window.__baseUrl + '/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
@@ -1294,3 +1294,75 @@ function createCardBulkSelector(cfg) {
     };
 }
 window.createCardBulkSelector = createCardBulkSelector;
+
+// ============================================================
+// PLP shared utilities (used by page-level inline scripts)
+// Call these lazily (from handlers); page scripts that sit above
+// this file in the layout run before it has loaded.
+// ============================================================
+window.PLP = (function () {
+    // One HTML escape for both text and attribute values.
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function csrf() {
+        var el = document.querySelector('input[name="_csrf"]');
+        return el ? el.value : '';
+    }
+
+    // POST form-encoded data with the CSRF token added. Resolves with the parsed JSON
+    // body; a network or parse failure resolves { ok:false, error:'...' } instead of throwing.
+    function post(url, data) {
+        var params = new URLSearchParams();
+        Object.keys(data || {}).forEach(function (k) {
+            if (data[k] != null) params.append(k, data[k]);
+        });
+        if (!params.has('_csrf')) params.append('_csrf', csrf());
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body: params.toString()
+        }).then(function (r) { return r.json(); })
+          .catch(function () { return { ok: false, error: 'Request failed. Try again.' }; });
+    }
+
+    // Memoised pdf.js loader. opts: { src, worker } (defaults to the cdnjs 3.11.174 build).
+    // Resolves with window.pdfjsLib. A failed load is not cached, so a later call retries.
+    var pdfPromise = null;
+    function loadPdfJs(opts) {
+        if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions && window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+            return Promise.resolve(window.pdfjsLib);
+        }
+        if (pdfPromise) return pdfPromise;
+        opts = opts || {};
+        var src = opts.src || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        var worker = opts.worker || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfPromise = new Promise(function (resolve, reject) {
+            function ready() {
+                if (!window.pdfjsLib) return reject(new Error('pdf.js missing'));
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = worker;
+                resolve(window.pdfjsLib);
+            }
+            if (window.pdfjsLib) return ready();
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = ready;
+            s.onerror = function () { reject(new Error('pdf.js failed to load')); };
+            document.head.appendChild(s);
+        });
+        pdfPromise.catch(function () { pdfPromise = null; });
+        return pdfPromise;
+    }
+
+    var modal = {
+        open: function (id)  { document.getElementById(id).style.display = 'flex'; },
+        close: function (id) { document.getElementById(id).style.display = 'none'; }
+    };
+
+    return { esc: esc, csrf: csrf, post: post, loadPdfJs: loadPdfJs, modal: modal };
+})();

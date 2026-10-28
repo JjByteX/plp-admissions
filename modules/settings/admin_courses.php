@@ -23,9 +23,8 @@ $role     = Auth::role();
 // AND max-slots edits for the courses in their own college (oversight +
 // standards-setting + their own college's intake size).
 $canManageCourses = ($role === ROLE_ADMIN || $role === ROLE_SSO);
-$isDean           = ($role === ROLE_DEAN);
-$scopedDept       = $isDean ? (string) user_department($adminId) : '';
-$scopedCourses    = ($scopedDept !== '') ? courses_in_department($scopedDept) : [];
+$isDean           = StaffScope::current()->restricted();
+$scope            = StaffScope::current();
 // Anyone here can change max-slots, but Dean's writes are scoped to their
 // own college (enforced in the `update_course_caps` handler below).
 $canEditMaxSlots  = $canManageCourses || $isDean;
@@ -42,9 +41,7 @@ foreach ($db->query('SELECT id, name FROM departments ORDER BY name')->fetchAll(
 $collegeNames = array_column($colleges, 'name', 'id');
 
 // ── POST handlers ─────────────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     // Dean is read-only on everything except tier thresholds and max-slots.
     // Anything else is dropped up front so the if-blocks below short-circuit.
@@ -56,9 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Add new custom course ──────────────────────────────────
     if ($action === 'add_course') {
-        $name    = trim($_POST['course_name'] ?? '');
+        $name    = post_str('course_name');
         $strands = array_values(array_filter($_POST['strands'] ?? [], fn($s) => isset(SHS_STRANDS[$s])));
-        $deptId  = (int)($_POST['department_id'] ?? 0);
+        $deptId  = post_int('department_id');
 
         if (!$name) {
             $errors[] = 'Course name is required.';
@@ -118,11 +115,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Edit existing custom course ────────────────────────────
     if ($action === 'edit_course') {
-        $courseId = (int)($_POST['course_id'] ?? 0);
-        $name     = trim($_POST['course_name'] ?? '');
+        $courseId = post_int('course_id');
+        $name     = post_str('course_name');
         $strands  = array_values(array_filter($_POST['strands'] ?? [], fn($s) => isset(SHS_STRANDS[$s])));
         $isActive = isset($_POST['is_active']) ? 1 : 0;
-        $deptId   = (int)($_POST['department_id'] ?? 0);
+        $deptId   = post_int('department_id');
 
         if (!$courseId) {
             $errors[] = 'Invalid course.';
@@ -184,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Delete custom course ───────────────────────────────────
     if ($action === 'delete_course') {
-        $courseId = (int)($_POST['course_id'] ?? 0);
+        $courseId = post_int('course_id');
         if (!$courseId) {
             $errors[] = 'Invalid course.';
         } else {
@@ -210,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Admin / SSO can write any course.
         $writableCourses = $canManageCourses
             ? $allCourses
-            : array_values(array_intersect($allCourses, $scopedCourses));
+            : $scope->filterCourses($allCourses);
         $written    = 0;
         foreach ($caps as $courseName => $maxVal) {
             if (!in_array($courseName, $writableCourses, true)) continue;
@@ -233,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Dean can only edit thresholds for courses in their own college.
         $writableCourses = $canManageCourses
             ? $allCourses
-            : array_values(array_intersect($allCourses, $scopedCourses));
+            : $scope->filterCourses($allCourses);
         $written   = 0;
         foreach ($scores as $courseName => $vals) {
             if (!in_array($courseName, $writableCourses, true)) continue;
@@ -285,12 +282,11 @@ try {
 $allCoursesList = function_exists('get_all_courses') ? get_all_courses() : PLP_COURSES;
 
 // Dean dept scope — only show courses that belong to their own college.
-if (!$canManageCourses && $scopedDept !== '') {
-    $deanSet        = array_flip($scopedCourses);
-    $allCoursesList = array_values(array_filter($allCoursesList, fn($c) => isset($deanSet[$c])));
+if (!$canManageCourses && $scope->restricted()) {
+    $allCoursesList = $scope->filterCourses($allCoursesList);
     $customCourses  = array_values(array_filter(
         $customCourses,
-        fn($cc) => isset($deanSet[$cc['course_name']])
+        fn($cc) => $scope->canAccessCourse((string)$cc['course_name'])
     ));
 }
 

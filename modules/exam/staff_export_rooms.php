@@ -83,33 +83,6 @@ if ($filterSlotId > 0) {
     $slotParams[':slot_id'] = $filterSlotId;
 }
 
-/**
- * Format a name as: "SURNAME SUFFIX, FIRST MIDDLE" — all caps.
- * Falls back to splitting `users.name` if structured columns are empty.
- */
-function format_exam_roster_name(array $r): string {
-    $last   = trim($r['last_name']   ?? '');
-    $first  = trim($r['first_name']  ?? '');
-    $middle = trim($r['middle_name'] ?? '');
-    $suffix = trim($r['suffix']      ?? '');
-
-    if ($last === '' && $first === '') {
-        // Legacy fallback — split the consolidated `users.name` on the last space.
-        $full  = trim((string) ($r['student_name'] ?? ''));
-        $parts = preg_split('/\s+/', $full) ?: [];
-        if (count($parts) >= 2) {
-            $last  = array_pop($parts);
-            $first = implode(' ', $parts);
-        } else {
-            $last  = $full;
-        }
-    }
-
-    $surnamePart = strtoupper(trim($last . ($suffix !== '' ? ' ' . $suffix : '')));
-    $firstPart   = strtoupper(trim($first . ($middle !== '' ? ' ' . $middle : '')));
-    return $surnamePart . ($firstPart !== '' ? ', ' . $firstPart : '');
-}
-
 // ── Sheets + CSV: every matching room with its full roster ──
 if ($format === 'csv' || $format === 'print') {
     $stmt = $db->prepare(
@@ -126,7 +99,7 @@ if ($format === 'csv' || $format === 'print') {
     $rosterBySlot = [];
     if ($slots) {
         $slotIds = array_column($slots, 'id');
-        $in      = implode(',', array_fill(0, count($slotIds), '?'));
+        [$in]    = sql_in($slotIds);
         $stmt = $db->prepare(
             "SELECT aes.slot_id, aes.applicant_id,
                     u.name        AS student_name,
@@ -154,42 +127,32 @@ if ($format === 'csv') {
         . ($filterDate !== '' ? $filterDate : date('Y-m-d'))
         . '.csv';
 
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-
-    // BOM so Excel opens UTF-8 cleanly.
-    echo "\xEF\xBB\xBF";
-    $out = fopen('php://output', 'w');
-    fputcsv($out, ['Date', 'Time', 'College', 'Room', 'Capacity', 'Seat #', 'Name (Surname, First Middle)']);
-    foreach ($slots as $slot) {
-        $sid   = (int) $slot['id'];
-        $list  = $rosterBySlot[$sid] ?? [];
-        $i     = 0;
-        if (!$list) {
-            fputcsv($out, [
+    $csvRows = (function () use ($slots, $rosterBySlot) {
+        foreach ($slots as $slot) {
+            $list = $rosterBySlot[(int) $slot['id']] ?? [];
+            $base = [
                 date('Y-m-d', strtotime($slot['exam_date'])),
                 date('H:i',   strtotime($slot['slot_time'])),
                 $slot['department'] ?: '-',
                 $slot['room_label'],
                 $slot['capacity'],
-                '', '(empty)',
-            ]);
-            continue;
+            ];
+            if (!$list) {
+                yield [...$base, '', '(empty)'];
+                continue;
+            }
+            $i = 0;
+            foreach ($list as $r) {
+                $i++;
+                yield [...$base, $i, format_exam_roster_name($r)];
+            }
         }
-        foreach ($list as $r) {
-            $i++;
-            fputcsv($out, [
-                date('Y-m-d', strtotime($slot['exam_date'])),
-                date('H:i',   strtotime($slot['slot_time'])),
-                $slot['department'] ?: '-',
-                $slot['room_label'],
-                $slot['capacity'],
-                $i,
-                format_exam_roster_name($r),
-            ]);
-        }
-    }
-    fclose($out);
+    })();
+    csv_download(
+        $filename,
+        ['Date', 'Time', 'College', 'Room', 'Capacity', 'Seat #', 'Name (Surname, First Middle)'],
+        $csvRows
+    );
     audit_log('exam_rooms_export_csv', 'Exported room assignments as CSV', null, null);
     exit;
 }

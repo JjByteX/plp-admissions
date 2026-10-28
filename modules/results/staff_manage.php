@@ -55,8 +55,7 @@ $canCloseCycle    = ($role === ROLE_ADMIN);
 
 // Dean is dept-scoped — only see applicants whose course maps to their
 // own college. Admin sees every applicant across all colleges.
-$scopedDept    = ($role === ROLE_DEAN) ? (string) user_department($staffId) : '';
-$scopedCourses = ($scopedDept !== '') ? courses_in_department($scopedDept) : [];
+$scope = StaffScope::current();
 
 $search    = trim($_GET['q']      ?? '');
 $filterRes = $_GET['result']      ?? '';  // ''|awaiting|ready_accept|ready_reject|released|withdrawn
@@ -80,20 +79,8 @@ $where  = ["a.overall_status IN ('released','exam','interview','withdrawn')"];
 $params = [];
 
 // Dean dept scope — limit to applicants whose course maps to dean's college.
-if ($role === ROLE_DEAN) {
-    if (empty($scopedCourses)) {
-        // Dean has no department on file (or no courses mapped) — show nothing.
-        $where[] = '1 = 0';
-    } else {
-        $names = [];
-        foreach ($scopedCourses as $i => $c) {
-            $key          = ':dc' . $i;
-            $names[]      = $key;
-            $params[$key] = $c;
-        }
-        $where[] = 'a.course_applied IN (' . implode(',', $names) . ')';
-    }
-}
+// A Dean with no department / no mapped courses sees nothing (handled by StaffScope).
+$scope->applyToWhere($where, $params, 'a.course_applied', 'dc');
 
 if ($search) {
     // PDO::ATTR_EMULATE_PREPARES is off in config/db.php, so a single
@@ -133,18 +120,10 @@ $whereStr = implode(' AND ', $where);
 // Same Dean dept scope applied so the tab badges match the table.
 $countWhere  = "a.overall_status IN ('released','exam','interview','withdrawn')";
 $countParams = [];
-if ($role === ROLE_DEAN) {
-    if (empty($scopedCourses)) {
-        $countWhere .= ' AND 1 = 0';
-    } else {
-        $names = [];
-        foreach ($scopedCourses as $i => $c) {
-            $key               = ':cdc' . $i;
-            $names[]           = $key;
-            $countParams[$key] = $c;
-        }
-        $countWhere .= ' AND a.course_applied IN (' . implode(',', $names) . ')';
-    }
+[$countScopeSql, $countScopeParams] = $scope->courseSql('a.course_applied', 'cdc');
+if ($countScopeSql !== '') {
+    $countWhere .= ' AND ' . $countScopeSql;
+    $countParams = array_merge($countParams, $countScopeParams);
 }
 $countStmt = $db->prepare(
     "SELECT
@@ -170,14 +149,10 @@ $countRows = $countStmt->fetch(PDO::FETCH_ASSOC);
 $sy = school_setting('current_school_year', date('Y').'-'.(date('Y')+1));
 $slotCapParams = [':sy' => $sy];
 $slotCapCourseFilter = '';
-if ($role === ROLE_DEAN && !empty($scopedCourses)) {
-    $scNames = [];
-    foreach ($scopedCourses as $i => $c) {
-        $k = ':scc' . $i;
-        $scNames[] = $k;
-        $slotCapParams[$k] = $c;
-    }
-    $slotCapCourseFilter = ' AND cc.course_name IN (' . implode(',', $scNames) . ')';
+[$scopeCapSql, $scopeCapParams] = $scope->courseSql('cc.course_name', 'scc');
+if ($scopeCapSql !== '') {
+    $slotCapCourseFilter = ' AND ' . $scopeCapSql;
+    $slotCapParams = array_merge($slotCapParams, $scopeCapParams);
 }
 $slotCapStmt = $db->prepare(
     "SELECT cc.course_name,
@@ -909,7 +884,7 @@ function openSuggestModal(appId, name, alts, rank) {
     modal.style.display = 'flex';
 }
 function escHtml(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return PLP.esc(str);
 }
 document.getElementById('suggest-modal').addEventListener('click', function(e){
     if(e.target===this) this.style.display='none';

@@ -99,13 +99,11 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     // The file follows the dashboard: same school year, same date range (on the
     // date the applicant applied), same college scope. The range is in the name.
     $rangeSlug = ($range === 'custom' && $fromDate && $toDate) ? $fromDate . '_to_' . $toDate : $range;
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="plp-admissions-' . $schoolYear . '-' . $rangeSlug . '.csv"');
-    $out = fopen('php://output', 'w');
-    fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF)); // UTF-8 BOM so Excel reads names with ñ / accents
-    fputcsv($out, ['Name','Email','Sex','Age','Barangay','Type','Course','Stage','School Year','Result','Remarks','Released At','Exam Score','Total Items','Applied At']);
-    foreach ($rows as $r) fputcsv($out, array_values($r));
-    fclose($out);
+    csv_download(
+        'plp-admissions-' . $schoolYear . '-' . $rangeSlug . '.csv',
+        ['Name','Email','Sex','Age','Barangay','Type','Course','Stage','School Year','Result','Remarks','Released At','Exam Score','Total Items','Applied At'],
+        $rows
+    );
     exit;
 }
 
@@ -167,8 +165,8 @@ $courseCountsMap = array_column($courseCountsStmt->fetchAll(PDO::FETCH_ASSOC), '
 
 // Admin / SSO: every PLP course. Dean: only the courses of their own college.
 $viewerDept = viewer_scoped_department();
-$isDean     = Auth::role() === ROLE_DEAN;
-$courseFull = $isDean ? courses_in_department($viewerDept) : PLP_COURSES;
+$isDean     = StaffScope::current()->restricted();
+$courseFull = $isDean ? StaffScope::current()->courses() : PLP_COURSES;
 $courseData   = array_map(fn($c) => (int)($courseCountsMap[$c] ?? 0), $courseFull);
 // Axis shows only the acronym (the text in the last parentheses, e.g.
 // "BS Information Technology (BSIT)" -> "BSIT"); the full name is shown in the

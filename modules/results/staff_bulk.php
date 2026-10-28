@@ -34,17 +34,16 @@ $action  = $_POST['action'] ?? '';
 // so the rejection trail is auditable.
 if ($action === 'close_admissions') {
     if ($role !== ROLE_ADMIN) {
-        Session::flash('error', 'Only Admin can close admissions.');
-        redirect('/staff/results');
+        fail('Only Admin can close admissions.', '/staff/results');
     }
 
-    $reason = trim($_POST['reason'] ?? '');
+    $reason = post_str('reason');
     if ($reason === '') {
         $reason = 'Admissions cycle closed - bulk rejection of unreleased applicants.';
     }
 
     // Optional course filter (defensive — UI doesn't currently send one).
-    $courseFilter = trim($_POST['course'] ?? '');
+    $courseFilter = post_str('course');
 
     $sql = "SELECT a.id
             FROM applicants a
@@ -95,12 +94,11 @@ if ($action === 'close_admissions') {
 $ids = array_values(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), fn($v) => $v > 0));
 
 if (empty($ids) || !in_array($action, ['release_selected', 'bulk_accept', 'bulk_reject'], true)) {
-    Session::flash('error', 'Invalid bulk action data.');
-    redirect('/staff/results');
+    fail('Invalid bulk action data.', '/staff/results');
 }
 
 // Pull bucket inputs for every selected applicant in one shot.
-$placeholders = implode(',', array_fill(0, count($ids), '?'));
+[$placeholders] = sql_in($ids);
 $stmt = $db->prepare(
     "SELECT a.id, a.overall_status,
             ar.result AS existing_result,
@@ -127,7 +125,7 @@ $upStatus = $db->prepare("UPDATE applicants SET overall_status = 'released' WHER
 
 $counts  = ['accepted' => 0, 'rejected' => 0];
 $skipped = 0;
-$overrideReason = trim($_POST['reason'] ?? '');
+$overrideReason = post_str('reason');
 
 foreach ($rows as $row) {
     if ($row['overall_status'] === 'withdrawn' || $row['existing_result'] !== null) {

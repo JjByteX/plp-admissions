@@ -22,19 +22,17 @@ $user = array_merge($user ?? [], $pf->fetch() ?: []);
 $errors  = [];
 $success = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check();
-    $action = $_POST['action'] ?? '';
+if (($action = require_post_action()) !== null) {
 
     if ($action === 'update_profile') {
-        $firstName  = trim($_POST['first_name']  ?? '');
-        $middleName = trim($_POST['middle_name'] ?? '');
-        $lastName   = trim($_POST['last_name']   ?? '');
-        $suffix     = trim($_POST['suffix']      ?? '');
-        $birthdate  = trim($_POST['birthdate']   ?? '');
-        $sex        = trim($_POST['sex']         ?? '');
-        $address    = trim($_POST['address']     ?? '');
-        $phone      = trim($_POST['phone']       ?? '');
+        $firstName  = post_str('first_name');
+        $middleName = post_str('middle_name');
+        $lastName   = post_str('last_name');
+        $suffix     = post_str('suffix');
+        $birthdate  = post_str('birthdate');
+        $sex        = post_str('sex');
+        $address    = post_str('address');
+        $phone      = post_str('phone');
 
         if (!$firstName)  $errors[] = 'First name is required.';
         if (!$lastName)   $errors[] = 'Last name is required.';
@@ -256,28 +254,12 @@ ob_start();
 
 </div>
 
-<script>
-function setSettingsSex(val) {
-    document.getElementById('settings_sex_value').value = val;
-    document.querySelectorAll('.sex-btn-s').forEach(function(btn) {
-        btn.classList.toggle('active', btn.textContent.trim() === (val === 'M' ? 'Male' : 'Female'));
-    });
-}
-</script>
-<style>
-.sex-toggle-settings { display:flex; gap:var(--space-2); height:var(--control-height); }
-.sex-btn-s {
-    flex:1; border:1px solid var(--border); border-radius:var(--radius);
-    background:var(--bg-elevated); color:var(--text-secondary);
-    font-size:var(--text-sm); font-weight:var(--weight-medium); cursor:pointer;
-    transition:background 0.15s,color 0.15s,border-color 0.15s;
-}
-.sex-btn-s.active { background:var(--accent); color:#fff; border-color:var(--accent); }
-</style>
 
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Settings';
+$pageStyles  = ['css/pages/student-settings.css'];
+$pageScripts = ['js/pages/student-settings.js'];
 require_once VIEWS_PATH . '/partials/page_header.php';
 $pageBreadcrumb = [page_home_crumb()];
 $activeNav = 'settings';
