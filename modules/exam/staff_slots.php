@@ -326,28 +326,6 @@ if (($action = require_post_action()) !== null) {
         }
     }
 
-    // ── Edit slot capacity inline ───────────────────────────────
-    if ($action === 'edit_capacity') {
-        $slotId = post_int('slot_id');
-        $cap    = max(1, post_int('capacity', 35));
-        if ($slotId) {
-            $stmt = $db->prepare(
-                'SELECT (SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id=?) AS filled'
-            );
-            $stmt->execute([$slotId]);
-            $filled = (int)$stmt->fetchColumn();
-            if ($cap < $filled) {
-                $errors[] = "Cannot shrink capacity below {$filled} (currently filled).";
-            } else {
-                $db->prepare('UPDATE exam_slot_schedule SET capacity=? WHERE id=?')
-                   ->execute([$cap, $slotId]);
-                audit_log(AuditAction::EXAM_SLOT_CAPACITY_CHANGED, "Slot {$slotId} capacity → {$cap}");
-                Session::flash('success', 'Capacity updated.');
-                _slots_redirect_back($ctxCollege, $ctxSlotId);
-            }
-        }
-    }
-
     // ── Delete a slot (only if empty) ───────────────────────────
     if ($action === 'delete_slot') {
         $slotId = post_int('slot_id');
@@ -383,84 +361,6 @@ if (($action = require_post_action()) !== null) {
         ];
         flash_bulk_delete_result(bulk_delete_empty($db, $bulkCfg, $ids), $bulkCfg);
         _slots_redirect_back($ctxCollege);
-    }
-
-    // ── Assign applicant to slot ────────────────────────────────
-    if ($action === 'assign') {
-        $applicantId = post_int('applicant_id');
-        $slotId      = post_int('slot_id');
-        if (!$applicantId || !$slotId) {
-            $errors[] = 'Applicant and slot are both required.';
-        } else {
-            $stmt = $db->prepare(
-                'SELECT s.capacity, s.exam_date, s.department,
-                        (SELECT COUNT(*) FROM applicant_exam_slots WHERE slot_id=s.id) AS filled
-                   FROM exam_slot_schedule s WHERE s.id=?'
-            );
-            $stmt->execute([$slotId]);
-            $slot = $stmt->fetch();
-            if (!$slot) {
-                $errors[] = 'Slot not found.';
-            } elseif ((int)$slot['filled'] >= (int)$slot['capacity']) {
-                $errors[] = 'Slot is full.';
-            } else {
-                $dailyCap = (int) school_setting('exam_daily_cap', defined('EXAM_DAILY_CAP') ? EXAM_DAILY_CAP : 3000);
-                $stmt2 = $db->prepare(
-                    'SELECT COUNT(*) FROM applicant_exam_slots aes
-                       JOIN exam_slot_schedule s ON s.id = aes.slot_id
-                      WHERE s.exam_date = ? AND s.school_year = ?'
-                );
-                $stmt2->execute([$slot['exam_date'], $schoolYear]);
-                $dayCount = (int)$stmt2->fetchColumn();
-                if ($dayCount >= $dailyCap) {
-                    $errors[] = "Daily exam cap of {$dailyCap} reached for "
-                              . date('M j, Y', strtotime($slot['exam_date']))
-                              . ". Add more slots on another day or increase the daily cap in Exam Config.";
-                } else {
-                    $stmt = $db->prepare(
-                        'SELECT a.overall_status, a.course_applied, u.department
-                           FROM applicants a
-                           JOIN users u ON u.id = a.user_id
-                          WHERE a.id = ?'
-                    );
-                    $stmt->execute([$applicantId]);
-                    $applRow = $stmt->fetch();
-                    if (!$applRow) {
-                        $errors[] = 'Applicant not found.';
-                    } elseif ($applRow['overall_status'] !== 'exam') {
-                        $errors[] = "Applicant is not at exam stage (currently: {$applRow['overall_status']}).";
-                    } else {
-                        // Cross-college guard. An applicant must only land in
-                        // a slot for their own college, regardless of how
-                        // they got here (manual assign, auto-assign,
-                        // reschedule). If the slot's department doesn't
-                        // match, refuse with a clear message rather than
-                        // booking them into a foreign room.
-                        $applDept = trim((string)($applRow['department'] ?? ''))
-                                 ?: course_to_department((string)$applRow['course_applied']);
-                        $slotDept = trim((string)($slot['department'] ?? ''));
-                        if ($applDept !== '' && $slotDept !== '' && strtolower(trim($applDept)) !== strtolower(trim($slotDept))) {
-                            $errors[] = "This slot is for {$slotDept}, but the applicant is in {$applDept}. "
-                                      . "Create a slot for {$applDept} instead.";
-                        } else {
-                            $db->prepare(
-                                'INSERT INTO applicant_exam_slots (applicant_id, slot_id, assigned_at)
-                                 VALUES (?, ?, NOW())
-                                 ON CONFLICT (applicant_id) DO UPDATE SET slot_id=EXCLUDED.slot_id, assigned_at=NOW()'
-                            )->execute([$applicantId, $slotId]);
-                            // Keep filled in sync so auto-assign queries stay accurate
-                            $db->prepare('UPDATE exam_slot_schedule SET filled = filled + 1 WHERE id = ?')
-                               ->execute([$slotId]);
-                            audit_log(AuditAction::EXAM_SLOT_ASSIGNED,
-                                "Assigned applicant {$applicantId} → slot {$slotId}",
-                                'applicant', $applicantId);
-                            Session::flash('success', 'Applicant assigned.');
-                            _slots_redirect_back($slot['department'] ?: $ctxCollege, $ctxSlotId);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     // ── B3: Batch create exam slots ────────────────────────────

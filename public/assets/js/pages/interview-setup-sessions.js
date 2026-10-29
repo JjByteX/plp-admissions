@@ -52,7 +52,6 @@ function _sessGrid()              { return document.querySelector('.sess-dir-gri
 function toggleSessSelectMode()   { _sessSelector().toggleSelectMode(); }
 function cancelSessSelectMode()   { _sessSelector().cancelSelectMode(); }
 function onSessCheckboxChange(cb) { _sessSelector().onCheckboxChange(cb); }
-function updateSessBulkCount()    { _sessSelector().updateCount(); }
 function confirmSessBulkDelete(b) { return _sessSelector().confirmBulkDelete(b); }
 function handleSessCardClick(event, payload) {
     var grid = _sessGrid();

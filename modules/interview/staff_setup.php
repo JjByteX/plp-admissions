@@ -60,7 +60,7 @@ if (!$canManage && !$college) {
 if (($action = require_post_action()) !== null) {
 
     // ─── Add Session ──────────────────────────────────────
-    if ($action === 'add_session' || $action === 'create_slot') {
+    if ($action === 'add_session') {
         $dept       = $canManage ? post_str('department', $college) : $staffDept;
         $assignedTo = post_int('assigned_to');
         $label      = post_str('location_label');

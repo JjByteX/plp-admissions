@@ -125,36 +125,6 @@ function exitExamEditMode() {
     document.getElementById('exam-header-card').dataset.editState = 'read';
 }
 
-// ── Inline exam title edit ────────────────────────────────────
-function startInlineExamEdit() {
-    document.getElementById('exam-title-view').style.display = 'none';
-    document.getElementById('exam-title-edit').style.display = '';
-    document.getElementById('exam-title-input').focus();
-    document.getElementById('exam-title-input').select();
-}
-function cancelInlineExamEdit() {
-    document.getElementById('exam-title-edit').style.display = 'none';
-    document.getElementById('exam-title-view').style.display = '';
-}
-function saveInlineExamTitle() {
-    const inp = document.getElementById('exam-title-input');
-    const newTitle = inp.value.trim();
-    if (!newTitle) return;
-    const csrfInput = document.querySelector('input[name^="_csrf"]');
-    const fd = new FormData();
-    fd.append('action', 'edit_exam');
-    fd.append('exam_id', PAGE.examId);
-    fd.append(csrfInput.name, csrfInput.value);
-    fd.append('title', newTitle);
-    fetch(location.href, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} })
-        .then(r => r.json()).then(d => {
-            if (d.ok) {
-                document.getElementById('exam-title-text').textContent = newTitle;
-                cancelInlineExamEdit();
-            }
-        }).catch(() => { location.reload(); });
-}
-
 // ── Inline section title edit ─────────────────────────────────
 function startInlineSecEdit(sid) {
     document.getElementById(`sec-title-view-${sid}`).style.display = 'none';
@@ -651,19 +621,6 @@ async function saveInlineQuestion(secId, secType) {
     } catch(e) {
         window.location.reload();
     }
-}
-
-// ── Per-course passing scores panel toggle ────────────────
-function togglePassingPanel() {
-    const panel   = document.getElementById('passing-edit-panel');
-    const summary = document.getElementById('passing-summary');
-    const icon    = document.getElementById('passing-toggle-icon');
-    const btn     = document.getElementById('passing-toggle-btn');
-    const isOpen  = panel.style.display !== 'none';
-    panel.style.display   = isOpen ? 'none' : 'block';
-    summary.style.display = isOpen ? '' : 'none';
-    icon.style.transform  = isOpen ? '' : 'rotate(180deg)';
-    btn.lastChild.textContent = isOpen ? ' Edit tiers' : ' Close';
 }
 
 // Live-update the Low label and enforce high > avg constraints

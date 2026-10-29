@@ -62,7 +62,6 @@ function _esGrid()              { return document.querySelector('.es-slot-grid')
 function toggleEsSelectMode()   { _esSelector().toggleSelectMode(); }
 function cancelEsSelectMode()   { _esSelector().cancelSelectMode(); }
 function onEsCheckboxChange(cb) { _esSelector().onCheckboxChange(cb); }
-function updateEsBulkCount()    { _esSelector().updateCount(); }
 function confirmEsBulkDelete(b) { return _esSelector().confirmBulkDelete(b); }
 function onEsCardClick(event, link) {
     var grid = _esGrid();
