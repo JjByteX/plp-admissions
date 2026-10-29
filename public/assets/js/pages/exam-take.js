@@ -45,7 +45,7 @@ function markChosenRadio(input) {
         if (label) label.classList.toggle('chosen', r.checked);
     });
     // Extract qid from name like answers[123]
-    const qid = parseInt(name.match(/\[(\d+)\]/)[1]);
+    const qid = Number.parseInt(name.match(/\[(\d+)\]/)[1], 10);
     markAnswered(qid);
 }
 
@@ -53,7 +53,7 @@ function markChosenRadio(input) {
 function markChosenCheckbox(input) {
     const label = input.closest('label');
     if (label) label.classList.toggle('chosen', input.checked);
-    const qid = parseInt(input.name.match(/\[(\d+)\]/)[1]);
+    const qid = Number.parseInt(input.name.match(/\[(\d+)\]/)[1], 10);
     markAnswered(qid);
 }
 

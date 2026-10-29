@@ -1,17 +1,17 @@
 (function(){
-    var form     = document.getElementById('apw-form');
+    const form     = document.getElementById('apw-form');
     if (!form) return;
-    var openEl   = document.getElementById('apw-open');
-    var closeEl  = document.getElementById('apw-close');
-    var deadEl   = document.getElementById('apw-deadline');
-    var saveBtn  = document.getElementById('apw-save');
-    var hintEl   = document.getElementById('apw-hint');
+    const openEl   = document.getElementById('apw-open');
+    const closeEl  = document.getElementById('apw-close');
+    const deadEl   = document.getElementById('apw-deadline');
+    const saveBtn  = document.getElementById('apw-save');
+    const hintEl   = document.getElementById('apw-hint');
 
     function evaluate(){
-        var o = openEl.value, c = closeEl.value, d = deadEl.value;
+        const o = openEl.value, c = closeEl.value, d = deadEl.value;
         deadEl.min = o || '';
         deadEl.max = c || '';
-        var msg = '';
+        let msg = '';
         if (!o || !c || !d) {
             msg = 'Fill in all three dates to save.';
         } else if (c <= o) {

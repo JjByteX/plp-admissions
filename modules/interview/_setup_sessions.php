@@ -118,6 +118,8 @@ foreach ($byDate as $date => $dateSlots) {
     ?>
         <div class="<?= $cardClasses ?>" data-session-id="<?= (int)$slot['id'] ?>"
              data-date="<?= e($date) ?>"
+             role="button" tabindex="0"
+             onkeydown="if (event.target === this && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); this.click(); }"
              onclick='handleSessCardClick(event, <?= $editPayload ?>)'>
             <?php if ($canManage): ?>
                 <input type="checkbox" class="select-card-check sess-select-checkbox" aria-label="Select session"

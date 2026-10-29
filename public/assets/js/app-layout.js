@@ -1,8 +1,8 @@
 // Global layout behaviour for views/layouts/app.php. Server values come from
 // the #layout-data JSON block (parsed in app-boot.js into window.__layoutData).
 (function () {
-    var DATA = window.__layoutData || {};
-    var SESSION = DATA.session;
+    const DATA = window.__layoutData || {};
+    const SESSION = DATA.session;
 
     // Inject accent from DB
     setAccentColor(DATA.accent || '');
@@ -86,7 +86,7 @@
     }
 
     // Global withdraw application modal (students with a withdrawable application)
-    var withdrawModal = document.getElementById('withdraw-modal');
+    const withdrawModal = document.getElementById('withdraw-modal');
     if (withdrawModal) {
         withdrawModal.addEventListener('click', function(e) {
             if (e.target === this) this.style.display = 'none';
@@ -96,12 +96,12 @@
     // Logout confirmation (opened by any [data-logout] link)
     if (document.getElementById('logout-modal')) {
     (function () {
-        var modal = document.getElementById('logout-modal');
-        var confirmBtn = document.getElementById('logout-confirm-btn');
-        var href = DATA.logoutUrl;
+        const modal = document.getElementById('logout-modal');
+        const confirmBtn = document.getElementById('logout-confirm-btn');
+        const href = DATA.logoutUrl;
         function close() { modal.style.display = 'none'; }
         document.addEventListener('click', function (e) {
-            var link = e.target.closest ? e.target.closest('[data-logout]') : null;
+            const link = e.target.closest ? e.target.closest('[data-logout]') : null;
             if (!link) return;
             e.preventDefault();
             modal.style.display = 'flex';
@@ -142,7 +142,7 @@
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         document.querySelectorAll('.modal-backdrop').forEach(function(m) {
-            var visible = m.style.display && m.style.display !== 'none';
+            const visible = m.style.display && m.style.display !== 'none';
             if (visible) m.style.display = 'none';
         });
     });

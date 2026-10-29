@@ -3,16 +3,16 @@
 // hide cards whose data-date doesn't match the selected value, then
 // rebuild the "N sessions" badge so it always reflects what's visible.
 (function() {
-    var dateEl  = document.getElementById('sess-date-filter');
-    var countEl = document.getElementById('sess-count');
+    const dateEl  = document.getElementById('sess-date-filter');
+    const countEl = document.getElementById('sess-count');
     if (!dateEl) return;
 
     function applySessDateFilter() {
-        var picked  = dateEl.value;
-        var visible = 0;
+        const picked  = dateEl.value;
+        let visible = 0;
         document.querySelectorAll('.sess-dir-grid .sess-dir-card').forEach(function(card) {
-            var d = card.getAttribute('data-date') || '';
-            var match = !picked || d === picked;
+            const d = card.dataset.date || '';
+            const match = !picked || d === picked;
             card.style.display = match ? '' : 'none';
             if (match) visible++;
         });
@@ -31,7 +31,7 @@
 // time, so load order doesn't matter. These wrappers keep the same
 // global names the markup already calls via onclick=, so no HTML
 // changed.
-var __sessSelectorInstance = null;
+let __sessSelectorInstance = null;
 function _sessSelector() {
     if (!__sessSelectorInstance) {
         __sessSelectorInstance = createCardBulkSelector({
@@ -54,11 +54,11 @@ function cancelSessSelectMode()   { _sessSelector().cancelSelectMode(); }
 function onSessCheckboxChange(cb) { _sessSelector().onCheckboxChange(cb); }
 function confirmSessBulkDelete(b) { return _sessSelector().confirmBulkDelete(b); }
 function handleSessCardClick(event, payload) {
-    var grid = _sessGrid();
+    const grid = _sessGrid();
     if (grid && grid.classList.contains('is-selecting')) {
         // In select mode the card toggles its own checkbox instead of opening
         // the edit modal. Disabled (booked) cards do nothing.
-        var cb = event.currentTarget.querySelector('.sess-select-checkbox');
+        const cb = event.currentTarget.querySelector('.sess-select-checkbox');
         if (cb && !cb.disabled) {
             cb.checked = !cb.checked;
             onSessCheckboxChange(cb);
@@ -70,14 +70,14 @@ function handleSessCardClick(event, payload) {
 
 // ── Add modal: switch between Single and Recurring fields ─────
 function setAddMode(mode) {
-    var single   = document.getElementById('add-single-fields');
-    var batch    = document.getElementById('add-batch-fields');
-    var btnS     = document.getElementById('add-mode-single');
-    var btnB     = document.getElementById('add-mode-batch');
-    var action   = document.getElementById('add-action');
-    var submit   = document.getElementById('add-submit');
+    const single   = document.getElementById('add-single-fields');
+    const batch    = document.getElementById('add-batch-fields');
+    const btnS     = document.getElementById('add-mode-single');
+    const btnB     = document.getElementById('add-mode-batch');
+    const action   = document.getElementById('add-action');
+    const submit   = document.getElementById('add-submit');
 
-    var isBatch = mode === 'batch';
+    const isBatch = mode === 'batch';
     single.style.display = isBatch ? 'none' : 'flex';
     batch.style.display  = isBatch ? 'flex' : 'none';
     btnS.classList.toggle('active', !isBatch);
@@ -93,7 +93,7 @@ function setAddMode(mode) {
     // Capacity in the batch block is named `capacity_batch` to avoid
     // colliding with the single field; rewrite it on submit so the
     // server still receives `capacity`.
-    var capBatch = document.querySelector('#add-batch-fields [name="capacity_batch"], #add-batch-fields [name="capacity"]');
+    const capBatch = document.querySelector('#add-batch-fields [name="capacity_batch"], #add-batch-fields [name="capacity"]');
     if (capBatch) capBatch.name = isBatch ? 'capacity' : 'capacity_batch';
 }
 // Initialize on first render
@@ -108,11 +108,11 @@ function openEditSession(data) {
     document.getElementById('edit-sess-cap').value     = data.capacity;
     document.getElementById('edit-sess-label').value   = data.location_label || '';
     document.getElementById('edit-sess-notes').value   = data.location_notes || '';
-    var sel = document.getElementById('edit-sess-assigned');
+    const sel = document.getElementById('edit-sess-assigned');
     if (sel) sel.value = data.assigned_to || '';
 
     // Close vs Reopen label
-    var toggle = document.getElementById('edit-sess-toggle');
+    const toggle = document.getElementById('edit-sess-toggle');
     if (data.status === 'closed') {
         toggle.textContent = 'Reopen session';
         toggle.dataset.next = 'open_slot';
@@ -122,8 +122,8 @@ function openEditSession(data) {
     }
 
     // Disable Remove if there are bookings
-    var del = document.getElementById('edit-sess-delete');
-    var info = document.getElementById('edit-sess-bookinfo');
+    const del = document.getElementById('edit-sess-delete');
+    const info = document.getElementById('edit-sess-bookinfo');
     if (data.booked > 0) {
         del.disabled = true;
         del.style.opacity = '.45';
@@ -140,7 +140,7 @@ function openEditSession(data) {
 }
 
 function submitSessionAction(actionName) {
-    var slotId = document.getElementById('edit-sess-id').value;
+    const slotId = document.getElementById('edit-sess-id').value;
     if (!slotId || !actionName) return;
     document.getElementById('edit-action-name').value = actionName;
     document.getElementById('edit-action-id').value   = slotId;
@@ -149,6 +149,6 @@ function submitSessionAction(actionName) {
 
 // Click outside the modal closes it
 ['add-session-modal','edit-session-modal'].forEach(function(id){
-    var m = document.getElementById(id);
+    const m = document.getElementById(id);
     if(m) m.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
 });

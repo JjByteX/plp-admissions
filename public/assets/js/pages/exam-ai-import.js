@@ -29,13 +29,13 @@ async function refreshPuterStatus() {
         } else { bar.className='ai-status-bar disconnected'; label.textContent='Not signed in to Puter'; linkEl.style.display=''; signinBtn.style.display=''; }
     } catch(_) { bar.className='ai-status-bar disconnected'; label.textContent='Could not reach Puter'; linkEl.style.display=''; signinBtn.style.display=''; }
 }
-async function puterSignIn() { await loadPuter(); try { await puter.auth.signIn(); refreshPuterStatus(); } catch(_){} }
-async function puterSignOut(){ await loadPuter(); try { await puter.auth.signOut(); refreshPuterStatus(); } catch(_){} }
+async function puterSignIn() { await loadPuter(); try { await puter.auth.signIn(); void refreshPuterStatus(); } catch(_){} }
+async function puterSignOut(){ await loadPuter(); try { await puter.auth.signOut(); void refreshPuterStatus(); } catch(_){} }
 
 // aiGeneratedSections = [{section_title, section_type, questions:[...]}, ...]
 let aiSelectedFile=null, aiGeneratedSections=[];
 
-function openAiImportModal()  { resetAiImport(true); openModal('ai-import-modal'); refreshPuterStatus(); }
+function openAiImportModal()  { resetAiImport(true); openModal('ai-import-modal'); void refreshPuterStatus(); }
 function closeAiImportModal() { closeModal('ai-import-modal'); }
 function handleAiFileDrop(e)  { e.preventDefault(); document.getElementById('ai-drop-zone').classList.remove('dragover'); if(e.dataTransfer.files[0]) setAiFile(e.dataTransfer.files[0]); }
 function handleAiFileSelect(inp) { if(inp.files[0]) setAiFile(inp.files[0]); }
@@ -132,6 +132,79 @@ function resetProgress() {
     document.getElementById('ai-processing-label').textContent = 'Reading file…';
 }
 
+// Read the chosen file into { content, isImage }. Images stay as the File; the rest becomes text.
+async function readAiFileContent(file, ext) {
+    // Step 1 — Read file (0 → 15%)
+    setProgress(15, 'Reading file…', 'Loading file from disk');
+    if (['jpg', 'jpeg', 'png'].includes(ext)) return { content: file, isImage: true };
+    if (ext === 'pdf') {
+        // Step 2 — Extract PDF (15 → 30%)
+        setProgress(30, 'Extracting text…', 'Parsing PDF pages');
+        await loadPdfJs();
+        return { content: await extractPdfText(file), isImage: false };
+    }
+    if (['docx', 'doc'].includes(ext)) {
+        // Step 2 — Extract DOCX (15 → 30%)
+        setProgress(30, 'Extracting text…', 'Parsing document');
+        await loadMammoth();
+        return { content: await extractDocxText(file), isImage: false };
+    }
+    return { content: await readFileAsText(file), isImage: false };
+}
+
+// Stricter content guard. < 50 chars from a PDF/DOCX almost always means the file
+// is image-based (scanned, no text layer) - sending that to the AI just produces
+// a refusal response.
+function assertReadableAiContent(content, ext) {
+    if (!content) throw new Error('Could not read this file. Try a different format.');
+    if (typeof content !== 'string') return;
+    const len = content.trim().length;
+    if (len < 5) {
+        throw new Error('Could not extract any readable text from this file. If it is a scanned PDF, save it as JPG/PNG instead and re-upload - the AI can read images.');
+    }
+    if (len < 50 && ['pdf', 'doc', 'docx'].includes(ext)) {
+        throw new Error('Only ' + len + ' characters of text could be extracted from this ' + ext.toUpperCase() + '. It is most likely a scanned document with no selectable text. Save the pages as JPG/PNG images and upload one of those instead.');
+    }
+}
+
+// Throws when the AI result is empty or is really a refusal; returns the question count.
+function assertAiSections(sections) {
+    if (!sections || sections.length === 0) throw new Error('No sections or questions were detected.');
+    const totalQ = sections.reduce((sum, s) => sum + s.questions.length, 0);
+    if (totalQ === 0) throw new Error('No questions were detected.');
+
+    // Refusal detection: parseAiResp can succeed on AI apology JSON
+    // (e.g. one section titled "Error" with a single question whose
+    // text says "No exam content was provided…"). Surface those as a
+    // clear error instead of letting them render as a fake exam.
+    const refusal = _detectRefusal(sections);
+    if (refusal) {
+        throw new Error(
+            'The AI didn\u2019t see any actual exam in what was sent. It said:\n\n“' +
+            refusal + '”\n\n' +
+            'Most common cause: the file is a scanned/image-only PDF or a corrupt upload. Save the pages as JPG/PNG and upload one of those, or pick a different file.'
+        );
+    }
+    return totalQ;
+}
+
+function showAiPreviewResult(sections, totalQ) {
+    aiGeneratedSections = sections;
+    renderAiPreview(sections);
+    showAiStep('preview');
+    document.getElementById('ai-preview-count').textContent =
+        `${sections.length} section${sections.length === 1 ? '' : 's'}, ${totalQ} question${totalQ === 1 ? '' : 's'} detected`;
+    document.getElementById('ai-save-footer').style.display = '';
+}
+
+function showAiError(err) {
+    showAiStep('error');
+    document.getElementById('ai-modal-footer').style.display = '';
+    const msg = typeof err === 'string' ? err : err?.message || err?.error || 'Unknown error';
+    document.getElementById('ai-error-msg').textContent = msg;
+    document.getElementById('ai-process-btn').disabled = !aiSelectedFile;
+}
+
 async function startAiProcessing() {
     if (!aiSelectedFile) return;
     resetProgress();
@@ -140,52 +213,19 @@ async function startAiProcessing() {
 
     try {
         // Pre-flight: empty file would only confuse the AI and waste a call.
-        if (!aiSelectedFile.size || aiSelectedFile.size === 0) {
+        if (!aiSelectedFile.size) {
             throw new Error('The selected file is empty (0 bytes). Pick a different file and try again.');
         }
         await loadPuter();
         const ext = aiSelectedFile.name.split('.').pop().toLowerCase();
-        let content = null, isImage = false;
-
-        // Step 1 — Read file (0 → 15%)
-        setProgress(15, 'Reading file…', 'Loading file from disk');
-        if (['jpg','jpeg','png'].includes(ext)) {
-            content = aiSelectedFile; isImage = true;
-        } else if (ext === 'pdf') {
-            // Step 2 — Extract PDF (15 → 30%)
-            setProgress(30, 'Extracting text…', 'Parsing PDF pages');
-            await loadPdfJs();
-            content = await extractPdfText(aiSelectedFile);
-        } else if (['docx','doc'].includes(ext)) {
-            // Step 2 — Extract DOCX (15 → 30%)
-            setProgress(30, 'Extracting text…', 'Parsing document');
-            await loadMammoth();
-            content = await extractDocxText(aiSelectedFile);
-        } else {
-            content = await readFileAsText(aiSelectedFile);
-        }
-
-        // Stricter content guard. < 50 chars from a PDF/DOCX almost
-        // always means the file is image-based (scanned, no text layer)
-        // - sending that to the AI just produces a refusal response.
-        if (!content) {
-            throw new Error('Could not read this file. Try a different format.');
-        }
-        if (typeof content === 'string') {
-            const len = content.trim().length;
-            if (len < 5) {
-                throw new Error('Could not extract any readable text from this file. If it is a scanned PDF, save it as JPG/PNG instead and re-upload - the AI can read images.');
-            }
-            if (len < 50 && (ext === 'pdf' || ext === 'doc' || ext === 'docx')) {
-                throw new Error('Only ' + len + ' characters of text could be extracted from this ' + ext.toUpperCase() + '. It is most likely a scanned document with no selectable text. Save the pages as JPG/PNG images and upload one of those instead.');
-            }
-        }
+        const { content, isImage } = await readAiFileContent(aiSelectedFile, ext);
+        assertReadableAiContent(content, ext);
 
         // Step 3 — Send to AI (→ 40%)
         setProgress(40, 'Sending to AI…', 'Uploading content to Puter AI');
 
         // Step 4 — AI processing (40 → 88%, slow crawl while we wait)
-        const pts = parseInt(document.getElementById('ai-default-points').value) || 1;
+        const pts = Number.parseInt(document.getElementById('ai-default-points').value, 10) || 1;
         // Kick off slow crawl to 88% — will snap to 100 when done
         setProgress(88, 'AI is processing…', 'Generating questions from your file');
 
@@ -197,35 +237,9 @@ async function startAiProcessing() {
         setProgress(100, 'Finalizing…', 'Parsing AI response');
         await new Promise(r => setTimeout(r, 350)); // let bar finish
 
-        if (!sections || sections.length === 0) throw new Error('No sections or questions were detected.');
-        const totalQ = sections.reduce((sum, s) => sum + s.questions.length, 0);
-        if (totalQ === 0) throw new Error('No questions were detected.');
-
-        // Refusal detection: parseAiResp can succeed on AI apology JSON
-        // (e.g. one section titled "Error" with a single question whose
-        // text says "No exam content was provided…"). Surface those as a
-        // clear error instead of letting them render as a fake exam.
-        const refusal = _detectRefusal(sections);
-        if (refusal) {
-            throw new Error(
-                'The AI didn\u2019t see any actual exam in what was sent. It said:\n\n“' +
-                refusal + '”\n\n' +
-                'Most common cause: the file is a scanned/image-only PDF or a corrupt upload. Save the pages as JPG/PNG and upload one of those, or pick a different file.'
-            );
-        }
-
-        aiGeneratedSections = sections;
-        renderAiPreview(sections);
-        showAiStep('preview');
-        document.getElementById('ai-preview-count').textContent =
-            `${sections.length} section${sections.length !== 1 ? 's' : ''}, ${totalQ} question${totalQ !== 1 ? 's' : ''} detected`;
-        document.getElementById('ai-save-footer').style.display = '';
+        showAiPreviewResult(sections, assertAiSections(sections));
     } catch (err) {
-        showAiStep('error');
-        document.getElementById('ai-modal-footer').style.display = '';
-        let msg = typeof err === 'string' ? err : err?.message || err?.error || 'Unknown error';
-        document.getElementById('ai-error-msg').textContent = msg;
-        document.getElementById('ai-process-btn').disabled = !aiSelectedFile;
+        showAiError(err);
     }
 }
 
@@ -362,13 +376,22 @@ function expandAnswer(ans) {
 // array unwrap, (3) truncation recovery — walk back to the last
 // complete `}` at array depth 0 and close with `]`.
 
+// Remove a leading "<fence>[lang]" and a trailing "<fence>" using string ops
+// (regexes anchored on \s*...$ backtrack super-linearly on long replies).
+function _stripFenceMarkers(s, fence, langs) {
+    let t = s;
+    if (t.startsWith(fence)) {
+        t = t.slice(fence.length);
+        const lang = langs.find(l => t.slice(0, l.length).toLowerCase() === l);
+        if (lang) t = t.slice(lang.length);
+        t = t.trimStart();
+    }
+    if (t.endsWith(fence)) t = t.slice(0, -fence.length).trimEnd();
+    return t;
+}
 function _stripFences(s) {
-    return s.trim()
-        .replace(/^```(?:json|javascript|js|json5)?\s*/i, '')
-        .replace(/\s*```\s*$/i, '')
-        .replace(/^~~~(?:json)?\s*/i, '')
-        .replace(/\s*~~~\s*$/i, '')
-        .trim();
+    const t = _stripFenceMarkers(s.trim(), '```', ['json5', 'javascript', 'json', 'js']);
+    return _stripFenceMarkers(t, '~~~', ['json']).trim();
 }
 function _stripTrailingCommas(s) {
     return s.replace(/,(\s*[}\]])/g, '$1');
@@ -391,28 +414,36 @@ function _tryParseObjectWrapper(s) {
     if (Array.isArray(obj.questions)) return [obj];
     return null;
 }
-function _tryRepairTruncated(s) {
-    const start = s.indexOf('[');
-    if (start === -1) return null;
-    const work = s.slice(start);
-    // Walk forward, tracking string state and bracket depth, recording
-    // each position where a section object closes at array-depth 1.
-    let depth = 0, inStr = false, esc = false, lastSafe = -1;
+// Track string/escape state one character at a time; true = char is inside a string.
+function _scanJsonChar(st, c) {
+    if (st.esc) { st.esc = false; return true; }
+    if (c === '\\') { st.esc = true; return true; }
+    if (c === '"') { st.inStr = !st.inStr; return true; }
+    return st.inStr;
+}
+// Walk forward tracking string state and bracket depth; return the index of the
+// last "}" that closed a section object (array depth 1), or -1.
+function _lastClosedSectionIndex(work) {
+    const st = { esc: false, inStr: false };
+    let depth = 0, lastSafe = -1;
     for (let i = 0; i < work.length; i++) {
         const c = work[i];
-        if (esc) { esc = false; continue; }
-        if (c === '\\') { esc = true; continue; }
-        if (c === '"') { inStr = !inStr; continue; }
-        if (inStr) continue;
+        if (_scanJsonChar(st, c)) continue;
         if (c === '{' || c === '[') depth++;
         else if (c === '}' || c === ']') {
             depth--;
             if (depth === 1 && c === '}') lastSafe = i; // a section closed
         }
     }
+    return lastSafe;
+}
+function _tryRepairTruncated(s) {
+    const start = s.indexOf('[');
+    if (start === -1) return null;
+    const work = s.slice(start);
+    const lastSafe = _lastClosedSectionIndex(work);
     if (lastSafe === -1) return null;
-    let candidate = work.slice(0, lastSafe + 1) + ']';
-    candidate = _stripTrailingCommas(candidate);
+    const candidate = _stripTrailingCommas(work.slice(0, lastSafe + 1) + ']');
     try { const a = JSON.parse(candidate); return Array.isArray(a) ? a : null; } catch (_) { return null; }
 }
 
@@ -532,7 +563,7 @@ function renderAiPreview(sections) {
             let choices='';
             if(CT.includes(q.question_type)&&q.choices&&q.choices.length){
                 choices='<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px">'+q.choices.map((c,ci)=>{
-                    const ok=q.question_type==='checkboxes'?(q.correct_indices||[]).includes(ci):ci===parseInt(q.correct_index);
+                    const ok=q.question_type==='checkboxes'?(q.correct_indices||[]).includes(ci):ci===Number.parseInt(q.correct_index, 10);
                     const dot=ok
                         ? `<span style="width:14px;height:14px;border-radius:50%;background:var(--success);flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"><i class="ph-bold ph-check" aria-hidden="true" style="font-size:var(--text-2xs);color:var(--white)"></i></span>`
                         : `<span style="width:14px;height:14px;border-radius:50%;border:1.5px solid var(--border-strong);flex-shrink:0;display:inline-block"></span>`;
@@ -552,54 +583,77 @@ function renderAiPreview(sections) {
 function escHtml(s){return PLP.esc(s);}
 
 // ── Save — creates sections first, then adds questions ────────
-async function saveAiQuestions(){
-    const btn=document.getElementById('ai-save-btn'); btn.disabled=true;
-    const examId=PAGE.examId;
-    const csrfInput=document.querySelector('#ai-import-modal input[type="hidden"]');
-    const csrfName=csrfInput?.name||'_csrf_token', csrf=csrfInput?.value||'';
-    if(!examId){ui.alert('Select an exam first.');btn.disabled=false;return;}
-    if(!csrf){ui.alert('Session expired. Refresh and try again.');btn.disabled=false;return;}
+const AI_CHOICE_TYPES = ['multiple_choice', 'checkboxes', 'dropdown'];
 
-    const CT=['multiple_choice','checkboxes','dropdown'];
-    const totalQ=aiGeneratedSections.reduce((sum,s)=>sum+s.questions.length,0);
-    let saved=0;
+// Create one section on the server. Resolves with its id, or null on any failure.
+async function createAiSection(sec, examId, csrfName, csrf) {
+    const fd = new FormData();
+    fd.append('action', 'create_section');
+    fd.append('exam_id', examId);
+    fd.append('section_title', sec.section_title);
+    fd.append('section_desc', sec.section_description || '');
+    fd.append('section_type', sec.section_type);
+    fd.append(csrfName, csrf);
+    try {
+        const r = await fetch(location.href, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const d = await r.json();
+        return d.ok ? d.section_id : null;
+    } catch (_) {
+        return null; // reported by the caller as "Error creating section"
+    }
+}
 
-    for(const sec of aiGeneratedSections){
-        // 1. Create the section
-        const secFd=new FormData();
-        secFd.append('action','create_section');
-        secFd.append('exam_id',examId);
-        secFd.append('section_title',sec.section_title);
-        secFd.append('section_desc', sec.section_description || '');
-        secFd.append('section_type',sec.section_type);
-        secFd.append(csrfName,csrf);
-        let sectionId=null;
-        try {
-            const r=await fetch(location.href,{method:'POST',body:secFd,headers:{'X-Requested-With':'XMLHttpRequest'}});
-            const d=await r.json();
-            if(d.ok) sectionId=d.section_id;
-        } catch(e){}
-        if(!sectionId){ btn.textContent=`Error creating section "${sec.section_title}"`; continue; }
+function buildAiQuestionForm(q, sectionId, examId, csrfName, csrf) {
+    const fd = new FormData();
+    fd.append('action', 'add_question'); fd.append('exam_id', examId); fd.append(csrfName, csrf);
+    fd.append('question_text', q.question_text);
+    fd.append('question_type', q.question_type); fd.append('points', q.points); fd.append('is_required', '1');
+    fd.append('section_id', sectionId);
+    if (AI_CHOICE_TYPES.includes(q.question_type) && q.choices.length) {
+        q.choices.forEach(c => fd.append('choices[]', c));
+        if (q.question_type === 'checkboxes') (q.correct_indices || []).forEach(ci => fd.append('correct_indices[]', ci));
+        else fd.append('correct_index', q.correct_index);
+    } else if (q.question_type === 'short_answer') {
+        fd.append('expected_answer', q.correct_answer || '');
+    }
+    return fd;
+}
 
-        // 2. Add questions to that section
-        for(const q of sec.questions){
-            const fd=new FormData();
-            fd.append('action','add_question');fd.append('exam_id',examId);fd.append(csrfName,csrf);
-            fd.append('question_text',q.question_text);
-            fd.append('question_type',q.question_type);fd.append('points',q.points);fd.append('is_required','1');
-            fd.append('section_id',sectionId);
-            if(CT.includes(q.question_type)&&q.choices.length){
-                q.choices.forEach(c=>fd.append('choices[]',c));
-                if(q.question_type==='checkboxes')(q.correct_indices||[]).forEach(ci=>fd.append('correct_indices[]',ci));
-                else fd.append('correct_index',q.correct_index);
-            } else if(q.question_type==='short_answer') fd.append('expected_answer',q.correct_answer||'');
-            try{
-                const resp=await fetch(location.href,{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}});
-                const d=await resp.json();
-                if(d.ok) saved++;
-                else console.warn('Failed to save question:', q.question_text);
-            }catch(e){ console.error('Save error:', e); }
-            btn.textContent=`Saving… (${saved}/${totalQ})`;
+// Save one question. Resolves true when the server accepted it.
+async function saveAiQuestion(q, sectionId, examId, csrfName, csrf) {
+    try {
+        const resp = await fetch(location.href, {
+            method: 'POST',
+            body: buildAiQuestionForm(q, sectionId, examId, csrfName, csrf),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const d = await resp.json();
+        if (d.ok) return true;
+        console.warn('Failed to save question:', q.question_text);
+    } catch (e) {
+        console.error('Save error:', e);
+    }
+    return false;
+}
+
+async function saveAiQuestions() {
+    const btn = document.getElementById('ai-save-btn'); btn.disabled = true;
+    const examId = PAGE.examId;
+    const csrfInput = document.querySelector('#ai-import-modal input[type="hidden"]');
+    const csrfName = csrfInput?.name || '_csrf_token', csrf = csrfInput?.value || '';
+    if (!examId) { void ui.alert('Select an exam first.'); btn.disabled = false; return; }
+    if (!csrf) { void ui.alert('Session expired. Refresh and try again.'); btn.disabled = false; return; }
+
+    const totalQ = aiGeneratedSections.reduce((sum, s) => sum + s.questions.length, 0);
+    let saved = 0;
+
+    for (const sec of aiGeneratedSections) {
+        const sectionId = await createAiSection(sec, examId, csrfName, csrf);
+        if (!sectionId) { btn.textContent = `Error creating section "${sec.section_title}"`; continue; }
+
+        for (const q of sec.questions) {
+            if (await saveAiQuestion(q, sectionId, examId, csrfName, csrf)) saved++;
+            btn.textContent = `Saving… (${saved}/${totalQ})`;
         }
     }
     window.location.reload();

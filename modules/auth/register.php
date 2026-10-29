@@ -559,7 +559,7 @@ ob_start();
                     class="form-input <?= isset($errors['street_address']) ? 'error' : '' ?>"
                     value="<?= e($old['street_address'] ?? '') ?>"
                     placeholder="House No., Building, Street"
-                    autocomplete="street-address" required>
+                    autocomplete="address-line1" required>
                 <?php if (!empty($errors['street_address'])): ?>
                     <span class="form-error"><?= e($errors['street_address']) ?></span>
                 <?php endif; ?>

@@ -43,13 +43,13 @@
             e.preventDefault();
             e.stopImmediatePropagation();
             const submitter = e.submitter;
-            askLive().then(ok => { if (ok) { addLive(form); form.requestSubmit(submitter); } });
+            void askLive().then(ok => { if (ok) { addLive(form); form.requestSubmit(submitter); } });
         }, true);
         const origSubmit = HTMLFormElement.prototype.submit;
         HTMLFormElement.prototype.submit = function () {
             if (!needsLive(this)) return origSubmit.call(this);
-            const form = this;
-            askLive().then(ok => { if (ok) { addLive(form); origSubmit.call(form); } });
+            // Arrow function keeps `this` (the form) without aliasing it.
+            void askLive().then(ok => { if (ok) { addLive(this); origSubmit.call(this); } });
         };
     }
 
@@ -58,7 +58,7 @@
     window.fetch = function (url, opts) {
         return baseFetch(url, opts).then(r => {
             if (r.status === 409) {
-                r.clone().json().then(d => { if (d && d.blocked && d.error) ui.alert(d.error); }).catch(() => {});
+                r.clone().json().then(d => { if (d && d.blocked && d.error) void ui.alert(d.error); }).catch(() => {});
             }
             return r;
         });
@@ -76,12 +76,12 @@ function closeModal(id) { PLP.modal.close(id); }
 // ── Year → Title auto-generation ──────────────────────────────
 (function() {
     // Create exam modal
-    var createYear = document.getElementById('create-exam-year');
-    var createPreview = document.getElementById('create-year-preview');
-    var createHidden = document.getElementById('create-exam-title-hidden');
+    const createYear = document.getElementById('create-exam-year');
+    const createPreview = document.getElementById('create-year-preview');
+    const createHidden = document.getElementById('create-exam-title-hidden');
     if (createYear) {
         createYear.addEventListener('input', function() {
-            var y = this.value.trim() || 'Year';
+            const y = this.value.trim() || 'Year';
             createPreview.textContent = y;
             createHidden.value = 'PLP Admissions Test (' + this.value.trim() + ')';
         });
@@ -152,7 +152,7 @@ function confirmDeleteSection(form, qCount, title) {
     if (form.dataset.ok) { delete form.dataset.ok; return true; }   // replay after OK
     const msg = qCount === 0 ? `Remove "${title}"?`
         : `Remove "${title}" and its ${qCount} question${qCount !== 1 ? 's' : ''}?`;
-    ui.confirm(msg, { danger: true, ok: 'Remove' })
+    void ui.confirm(msg, { danger: true, ok: 'Remove' })
         .then(ok => { if (ok) { form.dataset.ok = '1'; form.requestSubmit(); } });
     return false;
 }
@@ -186,7 +186,7 @@ function startInlineQFullEdit(qid) {
         const raw = JSON.parse(q.choices);
         const correctIndices = (q.question_type === 'checkboxes' && q.correct_answer)
             ? JSON.parse(q.correct_answer) : [];
-        const singleCorrect = parseInt(q.correct_index ?? 0);
+        const singleCorrect = Number.parseInt(q.correct_index ?? 0, 10);
         choices = raw.map((text, i) => ({
             text,
             correct: q.question_type === 'checkboxes' ? correctIndices.includes(i) : i === singleCorrect
@@ -316,6 +316,34 @@ function cancelInlineQFullEdit(qid) {
     card.querySelector('.q-edit-mode')?.remove();
     card.querySelector('.q-view-mode').style.display = 'flex';
 }
+function resetEditSaveBtn(saveBtn) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
+}
+
+// Add the answer-specific fields for an EDITED question. Returns false when validation fails.
+function appendEditedQuestionAnswer(fd, q, qid, choices) {
+    const val = id => document.getElementById(id)?.value;
+    if (CHOICE_TYPE_KEYS.includes(q.question_type)) {
+        const texts = choices.map(c => c.text).filter(t => t.trim());
+        if (texts.length < 2) return false;
+        texts.forEach(t => fd.append('choices[]', t));
+        if (q.question_type === 'checkboxes') {
+            choices.forEach((c, i) => { if (c.correct) fd.append('correct_indices[]', i); });
+        } else {
+            const ci = choices.findIndex(c => c.correct);
+            fd.append('correct_index', ci >= 0 ? ci : 0);
+        }
+    } else if (q.question_type === 'short_answer') {
+        fd.append('expected_answer', val(`qe-expected-${qid}`)?.trim() || '');
+    } else if (q.question_type === 'linear_scale') {
+        fd.append('scale_min', val(`qe-scale-min-${qid}`) || 1);
+        fd.append('scale_max', val(`qe-scale-max-${qid}`) || 5);
+        fd.append('scale_min_label', val(`qe-scale-min-label-${qid}`)?.trim() || '');
+        fd.append('scale_max_label', val(`qe-scale-max-label-${qid}`)?.trim() || '');
+    }
+    return true;
+}
+
 async function saveInlineQFullEdit(qid) {
     const card = document.querySelector(`.q-card[data-qid="${qid}"]`); if (!card) return;
     const q = JSON.parse(card.dataset.q);
@@ -323,41 +351,36 @@ async function saveInlineQFullEdit(qid) {
     if (!qText) { document.getElementById(`qe-text-${qid}`).focus(); return; }
 
     const saveBtn = card.querySelector('.q-edit-mode .btn-primary');
-    if (saveBtn) { saveBtn.disabled=true; saveBtn.textContent='Saving…'; }
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
-    const examId = PAGE.examId;
     const csrfInput = document.querySelector('input[name^="_csrf"]');
-    const CHOICE_TYPES = ['multiple_choice','checkboxes','dropdown'];
     const choices = IQ_EDIT_CHOICES[qid] || [];
 
     const fd = new FormData();
-    fd.append('action','edit_question'); fd.append('exam_id',examId);
-    fd.append('question_id',qid); fd.append('section_id',q.section_id||'');
-    fd.append(csrfInput.name,csrfInput.value);
-    fd.append('question_text',qText);
-    fd.append('question_type',q.question_type);
-    fd.append('points',document.getElementById(`qe-points-${qid}`)?.value||1);
-    if (document.getElementById(`qe-required-${qid}`)?.checked) fd.append('is_required','1');
+    fd.append('action', 'edit_question'); fd.append('exam_id', PAGE.examId);
+    fd.append('question_id', qid); fd.append('section_id', q.section_id || '');
+    fd.append(csrfInput.name, csrfInput.value);
+    fd.append('question_text', qText);
+    fd.append('question_type', q.question_type);
+    fd.append('points', document.getElementById(`qe-points-${qid}`)?.value || 1);
+    if (document.getElementById(`qe-required-${qid}`)?.checked) fd.append('is_required', '1');
 
-    if (CHOICE_TYPES.includes(q.question_type)) {
-        const texts = choices.map(c=>c.text).filter(t=>t.trim());
-        if (texts.length < 2) { ui.alert('Add at least 2 choices.'); if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save changes';} return; }
-        texts.forEach(t=>fd.append('choices[]',t));
-        if (q.question_type==='checkboxes') choices.forEach((c,i)=>{if(c.correct)fd.append('correct_indices[]',i);});
-        else { const ci=choices.findIndex(c=>c.correct); fd.append('correct_index',ci>=0?ci:0); }
-    } else if (q.question_type==='short_answer') {
-        fd.append('expected_answer',document.getElementById(`qe-expected-${qid}`)?.value.trim()||'');
-    } else if (q.question_type==='linear_scale') {
-        fd.append('scale_min',document.getElementById(`qe-scale-min-${qid}`)?.value||1);
-        fd.append('scale_max',document.getElementById(`qe-scale-max-${qid}`)?.value||5);
-        fd.append('scale_min_label',document.getElementById(`qe-scale-min-label-${qid}`)?.value.trim()||'');
-        fd.append('scale_max_label',document.getElementById(`qe-scale-max-label-${qid}`)?.value.trim()||'');
+    if (!appendEditedQuestionAnswer(fd, q, qid, choices)) {
+        void ui.alert('Add at least 2 choices.');
+        resetEditSaveBtn(saveBtn);
+        return;
     }
     try {
-        const resp = await fetch(location.href,{method:'POST',body:fd});
-        if (resp.ok) window.location.reload();
-        else { if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save changes';} ui.alert('Unable to save. Try again.'); }
-    } catch(e) { window.location.reload(); }
+        const resp = await fetch(location.href, { method: 'POST', body: fd });
+        if (resp.ok) {
+            window.location.reload();
+        } else {
+            resetEditSaveBtn(saveBtn);
+            void ui.alert('Unable to save. Try again.');
+        }
+    } catch (_) {
+        window.location.reload();
+    }
 }
 function escQT(s){return PLP.esc(s);}
 function escQA(s){return PLP.esc(s);}
@@ -532,39 +555,17 @@ function removeInlineChoice(secId, idx, secType) {
     renderInlineCreator(container, secId, secType);
 }
 
-async function saveInlineQuestion(secId, secType) {
-    const qText = document.getElementById(`iq-text-${secId}`)?.value.trim();
-    if (!qText) {
-        document.getElementById(`iq-text-${secId}`).focus();
-        document.getElementById(`iq-text-${secId}`).style.borderColor = 'var(--error)';
-        return;
-    }
-    const choices = getCreatorChoices(secId);
-    const points  = parseInt(document.getElementById(`iq-points-${secId}`)?.value || 1);
-    const required = document.getElementById(`iq-required-${secId}`)?.checked ? 1 : 0;
-    const examId  = PAGE.examId;
-    const csrfInput = document.querySelector('input[name^="_csrf"]');
-
-    const fd = new FormData();
-    fd.append('action', 'add_question');
-    fd.append('exam_id', examId);
-    fd.append('section_id', secId);
-    fd.append('question_text', qText);
-    fd.append('question_type', secType);
-    fd.append('points', points);
-    if (required) fd.append('is_required', '1');
-    fd.append(csrfInput.name, csrfInput.value);
-
-    const isChoice = CHOICE_TYPE_KEYS.includes(secType);
-    if (isChoice) {
+// Add the answer-specific fields for a NEW question. Returns false when validation fails.
+function appendNewQuestionAnswer(fd, secId, secType, choices) {
+    if (CHOICE_TYPE_KEYS.includes(secType)) {
         const texts = choices.map(c => c.text).filter(t => t.trim());
         if (texts.length < 2) {
-            ui.alert('Add at least 2 choices.');
-            return;
+            void ui.alert('Add at least 2 choices.');
+            return false;
         }
         texts.forEach(t => fd.append('choices[]', t));
         if (secType === 'checkboxes') {
-            choices.forEach((c,i) => { if (c.correct) fd.append('correct_indices[]', i); });
+            choices.forEach((c, i) => { if (c.correct) fd.append('correct_indices[]', i); });
         } else {
             const ci = choices.findIndex(c => c.correct);
             fd.append('correct_index', ci >= 0 ? ci : 0);
@@ -580,6 +581,33 @@ async function saveInlineQuestion(secId, secType) {
         if (minL) fd.append('scale_min_label', minL);
         if (maxL) fd.append('scale_max_label', maxL);
     }
+    return true;
+}
+
+async function saveInlineQuestion(secId, secType) {
+    const qText = document.getElementById(`iq-text-${secId}`)?.value.trim();
+    if (!qText) {
+        document.getElementById(`iq-text-${secId}`).focus();
+        document.getElementById(`iq-text-${secId}`).style.borderColor = 'var(--error)';
+        return;
+    }
+    const choices = getCreatorChoices(secId);
+    const points  = Number.parseInt(document.getElementById(`iq-points-${secId}`)?.value || 1, 10);
+    const required = document.getElementById(`iq-required-${secId}`)?.checked ? 1 : 0;
+    const examId  = PAGE.examId;
+    const csrfInput = document.querySelector('input[name^="_csrf"]');
+
+    const fd = new FormData();
+    fd.append('action', 'add_question');
+    fd.append('exam_id', examId);
+    fd.append('section_id', secId);
+    fd.append('question_text', qText);
+    fd.append('question_type', secType);
+    fd.append('points', points);
+    if (required) fd.append('is_required', '1');
+    fd.append(csrfInput.name, csrfInput.value);
+
+    if (!appendNewQuestionAnswer(fd, secId, secType, choices)) return;
 
     // Disable save button
     const saveBtn = document.querySelector(`#inline-creator-${secId} .btn-primary`);
@@ -591,9 +619,9 @@ async function saveInlineQuestion(secId, secType) {
             window.location.reload();
         } else {
             if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save question'; }
-            ui.alert('Unable to save. Try again.');
+            void ui.alert('Unable to save. Try again.');
         }
-    } catch(e) {
+    } catch (_) {
         window.location.reload();
     }
 }
@@ -611,8 +639,8 @@ async function saveInlineQuestion(secId, secType) {
         const avgEl  = row.querySelector('.passing-avg');
         const lowEl  = row.querySelector('.low-label');
         if (!highEl || !avgEl || !lowEl) return;
-        const highVal = parseInt(highEl.value, 10) || 7;
-        const avgVal  = parseInt(avgEl.value,  10) || 4;
+        const highVal = Number.parseInt(highEl.value, 10) || 7;
+        const avgVal  = Number.parseInt(avgEl.value,  10) || 4;
         // Enforce avg < high
         if (el.classList.contains('passing-high') && avgVal >= highVal) {
             avgEl.value = Math.max(1, highVal - 1);
@@ -620,7 +648,7 @@ async function saveInlineQuestion(secId, secType) {
         if (el.classList.contains('passing-avg') && avgVal >= highVal) {
             highEl.value = Math.min(10, avgVal + 1);
         }
-        const finalAvg = parseInt(avgEl.value, 10) || 4;
+        const finalAvg = Number.parseInt(avgEl.value, 10) || 4;
         lowEl.textContent = finalAvg <= 1 ? '-' : '1–' + (finalAvg - 1);
     });
 })();
@@ -652,7 +680,7 @@ async function saveInlineQuestion(secId, secType) {
             if (!dragged || sourceContainer !== container) return;
             const after = getDragAfterElement(container, e.clientY);
             if (after === null) container.appendChild(dragged);
-            else container.insertBefore(dragged, after);
+            else after.before(dragged);
         });
     });
 

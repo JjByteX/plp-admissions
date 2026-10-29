@@ -1,10 +1,10 @@
 (function () {
-    var drawer  = document.getElementById('apDrawer');
-    var backdrop= document.getElementById('apDrawerBackdrop');
-    var body    = document.getElementById('apDrawerBody');
+    const drawer  = document.getElementById('apDrawer');
+    const backdrop= document.getElementById('apDrawerBackdrop');
+    const body    = document.getElementById('apDrawerBody');
     // Server URLs come from data attributes on the drawer.
-    var PRINT_URL = drawer.getAttribute('data-print-url');
-    var PANEL_URL = drawer.getAttribute('data-panel-url');
+    const PRINT_URL = drawer.dataset.printUrl;
+    const PANEL_URL = drawer.dataset.panelUrl;
 
     // Public open / close API ------------------------------------
     window.openApplicantPanel = function (id) {
@@ -31,7 +31,7 @@
                     '<div class="ap-drawer-error">'
                     + 'Could not load applicant detail. '
                     + '<button type="button" class="btn btn-secondary btn-sm" '
-                    + 'onclick="openApplicantPanel(' + (id|0) + ')">Retry</button>'
+                    + 'onclick="openApplicantPanel(' + (Math.trunc(Number(id)) || 0) + ')">Retry</button>'
                     + '</div>';
             });
     };
@@ -45,10 +45,10 @@
 
     // Auto-wire data-applicant-panel triggers --------------------
     document.addEventListener('click', function (ev) {
-        var t = ev.target.closest('[data-applicant-panel]');
+        const t = ev.target.closest('[data-applicant-panel]');
         if (!t) return;
         ev.preventDefault();
-        window.openApplicantPanel(parseInt(t.getAttribute('data-applicant-panel'), 10));
+        window.openApplicantPanel(Number.parseInt(t.dataset.applicantPanel, 10));
     });
 
     // ESC closes
@@ -62,13 +62,13 @@
     // Dialogs are async: block this submit, ask, then submit again with a flag.
     window.apEvalConfirm = function (form) {
         if (form.dataset.apOk) { delete form.dataset.apOk; return true; }
-        var r = (form.querySelector('.ap-eval-input') || {}).value || '';
+        const r = (form.querySelector('.ap-eval-input') || {}).value || '';
         if (!r) {
-            ui.alert('Please choose Pass or Decline.');
+            void ui.alert('Please choose Pass or Decline.');
             return false;
         }
         if (r === 'pass' || r === 'reject') {
-            ui.confirm('Submit this evaluation as ' + r.toUpperCase() + '?', { danger: r === 'reject', ok: 'Submit' })
+            void ui.confirm('Submit this evaluation as ' + r.toUpperCase() + '?', { danger: r === 'reject', ok: 'Submit' })
                 .then(function (ok) { if (ok) { form.dataset.apOk = '1'; form.requestSubmit(); } });
             return false;
         }

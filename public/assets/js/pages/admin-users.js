@@ -1,4 +1,4 @@
-var PAGE = window.PAGE || {};
+const PAGE = window.PAGE || {};
 function openResetModal(uid, name) {
     document.getElementById('reset-uid').value = uid;
     document.getElementById('reset-name').textContent = 'Resetting password for: ' + name;
@@ -10,19 +10,19 @@ function openResetModal(uid, name) {
 
 // Make department required when role is Dean, optional otherwise.
 (function(){
-    var roleSel = document.getElementById('role-select');
-    var deptSel = document.getElementById('dept-select');
-    var deptHint = document.getElementById('dept-hint');
+    const roleSel = document.getElementById('role-select');
+    const deptSel = document.getElementById('dept-select');
+    const deptHint = document.getElementById('dept-hint');
     if (!roleSel || !deptSel) return;
     function sync() {
-        var isDean = roleSel.value === PAGE.roles.dean;
-        var isProctor = roleSel.value === PAGE.roles.proctor;
-        var isStaff = roleSel.value === PAGE.roles.staff;
-        var needsDept = isDean || isProctor || isStaff;
-        var isAdmin = roleSel.value === PAGE.roles.admin;
-        var isSSO = roleSel.value === PAGE.roles.sso;
-        var hideDept = isAdmin || isSSO;
-        var deptRow = deptSel.closest('div');
+        const isDean = roleSel.value === PAGE.roles.dean;
+        const isProctor = roleSel.value === PAGE.roles.proctor;
+        const isStaff = roleSel.value === PAGE.roles.staff;
+        const needsDept = isDean || isProctor || isStaff;
+        const isAdmin = roleSel.value === PAGE.roles.admin;
+        const isSSO = roleSel.value === PAGE.roles.sso;
+        const hideDept = isAdmin || isSSO;
+        const deptRow = deptSel.closest('div');
         if (hideDept) {
             deptRow.style.display = 'none';
             deptSel.required = false;

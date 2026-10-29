@@ -13,19 +13,19 @@
 window.PLPFileViewer = {
     init: function (opts) {
         opts = opts || {};
-        var pdfStyle = opts.pdfStyle || 'width:100%;height:100%;border:none;background:var(--white);';
-        var imgStyle = opts.imgStyle || 'max-width:100%;max-height:100%;border-radius:var(--radius);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;';
-        var onRender = opts.onRender || null;
+        const pdfStyle = opts.pdfStyle || 'width:100%;height:100%;border:none;background:var(--white);';
+        const imgStyle = opts.imgStyle || 'max-width:100%;max-height:100%;border-radius:var(--radius);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;';
+        const onRender = opts.onRender || null;
 
-        var _files=[], _idx=0, _scale=1, _tx=0, _ty=0;
-        var _drag=false, _ds={x:0,y:0}, _touch=null;
+        let _files=[], _idx=0, _scale=1, _tx=0, _ty=0;
+        let _drag=false, _ds={x:0,y:0}, _touch=null;
 
         window.openFileViewer = function(idx, files) {
             _files=files; _idx=idx; _scale=1; _tx=0; _ty=0;
             _render();
             document.getElementById('file-viewer-modal').style.display='flex';
             document.body.style.overflow='hidden';
-            var h=document.getElementById('fv-hint');
+            const h=document.getElementById('fv-hint');
             if(h){ h.style.opacity='1'; setTimeout(function(){ h.style.opacity='0'; },2800); }
         };
 
@@ -36,7 +36,7 @@ window.PLPFileViewer = {
         };
 
         window.fvNavigate = function(d) {
-            var n=_idx+d;
+            const n=_idx+d;
             if(n<0||n>=_files.length) return;
             _idx=n; _scale=1; _tx=0; _ty=0; _render();
         };
@@ -50,10 +50,10 @@ window.PLPFileViewer = {
         window.fvResetZoom = function() { _scale=1; _tx=0; _ty=0; _apply(); };
 
         function _render() {
-            var f=_files[_idx];
+            const f=_files[_idx];
             if(!f) return;
-            var wrap=document.getElementById('fv-transform-wrap');
-            var isPdf=f.url.toLowerCase().split('?')[0].endsWith('.pdf');
+            const wrap=document.getElementById('fv-transform-wrap');
+            const isPdf=f.url.toLowerCase().split('?')[0].endsWith('.pdf');
             if(isPdf){
                 wrap.innerHTML='<iframe src="'+f.url+'" style="'+pdfStyle+'"></iframe>';
             } else {
@@ -61,30 +61,30 @@ window.PLPFileViewer = {
             }
             document.getElementById('fv-label').textContent=f.label;
             document.getElementById('fv-counter').textContent=(_idx+1)+' of '+_files.length;
-            var p=document.getElementById('fv-prev');
-            var n=document.getElementById('fv-next');
+            const p=document.getElementById('fv-prev');
+            const n=document.getElementById('fv-next');
             p.disabled=(_idx===0); p.style.opacity=(_idx===0)?'0.35':'1';
             n.disabled=(_idx===_files.length-1); n.style.opacity=(_idx===_files.length-1)?'0.35':'1';
             _apply();
             _dots();
             if (onRender) onRender(f);
-            var h=document.getElementById('fv-hint');
+            const h=document.getElementById('fv-hint');
             if(h){ h.style.opacity='1'; setTimeout(function(){ h.style.opacity='0'; },2800); }
         }
 
         function _apply() {
-            var w=document.getElementById('fv-transform-wrap');
+            const w=document.getElementById('fv-transform-wrap');
             w.style.transform='translate('+_tx+'px,'+_ty+'px) scale('+_scale+')';
             document.getElementById('fv-zoom-label').textContent=Math.round(_scale*100)+'%';
-            var vp=document.getElementById('fv-viewport');
+            const vp=document.getElementById('fv-viewport');
             vp.dataset.zoomed=(_scale>1)?'true':'false';
         }
 
         function _dots() {
-            var c=document.getElementById('fv-dots');
+            const c=document.getElementById('fv-dots');
             c.innerHTML='';
             _files.forEach(function(f,i){
-                var b=document.createElement('button');
+                const b=document.createElement('button');
                 b.type='button';
                 b.style.cssText='width:8px;height:8px;border-radius:50%;border:none;padding:0;cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s;';
                 b.style.background=(i===_idx)?'var(--accent)':'var(--border-strong)';
@@ -97,7 +97,7 @@ window.PLPFileViewer = {
 
         // Pan, wheel zoom and click-backdrop-to-close
         document.addEventListener('DOMContentLoaded',function(){
-            var vp=document.getElementById('fv-viewport');
+            const vp=document.getElementById('fv-viewport');
             vp.addEventListener('mousedown',function(e){
                 if(_scale<=1) return;
                 _drag=true; _ds={x:e.clientX-_tx,y:e.clientY-_ty};
@@ -112,16 +112,16 @@ window.PLPFileViewer = {
             });
             vp.addEventListener('touchstart',function(e){
                 if(_scale<=1) return;
-                var t=e.touches[0]; _touch={x:t.clientX-_tx,y:t.clientY-_ty}; e.preventDefault();
+                const t=e.touches[0]; _touch={x:t.clientX-_tx,y:t.clientY-_ty}; e.preventDefault();
             },{passive:false});
             vp.addEventListener('touchmove',function(e){
                 if(!_touch) return;
-                var t=e.touches[0]; _tx=t.clientX-_touch.x; _ty=t.clientY-_touch.y; _apply(); e.preventDefault();
+                const t=e.touches[0]; _tx=t.clientX-_touch.x; _ty=t.clientY-_touch.y; _apply(); e.preventDefault();
             },{passive:false});
             vp.addEventListener('touchend',function(){ _touch=null; });
             vp.addEventListener('wheel',function(e){
                 e.preventDefault();
-                var d=e.deltaY>0?-0.15:0.15;
+                const d=e.deltaY>0?-0.15:0.15;
                 _scale=Math.min(5,Math.max(0.5,_scale+d));
                 if(_scale<=1){ _tx=0; _ty=0; }
                 _apply();

@@ -1,10 +1,10 @@
 /* ── Undo toast (bulk release) ──────────────────────────────── */
 function showResUndoToast(msg, onCommit) {
-    var existing = document.getElementById('res-undo-toast');
+    const existing = document.getElementById('res-undo-toast');
     if (existing) { existing._cancelFn && existing._cancelFn(); existing.remove(); }
 
-    var DELAY = 6000;
-    var toast = document.createElement('div');
+    const DELAY = 6000;
+    const toast = document.createElement('div');
     toast.id = 'res-undo-toast';
     toast.style.cssText = [
         'position:fixed;bottom:calc(var(--space-6) + 56px);left:50%;transform:translateX(-50%);',
@@ -16,7 +16,7 @@ function showResUndoToast(msg, onCommit) {
     ].join('');
 
     // Progress bar
-    var bar = document.createElement('div');
+    const bar = document.createElement('div');
     bar.style.cssText = 'position:absolute;bottom:0;left:0;height:3px;background:var(--accent);border-radius:0 0 var(--radius) var(--radius);width:100%;transition:width ' + DELAY + 'ms linear';
 
     toast.innerHTML = '<span style="flex:1">' + msg + '</span>'
@@ -28,7 +28,7 @@ function showResUndoToast(msg, onCommit) {
     // Kick off the progress bar shrink
     requestAnimationFrame(function() { requestAnimationFrame(function() { bar.style.width = '0'; }); });
 
-    var timer = setTimeout(function() {
+    const timer = setTimeout(function() {
         dismissResUndoToast();
         onCommit();
     }, DELAY);
@@ -42,7 +42,7 @@ function showResUndoToast(msg, onCommit) {
 }
 
 function dismissResUndoToast() {
-    var t = document.getElementById('res-undo-toast');
+    const t = document.getElementById('res-undo-toast');
     if (t) { t._cancelFn && t._cancelFn(); t.remove(); }
 }
 
@@ -50,15 +50,15 @@ function dismissResUndoToast() {
 // Intercept individual "Release as Accept/Reject" form submits and
 // show a short undo window before actually posting.
 document.addEventListener('submit', function(e) {
-    var form = e.target;
+    const form = e.target;
     if (!form || form.id === 'res-bulk-form') return;
-    var actionInput = form.querySelector('input[name="action"]');
+    const actionInput = form.querySelector('input[name="action"]');
     if (!actionInput || actionInput.value !== 'release') return;
 
     e.preventDefault();
 
-    var btn = form.querySelector('button[type="submit"]');
-    var label = btn ? btn.textContent.trim() : 'Releasing…';
+    const btn = form.querySelector('button[type="submit"]');
+    const label = btn ? btn.textContent.trim() : 'Releasing…';
 
     showResUndoToast(label + ' - releasing…', function() { form.submit(); });
 }, true);
@@ -68,12 +68,12 @@ function resGetSelectedIds() {
 }
 
 function resUpdateSelection() {
-    var ids     = resGetSelectedIds();
-    var count   = ids.length;
-    var toolbar = document.getElementById('res-bulk-toolbar');
-    var badge   = document.getElementById('res-bulk-count');
-    var allCb   = document.getElementById('res-select-all');
-    var total   = document.querySelectorAll('.res-check').length;
+    const ids     = resGetSelectedIds();
+    const count   = ids.length;
+    const toolbar = document.getElementById('res-bulk-toolbar');
+    const badge   = document.getElementById('res-bulk-count');
+    const allCb   = document.getElementById('res-select-all');
+    const total   = document.querySelectorAll('.res-check').length;
 
     badge.textContent     = count;
     toolbar.style.display = count > 0 ? 'flex' : 'none';
@@ -83,7 +83,7 @@ function resUpdateSelection() {
     }
 
     document.querySelectorAll('.res-bulk-row').forEach(function(tr) {
-        var cb = tr.querySelector('.res-check');
+        const cb = tr.querySelector('.res-check');
         if (cb && cb.checked) { tr.classList.add('res-selected'); }
         else { tr.classList.remove('res-selected'); }
     });
@@ -97,30 +97,30 @@ function resToggleAll(masterCb) {
 }
 
 function resClearSelection() {
-    var allCb = document.getElementById('res-select-all');
+    const allCb = document.getElementById('res-select-all');
     if (allCb) allCb.checked = false;
     document.querySelectorAll('.res-check').forEach(function(cb) { cb.checked = false; });
     resUpdateSelection();
 }
 
 async function resBulkRelease(decision) {
-    var ids = resGetSelectedIds();
+    const ids = resGetSelectedIds();
     if (ids.length === 0) return;
     if (decision !== 'accepted' && decision !== 'rejected') return;
 
     // Tally how many rows match the chosen decision vs. how many will count
     // as overrides of the Professor's recommendation.
-    var matchBucket = (decision === 'accepted') ? 'ready_accept' : 'ready_reject';
-    var matches = 0, overrides = 0;
+    const matchBucket = (decision === 'accepted') ? 'ready_accept' : 'ready_reject';
+    let matches = 0, overrides = 0;
     ids.forEach(function(id) {
-        var tr = document.querySelector('tr.res-bulk-row[data-id="' + id + '"]');
+        const tr = document.querySelector('tr.res-bulk-row[data-id="' + id + '"]');
         if (!tr) return;
-        if (tr.getAttribute('data-bucket') === matchBucket) matches++;
+        if (tr.dataset.bucket === matchBucket) matches++;
         else overrides++;
     });
 
-    var label = (decision === 'accepted') ? 'Accepted' : 'Declined';
-    var msg = 'Release ' + ids.length + ' selected applicant(s) as ' + label + '?\n\n'
+    const label = (decision === 'accepted') ? 'Accepted' : 'Declined';
+    const msg = 'Release ' + ids.length + ' selected applicant(s) as ' + label + '?\n\n'
             + '\u2022 ' + matches   + ' match the Professor\u2019s recommendation\n'
             + '\u2022 ' + overrides + ' will override the Professor\u2019s recommendation\n\n'
             + 'The applicants will be notified by email.';
@@ -129,7 +129,7 @@ async function resBulkRelease(decision) {
 
     // If any rows override the recommendation, ask for a single shared
     // reason that gets recorded against every override in the audit log.
-    var reason = '';
+    let reason = '';
     if (overrides > 0) {
         reason = await ui.prompt(
             overrides + ' of these applicants will be released against the Professor\u2019s '
@@ -140,7 +140,7 @@ async function resBulkRelease(decision) {
         reason = reason.trim();
     }
 
-    var form = document.getElementById('res-bulk-form');
+    const form = document.getElementById('res-bulk-form');
     document.getElementById('res-bulk-action').value =
         (decision === 'accepted') ? 'bulk_accept' : 'bulk_reject';
 
@@ -148,14 +148,14 @@ async function resBulkRelease(decision) {
     form.querySelectorAll('input[name="ids[]"], input[name="reason"]').forEach(function(el) { el.remove(); });
 
     ids.forEach(function(id) {
-        var input = document.createElement('input');
+        const input = document.createElement('input');
         input.type = 'hidden';
         input.name = 'ids[]';
         input.value = id;
         form.appendChild(input);
     });
     if (reason) {
-        var rInput = document.createElement('input');
+        const rInput = document.createElement('input');
         rInput.type = 'hidden';
         rInput.name = 'reason';
         rInput.value = reason;
@@ -173,14 +173,14 @@ async function resBulkRelease(decision) {
 // Triggered when the releaser clicks Accept on a Recommended:Reject row
 // (or Reject on a Recommended:Accept row). Demands a written reason.
 function openReleaseOverrideModal(appId, name, decision, bucket) {
-    var modal = document.getElementById('release-override-modal');
+    const modal = document.getElementById('release-override-modal');
     if (!modal) return;
-    var form  = document.getElementById('release-override-form');
+    const form  = document.getElementById('release-override-form');
     form.action = window.PAGE.resultsUrl + appId;
     document.getElementById('release-override-decision').value = decision;
     document.getElementById('release-override-name').textContent = name;
 
-    var label = (decision === 'accepted')
+    const label = (decision === 'accepted')
         ? 'Release as \u201cAccepted\u201d (Professor recommended Decline)'
         : 'Release as \u201cDeclined\u201d (Professor recommended Accept)';
     document.getElementById('release-override-result-label').textContent = label;
@@ -190,14 +190,14 @@ function openReleaseOverrideModal(appId, name, decision, bucket) {
 
 // Click-outside-to-close for the override modal + close-admissions modal.
 (function() {
-    var m = document.getElementById('release-override-modal');
+    const m = document.getElementById('release-override-modal');
     if (m) m.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
-    var c = document.getElementById('close-admissions-modal');
+    const c = document.getElementById('close-admissions-modal');
     if (c) c.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
 })();
 
 function openCloseAdmissionsModal() {
-    var modal = document.getElementById('close-admissions-modal');
+    const modal = document.getElementById('close-admissions-modal');
     if (!modal) return;
     document.getElementById('close-admissions-reason').value = '';
     modal.style.display = 'flex';

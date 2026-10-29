@@ -1,7 +1,6 @@
 // ── Puter helpers (shared with exam import; guard against double-load) ──
-if (typeof puterLoaded === 'undefined') {
-    var puterLoaded = false;
-}
+// Shared flag; a window property avoids a duplicate top-level declaration if exam-ai-import.js is also loaded.
+window.puterLoaded = window.puterLoaded || false;
 
 // Shared "load this script once" helper. checkFn reports whether the
 // library is already present (skips loading entirely); onLoaded runs
@@ -73,8 +72,8 @@ async function refreshLegacyPuterStatus() {
         signinBtn.style.display = '';
     }
 }
-async function legacyPuterSignIn()  { await loadPuterIfNeeded(); try { await puter.auth.signIn();  refreshLegacyPuterStatus(); } catch(_) {} }
-async function legacyPuterSignOut() { await loadPuterIfNeeded(); try { await puter.auth.signOut(); refreshLegacyPuterStatus(); } catch(_) {} }
+async function legacyPuterSignIn()  { await loadPuterIfNeeded(); try { await puter.auth.signIn();  void refreshLegacyPuterStatus(); } catch(_) {} }
+async function legacyPuterSignOut() { await loadPuterIfNeeded(); try { await puter.auth.signOut(); void refreshLegacyPuterStatus(); } catch(_) {} }
 
 // ── Modal open/close ──
 let legacySelectedFile = null;
@@ -82,7 +81,7 @@ let legacyExtractedRows = [];
 
 function openNewCycleModal() {
     document.getElementById('new-cycle-modal').style.display = '';
-    var i = document.getElementById('new-cycle-confirm');
+    let i = document.getElementById('new-cycle-confirm');
     if (i) { i.value = ''; i.focus(); }
 }
 function closeNewCycleModal() {
@@ -91,7 +90,7 @@ function closeNewCycleModal() {
 function openLegacyImportModal() {
     resetLegacyImport(true);
     document.getElementById('legacy-import-modal').style.display = '';
-    refreshLegacyPuterStatus();
+    void refreshLegacyPuterStatus();
 }
 function closeLegacyImportModal() {
     document.getElementById('legacy-import-modal').style.display = 'none';
@@ -282,6 +281,21 @@ function normalizeLookup(val, map, fallback) {
     return fallback;
 }
 
+// "(BSIT)" style abbreviation inside a course name, via indexOf (no regex backtracking).
+function parenText(s) {
+    const open = s.indexOf('(');
+    const close = open === -1 ? -1 : s.indexOf(')', open + 1);
+    return close > open + 1 ? s.slice(open + 1, close) : '';
+}
+
+// Course name with its first "(ABBR)" part removed, lowercased.
+function courseBaseName(c) {
+    const open = c.indexOf('(');
+    const close = open === -1 ? -1 : c.indexOf(')', open + 1);
+    const base = close > open + 1 ? c.slice(0, open) + c.slice(close + 1) : c;
+    return base.trim().toLowerCase();
+}
+
 function normalizeCourse(raw) {
     if (!raw) return '';
     const v = raw.trim();
@@ -290,46 +304,44 @@ function normalizeCourse(raw) {
     const exact = LEGACY_COURSES.find(c => c.toLowerCase() === lower);
     if (exact) return exact;
     // Abbreviation in parentheses match e.g. "(BSIT)"
-    const abbr = v.match(/\(([^)]+)\)/)?.[1]?.toUpperCase();
+    const abbr = parenText(v).toUpperCase();
     if (abbr) {
         const m = LEGACY_COURSES.find(c => c.toUpperCase().includes('(' + abbr + ')'));
         if (m) return m;
     }
     // Keyword match: check if raw appears inside any course string
-    const keyword = LEGACY_COURSES.find(c => c.toLowerCase().includes(lower) || lower.includes(c.toLowerCase().replace(/\s*\([^)]+\)\s*/,'').toLowerCase().trim()));
-    if (keyword) return keyword;
-    return v; // keep original if no match
+    const keyword = LEGACY_COURSES.find(c => c.toLowerCase().includes(lower) || lower.includes(courseBaseName(c)));
+    return keyword || v; // keep original if no match
+}
+
+function mappedText(rowObj, key) {
+    return key ? String(rowObj[key] ?? '').trim() : '';
+}
+
+function mappedNumber(raw) {
+    if (raw == null || raw === '') return null;
+    const n = Number.parseFloat(raw);
+    return Number.isNaN(n) ? null : n;
+}
+
+function mappedName(rowObj, schema) {
+    if (schema.name && rowObj[schema.name] != null) return String(rowObj[schema.name]).trim();
+    if (Array.isArray(schema.name_parts)) {
+        return schema.name_parts.map(p => (rowObj[p] ?? '')).join(' ').replace(/\s+/g, ' ').trim();
+    }
+    return '';
 }
 
 function applySchemaToRow(rowObj, schema) {
-    // Build name
-    let name = '';
-    if (schema.name && rowObj[schema.name] != null) {
-        name = String(rowObj[schema.name]).trim();
-    } else if (Array.isArray(schema.name_parts)) {
-        name = schema.name_parts.map(p => (rowObj[p] ?? '')).join(' ').replace(/\s+/g,' ').trim();
-    }
-
-    const email   = schema.email   ? String(rowObj[schema.email]  ?? '').trim() : '';
-    const typeRaw = schema.type    ? String(rowObj[schema.type]   ?? '').trim() : '';
-    const courseR = schema.course  ? String(rowObj[schema.course] ?? '').trim() : '';
-    const resultR = schema.result  ? String(rowObj[schema.result] ?? '').trim() : '';
-    const scoreR  = schema.score   ? rowObj[schema.score]  : null;
-    const totalR  = schema.total   ? rowObj[schema.total]  : null;
-    const remR    = schema.remarks ? String(rowObj[schema.remarks] ?? '').trim() : '';
-
-    const score = (scoreR != null && scoreR !== '') ? parseFloat(scoreR) : null;
-    const total = (totalR != null && totalR !== '') ? parseFloat(totalR) : null;
-
     return {
-        name:    name,
-        email:   email,
-        type:    normalizeLookup(typeRaw, TYPE_MAP, 'freshman'),
-        course:  normalizeCourse(courseR),
-        result:  normalizeLookup(resultR, RESULT_MAP, 'rejected'),
-        score:   isNaN(score) ? null : score,
-        total:   isNaN(total) ? null : total,
-        remarks: remR,
+        name:    mappedName(rowObj, schema),
+        email:   mappedText(rowObj, schema.email),
+        type:    normalizeLookup(mappedText(rowObj, schema.type), TYPE_MAP, 'freshman'),
+        course:  normalizeCourse(mappedText(rowObj, schema.course)),
+        result:  normalizeLookup(mappedText(rowObj, schema.result), RESULT_MAP, 'rejected'),
+        score:   mappedNumber(schema.score ? rowObj[schema.score] : null),
+        total:   mappedNumber(schema.total ? rowObj[schema.total] : null),
+        remarks: mappedText(rowObj, schema.remarks),
     };
 }
 
@@ -380,7 +392,7 @@ async function detectSchema(headers, sampleRows) {
         .join('\n');
     const raw = await puterChat(SCHEMA_PROMPT + '\n\nHEADERS AND SAMPLE ROWS:\n' + sampleCsv);
     // Parse the returned JSON object
-    const cleaned = raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/i,'').trim();
+    const cleaned = PLP.stripCodeFence(raw);
     const start = cleaned.indexOf('{'), end = cleaned.lastIndexOf('}');
     if (start === -1 || end === -1) throw new Error('AI did not return a valid schema map.');
     return JSON.parse(cleaned.slice(start, end + 1));
@@ -437,57 +449,86 @@ function extractLegacyText(response) {
     if (!text) throw new Error('AI returned an empty response.');
     return text;
 }
-// Parse JSONL response — tolerates a truncated last line
+// Parse JSONL response — tolerates a truncated last line.
+// Parse one JSON text; returns the object, or null if it is invalid or not a plain object.
+function tryParseObject(text) {
+    try {
+        const obj = JSON.parse(text);
+        return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+// Track string/escape state one character at a time. Returns true when the
+// character belongs to a string literal and must not be counted as a brace.
+function scanStringState(st, ch) {
+    if (st.escape) { st.escape = false; return true; }
+    if (ch === '\\') { if (st.inStr) st.escape = true; return true; }
+    if (ch === '"') { st.inStr = !st.inStr; return true; }
+    return st.inStr;
+}
+
+// Count braces; when a top-level {...} closes, return it parsed (or null).
+function scanBraces(st, str, i) {
+    const ch = str[i];
+    if (ch === '{') {
+        if (st.depth++ === 0) st.start = i;
+        return null;
+    }
+    if (ch !== '}') return null;
+    st.depth--;
+    if (st.depth !== 0 || st.start === -1) return null;
+    const obj = tryParseObject(str.slice(st.start, i + 1));
+    st.start = -1;
+    return obj;
+}
+
 // Walk a string and extract every complete top-level {...} object,
 // even if the surrounding array is truncated. Handles escaped chars + nested braces.
 function extractCompleteObjects(str) {
     const results = [];
-    let depth = 0, start = -1, inStr = false, escape = false;
+    const st = { depth: 0, start: -1, inStr: false, escape: false };
     for (let i = 0; i < str.length; i++) {
-        const ch = str[i];
-        if (escape)          { escape = false; continue; }
-        if (ch === '\\')     { if (inStr) escape = true; continue; }
-        if (ch === '"')       { inStr = !inStr; continue; }
-        if (inStr)            { continue; }
-        if (ch === '{')       { if (depth++ === 0) start = i; }
-        else if (ch === '}')  {
-            if (--depth === 0 && start !== -1) {
-                try { const obj = JSON.parse(str.slice(start, i + 1));
-                      if (obj && typeof obj === 'object' && !Array.isArray(obj)) results.push(obj); }
-                catch(_) {}
-                start = -1;
-            }
-        }
+        if (scanStringState(st, str[i])) continue;
+        const obj = scanBraces(st, str, i);
+        if (obj) results.push(obj);
     }
     return results;
 }
 
-function parseLegacyResp(raw) {
-    const cleaned = raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/i,'').trim();
-
-    // Strategy 1: JSONL — one object per line (ideal path)
+// Strategy 1: JSONL — one object per line (ideal path)
+function parseJsonlLines(cleaned) {
     const rows = [];
-    for (const line of cleaned.split(/\n/)) {
+    for (const line of cleaned.split('\n')) {
         const t = line.trim().replace(/,$/, '');
         if (!t || t === '[' || t === ']') continue;
-        try { const obj = JSON.parse(t); if (obj && typeof obj === 'object' && !Array.isArray(obj)) rows.push(obj); } catch(_) {}
+        const obj = tryParseObject(t);
+        if (obj) rows.push(obj);
     }
-    if (rows.length > 0) return rows;
+    return rows;
+}
 
-    // Strategy 2: complete JSON array (not truncated)
+// Strategy 2: complete JSON array (not truncated)
+function parseJsonArray(cleaned) {
     try {
         const s = cleaned.replace(/,(\s*[}\]])/g, '$1');
         const start = s.indexOf('['), end = s.lastIndexOf(']');
-        if (start !== -1 && end > start) {
-            const a = JSON.parse(s.slice(start, end + 1));
-            if (Array.isArray(a) && a.length > 0) return a;
-        }
-    } catch(_) {}
+        if (start === -1 || end <= start) return [];
+        const a = JSON.parse(s.slice(start, end + 1));
+        return Array.isArray(a) ? a : [];
+    } catch (_) {
+        return [];
+    }
+}
 
-    // Strategy 3: extract every complete {...} from a truncated array — handles cut-off responses
-    const salvaged = extractCompleteObjects(cleaned);
-    if (salvaged.length > 0) return salvaged;
-
+function parseLegacyResp(raw) {
+    const cleaned = PLP.stripCodeFence(raw);
+    // Strategy 3 (last resort): salvage every complete {...} from a cut-off response.
+    for (const strategy of [parseJsonlLines, parseJsonArray, extractCompleteObjects]) {
+        const rows = strategy(cleaned);
+        if (rows.length > 0) return rows;
+    }
     throw new Error('AI response was not valid JSON. Raw:\n' + raw.slice(0, 300));
 }
 
@@ -532,24 +573,102 @@ function toggleAllLegacyRows(checked) {
 }
 
 // ── Main processing ──
+function validateLegacySchoolYear(syVal, syHint) {
+    let msg = '';
+    if (!/^\d{4}-\d{4}$/.test(syVal)) {
+        msg = 'Enter a valid school year like 2023-2024.';
+    } else {
+        const [y1, y2] = syVal.split('-').map(Number);
+        if (y2 !== y1 + 1) msg = 'The two years must be consecutive (e.g. 2023-2024).';
+    }
+    if (msg) {
+        syHint.textContent = msg;
+        syHint.style.display = '';
+        return false;
+    }
+    syHint.style.display = 'none';
+    return true;
+}
+
+// Read the chosen file into { content, isImage }. Images are passed through as the
+// File itself; everything else becomes text.
+async function readLegacyContent(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    legacySetProgress(15, 'Reading file…', 'Loading file from disk');
+
+    if (['jpg', 'jpeg', 'png'].includes(ext)) return { content: file, isImage: true };
+    if (ext === 'pdf') {
+        legacySetProgress(30, 'Extracting text…', 'Parsing PDF pages');
+        await loadPdfJsIfNeeded();
+        return { content: await extractLegacyPdfText(file), isImage: false };
+    }
+    if (['docx', 'doc'].includes(ext)) {
+        legacySetProgress(30, 'Extracting text…', 'Parsing document');
+        await loadMammothIfNeeded();
+        return { content: await extractLegacyDocxText(file), isImage: false };
+    }
+    if (['xlsx', 'xls'].includes(ext)) {
+        legacySetProgress(30, 'Extracting text…', 'Reading spreadsheet');
+        return { content: await extractXlsxAsText(file), isImage: false };
+    }
+    // CSV and plain text
+    return { content: await readLegacyFileAsText(file), isImage: false };
+}
+
+// Structured (CSV/TSV): AI detects the column layout once, rows are then mapped client-side.
+async function extractLegacyCsvRows(content) {
+    legacySetProgress(35, 'Detecting columns…', 'Asking AI to identify column layout');
+    const { headers, rows: parsedRows } = parseCsvToObjects(content);
+    if (headers.length === 0 || parsedRows.length === 0) {
+        throw new Error('Could not parse the CSV. Make sure it has a header row.');
+    }
+    const schema = await detectSchema(headers, parsedRows);
+
+    legacySetProgress(60, 'Mapping records…', `Applying column map to ${parsedRows.length} rows`);
+    return parsedRows
+        .map(r => applySchemaToRow(r, schema))
+        .filter(r => r.name.trim());   // skip rows with no name
+}
+
+// Images and unstructured text go to the AI whole; CSV-like text uses the schema path.
+async function extractLegacyRows(content, isImage) {
+    if (isImage) {
+        legacySetProgress(40, 'Sending to AI…', 'Uploading image to Puter AI');
+        return callLegacyPuterWithImage(content);
+    }
+    const firstLine = (typeof content === 'string' ? content : '').split(/\r?\n/)[0] || '';
+    const isCsv = firstLine.split(',').length >= 3 || firstLine.split('\t').length >= 3;
+    if (isCsv) return extractLegacyCsvRows(content);
+
+    legacySetProgress(40, 'Sending to AI…', 'Extracting records from document');
+    const raw = await puterChat(LEGACY_AI_PROMPT + '\n\nCONTENT:\n\n' + content.slice(0, 12000));
+    return parseLegacyResp(raw);
+}
+
+function showLegacyPreview(rows) {
+    legacyExtractedRows = rows;
+    renderLegacyPreview(rows);
+    showLegacyStep('preview');
+    const count = rows.length;
+    document.getElementById('legacy-preview-count').textContent =
+        `${count} record${count === 1 ? '' : 's'} found. Uncheck any you want to skip.`;
+    document.getElementById('legacy-save-footer').style.display = 'flex';
+}
+
+function showLegacyError(err) {
+    showLegacyStep('error');
+    document.getElementById('legacy-modal-footer').style.display = '';
+    const msg = typeof err === 'string' ? err : (err?.message || err?.error || 'Unknown error');
+    document.getElementById('legacy-error-msg').textContent = msg;
+    document.getElementById('legacy-process-btn').disabled = !legacySelectedFile;
+}
+
 async function startLegacyProcessing() {
     if (!legacySelectedFile) return;
 
-    // Validate school year first
     const syVal = document.getElementById('legacy-sy-input').value.trim();
     const syHint = document.getElementById('legacy-sy-hint');
-    if (!syVal.match(/^\d{4}-\d{4}$/)) {
-        syHint.textContent = 'Enter a valid school year like 2023-2024.';
-        syHint.style.display = '';
-        return;
-    }
-    const [y1, y2] = syVal.split('-').map(Number);
-    if (y2 !== y1 + 1) {
-        syHint.textContent = 'The two years must be consecutive (e.g. 2023-2024).';
-        syHint.style.display = '';
-        return;
-    }
-    syHint.style.display = 'none';
+    if (!validateLegacySchoolYear(syVal, syHint)) return;
 
     legacyResetProgress();
     showLegacyStep('processing');
@@ -559,88 +678,22 @@ async function startLegacyProcessing() {
         if (!legacySelectedFile.size) throw new Error('File is empty (0 bytes).');
 
         await loadPuterIfNeeded();
-        const ext = legacySelectedFile.name.split('.').pop().toLowerCase();
-        let content = null, isImage = false;
-
-        legacySetProgress(15, 'Reading file…', 'Loading file from disk');
-
-        if (['jpg', 'jpeg', 'png'].includes(ext)) {
-            content = legacySelectedFile;
-            isImage = true;
-        } else if (ext === 'pdf') {
-            legacySetProgress(30, 'Extracting text…', 'Parsing PDF pages');
-            await loadPdfJsIfNeeded();
-            content = await extractLegacyPdfText(legacySelectedFile);
-        } else if (['docx', 'doc'].includes(ext)) {
-            legacySetProgress(30, 'Extracting text…', 'Parsing document');
-            await loadMammothIfNeeded();
-            content = await extractLegacyDocxText(legacySelectedFile);
-        } else if (['xlsx', 'xls'].includes(ext)) {
-            legacySetProgress(30, 'Extracting text…', 'Reading spreadsheet');
-            content = await extractXlsxAsText(legacySelectedFile);
-        } else {
-            // CSV and plain text
-            content = await readLegacyFileAsText(legacySelectedFile);
-        }
+        const { content, isImage } = await readLegacyContent(legacySelectedFile);
 
         if (!content) throw new Error('Could not read this file. Try a different format.');
         if (typeof content === 'string' && content.trim().length < 5) {
             throw new Error('No readable text found. If this is a scanned PDF, save pages as JPG/PNG and upload those.');
         }
 
-        // ── Phase 1: schema detection (CSV/structured) or full AI extraction (images/PDFs) ──
-        let rows = [];
-
-        if (isImage) {
-            legacySetProgress(40, 'Sending to AI…', 'Uploading image to Puter AI');
-            rows = await callLegacyPuterWithImage(content);
-        } else {
-            // Detect if content looks like CSV/TSV (structured)
-            const firstLine = (typeof content === 'string' ? content : '').split(/\r?\n/)[0] || '';
-            const isCsv = firstLine.split(',').length >= 3 || firstLine.split('	').length >= 3;
-
-            if (isCsv) {
-                // Phase 1: AI detects column schema from header + 5 sample rows (one tiny call)
-                legacySetProgress(35, 'Detecting columns…', 'Asking AI to identify column layout');
-                const { headers, rows: parsedRows } = parseCsvToObjects(content);
-                if (headers.length === 0 || parsedRows.length === 0) {
-                    throw new Error('Could not parse the CSV. Make sure it has a header row.');
-                }
-                const schema = await detectSchema(headers, parsedRows);
-
-                // Phase 2: all rows mapped client-side — no more AI calls needed
-                legacySetProgress(60, 'Mapping records…', `Applying column map to ${parsedRows.length} rows`);
-                rows = parsedRows
-                    .map(r => applySchemaToRow(r, schema))
-                    .filter(r => r.name.trim());   // skip rows with no name
-            } else {
-                // Unstructured (DOCX, plain text): full AI extraction via JSONL
-                legacySetProgress(40, 'Sending to AI…', 'Extracting records from document');
-                const raw = await puterChat(LEGACY_AI_PROMPT + '\n\nCONTENT:\n\n' + content.slice(0, 12000));
-                rows = parseLegacyResp(raw);
-            }
-        }
+        const rows = await extractLegacyRows(content, isImage);
 
         legacySetProgress(100, 'Finalizing…', 'Parsing AI response');
         await new Promise(r => setTimeout(r, 350));
 
         if (!rows || rows.length === 0) throw new Error('No student records were detected in this file.');
-
-        legacyExtractedRows = rows;
-        renderLegacyPreview(rows);
-        showLegacyStep('preview');
-
-        const count = rows.length;
-        document.getElementById('legacy-preview-count').textContent =
-            `${count} record${count !== 1 ? 's' : ''} found. Uncheck any you want to skip.`;
-        document.getElementById('legacy-save-footer').style.display = 'flex';
-
+        showLegacyPreview(rows);
     } catch (err) {
-        showLegacyStep('error');
-        document.getElementById('legacy-modal-footer').style.display = '';
-        const msg = typeof err === 'string' ? err : (err?.message || err?.error || 'Unknown error');
-        document.getElementById('legacy-error-msg').textContent = msg;
-        document.getElementById('legacy-process-btn').disabled = !legacySelectedFile;
+        showLegacyError(err);
     }
 }
 
@@ -651,7 +704,7 @@ async function saveLegacyRows() {
 
     // Collect checked rows
     const checkedIndices = Array.from(document.querySelectorAll('.legacy-row-check:checked'))
-                                .map(cb => parseInt(cb.dataset.idx));
+                                .map(cb => Number.parseInt(cb.dataset.idx, 10));
     if (checkedIndices.length === 0) {
         await ui.alert('No rows selected. Check at least one record to save.');
         return;

@@ -1,5 +1,5 @@
 (function () {
-    var m = document.getElementById('audit-modal');
+    const m = document.getElementById('audit-modal');
     if (!m) return;
     function $(id) { return document.getElementById(id); }
     function setBadge(el, text, cls) {
@@ -23,7 +23,7 @@
 
     document.querySelectorAll('.audit-view').forEach(function (b) {
         b.addEventListener('click', function () {
-            try { openDetail(JSON.parse(b.getAttribute('data-log'))); } catch (e) {}
+            try { openDetail(JSON.parse(b.dataset.log)); } catch (e) {}
         });
     });
     m.querySelectorAll('[data-audit-close]').forEach(function (b) { b.addEventListener('click', closeDetail); });

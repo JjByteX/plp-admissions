@@ -1276,7 +1276,7 @@ function createCardBulkSelector(cfg) {
         const ids = Array.from(g.querySelectorAll(cfg.checkboxSel + ':checked'))
             .map(function (cb) { return cb.value; });
         if (ids.length === 0) return false;
-        ui.confirm(cfg.confirmMsg(ids.length), { danger: true, ok: 'Remove' }).then(function (ok) {
+        void ui.confirm(cfg.confirmMsg(ids.length), { danger: true, ok: 'Remove' }).then(function (ok) {
             if (!ok) return;
             document.getElementById(cfg.idsInputId).value = ids.join(',');
             btn.dataset.bulkOk = '1';
@@ -1311,14 +1311,14 @@ window.PLP = (function () {
     }
 
     function csrf() {
-        var el = document.querySelector('input[name="_csrf"]');
+        const el = document.querySelector('input[name="_csrf"]');
         return el ? el.value : '';
     }
 
     // POST form-encoded data with the CSRF token added. Resolves with the parsed JSON
     // body; a network or parse failure resolves { ok:false, error:'...' } instead of throwing.
     function post(url, data) {
-        var params = new URLSearchParams();
+        const params = new URLSearchParams();
         Object.keys(data || {}).forEach(function (k) {
             if (data[k] != null) params.append(k, data[k]);
         });
@@ -1333,15 +1333,15 @@ window.PLP = (function () {
 
     // Memoised pdf.js loader. opts: { src, worker } (defaults to the cdnjs 3.11.174 build).
     // Resolves with window.pdfjsLib. A failed load is not cached, so a later call retries.
-    var pdfPromise = null;
+    let pdfPromise = null;
     function loadPdfJs(opts) {
         if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions && window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
             return Promise.resolve(window.pdfjsLib);
         }
         if (pdfPromise) return pdfPromise;
         opts = opts || {};
-        var src = opts.src || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-        var worker = opts.worker || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const src = opts.src || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        const worker = opts.worker || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         pdfPromise = new Promise(function (resolve, reject) {
             function ready() {
                 if (!window.pdfjsLib) return reject(new Error('pdf.js missing'));
@@ -1349,7 +1349,7 @@ window.PLP = (function () {
                 resolve(window.pdfjsLib);
             }
             if (window.pdfjsLib) return ready();
-            var s = document.createElement('script');
+            let s = document.createElement('script');
             s.src = src;
             s.onload = ready;
             s.onerror = function () { reject(new Error('pdf.js failed to load')); };
@@ -1359,10 +1359,23 @@ window.PLP = (function () {
         return pdfPromise;
     }
 
-    var modal = {
+    // Strip a Markdown code fence (```json ... ```) that an AI reply may be wrapped in.
+    // Plain string ops instead of regexes anchored on \s*...$ (those backtrack badly).
+    function stripCodeFence(raw) {
+        let s = String(raw == null ? '' : raw).trim();
+        if (s.startsWith('```')) {
+            s = s.slice(3);
+            if (s.slice(0, 4).toLowerCase() === 'json') s = s.slice(4);
+            s = s.trimStart();
+        }
+        if (s.endsWith('```')) s = s.slice(0, -3);
+        return s.trim();
+    }
+
+    let modal = {
         open: function (id)  { document.getElementById(id).style.display = 'flex'; },
         close: function (id) { document.getElementById(id).style.display = 'none'; }
     };
 
-    return { esc: esc, csrf: csrf, post: post, loadPdfJs: loadPdfJs, modal: modal };
+    return { esc: esc, csrf: csrf, post: post, loadPdfJs: loadPdfJs, stripCodeFence: stripCodeFence, modal: modal };
 })();

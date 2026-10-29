@@ -1,6 +1,6 @@
 // Auto-dismiss flash alerts after 5 seconds
 ['iq-flash-success','iq-flash-error'].forEach(function(id) {
-    var el = document.getElementById(id);
+    const el = document.getElementById(id);
     if (el) setTimeout(function() {
         el.style.transition = 'opacity .4s';
         el.style.opacity = '0';
@@ -12,8 +12,8 @@
 const evalModal = document.getElementById('eval-modal');
 
 function _showField(id, value) {
-    var wrap = document.getElementById(id + '-wrap');
-    var el   = document.getElementById(id);
+    const wrap = document.getElementById(id + '-wrap');
+    const el   = document.getElementById(id);
     if (value) {
         el.textContent = value;
         if (wrap) wrap.style.display = '';
@@ -40,10 +40,10 @@ function openEvalModal(d) {
     _showField('eval-detail-sy', d.school_year);
 
     // Exam score
-    var examWrap = document.getElementById('eval-detail-exam-wrap');
-    var examEl   = document.getElementById('eval-detail-exam');
+    const examWrap = document.getElementById('eval-detail-exam-wrap');
+    const examEl   = document.getElementById('eval-detail-exam');
     if (d.exam_score !== null && d.exam_total !== null) {
-        var scoreText = d.exam_score + '/' + d.exam_total;
+        let scoreText = d.exam_score + '/' + d.exam_total;
         if (d.exam_passed === 1) {
             scoreText += ' - <span style="color:var(--success);font-weight:var(--weight-semibold)">Passed</span>';
         } else if (d.exam_passed === 0) {
@@ -83,7 +83,7 @@ document.getElementById('eval-form').addEventListener('submit', function (e) {
     e.preventDefault();
     if (decision !== 'pass' && decision !== 'reject') return false;
     const submitter = e.submitter;
-    ui.confirm('Mark this interview as ' + (decision === 'pass' ? 'PASS' : 'FAIL') + '?',
+    void ui.confirm('Mark this interview as ' + (decision === 'pass' ? 'PASS' : 'FAIL') + '?',
                { danger: decision === 'reject', ok: 'Confirm' })
         .then(function (ok) { if (ok) { form.dataset.ok = '1'; form.requestSubmit(submitter); } });
     return false;

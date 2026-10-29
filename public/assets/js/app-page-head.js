@@ -1,10 +1,10 @@
 // Move any element marked data-page-action (the element itself) or
 // data-page-actions (its children) into the heading row, top right.
 (function () {
-    var slot = document.getElementById('page-head-actions');
+    const slot = document.getElementById('page-head-actions');
     if (!slot) return;
     document.querySelectorAll('#main-content [data-page-action]').forEach(function (el) {
-        el.removeAttribute('data-page-action');
+        delete el.dataset.pageAction;
         slot.appendChild(el);
     });
     document.querySelectorAll('#main-content [data-page-actions]').forEach(function (wrap) {

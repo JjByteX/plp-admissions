@@ -1,7 +1,7 @@
 (function() {
     const el = document.getElementById('gate-timer');
     if (!el) return;
-    let s = parseInt(el.getAttribute('data-secs') || '0', 10);
+    let s = Number.parseInt(el.dataset.secs || '0', 10);
     const iv = setInterval(() => {
         if (!el) { clearInterval(iv); return; }
         s--;

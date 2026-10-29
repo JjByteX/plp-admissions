@@ -1,32 +1,32 @@
 // Phase 5: Upload many files. One file per request (action=classify), sequential queue.
 // ponytail: queue lives in memory only (a page reload drops unfinished rows); upgrade path is none needed, saved files stay in the slot list.
 document.addEventListener('DOMContentLoaded', function () {
-    var $ = window.jQuery;
+    const $ = window.jQuery;
     if (!$ || !$('#batch-box').length) return;
 
-    var URL_  = window.PAGE.uploadUrl;
-    var MANUAL_URL = window.PAGE.manualUrl;
-    var CSRF  = $('#flags-form [name=_csrf], #upload-form [name=_csrf]').first().val() || window.PAGE.csrf;
-    var MAX   = 4 * 1024 * 1024;
-    var BODY  = 4.3 * 1024 * 1024;   // Vercel rejects request bodies over 4.5 MB; the PDF and its preview travel together
-    var AI_PX = 1024;                // longest side of the picture the AI reads (keep in step with llama-server --image-max-tokens)
-    var PDFJS = window.PAGE.pdfJs, PDFJS_WORKER = window.PAGE.pdfWorker;
-    var OK    = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    var rows  = {}, queue = [], busy = false, seq = 0, lastCats = null, replaceId = null;
+    const URL_  = window.PAGE.uploadUrl;
+    const MANUAL_URL = window.PAGE.manualUrl;
+    const CSRF  = $('#flags-form [name=_csrf], #upload-form [name=_csrf]').first().val() || window.PAGE.csrf;
+    const MAX   = 4 * 1024 * 1024;
+    const BODY  = 4.3 * 1024 * 1024;   // Vercel rejects request bodies over 4.5 MB; the PDF and its preview travel together
+    const AI_PX = 1024;                // longest side of the picture the AI reads (keep in step with llama-server --image-max-tokens)
+    const PDFJS = window.PAGE.pdfJs, PDFJS_WORKER = window.PAGE.pdfWorker;
+    const OK    = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    let rows  = {}, queue = [], busy = false, seq = 0, lastCats = null, replaceId = null;
 
     function badge(cls, text) { return $('<span class="badge">').addClass(cls).text(text); }
     function bytesOk(b) { return b.size <= MAX; }
 
     // 5.3: shrink to AI_PX JPEG. Falls back to the original file if the browser cannot decode it.
     function shrink(file) {
-        var d = $.Deferred();
+        const d = $.Deferred();
         if (file.type === 'application/pdf') return d.resolve(file).promise();
-        var img = new Image(), src = URL.createObjectURL(file);
+        const img = new Image(), src = URL.createObjectURL(file);
         img.onload = function () {
-            var k = Math.min(1, AI_PX / Math.max(img.width, img.height));
-            var c = document.createElement('canvas');
+            const k = Math.min(1, AI_PX / Math.max(img.width, img.height));
+            const c = document.createElement('canvas');
             c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-            var x = c.getContext('2d');
+            const x = c.getContext('2d');
             x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
             x.drawImage(img, 0, 0, c.width, c.height);
             URL.revokeObjectURL(src);
@@ -43,6 +43,16 @@ document.addEventListener('DOMContentLoaded', function () {
         return PLP.loadPdfJs({ src: PDFJS, worker: PDFJS_WORKER });
     }
 
+    // Canvas -> JPEG blob. Kept out of renderPdf so the callbacks do not nest six levels deep.
+    function canvasToJpeg(c) {
+        return new Promise(function (resolve, reject) {
+            c.toBlob(function (b) {
+                if (b) resolve(b);
+                else reject(new Error('no preview'));
+            }, 'image/jpeg', 0.85);
+        });
+    }
+
     function renderPdf(file) {
         return loadPdfJs().then(function (lib) {
             return file.arrayBuffer().then(function (buf) {
@@ -51,23 +61,21 @@ document.addEventListener('DOMContentLoaded', function () {
         }).then(function (pdf) {
             return pdf.getPage(1);
         }).then(function (page) {
-            var v1 = page.getViewport({ scale: 1 });
-            var vp = page.getViewport({ scale: AI_PX / Math.max(v1.width, v1.height) });
-            var c = document.createElement('canvas');
+            const v1 = page.getViewport({ scale: 1 });
+            const vp = page.getViewport({ scale: AI_PX / Math.max(v1.width, v1.height) });
+            const c = document.createElement('canvas');
             c.width = Math.round(vp.width); c.height = Math.round(vp.height);
-            var x = c.getContext('2d');
+            const x = c.getContext('2d');
             x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
             return page.render({ canvasContext: x, viewport: vp }).promise.then(function () {
-                return new Promise(function (resolve, reject) {
-                    c.toBlob(function (b) { b ? resolve(b) : reject(new Error('no preview')); }, 'image/jpeg', 0.85);
-                });
+                return canvasToJpeg(c);
             });
         });
     }
 
     // Sets r.preview (a JPEG blob, or null). Runs once per file.
     function previewFor(r) {
-        var d = $.Deferred();
+        const d = $.Deferred();
         if (!r.blob || r.blob.type !== 'application/pdf' || r.preview !== undefined) return d.resolve().promise();
         busyState(r, 'Reading PDF…');
         renderPdf(r.blob).then(function (b) {
@@ -78,8 +86,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function newRow(file) {
-        var id = ++seq;
-        var $el = $('<div class="batch-row">').attr('data-id', id).append(
+        const id = ++seq;
+        const $el = $('<div class="batch-row">').attr('data-id', id).append(
             $('<div class="batch-head">').append($('<span class="batch-name">').text(file.name), $('<span class="batch-state">')),
             $('<div class="batch-msg">'), $('<div class="batch-bar" style="display:none"><span></span></div>'), $('<div class="batch-actions">')
         );
@@ -110,16 +118,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function dropdown(r, cats, pre) {
-        var $sel = $('<select class="form-select batch-select">').append($('<option value="">').text('Choose document type…'));
+        const $sel = $('<select class="form-select batch-select">').append($('<option value="">').text('Choose document type…'));
         $.each(cats, function (_, c) {
-            var $o = $('<option>').val(c.category).text(c.label + (c.note ? ' - ' + c.note : ''));
+            const $o = $('<option>').val(c.category).text(c.label + (c.note ? ' - ' + c.note : ''));
             if (!c.available) $o.prop('disabled', true);
             $sel.append($o);
         });
-        var $go = actionBtn('Use this type', function () { pick(r, $sel.val()); }, true).prop('disabled', true);
+        const $go = actionBtn('Use this type', function () { pick(r, $sel.val()); }, true).prop('disabled', true);
         $sel.on('change', function () { $go.prop('disabled', !$sel.val()); });
         // The AI's guess is already picked, so confirming it is one tap.
-        var g = $.grep(cats, function (c) { return c.category === pre && c.available; })[0];
+        const g = $.grep(cats, function (c) { return c.category === pre && c.available; })[0];
         if (g) { $sel.val(g.category); $go.prop('disabled', false); }
         return [$sel, $go];
     }
@@ -127,10 +135,10 @@ document.addEventListener('DOMContentLoaded', function () {
     function offer(r, kind, msg, cats) {
         // kind: 'uncertain' (Not sure) | 'failed' (Unreadable) | 'error'
         cats = cats && cats.length ? cats : lastCats;
-        var cls = kind === 'uncertain' ? 'badge-warning' : 'badge-error';
-        var label = kind === 'uncertain' ? 'Not sure' : (kind === 'failed' ? 'Unreadable' : 'Error');
+        const cls = kind === 'uncertain' ? 'badge-warning' : 'badge-error';
+        const label = kind === 'uncertain' ? 'Not sure' : (kind === 'failed' ? 'Unreadable' : 'Error');
         show(r, cls, label, msg);
-        var $a = r.$el.find('.batch-actions');
+        const $a = r.$el.find('.batch-actions');
         if (kind === 'uncertain') $a.append(actionBtn('Replace file', function () { replaceId = r.id; $('#batch-replace').removeAttr('capture').val('').trigger('click'); }));
         else if (kind === 'failed') $a.append(actionBtn('Retake', function () { replaceId = r.id; $('#batch-replace').attr('capture', 'environment').val('').trigger('click'); }));
         else $a.append(actionBtn('Try again', function () { r.tries = 0; enqueue(r); }));
@@ -165,10 +173,10 @@ document.addEventListener('DOMContentLoaded', function () {
             url: URL_, method: 'POST', data: data, processData: false, contentType: false,
             dataType: 'json', timeout: 70000, headers: { 'X-Requested-With': 'XMLHttpRequest' },
             xhr: function () {
-                var x = $.ajaxSettings.xhr();
+                const x = $.ajaxSettings.xhr();
                 if (x.upload) x.upload.onprogress = function (e) {
                     if (!e.lengthComputable) return;
-                    var p = Math.round(e.loaded / e.total * 100);
+                    const p = Math.round(e.loaded / e.total * 100);
                     r.$el.find('.batch-bar span').css('width', p + '%');
                     if (p >= 100) r.$el.find('.batch-state .badge').text('Checking…');
                 };
@@ -178,9 +186,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function classify(r) {
-        var d = $.Deferred();
+        const d = $.Deferred();
         busyState(r, 'Uploading…');
-        var fd = new FormData();
+        const fd = new FormData();
         fd.append('_csrf', CSRF); fd.append('action', 'classify');
         fd.append('doc_file', r.blob, r.blob.name || r.file.name);
         if (r.preview) fd.append('ai_preview', r.preview, 'preview.jpg');
@@ -211,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function pick(r, cat) {
         if (!cat || !r.blob) return;
         busyState(r, 'Saving…');
-        var fd = new FormData();
+        const fd = new FormData();
         fd.append('_csrf', CSRF); fd.append('doc_slug', cat); fd.append('picked', '1'); fd.append('ai_guess', r.guess || '');
         fd.append('doc_file', r.blob, r.blob.name || r.file.name);
         send(r, fd).done(function (res) {
@@ -232,7 +240,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function run() {
         if (busy || !queue.length) return;
         busy = true;
-        var r = queue.shift();
+        const r = queue.shift();
         if (!rows[r.id]) { busy = false; return run(); }
         (r.blob ? $.Deferred().resolve(r.blob).promise() : shrink(r.file)).then(function (b) {
             if (!(b instanceof Blob)) b = r.file;
@@ -245,7 +253,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function addFiles(list) {
         $.each(list, function (_, f) {
-            var r = newRow(f);
+            const r = newRow(f);
             if (OK.indexOf(f.type) < 0) { show(r, 'badge-error', 'Error', 'Only PDF, JPG, PNG, and WEBP files are accepted.'); r.$el.find('.batch-actions').append(actionBtn('Dismiss', function () { r.$el.remove(); delete rows[r.id]; })); return; }
             enqueue(r);
         });
@@ -253,14 +261,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Replace file / Retake: swap the kept file and classify the same row again.
     $('#batch-replace').on('change', function () {
-        var f = this.files[0], r = rows[replaceId];
+        const f = this.files[0], r = rows[replaceId];
         if (!f || !r) return;
         if (OK.indexOf(f.type) < 0) { offer(r, 'error', 'Only PDF, JPG, PNG, and WEBP files are accepted.'); return; }
         r.file = f; r.blob = null; r.preview = undefined; r.$el.find('.batch-name').text(f.name);
         enqueue(r);
     });
 
-    var $drop = $('#batch-drop');
+    const $drop = $('#batch-drop');
     $drop.on('click', function () { $('#batch-input').val('').trigger('click'); });
     $('#batch-camera-btn').on('click', function (e) { e.stopPropagation(); $('#batch-camera').val('').trigger('click'); });
     $('#batch-input, #batch-camera').on('change', function () { addFiles(this.files); });

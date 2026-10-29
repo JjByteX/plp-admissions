@@ -1,13 +1,13 @@
 (function () {
     // Resend countdown (only when a wait is running). The seconds left come
     // from data-resend-in on the button.
-    var btn   = document.getElementById('resend-btn');
-    var label = document.getElementById('resend-label');
+    const btn   = document.getElementById('resend-btn');
+    const label = document.getElementById('resend-label');
     if (!btn || !label) return;
-    var left  = parseInt(btn.getAttribute('data-resend-in') || '0', 10);
+    let left  = Number.parseInt(btn.dataset.resendIn || '0', 10);
     if (left <= 0) return;
     btn.disabled = true;
-    var t = setInterval(function () {
+    const t = setInterval(function () {
         left -= 1;
         if (left <= 0) {
             clearInterval(t);

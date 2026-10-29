@@ -1,31 +1,30 @@
 (function () {
 
-    var DATA = window.PAGE.data;
+    const DATA = window.PAGE.data;
 
     function v(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 
-    var charts = {};
+    let charts = {};
 
     function buildCharts() {
         Object.values(charts).forEach(function(c) { if (c) c.destroy(); });
         charts = {};
 
-        var radius      = parseInt(v('--radius'), 10) || 8;   // shared radius token
-        var accent      = v('--accent');
-        var accentLight = v('--accent-light');
-        var textPrimary = v('--text-primary');
-        var textSecond  = v('--text-secondary');
-        var border      = v('--border');
-        var radius      = parseFloat(v('--radius')) || 8;
+        const accent      = v('--accent');
+        const accentLight = v('--accent-light');
+        const textPrimary = v('--text-primary');
+        const textSecond  = v('--text-secondary');
+        const border      = v('--border');
+        const radius      = Number.parseFloat(v('--radius')) || 8;   // shared radius token
         // Single accent color family for all charts — no rainbow
-        var barColor    = accentLight || accent;
+        const barColor    = accentLight || accent;
 
         Chart.defaults.font  = { family: v('--font-sans') || 'DM Sans,sans-serif', size: 14 };
         Chart.defaults.color = textSecond;
 
         // Print the count at the end of every bar so nobody has to hover to read it.
-        var valueLabels = { id: 'valueLabels', afterDatasetsDraw: function (chart) {
-            var ctx = chart.ctx;
+        const valueLabels = { id: 'valueLabels', afterDatasetsDraw: function (chart) {
+            const ctx = chart.ctx;
             ctx.save();
             ctx.fillStyle    = textPrimary;
             ctx.font         = '600 14px ' + (v('--font-sans') || 'DM Sans,sans-serif');
@@ -38,16 +37,16 @@
             ctx.restore();
         } };
         function mk(id, cfg) {
-            var el = document.getElementById(id);
+            const el = document.getElementById(id);
             if (!el) return null;
             cfg.plugins = [valueLabels];
             cfg.options.layout = { padding: { right: 32 } };
             return new Chart(el, cfg);
         }
 
-        var xGrid = { grid:{color:border}, border:{display:false}, ticks:{color:textSecond, precision:0} };
-        var yFlat  = { grid:{display:false}, border:{display:false}, ticks:{color:textPrimary, font:{size:14}} };
-        var tip   = { titleFont:{size:14}, bodyFont:{size:14}, callbacks:{ label:function(c){ return ' '+c.raw+' applicants'; } } };
+        const xGrid = { grid:{color:border}, border:{display:false}, ticks:{color:textSecond, precision:0} };
+        const yFlat  = { grid:{display:false}, border:{display:false}, ticks:{color:textPrimary, font:{size:14}} };
+        const tip   = { titleFont:{size:14}, bodyFont:{size:14}, callbacks:{ label:function(c){ return ' '+c.raw+' applicants'; } } };
         function fullTip(key){
             return { titleFont:{size:14}, bodyFont:{size:14}, callbacks:{
                 title:function(items){ return DATA[key].full[items[0].dataIndex]; },
@@ -86,7 +85,7 @@
                 plugins:{ legend:{display:false}, tooltip:fullTip('strand') },
                 scales:{ x:xGrid, y:yFlat } }
         });
-        var sl=document.getElementById('strandLegend');
+        const sl=document.getElementById('strandLegend');
         if(sl) sl.innerHTML='';
 
     }
@@ -98,18 +97,18 @@
     }).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 
     // Date picker
-    var BASE = window.PAGE.baseUrl;
-    var SY = window.PAGE.sy;
-    var SYQ=SY ? '&sy='+SY : '';
+    const BASE = window.PAGE.baseUrl;
+    const SY = window.PAGE.sy;
+    const SYQ=SY ? '&sy='+SY : '';
     window.dpToggle=function(e){ e.stopPropagation(); document.getElementById('dpMenu').classList.toggle('open'); };
     window.dpSet   =function(r){ window.location.href=BASE+'?range='+r+SYQ; };
     window.dpCustom=function() { document.getElementById('dpCustomRow').classList.add('show'); };
     window.dpApply =function() {
-        var f=document.getElementById('dpFrom').value, t=document.getElementById('dpTo').value;
+        const f=document.getElementById('dpFrom').value, t=document.getElementById('dpTo').value;
         if(f&&t) window.location.href=BASE+'?range=custom&from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t)+SYQ;
     };
     document.addEventListener('click',function(e){
-        var w=document.getElementById('dpWrap');
+        const w=document.getElementById('dpWrap');
         if(w&&!w.contains(e.target)) document.getElementById('dpMenu').classList.remove('open');
     });
 

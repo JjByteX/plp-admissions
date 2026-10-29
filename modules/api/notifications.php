@@ -15,14 +15,17 @@ switch ($action) {
         $notifications = get_notifications($userId, 20);
         $unread = notification_count($userId);
         json_response(['ok' => true, 'notifications' => $notifications, 'unread' => $unread]);
+        break;
 
     case 'count':
         json_response(['ok' => true, 'unread' => notification_count($userId)]);
+        break;
 
     case 'read':
         csrf_check();
         mark_notifications_read($userId);
         json_response(['ok' => true]);
+        break;
 
     case 'read_one':
         csrf_check();
@@ -31,9 +34,12 @@ switch ($action) {
             try {
                 db()->prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?')
                     ->execute([$notifId, $userId]);
-            } catch (\Throwable) {}
+            } catch (\Throwable) {
+                // Best effort: a failed mark-as-read must not break the page.
+            }
         }
         json_response(['ok' => true]);
+        break;
 
     default:
         json_response(['error' => 'Invalid action'], 400);
