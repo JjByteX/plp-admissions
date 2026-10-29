@@ -40,13 +40,9 @@ if (($action = require_post_action()) !== null) {
         }
 
         if (empty($errors)) {
-            $ups = fn($k,$v) => $db->prepare(
-                'INSERT INTO school_settings (setting_key,setting_value) VALUES (?,?)
-                 ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value'
-            )->execute([$k,$v]);
-            $ups('school_name', $schoolName);
-            $ups('accent_color', $accentColor);
-            if ($logoPath) $ups('school_logo', $logoPath);
+            set_school_setting('school_name', $schoolName);
+            set_school_setting('accent_color', $accentColor);
+            if ($logoPath) set_school_setting('school_logo', $logoPath);
             audit_log(AuditAction::SETTINGS_BRANDING_UPDATED, "Updated branding: school_name={$schoolName}");
             $success[] = 'Branding updated.';
         }

@@ -73,17 +73,6 @@
 function openModal(id)  { PLP.modal.open(id); }
 function closeModal(id) { PLP.modal.close(id); }
 
-// ── Edit exam modal ───────────────────────────────────────────
-// Title is auto-derived server-side from the active school year, so
-// the form only collects description + shuffle flags.
-function openEditExamModal(exam) {
-    document.getElementById('edit-exam-id').value       = exam.id;
-    document.getElementById('edit-exam-desc').value     = exam.description || '';
-    document.getElementById('edit-exam-shuffleQ').checked = exam.shuffle_questions == 1;
-    document.getElementById('edit-exam-shuffleC').checked = exam.shuffle_choices == 1;
-    openModal('edit-exam-modal');
-}
-
 // ── Year → Title auto-generation ──────────────────────────────
 (function() {
     // Create exam modal
@@ -99,20 +88,6 @@ function openEditExamModal(exam) {
         // Set on form submit
         createYear.closest('form').addEventListener('submit', function() {
             createHidden.value = 'PLP Admissions Test (' + createYear.value.trim() + ')';
-        });
-    }
-    // Edit exam modal
-    var editYear = document.getElementById('edit-exam-year');
-    var editPreview = document.getElementById('edit-year-preview');
-    var editHidden = document.getElementById('edit-exam-title');
-    if (editYear) {
-        editYear.addEventListener('input', function() {
-            var y = this.value.trim() || 'Year';
-            editPreview.textContent = y;
-            editHidden.value = 'PLP Admissions Test (' + this.value.trim() + ')';
-        });
-        editYear.closest('form').addEventListener('submit', function() {
-            editHidden.value = 'PLP Admissions Test (' + editYear.value.trim() + ')';
         });
     }
 })();

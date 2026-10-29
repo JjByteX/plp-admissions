@@ -100,27 +100,27 @@ ob_start();
         <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
             <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-4);--bs-gutter-y:var(--space-4)">
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Name</div>
+                    <div class="label-caps">Name</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(Auth::user()['name']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Course Applied</div>
+                    <div class="label-caps">Course Applied</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['course_applied']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Withdrawn On</div>
+                    <div class="label-caps">Withdrawn On</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)">
                         <?= $applicant['withdrawn_at'] ? format_date($applicant['withdrawn_at'], 'F j, Y') : '-' ?>
                     </div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Status</div>
+                    <div class="label-caps">Status</div>
                     <span style="display:inline-flex;align-items:center;gap:var(--space-1);padding:var(--space-1) var(--space-2);border-radius:var(--radius);font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);background:var(--bg-subtle)">Withdrawn</span>
                 </div>
             </div>
             <?php if ($applicant['withdrawn_reason']): ?>
                 <div style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border)">
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Reason Given</div>
+                    <div class="label-caps">Reason Given</div>
                     <p style="font-size:var(--text-sm);color:var(--text-secondary)"><?= e($applicant['withdrawn_reason']) ?></p>
                 </div>
             <?php endif; ?>
@@ -217,11 +217,11 @@ ob_start();
                     <a href="<?= e($enrollmentSiteUrl) ?>" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Go to Enrollment</a>
                 <?php endif; ?>
             <?php elseif ($handoff && $handoff['status'] === 'rejected'): ?>
-                <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+                <p class="text-secondary-sm">
                     Enrollment confirmed. The Registrar will contact you about your next step.
                 </p>
             <?php else: ?>
-                <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+                <p class="text-secondary-sm">
                     Enrollment confirmed. We are sending your details to the Registrar. You will get an email when it is done.
                 </p>
             <?php endif; ?>
@@ -253,7 +253,7 @@ ob_start();
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['school_year']) ?></div>
                 </div>
             </div>
-            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+            <p class="text-secondary-sm">
                 Admitted by the Admissions office. Proceed to the Enrollment portal for your visit date.
             </p>
         </div>
@@ -283,25 +283,25 @@ ob_start();
         <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
             <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-4);--bs-gutter-y:var(--space-4)">
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Name</div>
+                    <div class="label-caps">Name</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(Auth::user()['name']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Course Applied</div>
+                    <div class="label-caps">Course Applied</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['course_applied']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">School Year</div>
+                    <div class="label-caps">School Year</div>
                     <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['school_year']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Result</div>
+                    <div class="label-caps">Result</div>
                     <span class="badge badge-<?= $result['result'] ?>"><?= e(RESULT_LABELS[$result['result']]) ?></span>
                 </div>
             </div>
             <?php if ($result['remarks']): ?>
                 <div style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border)">
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--space-1)">Remarks</div>
+                    <div class="label-caps">Remarks</div>
                     <p style="font-size:var(--text-sm);color:var(--text-secondary)"><?= e($result['remarks']) ?></p>
                 </div>
             <?php endif; ?>
@@ -396,7 +396,7 @@ ob_start();
         <!-- Rejected with no qualifying alternatives — still be kind -->
         <div style="border:1px solid var(--border);background:var(--bg-subtle);border-radius:var(--radius);
                     padding:var(--space-4);margin-bottom:var(--space-5)">
-            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+            <p class="text-secondary-sm">
                 We understand this isn't the news you hoped for. There are no qualifying alternatives for your strand and
                 score this cycle. Visit the admissions office to discuss options for the next admission cycle.
             </p>

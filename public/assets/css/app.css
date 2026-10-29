@@ -907,9 +907,6 @@ button { cursor: pointer; }
     transition-property: background-color, border-color, color, opacity;
     transition-duration: 200ms;
     transition-timing-function: ease-out;
-}
-
-.step-dot {
     /* Step number, no icons: 1 to 4 reads the same in every state. */
     font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
@@ -1191,10 +1188,7 @@ textarea:-ms-input-placeholder {
 .input-suffix-icon { right: 0; pointer-events: auto; }
 
 .input-prefix-icon svg,
-.input-suffix-icon svg { width: 16px; height: 16px; }
-
-.input-wrapper.has-prefix .form-input { padding-left: 38px; }
-.input-wrapper.has-suffix .form-input { padding-right: 38px; }
+.input-suffix-icon svg { width: 16px; height: 16px; }.input-wrapper.has-suffix .form-input { padding-right: 38px; }
 
 /* Password toggle button */
 .btn-pw-toggle {
@@ -1474,17 +1468,6 @@ textarea:-ms-input-placeholder {
 .alert-error   { background: var(--error-bg);   color: var(--error);   border-color: rgba(185,28,28,0.2); }
 .alert-warning { background: var(--warning-bg); color: var(--warning); border-color: rgba(180,83,9,0.2);  }
 .alert-info    { background: var(--info-bg);    color: var(--info);    border-color: rgba(29,78,216,0.2); }
-
-/* ============================================================
-   10. TABLE
-   ============================================================ */
-
-.table-wrap {
-    overflow-x: auto;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-}
-
 table {
     width: 100%;
     border-collapse: collapse;
@@ -1603,9 +1586,7 @@ tbody tr:hover { background: var(--bg-overlay); }
 .privacy-body ul { padding-left: 1.2em; }
 .privacy-body li { margin-bottom: var(--space-2); }
 .privacy-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
-.privacy-meta { color: var(--text-secondary); }
-.privacy-todo { background: var(--note-bg); color: var(--note-text); padding: 0 var(--space-1); border-radius: var(--radius); font-weight: var(--weight-semibold); }
-.auth-legal { padding-top: var(--space-6); text-align: center; font-size: var(--text-xs); }
+.privacy-meta { color: var(--text-secondary); }.auth-legal { padding-top: var(--space-6); text-align: center; font-size: var(--text-xs); }
 .auth-legal a { color: var(--text-tertiary); text-decoration: underline; text-underline-offset: 3px; }
 .auth-legal a:hover { color: var(--text-primary); opacity: 1; }
 
@@ -1758,46 +1739,7 @@ tbody tr:hover { background: var(--bg-overlay); }
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-}
-
-.doc-name {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-    color: var(--text-primary);
-}
-
-/* ============================================================
-   13. THEME TOGGLE
-   ============================================================ */
-
-.theme-toggle {
-    width: var(--control-height);
-    height: var(--control-height);
-    border-radius: var(--radius);
-    background: transparent;
-    border: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background-color var(--transition-fast);
-    color: var(--text-secondary);
-}
-
-.theme-toggle:hover,
-.theme-toggle:focus-visible {
-    background: var(--bg-overlay);
-    color: var(--text-primary);
-}
-
-.theme-toggle:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-}
-
-.theme-toggle svg { width: 16px; height: 16px; }
-
-/* ============================================================
+}/* ============================================================
    14. DROPDOWN MENU
    ============================================================ */
 
@@ -1886,63 +1828,7 @@ hr, .divider, .dropdown-separator, .dp-divider, .step-connector, .auth-topbar,
     opacity: 1;
 }
 
-.dropdown-item svg { width: 15px; height: 15px; flex-shrink: 0; }
-
-.segmented-control {
-    display:inline-flex;
-    align-items:stretch;
-    box-sizing:border-box;
-    height:var(--control-height);
-    gap:2px;
-    padding:3px;
-    border:1px solid var(--border);
-    background:var(--bg-subtle);
-}
-
-.segmented-control > a,
-.segmented-control > button {
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    gap:var(--space-1);
-    padding:0 var(--space-3);
-    border:0;
-    background:transparent;
-    color:var(--text-secondary);
-    font:inherit;
-    font-size:var(--text-sm);
-    font-weight:var(--weight-medium);
-    line-height:1.2;
-    text-decoration:none;
-    white-space:nowrap;
-    cursor:pointer;
-}
-
-.segmented-control > .is-active {
-    background:var(--bg-elevated);
-    color:var(--text-primary);
-    box-shadow:var(--shadow-xs);
-}
-
-.segmented-control > a:hover,
-.segmented-control > button:hover { color:var(--text-primary); opacity:1; }
-
-@media (max-width:760px) {
-    .results-toolbar { align-items:stretch;flex-wrap:wrap; }
-    .results-toolbar .segmented-control {
-        flex:1 0 100%;
-        max-width:100%;
-        overflow-x:auto;
-        overflow-y:hidden;
-        -webkit-overflow-scrolling:touch;
-        scrollbar-width:none;
-    }
-    .results-toolbar .segmented-control::-webkit-scrollbar { display:none; }
-    .results-toolbar .segmented-control > a,
-    .results-toolbar .segmented-control > button { flex:0 0 auto; }
-    .results-toolbar-search { flex:1 1 100%; }
-    .results-toolbar-search input { width:100% !important; }
-}
+.dropdown-item svg { width: 15px; height: 15px; flex-shrink: 0; }@media (max-width:760px) {}
 
 .dropdown-separator {
     height: 1px;
@@ -1952,24 +1838,6 @@ hr, .divider, .dropdown-separator, .dp-divider, .step-connector, .auth-topbar,
 
 .dropdown-item.danger { color: var(--error); }
 .dropdown-item.danger:hover { background: var(--error-bg); }
-
-/* ============================================================
-   15. METRICS ROW (staff / admin dashboards)
-   ============================================================ */
-
-/* ============================================================
-   16. UTILITY CLASSES
-   ============================================================ */
-
-/* Admin form stack */
-.admin-form-stack {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-    max-width: 600px;
-    margin: 0 auto;
-}
-
 /* Danger card */
 
 .flex          { display: flex; }
@@ -2058,11 +1926,9 @@ textarea:focus-visible {
     position: sticky;
     top: 0;
     z-index: 50;
-}
 
-/* The student top bar is frozen: it keeps the spacing, weight, radius and size
-   values it had before the token cleanup, so nothing in it moves or changes. */
-.student-header {
+    /* The student top bar is frozen: it keeps the spacing, weight, radius and size
+       values it had before the token cleanup, so nothing in it moves or changes. */
     --space-3:       12px;
     --space-5:       20px;
     --weight-medium: 500;
@@ -2159,11 +2025,6 @@ textarea:focus-visible {
     .page {
         padding: var(--space-5);
     }
-
-    .metrics-row {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
     .stepper {
         padding: var(--space-4);
     }
@@ -2172,12 +2033,7 @@ textarea:focus-visible {
 }
 
 @media (max-width: 480px) {
-    .auth-pane { padding: var(--space-6) var(--space-4); }
-
-    .metrics-row {
-        grid-template-columns: 1fr 1fr;
-    }
-}
+    .auth-pane { padding: var(--space-6) var(--space-4); }}
 
 /* ============================================================
    MODAL
@@ -2493,26 +2349,7 @@ textarea:focus-visible {
 .step-bar-fill {
     height: 100%;
     border-radius: var(--radius);
-}
-
-/* ── RESULTS: filter bar ────────────────────────────────── */
-
-/* Status active states */
-
-/* Search input in filter bar */
-
-/* ── RESULTS: score legend ──────────────────────────────── */
-
-.legend-item { display: flex; align-items: center; gap: var(--space-1); }
-
-.legend-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-/* ── RESULTS: auto waitlist button ─────────────────────── */
+}/* ── RESULTS: auto waitlist button ─────────────────────── */
 .btn-outline-warning {
     display: inline-flex;
     align-items: center;
@@ -2520,32 +2357,7 @@ textarea:focus-visible {
     font-size: var(--text-sm);
 }
 
-.btn-outline-warning svg { width: 15px; height: 15px; }
-
-/* ── RESULTS: bulk action bar ───────────────────────────── */
-.bulk-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-4);
-    background: var(--info-bg);
-    border: 0.5px solid var(--info);
-    border-radius: var(--radius);
-    margin-bottom: var(--space-2);
-    font-size: var(--text-xs);
-    color: var(--info);
-    flex-wrap: wrap;
-}
-
-/* ── RESULTS: table ─────────────────────────────────────── */
-.table-card {
-    background: var(--bg-elevated);
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-}
-
-.results-table {
+.btn-outline-warning svg { width: 15px; height: 15px; }.results-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
@@ -2570,11 +2382,6 @@ textarea:focus-visible {
 .results-table tbody tr:last-child td { border-bottom: none; }
 
 .results-table tbody tr:hover td { background: var(--bg-subtle); }
-
-/* Column widths */
-
-.mono       { font-family: var(--font-mono); font-size: var(--text-xs); }
-
 /* Score badges */
 
 .badge-high { background: var(--color-high-bg); color: var(--color-high-text); }
@@ -3492,7 +3299,7 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
    mirror the old `X svg { width/height }` rules so nothing shifts. */
 .ph-bold, .ph-fill { display: block; flex-shrink: 0; }
 .nav-item i { font-size: 16px !important; }
-.sidebar-logo-placeholder i { font-size: 18px !important; }
+.sidebar-logo-placeholder i { font-size: 18px !important; color: white; }
 .btn i, .dropdown-item i, .btn-outline-warning i { font-size: 15px !important; }
 .alert i, .input-prefix-icon i, .input-suffix-icon i, .btn-pw-toggle i,
 .theme-toggle i, .auto-table-page-btn i { font-size: 16px !important; }
@@ -3500,7 +3307,6 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
 
 .session-modal-icon i { font-size: 24px !important; }
 
-.sidebar-logo-placeholder i { color: white; }
 .btn-pw-toggle i { pointer-events: none; }
 .step-dot i { font-size: 12px !important; color: var(--text-tertiary); }
 .step.done .step-dot i { color: white; }
@@ -3522,10 +3328,10 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
     border: 1px solid var(--border);
     border-radius: 0;
     overflow: hidden;
+    position: relative;
 }
 .sy-col { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow-y: auto; }
 /* One straight, subtle divider, inset so it never touches the card edges. */
-.sy-card { position: relative; }
 .sy-card::before {
     content: "";
     position: absolute;
@@ -3559,9 +3365,7 @@ html[data-font-size="xlarge"] { font-size: 22px; --height-table-row: 68px; --hei
     text-align: left;
     min-height: 1.5em;
 }
-.sy-sec.sy-grow { flex: 1 1 auto; }
-.sy-sec.sy-danger .card-title { color: var(--error); }
-@media (max-width: 960px) {
+.sy-sec.sy-grow { flex: 1 1 auto; }@media (max-width: 960px) {
     .main:has(.sy-card) { height: auto; overflow: visible; }
     .page:has(.sy-card) { overflow: visible; }
     .sy-card { grid-template-columns: 1fr; overflow: visible; }
@@ -4139,7 +3943,6 @@ time, [class*="timer"], [class*="count"] { font-variant-numeric: tabular-nums; }
 /* Selectable cards: hover and state are borders (they communicate state). */
 .select-card:hover { border-color: var(--accent); box-shadow: var(--shadow-border-hover); }
 .select-card.is-live, .select-card.is-today, .select-card.is-active { border-color: var(--accent); }
-.select-card.is-full { border-color: var(--error); }
 .select-card.is-disabled { box-shadow: none; border-color: var(--border); }
 /* The global link hover fade would dim a whole card or button. */
 a.select-card:hover, a.btn:hover { opacity: 1; }
@@ -4375,4 +4178,15 @@ img:not([class*="logo"]):not([src$=".svg"]) {
     ::-webkit-scrollbar-thumb { background: transparent; border-radius: var(--scrollbar-size); }
     :hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
     ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+}
+
+/* Small text helpers, replacing long repeated inline styles in the views. */
+.text-secondary-sm { font-size: var(--text-sm); color: var(--text-secondary); margin: 0; }
+.label-caps {
+    font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-tertiary); margin-bottom: var(--space-1);
+}
+.label-caps-tight {
+    font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .04em;
+    color: var(--text-tertiary); margin-bottom: 2px;
 }

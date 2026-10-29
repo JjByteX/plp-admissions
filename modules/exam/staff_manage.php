@@ -400,7 +400,7 @@ ob_start();
 include __DIR__ . '/_manage_view.php';
 $content   = ob_get_clean();
 $pageTitle = 'Entrance Exam';
-$pageStyles  = ['css/pages/exam-manage.css'];
+$pageStyles  = ['css/ai-import.css', 'css/pages/exam-manage.css'];
 $pageScripts = ['js/pages/exam-manage.js', 'js/pages/exam-ai-import.js'];
 // Entrance Exam > Exams > Exam Editor (replaces the old back-arrow buttons).
 $pageBreadcrumb = [];

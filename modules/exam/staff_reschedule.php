@@ -602,5 +602,4 @@ $pageBreadcrumb = [['label' => 'Exam Slots', 'to' => '/staff/exam/slots']];
 $pageActions = ($canReschedule ? ui_button('Cancel a slot (bulk move)', ['href' => url('/staff/exam/cancel-slot'), 'variant' => 'ghost', 'icon' => 'ic_fluent_arrow_right_24_regular', 'icon_pos' => 'after']) : '');
 $activeNav = 'exam-reschedule';
 $pageWide  = true; // table-heavy page - match staff_slots / staff_review / staff_manage
-$pageStyles = ['css/pages/exam-reschedule.css'];
 include VIEWS_PATH . '/layouts/app.php';

@@ -33,7 +33,6 @@ final class AuditAction
     public const COURSE_ADDED = 'course_added';
     public const COURSE_CAPS_UPDATED = 'course_caps_updated';
     public const COURSE_DELETED = 'course_deleted';
-    public const COURSE_SUGGESTION = 'course_suggestion';
     public const COURSE_UPDATED = 'course_updated';
     public const DOC_AI_PASSED = 'doc_ai_passed';
     public const DOC_CATEGORY_OK = 'doc_category_ok';
@@ -57,9 +56,7 @@ final class AuditAction
     public const EXAM_ROOMS_EXPORT_CSV = 'exam_rooms_export_csv';
     public const EXAM_ROOMS_EXPORT_HTML = 'exam_rooms_export_html';
     public const EXAM_SLOT_ADDED = 'exam_slot_added';
-    public const EXAM_SLOT_ASSIGNED = 'exam_slot_assigned';
     public const EXAM_SLOT_AUTO_ASSIGNED = 'exam_slot_auto_assigned';
-    public const EXAM_SLOT_CAPACITY_CHANGED = 'exam_slot_capacity_changed';
     public const EXAM_SLOT_CODE_AUTO_GENERATED = 'exam_slot_code_auto_generated';
     public const EXAM_SLOT_CODE_EXTENDED = 'exam_slot_code_extended';
     public const EXAM_SLOT_CODE_GENERATED = 'exam_slot_code_generated';

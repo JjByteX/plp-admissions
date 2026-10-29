@@ -463,55 +463,6 @@ elseif ($selectedExamId) $view = 'editor';
 </div>
 
 <!-- ════════════════════════════════════════════════════════════
-     EDIT EXAM MODAL
-════════════════════════════════════════════════════════════ -->
-<div id="edit-exam-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:520px;max-height:92vh;overflow-y:auto">
-        <div class="modal-header">
-            <div class="modal-title">Edit Exam</div>
-            <button class="btn-icon" onclick="closeModal('edit-exam-modal')">
-                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
-            </button>
-        </div>
-        <form method="POST">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="edit_exam">
-            <input type="hidden" name="exam_id" id="edit-exam-id">
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div style="font-size:var(--text-sm);color:var(--text-secondary);background:var(--bg-subtle);
-                            padding:var(--space-3) var(--space-4);border-radius:var(--radius)">
-                    Title is set automatically:
-                    <strong>PLP Admissions Test (<?= e($schoolYear) ?>)</strong>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
-                        Pulled from the active school year. Change it on the
-                        <a href="<?= url('/admin/school-year') ?>">School Year</a> page.
-                    </div>
-                </div>
-                <div>
-                    <label class="form-label" for="edit-exam-desc">Description</label>
-                    <textarea name="description" id="edit-exam-desc" class="form-control" rows="2"></textarea>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:var(--space-2)">
-                    <label style="display:flex;align-items:center;gap:var(--space-3);cursor:pointer">
-                        <input type="checkbox" name="shuffle_questions" id="edit-exam-shuffleQ" style="accent-color:var(--accent)">
-                        <span style="font-size:var(--text-sm)">Shuffle question order</span>
-                    </label>
-                    <label style="display:flex;align-items:center;gap:var(--space-3);cursor:pointer">
-                        <input type="checkbox" name="shuffle_choices" id="edit-exam-shuffleC" style="accent-color:var(--accent)">
-                        <span style="font-size:var(--text-sm)">Shuffle answer choices</span>
-                    </label>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-ghost" onclick="closeModal('edit-exam-modal')">Cancel</button>
-                <button type="submit" class="btn btn-primary">Save Changes</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ════════════════════════════════════════════════════════════
      ADD / EDIT SECTION MODAL
 ════════════════════════════════════════════════════════════ -->
 <div id="section-modal" class="modal-backdrop" style="display:none">

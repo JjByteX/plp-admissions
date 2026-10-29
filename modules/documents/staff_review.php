@@ -407,34 +407,34 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 
                     <div style="display:flex;flex-direction:column;gap:var(--space-3);font-size:var(--text-sm)">
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Full Name</div>
+                            <div class="label-caps-tight">Full Name</div>
                             <div style="font-weight:var(--weight-medium)"><?= e($studentFullName) ?></div>
                         </div>
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Email</div>
+                            <div class="label-caps-tight">Email</div>
                             <div><?= e($applicant['email'] ?? '-') ?></div>
                         </div>
                         <?php if (!empty($applicant['phone'])): ?>
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Phone</div>
+                            <div class="label-caps-tight">Phone</div>
                             <div><?= e($applicant['phone']) ?></div>
                         </div>
                         <?php endif; ?>
                         <?php if (!empty($applicant['birthdate'])): ?>
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Birthdate</div>
+                            <div class="label-caps-tight">Birthdate</div>
                             <div><?= e(format_date($applicant['birthdate'], 'M j, Y')) ?></div>
                         </div>
                         <?php endif; ?>
                         <?php if (!empty($applicant['sex'])): ?>
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Sex</div>
+                            <div class="label-caps-tight">Sex</div>
                             <div><?= $applicant['sex'] === 'M' ? 'Male' : 'Female' ?></div>
                         </div>
                         <?php endif; ?>
                         <?php if (!empty($applicant['address'])): ?>
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Address</div>
+                            <div class="label-caps-tight">Address</div>
                             <div><?= e($applicant['address']) ?></div>
                         </div>
                         <?php endif; ?>
@@ -442,21 +442,21 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                         <div style="border-top:1px solid var(--border);margin:var(--space-2) 0"></div>
 
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Applicant Type</div>
+                            <div class="label-caps-tight">Applicant Type</div>
                             <div><?= e(ucfirst($applicant['applicant_type'] ?? '-')) ?></div>
                         </div>
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">Course Applied</div>
+                            <div class="label-caps-tight">Course Applied</div>
                             <div style="font-weight:var(--weight-medium)"><?= e($applicant['course_applied'] ?? '-') ?></div>
                         </div>
                         <?php if ($strandLabel): ?>
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">SHS Strand</div>
+                            <div class="label-caps-tight">SHS Strand</div>
                             <div><?= e($strandLabel) ?></div>
                         </div>
                         <?php endif; ?>
                         <div>
-                            <div style="color:var(--text-tertiary);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">School Year</div>
+                            <div class="label-caps-tight">School Year</div>
                             <div><?= e($applicant['school_year'] ?? '-') ?></div>
                         </div>
                     </div>
@@ -492,8 +492,8 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 
 
 <?php
-    $pageStyles  = ['css/pages/documents-review.css'];
-    $pageScripts = ['js/pages/documents-review.js'];
+    $pageStyles  = ['css/file-viewer.css', 'css/pages/documents-review.css'];
+    $pageScripts = ['js/file-viewer.js', 'js/pages/documents-review.js'];
     $content   = ob_get_clean();
     $pageTitle = 'Review: ' . format_full_name($applicant);  
     $pageBreadcrumb = [['label' => 'Documents', 'to' => '/staff/applicants']];

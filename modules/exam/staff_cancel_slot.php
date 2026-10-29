@@ -169,7 +169,7 @@ ob_start();
     <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin:0 0 var(--space-2)">
         Cancel an exam slot
     </h2>
-    <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+    <p class="text-secondary-sm">
         For typhoon closures, room conflicts, or any time you need
         to move everyone in an exam slot at once. Pick the slot to
         cancel, pick a replacement slot with enough capacity, and

@@ -813,46 +813,8 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
 </div>
 <?php endif; ?>
 
-<!-- ── Suggest course modal (kept) ─────────────────────── -->
-<div id="suggest-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:460px">
-        <div class="modal-header">
-            <div class="modal-title">Suggest Alternative Course</div>
-            <button class="btn-icon" onclick="document.getElementById('suggest-modal').style.display='none'">
-                <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
-            </button>
-        </div>
-        <form method="POST" id="suggest-form">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="suggest_course">
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-3) var(--space-4);font-size:var(--text-sm)">
-                    Applicant: <strong id="suggest-name"></strong><br>
-                    <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
-                        Exam rank: <strong id="suggest-rank"></strong>/10 - did not pass applied course threshold.
-                    </span>
-                </div>
-                <div>
-                    <span class="form-label">Suggest a course where their score qualifies:</span>
-                    <div id="suggest-course-list" style="display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-2)"></div>
-                </div>
-                <div>
-                    <label class="form-label" for="suggest-note">Note for applicant (optional)</label>
-                    <textarea id="suggest-note" name="suggest_note" class="form-control" rows="2"
-                              placeholder="e.g. Strong match based on your exam results."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-ghost" onclick="document.getElementById('suggest-modal').style.display='none'">Cancel</button>
-                <button type="submit" class="btn btn-primary">Send Suggestion</button>
-            </div>
-        </form>
-    </div>
-</div>
-
 <script>window.PAGE = <?= json_encode([
     'resultsUrl' => url('/staff/results/'),
-    'suggestUrl' => url('/staff/results/suggest/'),
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;</script>
 
 <?php if ($canRelease): ?>

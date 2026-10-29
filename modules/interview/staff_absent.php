@@ -889,7 +889,6 @@ $pageTitle = $activeTab === 'requests' ? 'Reschedule Requests' : 'Absent Student
 $pageBreadcrumb = [['label' => 'Interview Sessions', 'to' => '/staff/interviews']];
 $pageActions = ($canReschedule ? ui_button('Cancel a slot (bulk move)', ['href' => url('/staff/interviews/cancel-slot'), 'variant' => 'ghost', 'icon' => 'ic_fluent_arrow_right_24_regular', 'icon_pos' => 'after']) : '');
 $activeNav = $activeTab === 'requests' ? 'reschedule' : 'interviews';
-$pageStyles  = ['css/pages/interview-absent.css'];
 if ($canReschedule) {
     $pageScripts = ['js/pages/interview-absent.js'];
 }

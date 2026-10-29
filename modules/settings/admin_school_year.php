@@ -28,16 +28,14 @@ if (($action = require_post_action()) !== null) {
         } elseif ($docDeadline > $close) {
             $errors[] = 'Document deadline must be on or before the admissions close date.';
         } else {
-            $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
-                       ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value';
-            $db->prepare($upsert)->execute(['admissions_open',  $open]);
-            $db->prepare($upsert)->execute(['admissions_close', $close]);
-            $db->prepare($upsert)->execute(['document_deadline', $docDeadline]);
+            set_school_setting('admissions_open',   $open);
+            set_school_setting('admissions_close',  $close);
+            set_school_setting('document_deadline', $docDeadline);
 
             // Derive and persist school year for reference
             $openYear  = (int) date('Y', strtotime($open));
             $schoolYear = $openYear . '-' . ($openYear + 1);
-            $db->prepare($upsert)->execute(['current_school_year', $schoolYear]);
+            set_school_setting('current_school_year', $schoolYear);
 
             audit_log(AuditAction::ADMISSIONS_WINDOW_SET,
                 "Admissions window set: {$open} to {$close} (AY {$schoolYear})");
@@ -102,9 +100,7 @@ if (($action = require_post_action()) !== null) {
         $existingHist = $histRow ? array_filter(array_map('trim', explode(',', $histRow['setting_value']))) : [];
         if (!in_array($targetSY, $existingHist, true)) {
             $existingHist[] = $targetSY;
-            $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
-                       ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value';
-            $db->prepare($upsert)->execute(['historical_school_years', implode(',', $existingHist)]);
+            set_school_setting('historical_school_years', implode(',', $existingHist));
         }
 
         // Load current course list for validation (case-insensitive)
@@ -349,7 +345,7 @@ ob_start();
                 Import with AI
             </button>
         </div>
-        <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+        <p class="text-secondary-sm">
             Upload a file of past admissions results and AI will read it for you.
             Imported records show up in <strong>Results</strong> under their school year.
         </p>
@@ -606,7 +602,7 @@ ob_start();
 $content   = ob_get_clean();
 $pageTitle = 'Admissions';
 $pageHeading = 'School Year';
-$pageStyles  = ['css/pages/admin-school-year.css'];
+$pageStyles  = ['css/ai-import.css', 'css/pages/admin-school-year.css'];
 $pageScripts = ['js/pages/admin-school-year-window.js', 'js/pages/admin-school-year-import.js'];
 $pageWide  = true;
 $activeNav = 'school-year';

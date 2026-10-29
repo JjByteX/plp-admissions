@@ -219,7 +219,7 @@ ob_start();
     <!-- Password (Google account) -->
     <div class="card" data-settings-section="password" style="padding:var(--space-6)">
         <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-3)">Password</div>
-        <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+        <p class="text-secondary-sm">
             You sign in with Google. To set a password as well, use
             <a href="<?= url('/forgot-password') ?>">Forgot password</a> on the sign in page.
         </p>

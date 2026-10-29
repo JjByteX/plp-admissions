@@ -3,13 +3,7 @@
 .db-header {
     display:flex; align-items:flex-start; justify-content:space-between;
     flex-wrap:wrap; gap:var(--space-3); margin-bottom:var(--space-6);
-}
-.db-heading {
-    font-size:var(--text-xl); font-weight:var(--weight-semibold);
-    color:var(--text-primary); margin:0 0 var(--space-1); letter-spacing:-0.2px;
-}
-.db-sub      { font-size:var(--text-sm); color:var(--text-tertiary); margin:0; }
-.db-header:not(:has(*)), .db-header:not(:has(.db-controls)) { display:none; }
+}.db-header:not(:has(*)), .db-header:not(:has(.db-controls)) { display:none; }
 .page-head-actions .dp-menu { left:auto; right:0; }
 .db-controls { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; }
 
@@ -99,10 +93,6 @@
 
 /* Legend */
 .db-legend      { display:flex; flex-wrap:wrap; gap:var(--space-3); margin-top:var(--space-3); justify-content:center; }
-.db-legend-item { display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm); color:var(--text-secondary); }
-.db-legend-dot  { width:8px; height:8px; border-radius:var(--radius); flex-shrink:0; }
-
-
 /* Dashboard card titles */
 .db-grid .card-title { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--text-primary); }
 

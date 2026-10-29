@@ -716,6 +716,6 @@ $pageTitle   = $manualPage ? 'Upload Documents Manually' : 'My Documents';
 $pageBreadcrumb = $manualPage ? [['label' => 'My Documents', 'to' => '/student/documents']] : [];
 $activeNav   = 'documents';
 $showStepper = true;
-$pageStyles  = ['css/pages/student-documents.css'];
-$pageScripts = ['js/pages/student-documents.js', 'js/pages/student-documents-viewer.js', 'js/pages/student-documents-flags.js', 'js/pages/student-documents-batch.js'];
+$pageStyles  = ['css/file-viewer.css', 'css/pages/student-documents.css'];
+$pageScripts = ['js/file-viewer.js', 'js/pages/student-documents.js', 'js/pages/student-documents-viewer.js', 'js/pages/student-documents-flags.js', 'js/pages/student-documents-batch.js'];
 include VIEWS_PATH . '/layouts/app.php';

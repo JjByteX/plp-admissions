@@ -461,45 +461,10 @@ ob_start();
                 // history of their attempts (and the reason staff gave
                 // when one was denied). Hidden by default to avoid
                 // cluttering the card; click to expand.
-                $pastReschedules = array_slice($rescheduleHistory, $reschedulePending ? 1 : 0);
+                $pastReschedules   = array_slice($rescheduleHistory, $reschedulePending ? 1 : 0);
+                $historyExtraStyle = '';
+                include VIEWS_PATH . '/partials/reschedule_history.php';
             ?>
-            <?php if (!empty($pastReschedules)): ?>
-                <details style="margin-top:var(--space-4)">
-                    <summary style="cursor:pointer;font-size:var(--text-xs);color:var(--text-tertiary)">
-                        Past reschedule requests (<?= count($pastReschedules) ?>)
-                    </summary>
-                    <div style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
-                        <?php foreach ($pastReschedules as $h): ?>
-                            <div style="padding:var(--space-3);background:var(--bg-subtle);border-radius:var(--radius);
-                                         font-size:var(--text-xs)">
-                                <div style="display:flex;justify-content:space-between;gap:var(--space-3);align-items:flex-start">
-                                    <div style="color:var(--text-tertiary)">
-                                        <?= date('M j, Y · g:i A', strtotime($h['created_at'])) ?>
-                                    </div>
-                                    <?php
-                                        $sLabel = $h['status'];
-                                        $sClass = $sLabel === 'approved' ? 'badge-success'
-                                                : ($sLabel === 'denied' ? 'badge-error' : 'badge-warning');
-                                    ?>
-                                    <span class="badge <?= $sClass ?>">
-                                        <?= e(ucfirst($sLabel)) ?>
-                                    </span>
-                                </div>
-                                <?php if (!empty($h['reason'])): ?>
-                                    <div style="margin-top:var(--space-2);color:var(--text-secondary);white-space:pre-line">
-                                        <?= e($h['reason']) ?>
-                                    </div>
-                                <?php endif; ?>
-                                <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
-                                    <div style="margin-top:var(--space-2);color:var(--text-tertiary)">
-                                        Staff: <?= e($h['deny_reason']) ?>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </details>
-            <?php endif; ?>
         </div>
     <?php endif; ?>
 

@@ -283,6 +283,16 @@ function school_setting(string $key, string $default = ''): string
     return $cache[$key] ?? $default;
 }
 
+// Insert-or-update one school_settings row. Writes straight to the DB;
+// school_setting() keeps its per-request cache, same as before.
+function set_school_setting(string $key, string|int $value): void
+{
+    db()->prepare(
+        'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value'
+    )->execute([$key, (string) $value]);
+}
+
 require_once __DIR__ . '/helpers/exam_scores.php';
 require_once __DIR__ . '/helpers/docs.php';
 // -- Formatting -------------------------------------------------

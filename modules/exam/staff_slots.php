@@ -210,12 +210,10 @@ if (($action = require_post_action()) !== null) {
 
     // ── Update exam config (room default + daily cap) ────────────
     if ($action === 'update_exam_config') {
-        $upsert = 'INSERT INTO school_settings (setting_key, setting_value) VALUES (?,?)
-                   ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value';
         $roomCap  = max(1, post_int('exam_room_capacity', 35));
         $dailyCap = max(1, post_int('exam_daily_cap', 3000));
-        $db->prepare($upsert)->execute(['exam_room_capacity', $roomCap]);
-        $db->prepare($upsert)->execute(['exam_daily_cap',     $dailyCap]);
+        set_school_setting('exam_room_capacity', $roomCap);
+        set_school_setting('exam_daily_cap',     $dailyCap);
         audit_log(AuditAction::EXAM_CONFIG_UPDATED, "Room cap={$roomCap}, Daily cap={$dailyCap}");
         Session::flash('success', 'Exam config saved.');
         _slots_redirect_back($ctxCollege, $ctxSlotId);

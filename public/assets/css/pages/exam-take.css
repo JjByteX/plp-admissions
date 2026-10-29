@@ -66,13 +66,7 @@
     font-size: var(--text-base);
     margin-bottom: var(--space-2);
     line-height: 1.5;
-}
-.q-desc {
-    font-size: var(--text-sm);
-    color: var(--text-secondary);
-    margin-bottom: var(--space-4);
-}
-.q-required {
+}.q-required {
     color: var(--error);
     margin-left: 2px;
 }

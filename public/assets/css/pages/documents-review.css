@@ -1,12 +1,1 @@
-.fv-ctrl-btn {
-    display:flex;align-items:center;justify-content:center;
-    width:var(--control-height);height:var(--control-height);border-radius:var(--radius);
-    border:1px solid var(--border);background:var(--bg);
-    color:var(--text-secondary);cursor:pointer;
-    transition:background var(--transition-fast),color var(--transition-fast);
-}
-.fv-ctrl-btn:hover { background:var(--bg-overlay); color:var(--text-primary); }
-#fv-prev:hover, #fv-next:hover { background:var(--bg-overlay); color:var(--text-primary); }
-#fv-viewport[data-zoomed="true"]   { cursor:grab; }
-#fv-viewport[data-dragging="true"] { cursor:grabbing !important; }
 @keyframes slideUp { from { opacity:0; transform:translateX(-50%) translateY(20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }

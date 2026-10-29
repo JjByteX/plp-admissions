@@ -609,7 +609,7 @@
 
                     <!-- ── Recurring (batch) fields ───────────── -->
                     <div id="add-slot-batch-fields" style="display:none;flex-direction:column;gap:var(--space-4)">
-                        <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+                        <p class="text-secondary-sm">
                             One slot is created per room per selected weekday in the date range.
                         </p>
                         <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">

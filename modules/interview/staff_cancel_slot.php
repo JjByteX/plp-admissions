@@ -220,7 +220,7 @@ ob_start();
     <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin:0 0 var(--space-2)">
         Cancel an interview slot
     </h2>
-    <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+    <p class="text-secondary-sm">
         Use this for typhoon closures or any time you need to move
         everyone in a slot at once. Pick the slot to cancel, pick a
         replacement slot with enough capacity, and write a short

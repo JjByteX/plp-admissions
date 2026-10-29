@@ -226,7 +226,7 @@ if ($isSlotFuture) {
                 <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Room</div>
                 <div style="font-size:var(--text-lg);font-weight:var(--weight-medium)"><?= e($mySlot['room_label']) ?></div>
             </div>
-            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">
+            <p class="text-secondary-sm">
                 On exam day, log in here. The proctor in your room will announce the access code when the exam opens - you'll have 5 minutes to enter it to start.
             </p>
         </div>
@@ -290,44 +290,10 @@ if ($isSlotFuture) {
             // Reschedule history — collapsed by default so it doesn't
             // crowd the page. Shows the most recent attempts and
             // includes the deny reason if staff provided one.
-            $pastExamReschedules = array_slice($examRescheduleHistory, $examReschedulePending ? 1 : 0);
+            $pastReschedules   = array_slice($examRescheduleHistory, $examReschedulePending ? 1 : 0);
+            $historyExtraStyle = '';
+            include VIEWS_PATH . '/partials/reschedule_history.php';
         ?>
-        <?php if (!empty($pastExamReschedules)): ?>
-            <details style="margin-top:var(--space-4)">
-                <summary style="cursor:pointer;font-size:var(--text-xs);color:var(--text-tertiary)">
-                    Past reschedule requests (<?= count($pastExamReschedules) ?>)
-                </summary>
-                <div style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
-                    <?php foreach ($pastExamReschedules as $h): ?>
-                        <div style="padding:var(--space-3);background:var(--bg-subtle);border-radius:var(--radius);font-size:var(--text-xs)">
-                            <div style="display:flex;justify-content:space-between;gap:var(--space-3);align-items:flex-start">
-                                <div style="color:var(--text-tertiary)">
-                                    <?= date('M j, Y · g:i A', strtotime($h['created_at'])) ?>
-                                </div>
-                                <?php
-                                    $sLabel = $h['status'];
-                                    $sClass = $sLabel === 'approved' ? 'badge-success'
-                                            : ($sLabel === 'denied' ? 'badge-error' : 'badge-warning');
-                                ?>
-                                <span class="badge <?= $sClass ?>">
-                                    <?= e(ucfirst($sLabel)) ?>
-                                </span>
-                            </div>
-                            <?php if (!empty($h['reason'])): ?>
-                                <div style="margin-top:var(--space-2);color:var(--text-secondary);white-space:pre-line">
-                                    <?= e($h['reason']) ?>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
-                                <div style="margin-top:var(--space-2);color:var(--text-tertiary)">
-                                    Staff: <?= e($h['deny_reason']) ?>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </details>
-        <?php endif; ?>
     </div>
     <?php
     $content = ob_get_clean(); $pageTitle='Entrance Exam'; $activeNav='exam'; $showStepper=true;
@@ -397,43 +363,11 @@ if ($isSlotPast) {
             </div>
         <?php endif; ?>
 
-        <?php $pastExamReschedules = array_slice($examRescheduleHistory, $examReschedulePending ? 1 : 0); ?>
-        <?php if (!empty($pastExamReschedules)): ?>
-            <details style="margin-top:var(--space-4);text-align:left">
-                <summary style="cursor:pointer;font-size:var(--text-xs);color:var(--text-tertiary)">
-                    Past reschedule requests (<?= count($pastExamReschedules) ?>)
-                </summary>
-                <div style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
-                    <?php foreach ($pastExamReschedules as $h): ?>
-                        <div style="padding:var(--space-3);background:var(--bg-subtle);border-radius:var(--radius);font-size:var(--text-xs)">
-                            <div style="display:flex;justify-content:space-between;gap:var(--space-3);align-items:flex-start">
-                                <div style="color:var(--text-tertiary)">
-                                    <?= date('M j, Y · g:i A', strtotime($h['created_at'])) ?>
-                                </div>
-                                <?php
-                                    $sLabel = $h['status'];
-                                    $sClass = $sLabel === 'approved' ? 'badge-success'
-                                            : ($sLabel === 'denied' ? 'badge-error' : 'badge-warning');
-                                ?>
-                                <span class="badge <?= $sClass ?>">
-                                    <?= e(ucfirst($sLabel)) ?>
-                                </span>
-                            </div>
-                            <?php if (!empty($h['reason'])): ?>
-                                <div style="margin-top:var(--space-2);color:var(--text-secondary);white-space:pre-line">
-                                    <?= e($h['reason']) ?>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
-                                <div style="margin-top:var(--space-2);color:var(--text-tertiary)">
-                                    Staff: <?= e($h['deny_reason']) ?>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </details>
-        <?php endif; ?>
+        <?php
+            $pastReschedules    = array_slice($examRescheduleHistory, $examReschedulePending ? 1 : 0);
+            $historyExtraStyle  = 'text-align:left';
+            include VIEWS_PATH . '/partials/reschedule_history.php';
+        ?>
     </div>
     <?php
     $content = ob_get_clean(); $pageTitle='Entrance Exam'; $activeNav='exam'; $showStepper=true;
