@@ -1,0 +1,152 @@
+/* ── All UI colors from app CSS variables ─────────────────── */
+
+.db-header {
+    display:flex; align-items:flex-start; justify-content:space-between;
+    flex-wrap:wrap; gap:var(--space-3); margin-bottom:var(--space-6);
+}
+.db-heading {
+    font-size:var(--text-xl); font-weight:var(--weight-semibold);
+    color:var(--text-primary); margin:0 0 var(--space-1); letter-spacing:-0.2px;
+}
+.db-sub      { font-size:var(--text-sm); color:var(--text-tertiary); margin:0; }
+.db-header:not(:has(*)), .db-header:not(:has(.db-controls)) { display:none; }
+.page-head-actions .dp-menu { left:auto; right:0; }
+.db-controls { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; }
+
+/* ── 3-column grid: 30% | 40% | 30%
+   Col1 and Col2 are plain flex stacks - no row-spanning.
+   ───────────────────────────────────── */
+.db-grid {
+    display: grid;
+    /* minmax(0, 1fr), not 1fr: a bare 1fr can't shrink below its content, so
+       after the sidebar collapsed and re-expanded the charts' old pixel width
+       held the columns open and the cards ran off to the right. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto 1fr;
+    gap: var(--space-4);
+    align-items: stretch;
+    min-height: 0;
+    flex: 1;
+}
+.db-grid > .card { display: flex; flex-direction: column; min-width: 0; }
+
+/* Make the dashboard fill the .page so the bottom gap matches the
+   left/right gap (var(--space-8) = 32px from .page padding). */
+.page:has(.dashboard-wrap) { display:flex; flex-direction:column; }
+.dashboard-wrap { display:flex; flex-direction:column; flex:1; min-height:0; }
+
+/* KPI cards — 4 equal squares, single accent color */
+.db-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+    flex: 1;
+}
+.db-kpi-item {
+    background: var(--bg-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-5) var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.db-kpi-val {
+    font-size: 2rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--text-primary);
+}
+.db-kpi-val--success,
+.db-kpi-val--error,
+.db-kpi-val--warning { color: var(--text-primary); }
+.db-kpi-lbl {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    font-weight: var(--weight-medium);
+    letter-spacing: 0;
+    text-transform: none;
+    margin-top: var(--space-1);
+}
+.db-kpi-sub {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-top: calc(var(--space-1) * -1);
+}
+.db-kpi-bar {
+    height: 4px;
+    margin-top: auto;
+    background: var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.db-kpi-bar > span { display: block; height: 100%; background: var(--accent-light); border-radius: var(--radius); }
+.db-empty { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 120px; color: var(--text-tertiary); font-size: var(--text-sm); }
+
+/* Pipeline donut (SVG) */
+.db-donut-wrap { position:relative; width:110px; height:110px; flex-shrink:0; }
+.db-donut      { width:110px; height:110px; }
+.db-donut-bg   { stroke:var(--bg-subtle); }
+.db-donut-fill { stroke:var(--accent); stroke-linecap:round; transition:stroke-dashoffset .5s ease; }
+.db-donut-lbl  { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1; gap:2px; }
+.db-donut-pct  { font-size:22px; font-weight:var(--weight-semibold); color:var(--text-primary); }
+.db-donut-sub  { font-size:var(--text-xs); color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.05em; }
+
+/* Card chart header */
+.db-ch     { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:var(--space-4); }
+.db-ch-sub { font-size:var(--text-sm); color:var(--text-secondary); font-weight:var(--weight-medium); }
+
+/* Legend */
+.db-legend      { display:flex; flex-wrap:wrap; gap:var(--space-3); margin-top:var(--space-3); justify-content:center; }
+.db-legend-item { display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm); color:var(--text-secondary); }
+.db-legend-dot  { width:8px; height:8px; border-radius:var(--radius); flex-shrink:0; }
+
+
+/* Dashboard card titles */
+.db-grid .card-title { font-size: var(--text-base); font-weight: var(--weight-semibold); color: var(--text-primary); }
+
+/* Date picker */
+.dp-wrap { position:relative; }
+.dp-menu {
+    display:none; position:absolute; left:0; top:calc(100% + var(--space-1));
+    min-width:176px; background:var(--bg-elevated); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow-md);
+    padding:var(--space-1) 0; z-index:200;
+}
+.dp-menu.open { display:block; }
+.dp-item {
+    display:block; width:100%; text-align:left; padding:var(--space-2) var(--space-4);
+    font-size:var(--text-sm); font-family:var(--font-sans); color:var(--text-secondary);
+    background:none; border:none; cursor:pointer;
+}
+.dp-item:hover  { background:var(--bg-subtle); color:var(--text-primary); }
+.dp-item.active { color:var(--accent); font-weight:var(--weight-medium); }
+.dp-divider     { height:1px; background:var(--border); margin:var(--space-1) 0; }
+.dp-custom-row  { display:none; padding:var(--space-2) var(--space-3); gap:var(--space-2); align-items:center; }
+.dp-custom-row.show { display:flex; }
+.dp-date-in {
+    flex:1; height:var(--control-height); padding:0 var(--space-2); font-size:var(--text-sm);
+    font-family:var(--font-sans); border:1px solid var(--border);
+    border-radius:var(--radius); background:var(--bg-subtle); color:var(--text-primary); min-width:0;
+}
+
+@media (max-width:640px) {
+    .dp-menu, .page-head-actions .dp-menu {
+        left:auto; right:0;
+        min-width:min(220px, calc(100vw - 2rem));
+        max-width:calc(100vw - 2rem);
+    }
+    .dp-item { font-size:var(--text-base); padding:var(--space-3) var(--space-4); }
+    .dp-custom-row.show { flex-wrap:wrap; }
+}
+@media (max-width:960px) {
+    .db-grid { grid-template-columns:minmax(0, 1fr); }
+}
+@media (max-width:560px) {
+    .db-grid { grid-template-columns:minmax(0, 1fr); }
+}
+@media (max-width:768px) {
+    .db-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .db-kpi-item { min-width:0;padding:var(--space-4) var(--space-3); }
+}

@@ -131,42 +131,25 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     <?= phosphor_head() ?>
 
     <!-- Critical canvas colour: applies before app.css arrives so page switches never flash -->
-    <style>
-        html{background:#f7f7f5;color-scheme:light}
-        html[data-theme="dark"]{background:#111110;color-scheme:dark}
-    </style>
+    <link rel="stylesheet" href="<?= asset('css/app-critical.css') ?>">
     <!-- Theme and text size are applied before the stylesheet, so the first paint is already in the right theme -->
-    <script>
-        // Apply saved theme before render to prevent flash
-        (function(){
-            const t = localStorage.getItem('plp_theme') || 'light';
-            document.documentElement.dataset.theme = t;
-            var fs = null; try { fs = localStorage.getItem('plp_font_size'); } catch (e) {}
-            document.documentElement.dataset.fontSize = ['small','medium','large','xlarge'].indexOf(fs) > -1 ? fs : 'medium';
-            document.addEventListener('DOMContentLoaded', function() {
-                const pill = document.querySelector('.theme-pill');
-                if (pill) pill.dataset.theme = t;
-            });
-        })();
-    </script>
+    <script src="<?= asset('js/app-head.js') ?>"></script>
     <!-- Bootstrap 5.3.3 + Bootstrap Icons, served locally (works offline). Order: Bootstrap -> bootstrap-compat.css -> app.css -->
     <link rel="stylesheet" href="<?= asset('vendor/bootstrap/bootstrap.min.css') ?>">
     <link rel="stylesheet" href="<?= asset('vendor/bootstrap-icons/bootstrap-icons.min.css') ?>">
     <link rel="stylesheet" href="<?= asset('css/bootstrap-compat.css') ?>">
     <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
+    <link rel="stylesheet" href="<?= asset('css/app-layout.css') ?>">
     <?php foreach (($pageStyles ?? []) as $pageStyle): ?>
     <link rel="stylesheet" href="<?= asset($pageStyle) ?>">
     <?php endforeach; ?>
-    <?php if ($isEmbed && $embedSection !== ''): ?>
-    <style>[data-settings-section]:not([data-settings-section="<?= $embedSection ?>"]) { display: none !important; }</style>
-    <?php endif; ?>
 
     <?php if ($schoolLogo): ?>
     <link rel="preload" as="image" href="<?= str_starts_with($schoolLogo, 'http') ? e($schoolLogo) : e(url('/' . $schoolLogo)) ?>">
     <?php endif; ?>
 
 </head>
-<body<?= $isEmbed ? ' class="is-embed"' : '' ?>>
+<body<?= $isEmbed ? ' class="is-embed"' : '' ?><?= ($isEmbed && $embedSection !== '') ? ' data-embed-section="' . $embedSection . '"' : '' ?>>
 
 <div class="layout <?= ($isStudent && !$isEmbed) ? 'layout-student' : '' ?>">
 
@@ -385,10 +368,6 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                                 </div>
                             </div>
                         </div>
-                        <style>
-                            .theme-pill[data-theme='dark'] { background: var(--accent) !important; }
-                            .theme-pill[data-theme='dark'] div { transform: translateX(14px) !important; }
-                        </style>
                         <a href="<?= url('/logout') ?>" class="dropdown-item" data-logout>
                             <?= icon('sign-out', 15) ?>
                             Log out
@@ -458,30 +437,27 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
             <?php endif; ?>
             <?= $content ?? '' ?>
         </main>
-        <?php if ($showPageHead): ?>
-        <script>
-        // Move any element marked data-page-action (the element itself) or
-        // data-page-actions (its children) into the heading row, top right.
-        (function () {
-            var slot = document.getElementById('page-head-actions');
-            if (!slot) return;
-            document.querySelectorAll('#main-content [data-page-action]').forEach(function (el) {
-                el.removeAttribute('data-page-action');
-                slot.appendChild(el);
-            });
-            document.querySelectorAll('#main-content [data-page-actions]').forEach(function (wrap) {
-                while (wrap.firstElementChild) slot.appendChild(wrap.firstElementChild);
-                wrap.remove();
-            });
-        })();
-        </script>
-        <?php endif; ?>
 
     </div><!-- /.main -->
 
 </div><!-- /.layout -->
 
-<script>window.__baseUrl = '<?= rtrim(BASE_URL, '/') ?>';</script>
+<script type="application/json" id="layout-data"><?= json_encode([
+    'baseUrl' => rtrim(BASE_URL, '/'),
+    'accent'  => $accentColor,
+    'loginUrl' => url('/login'),
+    'logoutUrl' => url('/logout'),
+    'session' => (Auth::check() && !$isEmbed) ? [
+        'warnBefore'    => (int) SESSION_WARN_BEFORE,
+        'secsRemaining' => (int) Session::secondsRemaining(),
+        'keepaliveUrl'  => url('/auth/keepalive'),
+        'csrf'          => csrf_token(),
+    ] : null,
+], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+<script src="<?= asset('js/app-boot.js') ?>"></script>
+<?php if ($showPageHead): ?>
+<script src="<?= asset('js/app-page-head.js') ?>"></script>
+<?php endif; ?>
 <?php /* Page scripts load before jquery/app.js, the same point the old inline blocks ran at. */ ?>
 <?php foreach (($pageScripts ?? []) as $pageScript): ?>
 <script src="<?= asset($pageScript) ?>"></script>
@@ -489,11 +465,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 <script src="<?= asset('js/jquery.min.js') ?>"></script>
 <script src="<?= asset('vendor/bootstrap/bootstrap.bundle.min.js') ?>"></script>
 <script src="<?= asset('js/app.js') ?>"></script>
-<script>
-    // Inject accent from DB
-    setAccentColor('<?= e($accentColor) ?>');
-
-</script>
+<script src="<?= asset('js/app-layout.js') ?>"></script>
 
 <?php if (Auth::check() && !$isEmbed): ?>
 <!-- ── Session timeout warning ──────────────────────────────── -->
@@ -522,82 +494,6 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     </div>
 </div>
 
-<script>
-(function () {
-    const WARN_BEFORE   = <?= SESSION_WARN_BEFORE ?>;         // seconds before expiry to warn
-    let secsRemaining   = <?= Session::secondsRemaining() ?>; // seconds left right now
-    let countdownTimer  = null;
-    let warnTimer       = null;
-    const modal         = document.getElementById('session-timeout-modal');
-    const countdownEl   = document.getElementById('session-countdown');
-
-    function fmtTime(s) {
-        const m = Math.floor(s / 60), r = s % 60;
-        return m > 0 ? `${m}m ${r}s` : `${r}s`;
-    }
-
-    function showWarning() {
-        let secs = WARN_BEFORE;
-        countdownEl.textContent = fmtTime(secs);
-        modal.style.display = 'flex';
-        countdownTimer = setInterval(() => {
-            secs--;
-            if (secs <= 0) {
-                clearInterval(countdownTimer);
-                window.location.href = '<?= url('/login') ?>';
-            } else {
-                countdownEl.textContent = fmtTime(secs);
-            }
-        }, 1000);
-    }
-
-    function scheduleWarning() {
-        if (warnTimer) clearTimeout(warnTimer);
-        const fireIn = Math.max(0, (secsRemaining - WARN_BEFORE) * 1000);
-        warnTimer = setTimeout(showWarning, fireIn);
-    }
-
-    async function keepAlive() {
-        modal.style.display = 'none';
-        clearInterval(countdownTimer);
-        try {
-            const res  = await fetch('<?= url('/auth/keepalive') ?>', {
-                method: 'POST',
-                headers: { 'X-Requested-With': 'XMLHttpRequest',
-                           'Content-Type': 'application/x-www-form-urlencoded' },
-                body: '_csrf=<?= csrf_token() ?>'
-            });
-            const data = await res.json();
-            secsRemaining = data.seconds_remaining ?? secsRemaining;
-        } catch (e) { /* ignore */ }
-        scheduleWarning();
-    }
-
-    function logOutNow() {
-        window.location.href = '<?= url('/logout') ?>';
-    }
-
-    // The buttons inside the modal use inline onclick="keepAlive()" /
-    // onclick="logOutNow()", so the IIFE-scoped functions need to be
-    // hoisted to the global scope or the clicks throw ReferenceError.
-    window.keepAlive = keepAlive;
-    window.logOutNow = logOutNow;
-
-    // Expose so login page can trigger the "session expired" modal
-    window.showTimeoutModal = function () {
-        countdownEl.textContent = '0s';
-        modal.style.display = 'flex';
-        // Replace buttons with just a "Log In Again" button
-        modal.querySelector('div[style*="flex-direction:column"]').innerHTML =
-            `<a href="<?= url('/login') ?>" class="btn btn-primary" style="width:100%">Log In Again</a>`;
-        modal.querySelector('#session-countdown').closest('div').textContent =
-            'Your session expired due to inactivity. Please log in again.';
-        modal.querySelector('div[style*="font-weight"]').textContent = 'Session Expired';
-    };
-
-    scheduleWarning();
-})();
-</script>
 <?php endif; ?>
 
 <?php if ($isStudent && !empty($_canWithdraw)): ?>
@@ -645,11 +541,6 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
         </form>
     </div>
 </div>
-<script>
-document.getElementById('withdraw-modal').addEventListener('click', function(e) {
-    if (e.target === this) this.style.display = 'none';
-});
-</script>
 <?php endif; ?>
 
 <?php if (Auth::check()): ?>
@@ -668,66 +559,12 @@ document.getElementById('withdraw-modal').addEventListener('click', function(e) 
         </div>
     </div>
 </div>
-<script>
-(function () {
-    var modal = document.getElementById('logout-modal');
-    var confirmBtn = document.getElementById('logout-confirm-btn');
-    var href = '<?= url('/logout') ?>';
-    function close() { modal.style.display = 'none'; }
-    document.addEventListener('click', function (e) {
-        var link = e.target.closest ? e.target.closest('[data-logout]') : null;
-        if (!link) return;
-        e.preventDefault();
-        modal.style.display = 'flex';
-        confirmBtn.focus(); // Enter confirms, Esc closes (global handler)
-    });
-    document.getElementById('logout-cancel-btn').addEventListener('click', close);
-    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
-    confirmBtn.addEventListener('click', function () {
-        // Exam page: drop the browser answer copy only now, after confirming.
-        // The server draft stays until submit or close.
-        try {
-            Object.keys(localStorage).forEach(function (k) {
-                if (k.indexOf('plp_exam_draft:') === 0) localStorage.removeItem(k);
-            });
-        } catch (err) {}
-        window.location.href = href;
-    });
-})();
-</script>
 <?php endif; ?>
 
 <?php if (!$isEmbed && Auth::check()): ?>
 <?php include __DIR__ . '/../partials/settings_modal.php'; ?>
 <?php endif; ?>
 
-<?php if ($isEmbed): ?>
-<script>
-// Inside the settings modal: tell the page around us when something was saved
-// (it reloads on close so the name / branding / theme shown behind updates)
-// and forward Escape, since key presses in an iframe never reach the parent.
-(function () {
-    if (window.parent === window) return;
-    function tell(type) { try { window.parent.postMessage({ type: type }, location.origin); } catch (e) {} }
-    if (document.querySelector('.alert-success')) tell('settings:saved');
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') tell('settings:close'); });
-})();
-</script>
-<?php endif; ?>
-
-<script>
-// Global Escape-to-close for any open modal. Modals across the app
-// use the same .modal-backdrop wrapper toggled via inline display:
-// this listens once at the document level so every modal benefits
-// without per-page wiring.
-document.addEventListener('keydown', function(e) {
-    if (e.key !== 'Escape') return;
-    document.querySelectorAll('.modal-backdrop').forEach(function(m) {
-        var visible = m.style.display && m.style.display !== 'none';
-        if (visible) m.style.display = 'none';
-    });
-});
-</script>
 
 </body>
 </html>

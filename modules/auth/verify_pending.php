@@ -47,7 +47,7 @@ if (($action = require_post_action('verify')) !== null) {
                 $creds = generate_verify_credentials((int) $user['id']);
                 try {
                     send_verification_email($user['email'], $user['name'], $creds['token'], $creds['code']);
-                    audit_log('verify_resent', "Resent verification email for user #{$user['id']}", 'user', (int) $user['id']);
+                    audit_log(AuditAction::VERIFY_RESENT, "Resent verification email for user #{$user['id']}", 'user', (int) $user['id']);
                 } catch (\Throwable $e) {
                     error_log('Resend verification email failed: ' . $e->getMessage());
                 }
@@ -171,7 +171,7 @@ ob_start();
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="resend">
             <input type="hidden" name="email"  value="<?= e($email) ?>">
-            <button type="submit" id="resend-btn" class="auth-link-btn" <?= $resendIn > 0 ? 'disabled' : '' ?>>
+            <button type="submit" id="resend-btn" class="auth-link-btn" data-resend-in="<?= (int) $resendIn ?>" <?= $resendIn > 0 ? 'disabled' : '' ?>>
                 <span id="resend-label"><?= $resendIn > 0 ? 'Resend in ' . $resendIn . 's' : 'Resend code' ?></span>
             </button>
         </form>
@@ -182,37 +182,9 @@ ob_start();
     </div>
 </div>
 
-<script>
-(function () {
-    // Auto-submit when the user pastes/types a 6-digit code.
-    var input = document.getElementById('code');
-    if (input) {
-        input.addEventListener('input', function () {
-            var v = (input.value || '').replace(/\D/g, '');
-            if (v.length === 6) input.form.submit();
-        });
-    }
-
-    // Resend countdown (only when a wait is running).
-    var btn   = document.getElementById('resend-btn');
-    var label = document.getElementById('resend-label');
-    var left  = <?= (int) $resendIn ?>;
-    if (!btn || left <= 0) return;
-    btn.disabled = true;
-    var t = setInterval(function () {
-        left -= 1;
-        if (left <= 0) {
-            clearInterval(t);
-            btn.disabled  = false;
-            label.textContent = 'Resend code';
-        } else {
-            label.textContent = 'Resend in ' + left + 's';
-        }
-    }, 1000);
-})();
-</script>
 
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Verify Email';
+$pageScripts = ['js/pages/auth-verify-code.js', 'js/pages/auth-resend.js'];
 include VIEWS_PATH . '/layouts/auth.php';

@@ -54,7 +54,7 @@ if (($action = require_post_action()) !== null) {
         // Assignment" page.
         $assigned = backfill_exam_slot_assignments();
 
-        audit_log('bulk_approve_docs', "Approved all pending documents ({$count} docs); {$advanced} advanced to exam, {$skipped} AI-flagged skipped; assigned exam slot to {$assigned} applicant(s)");
+        audit_log(AuditAction::BULK_APPROVE_DOCS, "Approved all pending documents ({$count} docs); {$advanced} advanced to exam, {$skipped} AI-flagged skipped; assigned exam slot to {$assigned} applicant(s)");
         Session::flash(
             'success',
             "Approved {$count} pending document(s). {$advanced} applicant(s) advanced to exam."
@@ -213,7 +213,7 @@ $totalIdle   = array_sum(array_column($idleSummary, 'count'));
 
 // B6: Check if there are interview sessions today
 $hasTodayStmt = db()->prepare('SELECT COUNT(*) FROM interview_slots WHERE slot_date = ? AND status = \'open\'');
-$hasTodayStmt->execute([date('Y-m-d')]);
+$hasTodayStmt->execute([now_date()]);
 $hasToday = (int)$hasTodayStmt->fetchColumn() > 0;
 
 $activeNav = 'dashboard';
@@ -424,41 +424,11 @@ ob_start();
     <?php endforeach; ?>
 </div>
 
-<!-- B6: Real-time dashboard polling on interview days -->
-<?php if ($hasToday ?? false): ?>
-<script>
-(function(){
-    var POLL_INTERVAL = 30000;
-    var statsArea = document.querySelector('.stat-grid');
-    var pipelineArea = document.querySelector('.dashboard-grid');
-    if (!statsArea && !pipelineArea) return;
-
-    function pollDashboard() {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', window.location.href, true);
-        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-        xhr.onload = function() {
-            if (xhr.status === 200) {
-                var parser = new DOMParser();
-                var doc = parser.parseFromString(xhr.responseText, 'text/html');
-                var newStats = doc.querySelector('.stat-grid');
-                var newPipeline = doc.querySelector('.dashboard-grid');
-                if (newStats && statsArea) {
-                    statsArea.innerHTML = newStats.innerHTML;
-                }
-                if (newPipeline && pipelineArea) {
-                    pipelineArea.innerHTML = newPipeline.innerHTML;
-                }
-            }
-        };
-        xhr.send();
-    }
-
-    setInterval(pollDashboard, POLL_INTERVAL);
-})();
-</script>
-<?php endif; ?>
 
 <?php
 $content = ob_get_clean();
+// B6: real-time dashboard polling on interview days
+if ($hasToday ?? false) {
+    $pageScripts = ['js/pages/staff-dashboard.js'];
+}
 include VIEWS_PATH . '/layouts/app.php';

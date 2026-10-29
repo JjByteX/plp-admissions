@@ -84,7 +84,7 @@ if (($action = require_post_action()) !== null) {
         // (or only the "Auto-assign" option was visible), tell them to
         // create a slot first instead of failing silently.
         // ------------------------------------------------------------
-        $today = date('Y-m-d');
+        $today = now_date();
 
         // Load applicant's department so the auto-assign pre-check
         // matches the same department rule applied at assignment time.
@@ -223,7 +223,7 @@ if (($action = require_post_action()) !== null) {
 
         if ($ok) {
             audit_log(
-                'exam_reschedule_request_approved',
+                AuditAction::EXAM_RESCHEDULE_REQUEST_APPROVED,
                 "Approved exam reschedule request #{$requestId} for applicant #{$applicantId} → slot #{$candidateSlotId}",
                 'applicant',
                 $applicantId
@@ -300,7 +300,7 @@ if (($action = require_post_action()) !== null) {
                   WHERE id = ?'
             )->execute([$staffId, $denyReason !== '' ? $denyReason : null, $requestId]);
             audit_log(
-                'exam_reschedule_request_denied',
+                AuditAction::EXAM_RESCHEDULE_REQUEST_DENIED,
                 "Denied exam reschedule request #{$requestId} for applicant #{$req['applicant_id']}"
                 . ($denyReason !== '' ? " - {$denyReason}" : ''),
                 'applicant',
@@ -399,7 +399,7 @@ $deptOptions = $db->query(
 // ----------------------------------------------------------------
 // Load open future slots (used as reschedule targets in the dropdown)
 // ----------------------------------------------------------------
-$today = date('Y-m-d');
+$today = now_date();
 $stmt = $db->prepare(
     'SELECT id, exam_date, slot_time, end_time, room_label, department, capacity, filled
        FROM exam_slot_schedule
@@ -431,12 +431,6 @@ $hasFilters = ($search !== '' || $filterDept !== '' || $filterDate !== '');
 ob_start();
 ?>
 
-<style>
-.page:has(.sa-table-card) { display:flex; flex-direction:column; }
-.sa-table-card { flex:1; min-height:300px; display:flex; flex-direction:column; }
-.sa-table-card table { flex:0 0 auto; }
-.sa-table-card .sa-filler { flex:1; border-top:1px solid var(--border); }
-</style>
 
 <?php
 // Same structure as the audit log (and lakbay-pasig's AdminDataTable): one
@@ -608,4 +602,5 @@ $pageBreadcrumb = [['label' => 'Exam Slots', 'to' => '/staff/exam/slots']];
 $pageActions = ($canReschedule ? ui_button('Cancel a slot (bulk move)', ['href' => url('/staff/exam/cancel-slot'), 'variant' => 'ghost', 'icon' => 'ic_fluent_arrow_right_24_regular', 'icon_pos' => 'after']) : '');
 $activeNav = 'exam-reschedule';
 $pageWide  = true; // table-heavy page - match staff_slots / staff_review / staff_manage
+$pageStyles = ['css/pages/exam-reschedule.css'];
 include VIEWS_PATH . '/layouts/app.php';

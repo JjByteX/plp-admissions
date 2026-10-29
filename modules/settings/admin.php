@@ -47,7 +47,7 @@ if (($action = require_post_action()) !== null) {
             $ups('school_name', $schoolName);
             $ups('accent_color', $accentColor);
             if ($logoPath) $ups('school_logo', $logoPath);
-            audit_log('settings_branding_updated', "Updated branding: school_name={$schoolName}");
+            audit_log(AuditAction::SETTINGS_BRANDING_UPDATED, "Updated branding: school_name={$schoolName}");
             $success[] = 'Branding updated.';
         }
     }
@@ -65,7 +65,7 @@ if (($action = require_post_action()) !== null) {
         else {
             $db->prepare('UPDATE users SET password_hash=? WHERE id=?')
                ->execute([password_hash($new, PASSWORD_BCRYPT, ['cost'=>12]), $userId]);
-            audit_log('admin_password_changed', 'Admin changed their own password', 'user', $userId);
+            audit_log(AuditAction::ADMIN_PASSWORD_CHANGED, 'Admin changed their own password', 'user', $userId);
             Auth::rememberRevokeAll((int) $userId);
             $success[] = 'Password changed.';
         }

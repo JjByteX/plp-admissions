@@ -140,7 +140,7 @@ if (($action = require_post_action()) !== null) {
 // ----------------------------------------------------------------
 // GET — list upcoming slots with bookings + replacement candidates
 // ----------------------------------------------------------------
-$today = date('Y-m-d');
+$today = now_date();
 
 $stmt = $db->prepare(
     'SELECT id, exam_date, slot_time, end_time, room_label, department, exam_id, capacity, filled

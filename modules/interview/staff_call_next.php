@@ -15,7 +15,7 @@ csrf_check();
 
 $db      = db();
 $staffId = Auth::id();
-$today   = date('Y-m-d');
+$today   = now_date();
 
 $stmt = $db->prepare(
     "SELECT q.id FROM interview_queue q

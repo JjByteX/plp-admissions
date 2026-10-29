@@ -30,24 +30,6 @@ $sessions = $stmt->fetchAll();
 ob_start();
 ?>
 
-<style>
-/* Queue stats strip inside the shared selector card (select-card in app.css). */
-.q-sess-stats {
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: var(--space-2); margin-top: auto; padding-top: var(--space-3);
-    border-top: 1px solid var(--border);
-}
-.q-sess-stat { text-align: center; }
-.q-sess-stat-num {
-    font-size: var(--text-base); font-weight: var(--weight-semibold);
-    line-height: 1;
-}
-.q-sess-stat-label {
-    font-size: 10px; color: var(--text-tertiary);
-    text-transform: uppercase; letter-spacing: .05em;
-    margin-top: 2px;
-}
-</style>
 
 <?php if (empty($sessions)): ?>
     <div class="select-empty">
@@ -121,4 +103,5 @@ $pageBreadcrumb = [
 ];
 $activeNav = 'interviews';
 $pageWide  = true;
+$pageStyles = ['css/pages/queue-session-select.css'];
 include VIEWS_PATH . '/layouts/app.php';

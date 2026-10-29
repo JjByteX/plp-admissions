@@ -20,7 +20,7 @@ if (Auth::role() === ROLE_SSO) {
 $db      = db();
 $staffId = Auth::id();
 $isAdmin = Auth::role() === ROLE_ADMIN;
-$today   = date('Y-m-d');
+$today   = now_date();
 
 // Stats for landing cards
 $upcomingStmt = $db->prepare(

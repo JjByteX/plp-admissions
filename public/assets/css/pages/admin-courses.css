@@ -1,0 +1,6 @@
+/* Inline row edit: view and edit controls share the cell; the row class picks one. */
+.cell-edit, .row-edit-form { display: none; }
+tr.is-editing .cell-view { display: none; }
+tr.is-editing .cell-edit { display: block; }
+tr.is-editing .row-edit-form { display: flex; align-items: center; justify-content: center; gap: var(--space-2); }
+.auto-table tbody tr.is-editing td { background: var(--bg-subtle); }

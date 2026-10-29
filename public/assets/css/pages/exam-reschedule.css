@@ -1,0 +1,4 @@
+.page:has(.sa-table-card) { display:flex; flex-direction:column; }
+.sa-table-card { flex:1; min-height:300px; display:flex; flex-direction:column; }
+.sa-table-card table { flex:0 0 auto; }
+.sa-table-card .sa-filler { flex:1; border-top:1px solid var(--border); }

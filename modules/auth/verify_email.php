@@ -27,7 +27,7 @@ if (!$user) {
 // Already verified (rare race) — just log them in.
 if (!empty($user['email_verified'])) {
     Auth::login($user);
-    audit_log('email_verified_idempotent', "User #{$user['id']} hit verify link but was already verified", 'user', (int) $user['id']);
+    audit_log(AuditAction::EMAIL_VERIFIED_IDEMPOTENT, "User #{$user['id']} hit verify link but was already verified", 'user', (int) $user['id']);
     header('Location: ' . Auth::homeUrl()); exit;
 }
 
@@ -38,7 +38,7 @@ try {
 } catch (\Throwable $e) {
     error_log('Welcome email failed after verify: ' . $e->getMessage());
 }
-audit_log('email_verified', "User #{$user['id']} ({$user['email']}) verified via link", 'user', (int) $user['id']);
+audit_log(AuditAction::EMAIL_VERIFIED, "User #{$user['id']} ({$user['email']}) verified via link", 'user', (int) $user['id']);
 
 Auth::login($user);
 

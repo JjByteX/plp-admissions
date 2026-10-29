@@ -25,7 +25,7 @@ csrf_check();
 $db      = db();
 $staffId = Auth::id();
 $role    = Auth::role();
-$action  = $_POST['action'] ?? '';
+$action  = post_str('action');
 
 // ── Close Admissions (Admin only) ──────────────────────────────
 // Bulk-reject every applicant in the current cycle who hasn't been
@@ -75,7 +75,7 @@ if ($action === 'close_admissions') {
         $upsert->execute([$appId, $reason, $staffId]);
         $upStatus->execute([$appId]);
         notify_stage_transition($appId, 'released', 'Result: Declined');
-        audit_log('admission_close_admissions',
+        audit_log(AuditAction::ADMISSION_CLOSE_ADMISSIONS,
             "Closed admissions: applicant {$appId} bulk-rejected. Reason: {$reason}",
             'applicant', $appId);
         $count++;

@@ -39,7 +39,7 @@ function reset_send(?array $user): void
     if (!send_reset_code_email($user['email'], $code)) {
         error_log('Password reset email failed for user ' . (int) $user['id']);
     }
-    audit_log('password_reset_requested', 'Reset code sent', 'user', (int) $user['id']);
+    audit_log(AuditAction::PASSWORD_RESET_REQUESTED, 'Reset code sent', 'user', (int) $user['id']);
 }
 
 if (($action = require_post_action('send')) !== null) {
@@ -192,7 +192,7 @@ ob_start();
             <form method="POST" action="<?= url('/forgot-password') ?>" class="auth-inline-form">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="resend">
-                <button type="submit" id="resend-btn" class="auth-link-btn" <?= $resendIn > 0 ? 'disabled' : '' ?>>
+                <button type="submit" id="resend-btn" class="auth-link-btn" data-resend-in="<?= (int) $resendIn ?>" <?= $resendIn > 0 ? 'disabled' : '' ?>>
                     <span id="resend-label"><?= $resendIn > 0 ? 'Resend in ' . (int) $resendIn . 's' : 'Resend code' ?></span>
                 </button>
             </form>
@@ -202,25 +202,6 @@ ob_start();
             <a class="auth-link" href="<?= url('/forgot-password?new=1') ?>">Use a different email</a>
         </div>
 
-        <script>
-        (function () {
-            var btn = document.getElementById('resend-btn');
-            var label = document.getElementById('resend-label');
-            var left = <?= (int) $resendIn ?>;
-            if (!btn || left <= 0) return;
-            btn.disabled = true;
-            var t = setInterval(function () {
-                left -= 1;
-                if (left <= 0) {
-                    clearInterval(t);
-                    btn.disabled = false;
-                    label.textContent = 'Resend code';
-                } else {
-                    label.textContent = 'Resend in ' + left + 's';
-                }
-            }, 1000);
-        })();
-        </script>
 
     <?php endif; ?>
 
@@ -232,4 +213,7 @@ ob_start();
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Reset Password';
+if ($step !== 1) {
+    $pageScripts = ['js/pages/auth-resend.js'];
+}
 include VIEWS_PATH . '/layouts/auth.php';

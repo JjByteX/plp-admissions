@@ -10,8 +10,8 @@ Auth::requireRole(ROLE_SSO, ROLE_ADMIN);
 csrf_check();
 
 $db     = db();
-$id     = (int)($_GET['id'] ?? 0);
-$action = $_POST['action'] ?? '';
+$id     = get_int('id');
+$action = post_str('action');
 $staffId = Auth::id();
 $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
     && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
@@ -59,7 +59,7 @@ switch ($action) {
             'UPDATE applicants SET overall_status=\'submitted\' WHERE id=? AND overall_status=\'exam\''
         )->execute([$applicantId]);
 
-        audit_log('document_unapproved', "Undid approval for document ID {$id} (applicant {$applicantId})", 'document', $id);
+        audit_log(AuditAction::DOCUMENT_UNAPPROVED, "Undid approval for document ID {$id} (applicant {$applicantId})", 'document', $id);
         ok('Approval reverted.', '/staff/applicants/' . $applicantId);
         break;
 
@@ -83,7 +83,7 @@ switch ($action) {
             auto_assign_exam_slot($id);
         }
 
-        audit_log('documents_approved_all', "Approved all {$affected} document(s) for applicant {$id}", 'applicant', $id);
+        audit_log(AuditAction::DOCUMENTS_APPROVED_ALL, "Approved all {$affected} document(s) for applicant {$id}", 'applicant', $id);
         $msg = "{$affected} document" . ($affected != 1 ? 's' : '') . " approved.";
         if ($skipped > 0) {
             $msg .= " {$skipped} AI-flagged document" . ($skipped != 1 ? 's were' : ' was') . " skipped. Confirm the category first.";
@@ -140,7 +140,7 @@ switch ($action) {
             )->execute([$id]);
         }
 
-        audit_log('undo_approve_all', "Undid bulk approval for applicant {$id} ({$reverted} docs reverted)", 'applicant', $id);
+        audit_log(AuditAction::UNDO_APPROVE_ALL, "Undid bulk approval for applicant {$id} ({$reverted} docs reverted)", 'applicant', $id);
         $undoReply(true, "Reverted {$reverted} document" . ($reverted != 1 ? 's' : '') . ".");
         break;
 
@@ -160,7 +160,7 @@ switch ($action) {
         $aiFlags = doc_ai_flags($db, (int)$applicantId);
         if (isset($aiFlags[$id])) {
             doc_ai_confirm($db, $aiFlags[$id]['validation_id'], 'approved', $staffId);
-            audit_log('doc_category_ok', "Category confirmed by approval of document ID {$id} (applicant {$applicantId})", 'document', $id);
+            audit_log(AuditAction::DOC_CATEGORY_OK, "Category confirmed by approval of document ID {$id} (applicant {$applicantId})", 'document', $id);
         }
 
         // Auto-advance to exam stage if all documents are now approved
@@ -179,7 +179,7 @@ switch ($action) {
         }
 
         Session::flash('success', 'Document approved.');
-        audit_log('document_approved', "Approved document ID {$id} for applicant {$applicantId}", 'document', $id);
+        audit_log(AuditAction::DOCUMENT_APPROVED, "Approved document ID {$id} for applicant {$applicantId}", 'document', $id);
         redirect('/staff/applicants/' . $applicantId);
         break;
 
@@ -195,7 +195,7 @@ switch ($action) {
         if (!isset($aiFlags[$id])) $flagReply(false, 'This document is not flagged.', $aid);
 
         doc_ai_confirm($db, $aiFlags[$id]['validation_id'], 'approved', $staffId);
-        audit_log('doc_category_ok', "Confirmed category of document ID {$id} ({$doc['doc_type']}) for applicant {$aid}", 'document', $id);
+        audit_log(AuditAction::DOC_CATEGORY_OK, "Confirmed category of document ID {$id} ({$doc['doc_type']}) for applicant {$aid}", 'document', $id);
         $flagReply(true, 'Category confirmed.', $aid);
         break;
 
@@ -276,7 +276,7 @@ switch ($action) {
                 '/student/documents'
             );
         }
-        audit_log('doc_type_changed', "Moved document ID {$id} from {$doc['doc_type']} to {$target} for applicant {$aid}", 'document', $id);
+        audit_log(AuditAction::DOC_TYPE_CHANGED, "Moved document ID {$id} from {$doc['doc_type']} to {$target} for applicant {$aid}", 'document', $id);
         $flagReply(true, "Moved to {$tgtLabel}.", $aid);
         break;
 
@@ -305,7 +305,7 @@ switch ($action) {
         notify_stage_transition($id, 'exam');
         auto_assign_exam_slot($id);
 
-        audit_log('applicant_advanced_exam', "Manually advanced applicant {$id} to exam stage", 'applicant', $id);
+        audit_log(AuditAction::APPLICANT_ADVANCED_EXAM, "Manually advanced applicant {$id} to exam stage", 'applicant', $id);
         ok('Applicant advanced to exam stage.', '/staff/applicants/' . $id);
         break;
 
@@ -354,7 +354,7 @@ switch ($action) {
         }
 
         Session::flash('success', 'Resubmission requested. Student has been notified.');
-        audit_log('document_resubmission_requested', "Requested resubmission for document ID {$id} - {$remarks}", 'document', $id);
+        audit_log(AuditAction::DOCUMENT_RESUBMISSION_REQUESTED, "Requested resubmission for document ID {$id} - {$remarks}", 'document', $id);
         redirect('/staff/applicants/' . $applicantId);
         break;
 

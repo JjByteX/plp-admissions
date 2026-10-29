@@ -1,0 +1,9 @@
+@keyframes resToolbarSlideUp {
+    from { opacity:0; transform:translateX(-50%) translateY(16px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+@keyframes resUndoSlideUp {
+    from { opacity:0; transform:translateX(-50%) translateY(20px); }
+    to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+tr.res-bulk-row.res-selected, tr.res-bulk-row.res-selected td { background:var(--accent-muted); }

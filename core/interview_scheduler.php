@@ -173,7 +173,7 @@ function slot_is_available(array $slot): bool
 {
     if (($slot['status'] ?? '') !== 'open') return false;
 
-    $today   = date('Y-m-d');
+    $today   = now_date();
     $nowTime = date('H:i:s');
     $date    = (string)($slot['slot_date'] ?? '');
     if ($date === '' || $date < $today) return false;
@@ -250,7 +250,7 @@ function assign_interview_slot(int $applicantId, ?int $actorUserId = null, ?int 
             return null;
         }
 
-        $today   = date('Y-m-d');
+        $today   = now_date();
         $nowTime = date('H:i:s');
 
         if ($forceSlotId !== null && $forceSlotId > 0) {

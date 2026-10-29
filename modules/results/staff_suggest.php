@@ -9,7 +9,7 @@ Auth::requireRole(ROLE_DEAN, ROLE_ADMIN);
 csrf_check();
 
 $db          = db();
-$applicantId = (int)($_GET['id'] ?? 0);
+$applicantId = get_int('id');
 $course      = post_str('suggest_course');
 $note        = post_str('suggest_note');
 $staffId     = Auth::id();
@@ -63,7 +63,7 @@ $db->prepare(
 ]);
 
 audit_log(
-    'course_suggestion',
+    AuditAction::COURSE_SUGGESTION,
     "Suggested '{$course}' for applicant {$applicantId} (was '{$app['course_applied']}')",
     'applicant',
     $applicantId

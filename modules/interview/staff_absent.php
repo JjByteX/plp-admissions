@@ -80,7 +80,7 @@ if (($action = require_post_action()) !== null) {
             $department = course_to_department((string)($deptRow['course_applied'] ?? ''));
         }
 
-        $today   = date('Y-m-d');
+        $today   = now_date();
         $nowTime = date('H:i:s');
 
         // ------------------------------------------------------------
@@ -231,7 +231,7 @@ if (($action = require_post_action()) !== null) {
 
         if ($newSlot && $newSlotInfo) {
             audit_log(
-                'reschedule_request_approved',
+                AuditAction::RESCHEDULE_REQUEST_APPROVED,
                 "Approved reschedule request #{$requestId} for applicant #{$applicantId} → slot #{$newSlot}",
                 'applicant', $applicantId
             );
@@ -271,7 +271,7 @@ if (($action = require_post_action()) !== null) {
                   WHERE id = ?"
             )->execute([$staffId, $denyReason !== '' ? $denyReason : null, $requestId]);
 
-            audit_log('reschedule_request_denied',
+            audit_log(AuditAction::RESCHEDULE_REQUEST_DENIED,
                 "Denied reschedule request #{$requestId} for applicant #{$req['applicant_id']}"
                 . ($denyReason !== '' ? " - {$denyReason}" : ''),
                 'applicant', (int)$req['applicant_id']);
@@ -483,7 +483,7 @@ $page = $result['current_page'];
 // ----------------------------------------------------------------
 // Load open slots (used as reschedule targets)
 // ----------------------------------------------------------------
-$today   = date('Y-m-d');
+$today   = now_date();
 $nowTime = date('H:i:s');
 $stmt = $db->prepare(
     "SELECT s.id, s.slot_date, s.slot_time, s.end_time, s.department, s.capacity,
@@ -551,12 +551,6 @@ $absUrl = function (array $merge = []) use ($activeTab, $search, $filterDept, $f
 ob_start();
 ?>
 
-<style>
-.page:has(.sa-table-card) { display:flex; flex-direction:column; }
-.sa-table-card { flex:1; min-height:300px; display:flex; flex-direction:column; }
-.sa-table-card table { flex:0 0 auto; }
-.sa-table-card .sa-filler { flex:1; border-top:1px solid var(--border); }
-</style>
 
 <?php foreach ($errors as $err): ?>
     <div class="alert alert-error" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($err) ?></div>
@@ -726,20 +720,6 @@ if (!$isDean) {
 
 </div><!-- /.auto-table-wrap -->
 
-<?php if ($canReschedule): ?>
-<script>
-    (function () {
-        var selectAll = document.getElementById('select-all');
-        if (selectAll) {
-            selectAll.addEventListener('change', function () {
-                document.querySelectorAll('.js-select-row').forEach(function (cb) {
-                    cb.checked = selectAll.checked;
-                });
-            });
-        }
-    })();
-</script>
-<?php endif; ?>
 
 <?php else: ?>
 <!-- ============================================================
@@ -909,5 +889,9 @@ $pageTitle = $activeTab === 'requests' ? 'Reschedule Requests' : 'Absent Student
 $pageBreadcrumb = [['label' => 'Interview Sessions', 'to' => '/staff/interviews']];
 $pageActions = ($canReschedule ? ui_button('Cancel a slot (bulk move)', ['href' => url('/staff/interviews/cancel-slot'), 'variant' => 'ghost', 'icon' => 'ic_fluent_arrow_right_24_regular', 'icon_pos' => 'after']) : '');
 $activeNav = $activeTab === 'requests' ? 'reschedule' : 'interviews';
+$pageStyles  = ['css/pages/interview-absent.css'];
+if ($canReschedule) {
+    $pageScripts = ['js/pages/interview-absent.js'];
+}
 $pageWide  = true; // table-heavy page - match staff_slots / staff_review / staff_manage
 include VIEWS_PATH . '/layouts/app.php';

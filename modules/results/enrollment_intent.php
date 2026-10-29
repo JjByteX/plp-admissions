@@ -15,7 +15,7 @@ csrf_check();
 
 $db     = db();
 $userId = Auth::id();
-$action = $_POST['action'] ?? '';   // 'withdraw' | 'confirm_enrollment'
+$action = post_str('action');   // 'withdraw' | 'confirm_enrollment'
 
 // ─────────────────────────────────────────────────────────────
 // ENROLLMENT CONFIRMATION
@@ -37,7 +37,7 @@ if ($action === 'confirm_enrollment') {
     } else {
         $db->prepare("UPDATE admission_results SET enrollment_intent = 'confirmed' WHERE id = ?")
             ->execute([$row['result_id']]);
-        audit_log('enrollment_confirmed', "Applicant {$row['id']} confirmed enrollment", 'applicant', $row['id']);
+        audit_log(AuditAction::ENROLLMENT_CONFIRMED, "Applicant {$row['id']} confirmed enrollment", 'applicant', $row['id']);
         // Pass the applicant to Enrollment first, so the one confirmation message can
         // carry the visit date Enrollment booked. A failed send stays pending for
         // staff to retry and never blocks the confirmation.
@@ -88,7 +88,7 @@ if ($action === 'withdraw') {
              WHERE id = ?"
         )->execute([$reason ?: null, $applicant['id']]);
 
-        audit_log('application_withdrawn',
+        audit_log(AuditAction::APPLICATION_WITHDRAWN,
             "Applicant {$applicant['id']} withdrew their application" . ($reason ? ": {$reason}" : ''),
             'applicant', $applicant['id']
         );

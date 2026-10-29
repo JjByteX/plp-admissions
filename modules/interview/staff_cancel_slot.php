@@ -152,7 +152,7 @@ if (($action = require_post_action()) !== null) {
 // ----------------------------------------------------------------
 // GET — list upcoming slots with bookings + replacement choices
 // ----------------------------------------------------------------
-$today   = date('Y-m-d');
+$today   = now_date();
 $nowTime = date('H:i:s');
 
 $stmt = $db->prepare(
@@ -186,7 +186,7 @@ foreach ($slots as $s) {
 // Search — narrows the slots to cancel by interviewer, department, location
 // or date. $replacements stays whole: every row's "Move everyone to…" list
 // is built from all of them, whatever the search says.
-$search = trim((string)($_GET['q'] ?? ''));
+$search = get_str('q');
 if ($search !== '') {
     $needle      = mb_strtolower($search);
     $cancellable = array_values(array_filter($cancellable, function (array $s) use ($needle): bool {

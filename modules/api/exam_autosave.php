@@ -18,8 +18,8 @@ if (!$applicant) {
     json_response(['ok' => false, 'error' => 'No applicant']);
 }
 
-$examId  = (int)($_POST['exam_id'] ?? 0);
-$slotId  = (int)($_POST['slot_id'] ?? 0);
+$examId  = post_int('exam_id');
+$slotId  = post_int('slot_id');
 $answers = $_POST['answers'] ?? '{}';
 
 if (!$examId || !$slotId) {

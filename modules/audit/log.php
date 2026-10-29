@@ -14,9 +14,9 @@ $userId  = Auth::id();
 // ----------------------------------------------------------------
 // Filters
 // ----------------------------------------------------------------
-$filterAction = trim($_GET['action'] ?? '');
-$filterUser   = trim($_GET['user']   ?? '');
-$filterDate   = trim($_GET['date']   ?? '');
+$filterAction = get_str('action');
+$filterUser   = get_str('user');
+$filterDate   = get_str('date');
 $page         = max(1, (int)($_GET['page'] ?? 1));
 
 // Page size — driven by AutoPageSize (app.js): it measures how many
@@ -45,16 +45,16 @@ $perPage = max(3, min(100, $perPage));
 // Action categories for filter dropdown
 // ----------------------------------------------------------------
 $actionGroups = [
-    'Authentication' => ['login', 'logout', 'login_failed'],
-    'Documents'      => ['document_approved', 'document_rejected', 'applicant_advanced_exam'],
-    'Interview'      => ['interview_completed', 'interview_no_show', 'interview_started',
-                         'interview_notes_saved', 'interview_slot_deleted',
-                         'interview_slot_closed', 'interview_slot_reopened'],
-    'Results'        => ['admission_result'],
-    'Exam'           => ['exam_created', 'exam_updated', 'exam_activated'],
-    'Users'          => ['user_created', 'user_status_changed', 'user_password_reset', 'user_deleted'],
-    'Settings'       => ['settings_branding_updated', 'admin_password_changed',
-                         'school_year_changed', 'new_cycle_started'],
+    'Authentication' => [AuditAction::LOGIN, AuditAction::LOGOUT, AuditAction::LOGIN_FAILED],
+    'Documents'      => [AuditAction::DOCUMENT_APPROVED, AuditAction::DOCUMENT_REJECTED, AuditAction::APPLICANT_ADVANCED_EXAM],
+    'Interview'      => [AuditAction::INTERVIEW_COMPLETED, AuditAction::INTERVIEW_NO_SHOW, AuditAction::INTERVIEW_STARTED,
+                         AuditAction::INTERVIEW_NOTES_SAVED, AuditAction::INTERVIEW_SLOT_DELETED,
+                         AuditAction::INTERVIEW_SLOT_CLOSED, AuditAction::INTERVIEW_SLOT_REOPENED],
+    'Results'        => [AuditAction::ADMISSION_RESULT],
+    'Exam'           => [AuditAction::EXAM_CREATED, AuditAction::EXAM_UPDATED, AuditAction::EXAM_ACTIVATED],
+    'Users'          => [AuditAction::USER_CREATED, AuditAction::USER_STATUS_CHANGED, AuditAction::USER_PASSWORD_RESET, AuditAction::USER_DELETED],
+    'Settings'       => [AuditAction::SETTINGS_BRANDING_UPDATED, AuditAction::ADMIN_PASSWORD_CHANGED,
+                         AuditAction::SCHOOL_YEAR_CHANGED, AuditAction::NEW_CYCLE_STARTED],
 ];
 
 // ----------------------------------------------------------------

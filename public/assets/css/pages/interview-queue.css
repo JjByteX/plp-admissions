@@ -1,0 +1,53 @@
+@keyframes pulse-dot {
+    0%,100%{opacity:1;transform:scale(1)}
+    50%   {opacity:.5;transform:scale(1.3)}
+}
+
+/* Empty state only: stretch the card to fill the .page area. A populated
+   queue uses .auto-table-wrap (app.css) instead. */
+.page:has(.iq-table-card) { display:flex; flex-direction:column; }
+.iq-table-card { flex:1; min-height:300px; }
+
+/* Row tints by status, matches existing badge palette. */
+.iq-row-in-progress td { background: rgba(45,106,79,0.06); }
+.iq-row-no-show     td,
+.iq-row-completed   td { color: var(--text-tertiary); }
+
+.iq-name-cell      { font-weight: var(--weight-medium); }
+.iq-name-cell .sub {
+    display:block;
+    font-size:var(--text-xs);
+    color:var(--text-tertiary);
+    font-weight:var(--weight-regular);
+    margin-top:2px;
+}
+
+.iq-eval-summary {
+    font-size:var(--text-xs);
+    color:var(--text-tertiary);
+    max-width:240px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+/* Pass/Reject buttons inside the Evaluation modal */
+.btn-pass   { background: var(--success-bg, #d1fae5); color: var(--success, #15803d); border-color: var(--success, #15803d); }
+.btn-reject { background: var(--error-bg, #fee2e2);   color: var(--error, #b91c1c);     border-color: var(--error, #b91c1c); }
+
+.eval-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3) var(--space-5);
+    font-size: var(--text-sm);
+}
+.eval-details > div { min-width: 0; overflow-wrap: anywhere; }
+.eval-details .eval-full { grid-column: 1 / -1; }
+.eval-k {
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 2px;
+}
+@media (max-width: 480px) { .eval-details { grid-template-columns: 1fr; } }

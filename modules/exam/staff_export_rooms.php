@@ -42,10 +42,10 @@ $schoolName = school_setting('school_name', 'PLP Admissions');
 $schoolLogo = school_setting('school_logo', '');
 
 // ── Filters ────────────────────────────────────────────────
-$filterDate   = trim($_GET['date'] ?? '');
-$filterDept   = trim($_GET['dept'] ?? '');
-$filterSlotId = (int) ($_GET['slot'] ?? 0);
-$search       = trim($_GET['q'] ?? '');
+$filterDate   = get_str('date');
+$filterDept   = get_str('dept');
+$filterSlotId = get_int('slot');
+$search       = get_str('q');
 $format       = $_GET['format'] ?? 'html';
 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterDate)) {
@@ -124,7 +124,7 @@ if ($format === 'csv' || $format === 'print') {
 // ── CSV branch ─────────────────────────────────────────────
 if ($format === 'csv') {
     $filename = 'exam-room-assignments-'
-        . ($filterDate !== '' ? $filterDate : date('Y-m-d'))
+        . ($filterDate !== '' ? $filterDate : now_date())
         . '.csv';
 
     $csvRows = (function () use ($slots, $rosterBySlot) {
@@ -153,13 +153,13 @@ if ($format === 'csv') {
         ['Date', 'Time', 'College', 'Room', 'Capacity', 'Seat #', 'Name (Surname, First Middle)'],
         $csvRows
     );
-    audit_log('exam_rooms_export_csv', 'Exported room assignments as CSV', null, null);
+    audit_log(AuditAction::EXAM_ROOMS_EXPORT_CSV, 'Exported room assignments as CSV', null, null);
     exit;
 }
 
 // ── Print branch: standalone per-room sheets ───────────────
 if ($format === 'print') {
-    audit_log('exam_rooms_export_html', 'Viewed exam room assignments printable view', null, null);
+    audit_log(AuditAction::EXAM_ROOMS_EXPORT_HTML, 'Viewed exam room assignments printable view', null, null);
 
     // Resolve school logo to a usable URL (handles both absolute and relative paths)
     $logoUrl = '';
@@ -181,109 +181,15 @@ if ($format === 'print') {
         'slot'   => $filterSlotId,
         'format' => 'csv',
     ]));
+    $sheetAccent = school_setting('accent_color', '#2d6a4f');
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="--accent: <?= e($sheetAccent) ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?= e($pageTitleSheet) ?> - <?= e($schoolName) ?></title>
-<style>
-  /* ── Screen styles ──────────────────────────────────────── */
-  :root {
-        --radius: 8px;
-    --ink: #111827;
-    --muted: #6b7280;
-    --line: #d1d5db;
-    --accent: <?= e(school_setting('accent_color', '#2d6a4f')) ?>;
-    --bg: #f9fafb;
-  }
-  * { box-sizing: border-box; }
-    :where(*) { border-radius:var(--radius) !important; }
-  body { margin:0; padding:0; background:var(--bg); color:var(--ink);
-         font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
-         font-size: 12pt; line-height: 1.45; }
-  .toolbar {
-    position: sticky; top: 0; z-index: 5;
-    background: #fff; border-bottom: 1px solid var(--line);
-    padding: 12px 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
-  }
-  .toolbar .left { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  .toolbar .right { margin-left:auto; display:flex; gap:8px; }
-  .btn {
-    display:inline-flex; align-items:center; gap:6px;
-    padding:8px 16px; border:1px solid var(--line); border-radius:var(--radius);
-    background:#fff; color:var(--ink); cursor:pointer;
-    font-size: 11pt; font-family: inherit; text-decoration: none;
-  }
-  .btn-primary { background: var(--accent); color:#fff; border-color: var(--accent); }
-  .btn:hover { filter: brightness(.96); }
-  select, input[type=date] {
-    padding:7px 10px; border:1px solid var(--line); border-radius:var(--radius);
-    background:#fff; font-size:11pt; font-family: inherit; color: var(--ink);
-  }
-  /* Pagewrap sized to render close to actual A4 width (210mm ≈ 794px @ 96dpi).
-     Inner padding mirrors print margins so on-screen preview matches paper. */
-  .pagewrap { max-width: 800px; margin: 32px auto; padding: 0 16px; }
-  .empty { padding: 64px 24px; text-align:center; color: var(--muted); }
-  .room-sheet {
-    background:#fff; padding: 32px 40px 40px;
-    margin-bottom: 24px; border:1px solid var(--line); border-radius:var(--radius);
-  }
-  .sheet-header {
-    display:flex; align-items:center; gap:20px;
-    border-bottom: 2px solid var(--accent); padding-bottom: 16px; margin-bottom: 18px;
-  }
-  .sheet-header img { width:56px; height:56px; object-fit: contain; flex-shrink:0; }
-  .sheet-header .meta { flex:1; }
-  .sheet-header h1 { margin:0; font-size: 16pt; }
-  .sheet-header .school { margin:2px 0 0; font-size:10pt; color: var(--muted); }
-  .sheet-header .sy { margin:4px 0 0; font-size: 9pt; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
-  /* Asymmetric grid: College gets the most width (longest text);
-     Room slightly wider so the big number breathes. */
-  .room-info {
-    display:grid;
-    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.1fr) minmax(0, 0.9fr) minmax(0, 1.3fr);
-    gap: 12px;
-    margin-bottom: 20px; padding: 14px 16px;
-    background: #f3f4f6; border-radius: var(--radius);
-  }
-  .room-info .label { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-  .room-info .value { font-size: 12pt; font-weight: 600; margin-top: 2px; line-height: 1.25; }
-  .room-info .value.lg { font-size: 18pt; color: var(--accent); }
-  table.roster { width:100%; border-collapse: collapse; }
-  table.roster th, table.roster td {
-    padding: 8px 10px; border-bottom: 1px solid var(--line);
-    font-size: 11pt; text-align: left; vertical-align: top;
-  }
-  table.roster th {
-    font-size: 9pt; text-transform: uppercase; letter-spacing: .06em;
-    color: var(--muted); background: #f9fafb; font-weight: 600;
-  }
-  table.roster td.num { width: 36px; color: var(--muted); text-align: right; }
-  table.roster td.name { letter-spacing: .01em; }
-  table.roster .empty-row td { color: var(--muted); padding: 24px 12px; text-align:center; }
-
-  /* ── Print styles ───────────────────────────────────────── */
-  @media print {
-    body { background: #fff; }
-    .toolbar, .no-print { display: none !important; }
-    .pagewrap { margin: 0; padding: 0; max-width: none; }
-    .room-sheet {
-    border: none; border-radius: var(--radius); padding: 0;
-      margin: 0; page-break-after: always;
-    }
-    .room-sheet:last-child { page-break-after: auto; }
-    @page { size: A4; margin: 18mm 16mm; }
-  }
-    @media (max-width:600px) {
-        .toolbar { padding:10px 12px; }
-        .toolbar .right { margin-left:0; }
-        .pagewrap { margin:16px auto; padding:0 10px; }
-        .room-sheet { padding:20px 16px; }
-        .room-info { grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }
-    }
-</style>
+<link rel="stylesheet" href="<?= e(asset('css/pages/exam-export-rooms.css')) ?>">
 </head>
 <body>
 
@@ -400,13 +306,7 @@ if ($format === 'print') {
 
 </div>
 
-<script>
-document.querySelectorAll('.sheet-header img').forEach(function (img) {
-    function hide() { img.style.display = 'none'; }
-    img.addEventListener('error', hide);
-    if (img.complete && img.naturalWidth === 0) { hide(); }
-});
-</script>
+<script src="<?= e(asset('js/pages/exam-export-rooms.js')) ?>"></script>
 </body>
 </html>
 <?php

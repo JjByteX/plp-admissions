@@ -64,7 +64,7 @@ if ($schoolLogo !== '') {
     $logoUrl = str_starts_with($schoolLogo, 'http') ? $schoolLogo : url('/' . $schoolLogo);
 }
 
-audit_log('admission_print', 'Viewed printable admission record: ' . $fullName, 'applicant', $applicantId);
+audit_log(AuditAction::ADMISSION_PRINT, 'Viewed printable admission record: ' . $fullName, 'applicant', $applicantId);
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
@@ -136,12 +136,6 @@ audit_log('admission_print', 'Viewed printable admission record: ' . $fullName, 
 </div>
 
 <script src="<?= e(asset('js/jquery.min.js')) ?>"></script>
-<script>
-$('#printBtn').on('click', function () { window.print(); });
-// Drop the logo if it fails to load (also when it already failed before this ran).
-$('.pr-logo').on('error', function () { $(this).remove(); }).each(function () {
-    if (this.complete && !this.naturalWidth) { $(this).remove(); }
-});
-</script>
+<script src="<?= e(asset('js/pages/print-admission.js')) ?>"></script>
 </body>
 </html>

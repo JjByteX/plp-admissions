@@ -1,0 +1,11 @@
+.theme-pill[data-theme='dark'] { background: var(--accent) !important; }
+.theme-pill[data-theme='dark'] div { transform: translateX(14px) !important; }
+
+
+/* Embedded settings modal (?embed=1&section=x): show only the asked-for section. */
+body[data-embed-section="about"] [data-settings-section]:not([data-settings-section="about"]) { display: none !important; }
+body[data-embed-section="appearance"] [data-settings-section]:not([data-settings-section="appearance"]) { display: none !important; }
+body[data-embed-section="branding"] [data-settings-section]:not([data-settings-section="branding"]) { display: none !important; }
+body[data-embed-section="password"] [data-settings-section]:not([data-settings-section="password"]) { display: none !important; }
+body[data-embed-section="profile"] [data-settings-section]:not([data-settings-section="profile"]) { display: none !important; }
+body[data-embed-section]:not([data-embed-section="about"]):not([data-embed-section="appearance"]):not([data-embed-section="branding"]):not([data-embed-section="password"]):not([data-embed-section="profile"]) [data-settings-section] { display: none !important; }

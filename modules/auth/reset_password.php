@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         clear_login_attempts($resetRow['email']);
         Auth::rememberRevokeAll((int) $resetRow['user_id']);
-        audit_log('password_reset_done', 'Password reset with emailed code', 'user', (int) $resetRow['user_id']);
+        audit_log(AuditAction::PASSWORD_RESET_DONE, 'Password reset with emailed code', 'user', (int) $resetRow['user_id']);
 
         // ponytail: other open sessions live until idle timeout (no user_id on `sessions`). Upgrade: add the column.
         unset($_SESSION['reset_ok'], $_SESSION['reset_email'], $_SESSION['reset_sent_at'], $_SESSION['reset_miss']);
@@ -109,40 +109,8 @@ ob_start();
 
 </div>
 
-<script>
-(function () {
-    var pw = document.getElementById('password');
-    var pc = document.getElementById('password_confirm');
-    var hint = document.getElementById('pw-hint');
-    var msg = document.getElementById('match-msg');
-    var btn = document.getElementById('reset-btn');
-
-    function update() {
-        var long = pw.value.length >= 8;
-        hint.textContent = long ? 'Length looks good.' : 'At least 8 characters (' + pw.value.length + '/8).';
-        hint.classList.toggle('ok', long);
-
-        var match = pc.value.length > 0 && pw.value === pc.value;
-        if (pc.value.length === 0) {
-            msg.textContent = '';
-            msg.classList.remove('ok', 'bad');
-        } else if (match) {
-            msg.textContent = 'Passwords match';
-            msg.classList.add('ok');
-            msg.classList.remove('bad');
-        } else {
-            msg.textContent = 'Passwords do not match';
-            msg.classList.add('bad');
-            msg.classList.remove('ok');
-        }
-        btn.disabled = !(long && match);
-    }
-    pw.addEventListener('input', update);
-    pc.addEventListener('input', update);
-    update();
-})();
-</script>
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'New Password';
+$pageScripts = ['js/pages/auth-reset-password.js'];
 include VIEWS_PATH . '/layouts/auth.php';

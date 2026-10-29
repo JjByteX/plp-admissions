@@ -122,7 +122,7 @@ if ($user) {
         google_fail('This account cannot sign in. Contact the admissions office.');
     }
     Auth::login($user, $remember);
-    audit_log('login_google', "Google login: {$user['email']}", 'user', (int) $user['id']);
+    audit_log(AuditAction::LOGIN_GOOGLE, "Google login: {$user['email']}", 'user', (int) $user['id']);
     header('Location: ' . Auth::homeUrl());
     exit;
 }

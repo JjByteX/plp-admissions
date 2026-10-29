@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
             auto_assign_exam_slot($aid);
         }
     }
-    audit_log('bulk_approve_selected', "Bulk-approved docs for {$approved} applicant(s), {$advanced} advanced to exam, {$confirmed} AI-flagged categories confirmed");
+    audit_log(AuditAction::BULK_APPROVE_SELECTED, "Bulk-approved docs for {$approved} applicant(s), {$advanced} advanced to exam, {$confirmed} AI-flagged categories confirmed");
     $flashMsg = "Approved documents for {$approved} applicant(s). {$advanced} advanced to exam.";
     if ($confirmed > 0) {
         $flashMsg .= " {$confirmed} AI-flagged document" . ($confirmed != 1 ? 's' : '') . ' approved with the category confirmed.';
@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
 // ----------------------------------------------------------------
 
 // Per-applicant view?
-$applicantId = (int)($_GET['id'] ?? 0);
+$applicantId = get_int('id');
 
 if ($applicantId) {
     // ---- Single applicant document review ----
@@ -484,309 +484,16 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
     </div>
 </div>
 
-<style>
-.fv-ctrl-btn {
-    display:flex;align-items:center;justify-content:center;
-    width:var(--control-height);height:var(--control-height);border-radius:var(--radius);
-    border:1px solid var(--border);background:var(--bg);
-    color:var(--text-secondary);cursor:pointer;
-    transition:background var(--transition-fast),color var(--transition-fast);
-}
-.fv-ctrl-btn:hover { background:var(--bg-overlay); color:var(--text-primary); }
-#fv-prev:hover, #fv-next:hover { background:var(--bg-overlay); color:var(--text-primary); }
-#fv-viewport[data-zoomed="true"]   { cursor:grab; }
-#fv-viewport[data-dragging="true"] { cursor:grabbing !important; }
-</style>
-
-<script>
-(function(){
-    var _files=[], _idx=0, _scale=1, _tx=0, _ty=0;
-    var _drag=false, _ds={x:0,y:0}, _touch=null;
-    window._fvCurrentDocId = 0;
-
-    window.openFileViewer = function(idx, files) {
-        _files=files; _idx=idx; _scale=1; _tx=0; _ty=0;
-        _render();
-        document.getElementById('file-viewer-modal').style.display='flex';
-        document.body.style.overflow='hidden';
-        var h=document.getElementById('fv-hint');
-        if(h){ h.style.opacity='1'; setTimeout(function(){ h.style.opacity='0'; },2800); }
-    };
-
-    window.closeFileViewer = function() {
-        document.getElementById('file-viewer-modal').style.display='none';
-        document.body.style.overflow='';
-        document.getElementById('fv-transform-wrap').innerHTML='';
-    };
-
-    window.fvNavigate = function(d) {
-        var n=_idx+d;
-        if(n<0||n>=_files.length) return;
-        _idx=n; _scale=1; _tx=0; _ty=0; _render();
-    };
-
-    window.fvZoom = function(delta) {
-        _scale=Math.min(5,Math.max(0.5,_scale+delta));
-        if(_scale<=1){ _tx=0; _ty=0; }
-        _apply();
-    };
-
-    window.fvResetZoom = function() { _scale=1; _tx=0; _ty=0; _apply(); };
-
-    function _render() {
-        var f=_files[_idx];
-        if(!f) return;
-        var wrap=document.getElementById('fv-transform-wrap');
-        var isPdf=f.url.toLowerCase().split('?')[0].endsWith('.pdf');
-        if(isPdf){
-            wrap.innerHTML='<iframe src="'+f.url+'" style="width:100%;height:100%;border:none;background:var(--white);"></iframe>';
-        } else {
-            wrap.innerHTML='<img src="'+f.url+'" alt="Document preview" style="max-width:100%;max-height:100%;border-radius:var(--radius);box-shadow:var(--shadow-md);display:block;pointer-events:none;user-select:none;-webkit-user-drag:none;">';
-        }
-        document.getElementById('fv-label').textContent=f.label;
-        document.getElementById('fv-counter').textContent=(_idx+1)+' of '+_files.length;
-        var p=document.getElementById('fv-prev');
-        var n=document.getElementById('fv-next');
-        p.disabled=(_idx===0); p.style.opacity=(_idx===0)?'0.35':'1';
-        n.disabled=(_idx===_files.length-1); n.style.opacity=(_idx===_files.length-1)?'0.35':'1';
-        _apply();
-        _dots();
-        _updateActions(f);
-        var h=document.getElementById('fv-hint');
-        if(h){ h.style.opacity='1'; setTimeout(function(){ h.style.opacity='0'; },2800); }
-    }
-
-    function _updateActions(f) {
-        var approveForm = document.getElementById('fv-approve-form');
-        var resubmitBtn = document.getElementById('fv-resubmit-btn');
-        var statusMsg   = document.getElementById('fv-status-msg');
-        window._fvCurrentDocId = f.doc_id || 0;
-
-        if (f.status === 'uploaded' || f.status === 'under_review') {
-            approveForm.action = '<?= url('/staff/documents/') ?>' + f.doc_id;
-            approveForm.style.display = '';
-            resubmitBtn.style.display = '';
-            statusMsg.style.display = 'none';
-        } else {
-            approveForm.style.display = 'none';
-            resubmitBtn.style.display = 'none';
-            statusMsg.style.display = '';
-            if (f.status === 'approved') {
-                statusMsg.textContent = 'This document has been approved.';
-            } else if (f.status === 'rejected') {
-                statusMsg.textContent = 'Resubmission requested for this document.';
-            } else {
-                statusMsg.textContent = '';
-                statusMsg.style.display = 'none';
-            }
-        }
-    }
-
-    function _apply() {
-        var w=document.getElementById('fv-transform-wrap');
-        w.style.transform='translate('+_tx+'px,'+_ty+'px) scale('+_scale+')';
-        document.getElementById('fv-zoom-label').textContent=Math.round(_scale*100)+'%';
-        var vp=document.getElementById('fv-viewport');
-        vp.dataset.zoomed=(_scale>1)?'true':'false';
-    }
-
-    function _dots() {
-        var c=document.getElementById('fv-dots');
-        c.innerHTML='';
-        _files.forEach(function(f,i){
-            var b=document.createElement('button');
-            b.type='button';
-            b.style.cssText='width:8px;height:8px;border-radius:50%;border:none;padding:0;cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s;';
-            b.style.background=(i===_idx)?'var(--accent)':'var(--border-strong)';
-            b.style.transform=(i===_idx)?'scale(1.35)':'scale(1)';
-            b.title=f.label;
-            b.onclick=function(){ _idx=i; _scale=1; _tx=0; _ty=0; _render(); };
-            c.appendChild(b);
-        });
-    }
-
-    // Pan
-    document.addEventListener('DOMContentLoaded',function(){
-        var vp=document.getElementById('fv-viewport');
-        vp.addEventListener('mousedown',function(e){
-            if(_scale<=1) return;
-            _drag=true; _ds={x:e.clientX-_tx,y:e.clientY-_ty};
-            vp.dataset.dragging='true'; e.preventDefault();
-        });
-        window.addEventListener('mousemove',function(e){
-            if(!_drag) return;
-            _tx=e.clientX-_ds.x; _ty=e.clientY-_ds.y; _apply();
-        });
-        window.addEventListener('mouseup',function(){
-            if(_drag){ _drag=false; document.getElementById('fv-viewport').dataset.dragging='false'; }
-        });
-        vp.addEventListener('touchstart',function(e){
-            if(_scale<=1) return;
-            var t=e.touches[0]; _touch={x:t.clientX-_tx,y:t.clientY-_ty}; e.preventDefault();
-        },{passive:false});
-        vp.addEventListener('touchmove',function(e){
-            if(!_touch) return;
-            var t=e.touches[0]; _tx=t.clientX-_touch.x; _ty=t.clientY-_touch.y; _apply(); e.preventDefault();
-        },{passive:false});
-        vp.addEventListener('touchend',function(){ _touch=null; });
-        vp.addEventListener('wheel',function(e){
-            e.preventDefault();
-            var d=e.deltaY>0?-0.15:0.15;
-            _scale=Math.min(5,Math.max(0.5,_scale+d));
-            if(_scale<=1){ _tx=0; _ty=0; }
-            _apply();
-        },{passive:false});
-        // Click backdrop to close
-        document.getElementById('file-viewer-modal').addEventListener('click',function(e){
-            if(e.target===this) closeFileViewer();
-        });
-    });
-
-    // Keyboard
-    document.addEventListener('keydown',function(e){
-        if(document.getElementById('file-viewer-modal').style.display!=='flex') return;
-        if(e.key==='Escape') closeFileViewer();
-        if(e.key==='ArrowLeft') fvNavigate(-1);
-        if(e.key==='ArrowRight') fvNavigate(1);
-        if(e.key==='+'||e.key==='=') fvZoom(0.25);
-        if(e.key==='-') fvZoom(-0.25);
-        if(e.key==='0') fvResetZoom();
-    });
-})();
-</script>
-
-<script>
-// Phase 6: Category OK / Change type (jQuery). jQuery loads after this block,
-// so wait for DOMContentLoaded. The list is re-fetched after each action, so
-// no full page reload.
-document.addEventListener('DOMContentLoaded', function () {
-    var $ = window.jQuery;
-    if (!$) return;
-    var actionUrl = '<?= url('/staff/documents/') ?>';
-    var csrf = '<?= e(csrf_token()) ?>';
-
-    function refresh(msg, ok) {
-        $('#doc-review').load(window.location.href + ' #doc-review > *', function () {
-            if (!msg) return;
-            $('<div class="alert"></div>')
-                .addClass(ok ? 'alert-success' : 'alert-error')
-                .css('margin-bottom', 'var(--space-4)')
-                .text(msg)
-                .prependTo('#doc-review');
-        });
-    }
-    function send($flag, data) {
-        $flag.find('button, select').prop('disabled', true);
-        $.ajax({
-            url: actionUrl + $flag.data('doc'),
-            method: 'POST',
-            data: $.extend({ _csrf: csrf }, data),
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            dataType: 'json'
-        }).done(function (r) {
-            refresh(r.message, r.ok);
-        }).fail(function () {
-            refresh('Something went wrong. Please try again.', false);
-        });
-    }
-
-    $('#doc-review').on('click', '.js-cat-ok', function () {
-        send($(this).closest('.ai-flag'), { action: 'category_ok' });
-    });
-    $('#doc-review').on('click', '.js-change-type', function () {
-        var $flag = $(this).closest('.ai-flag');
-        var target = $flag.find('.js-target').val();
-        if (!target) { $flag.find('.js-target').focus(); return; }
-        send($flag, { action: 'change_type', target_slot: target });
-    });
-});
-</script>
-
-<script>
-function openResubmitModal(docId) {
-    document.getElementById('resubmit-form').action = '<?= url('/staff/documents/') ?>' + docId;
-    document.getElementById('resubmit-modal').style.display = 'flex';
-}
-
-// AJAX Approve All — fast, non-blocking
-function approveAllAjax() {
-    var btn = document.getElementById('approve-all-btn');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = 'Approving…';
-
-    var fd = new FormData();
-    fd.append('_csrf', '<?= e(csrf_token()) ?>');
-    fd.append('action', 'approve_all');
-
-    fetch('<?= url('/staff/documents/' . $applicantId) ?>', {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        body: fd
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.ok) {
-            window._lastApprovedIds = data.ids || [];
-            showUndoToast(data.message || 'All documents approved.');
-        } else {
-            ui.alert(data.message || 'Something went wrong.').then(function() { window.location.reload(); });
-        }
-    })
-    .catch(function() { window.location.reload(); });
-}
-
-// Undo toast
-function showUndoToast(msg) {
-    var existing = document.getElementById('undo-toast');
-    if (existing) existing.remove();
-
-    var toast = document.createElement('div');
-    toast.id = 'undo-toast';
-    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:12px 20px;display:flex;align-items:center;gap:12px;font-size:var(--text-sm);min-width:320px;animation:slideUp .25s ease';
-    toast.innerHTML = '<span style="flex:1">' + msg + '</span>'
-        + '<button onclick="undoApproveAll()" class="btn btn-secondary btn-sm">Undo</button>'
-        + '<button onclick="dismissToast()" class="btn btn-icon" aria-label="Dismiss">&times;</button>';
-    document.body.appendChild(toast);
-
-    window._undoToastTimer = setTimeout(function() {
-        dismissToast();
-        window.location.reload();
-    }, 6000);
-}
-
-function dismissToast() {
-    clearTimeout(window._undoToastTimer);
-    var t = document.getElementById('undo-toast');
-    if (t) t.remove();
-}
-
-function undoApproveAll() {
-    dismissToast();
-    var fd = new FormData();
-    fd.append('_csrf', '<?= e(csrf_token()) ?>');
-    fd.append('action', 'undo_approve_all');
-    (window._lastApprovedIds || []).forEach(function(id) { fd.append('doc_ids[]', id); });
-
-    fetch('<?= url('/staff/documents/' . $applicantId) ?>', {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        body: fd
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data && data.ok === false) return ui.alert(data.message || 'Could not undo.').then(function() { window.location.reload(); });
-        window.location.reload();
-    })
-    .catch(function() { window.location.reload(); });
-}
-</script>
-<style>
-@keyframes slideUp { from { opacity:0; transform:translateX(-50%) translateY(20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
-</style>
+<script>window.PAGE = <?= json_encode([
+    'docUrl'       => url('/staff/documents/'),
+    'applicantUrl' => url('/staff/documents/' . $applicantId),
+    'csrf'         => csrf_token(),
+], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;</script>
 
 
 <?php
+    $pageStyles  = ['css/pages/documents-review.css'];
+    $pageScripts = ['js/pages/documents-review.js'];
     $content   = ob_get_clean();
     $pageTitle = 'Review: ' . format_full_name($applicant);  
     $pageBreadcrumb = [['label' => 'Documents', 'to' => '/staff/applicants']];
@@ -809,7 +516,7 @@ $statusFilter = 'documents';                 // kept for filter-link URL backwar
 $reviewableStatuses = ['submitted', 'documents'];
 $typeFilter   = $_GET['type']   ?? '';
 $courseFilter = $_GET['course'] ?? '';
-$search       = trim($_GET['q'] ?? '');
+$search       = get_str('q');
 $sortCol      = $_GET['sort_col'] ?? 'applied';
 $sortDir      = strtolower($_GET['sort_dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
 $page         = max(1, (int)($_GET['page'] ?? 1));
@@ -1068,100 +775,11 @@ $sortParams = ['status' => $statusFilter, 'type' => $typeFilter, 'course' => $co
     <input type="hidden" name="action" value="bulk_approve_selected">
 </form>
 
-<style>
-@keyframes bulkToolbarSlideUp {
-    from { opacity:0; transform:translateX(-50%) translateY(16px); }
-    to   { opacity:1; transform:translateX(-50%) translateY(0); }
-}
-tr.bulk-row.bulk-selected { background:var(--accent-muted); }
-</style>
-
-<script>
-/* ── Bulk selection logic ──────────────────────────────── */
-function getSelectedIds() {
-    return Array.from(document.querySelectorAll('.bulk-check:checked')).map(cb => cb.value);
-}
-
-function bulkUpdateSelection() {
-    var ids     = getSelectedIds();
-    var count   = ids.length;
-    var toolbar = document.getElementById('bulk-toolbar');
-    var badge   = document.getElementById('bulk-count');
-    var allCb   = document.getElementById('bulk-select-all');
-    var total   = document.querySelectorAll('.bulk-check').length;
-
-    badge.textContent  = count;
-    toolbar.style.display = count > 0 ? 'flex' : 'none';
-    allCb.checked      = count > 0 && count === total;
-    allCb.indeterminate = count > 0 && count < total;
-
-    document.querySelectorAll('.bulk-row').forEach(function(tr) {
-        var cb = tr.querySelector('.bulk-check');
-        if (cb && cb.checked) { tr.classList.add('bulk-selected'); }
-        else { tr.classList.remove('bulk-selected'); }
-    });
-}
-
-function bulkToggleAll(masterCb) {
-    document.querySelectorAll('.bulk-check').forEach(function(cb) {
-        cb.checked = masterCb.checked;
-    });
-    bulkUpdateSelection();
-}
-
-function bulkClearSelection() {
-    document.getElementById('bulk-select-all').checked = false;
-    document.querySelectorAll('.bulk-check').forEach(function(cb) { cb.checked = false; });
-    bulkUpdateSelection();
-}
-
-async function bulkApproveSelected() {
-    var ids = getSelectedIds();
-    if (ids.length === 0) return;
-    if (!await ui.confirm('Approve all pending documents for ' + ids.length + ' selected applicant(s)?\n\nAI-flagged documents are approved too and their category is confirmed. Applicants with all docs approved will advance to the exam stage.', { ok: 'Approve' })) return;
-
-    var form = document.getElementById('bulk-approve-form');
-    // Remove old hidden inputs
-    form.querySelectorAll('input[name="applicant_ids[]"]').forEach(function(el) { el.remove(); });
-    ids.forEach(function(id) {
-        var input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'applicant_ids[]';
-        input.value = id;
-        form.appendChild(input);
-    });
-    form.submit();
-}
-
-function bulkExportCsv() {
-    var ids = getSelectedIds();
-    if (ids.length === 0) return;
-    var rows = [['Name','Email','Type','Course','Status','Applied']];
-    ids.forEach(function(id) {
-        var tr = document.querySelector('.bulk-row[data-id="'+id+'"]');
-        if (!tr) return;
-        var cells = tr.querySelectorAll('td');
-        rows.push([
-            (cells[1]?.textContent||'').trim(),
-            (cells[1]?.querySelector('[title]')?.getAttribute('title')||'').trim(),
-            (cells[2]?.textContent||'').trim(),
-            (cells[3]?.textContent||'').trim(),
-            (cells[4]?.textContent||'').trim(),
-            (cells[6]?.textContent||'').trim()
-        ]);
-    });
-    var csv = rows.map(function(r){return r.map(function(c){return '"'+c.replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-    var blob = new Blob([csv], {type:'text/csv'});
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'applicants_export_'+new Date().toISOString().slice(0,10)+'.csv';
-    a.click();
-}
-
-</script>
 
 
 <?php
+$pageStyles  = ['css/pages/documents-list.css'];
+$pageScripts = ['js/pages/documents-bulk.js'];
 $content   = ob_get_clean();
 $pageTitle = 'Documents';
 $activeNav = 'documents';

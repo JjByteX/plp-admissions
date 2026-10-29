@@ -264,7 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // course → college decisions after the fact.
             if ($department !== '') {
                 audit_log(
-                    'user_department_assigned',
+                    AuditAction::USER_DEPARTMENT_ASSIGNED,
                     "Registered user #{$userId} assigned to {$department} from course '" . $old['course_applied'] . "'",
                     'user',
                     $userId
@@ -278,7 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $newUser = $pdo->prepare('SELECT * FROM users WHERE id = ?');
                 $newUser->execute([$userId]);
                 Auth::login($newUser->fetch(), $remember);
-                audit_log('login_google', "Google sign up: {$old['email']}", 'user', $userId);
+                audit_log(AuditAction::LOGIN_GOOGLE, "Google sign up: {$old['email']}", 'user', $userId);
                 header('Location: ' . Auth::homeUrl());
                 exit;
             }
@@ -654,223 +654,16 @@ ob_start();
 
 </div>
 
-<script>
-const strandMap  = <?= json_encode(get_all_strand_map()) ?>;
-const allStrands = <?= json_encode(SHS_STRANDS) ?>;
-
-function setSex(val) {
-    document.getElementById('sex_value').value = val;
-    document.querySelectorAll('.sex-btn').forEach(function(btn) {
-        btn.classList.toggle('active', btn.textContent.trim() === val);
-    });
-}
-
-function onTypeChange(type) {
-    document.getElementById('qual-freshman').style.display   = type === 'freshman'   ? 'block' : 'none';
-    document.getElementById('qual-transferee').style.display = type === 'transferee' ? 'block' : 'none';
-    document.getElementById('strand-group').style.display    = type === 'freshman'   ? 'flex'  : 'none';
-    if (type !== 'freshman') document.getElementById('shs_strand').value = '';
-    rebuildStrandOptions(document.getElementById('course_applied').value);
-}
-
-function onCourseChange(course) {
-    rebuildStrandOptions(course);
-}
-
-function rebuildStrandOptions(course) {
-    const sel = document.getElementById('shs_strand');
-    const prevVal = sel.value;
-    sel.innerHTML = '';
-
-    const allowedKeys = strandMap[course] || null;
-    // If no course selected yet, or type isn't freshman, show placeholder only
-    if (!course || document.getElementById('strand-group').style.display === 'none') {
-        sel.innerHTML = '<option value="">Select…</option>';
-        return;
-    }
-
-    if (allowedKeys && allowedKeys.length) {
-        sel.innerHTML = '<option value="">Select…</option>';
-        allowedKeys.forEach(function(key) {
-            const label = allStrands[key] || key;
-            const opt = document.createElement('option');
-            opt.value = key;
-            opt.textContent = label;
-            if (key === prevVal) opt.selected = true;
-            sel.appendChild(opt);
-        });
-    } else {
-        // Open to all strands
-        sel.innerHTML = '<option value="">Select…</option>';
-        Object.keys(allStrands).forEach(function(key) {
-            const opt = document.createElement('option');
-            opt.value = key;
-            opt.textContent = allStrands[key];
-            if (key === prevVal) opt.selected = true;
-            sel.appendChild(opt);
-        });
-    }
-}
-
-(function() {
-    const t = document.getElementById('applicant_type').value;
-    const c = document.getElementById('course_applied').value;
-    const savedStrand = <?= json_encode($old['shs_strand'] ?? '') ?>;
-
-    if (t) onTypeChange(t);
-    if (c) rebuildStrandOptions(c);
-
-    // Restore previously selected strand after rebuilding
-    if (savedStrand) {
-        const sel = document.getElementById('shs_strand');
-        for (let i = 0; i < sel.options.length; i++) {
-            if (sel.options[i].value === savedStrand) {
-                sel.options[i].selected = true;
-                break;
-            }
-        }
-    }
-})();
-</script>
-
-<script>
-// jQuery loads after page content, so wait for DOMContentLoaded.
-document.addEventListener('DOMContentLoaded', function () {
-    var $ = window.jQuery;
-    if (!$) return;
-    // Show only the ticks that fit the applicant type; clear hidden ones.
-    function syncFlags() {
-        var type = $('#applicant_type').val();
-        $('#doc-flags').toggle(!!type);
-        $('#doc-flags [data-types]').each(function () {
-            var show = String($(this).data('types')).split(' ').indexOf(type) !== -1;
-            $(this).toggle(show);
-            if (!show) $(this).find('input').prop('checked', false);
-        });
-    }
-    $('#applicant_type').on('change', syncFlags);
-    syncFlags();
-
-    // Live password checks (same rules as the server): 8+ chars, and both match.
-    // The layout wraps each password input in .auth-pw (show/hide button), so the
-    // message goes after that wrapper.
-    function pwMsg($in, msg) {
-        var $box = $in.closest('.auth-pw');
-        if (!$box.length) $box = $in;
-        $box.siblings('.form-error').remove();
-        $in.toggleClass('error', !!msg);
-        if (msg) $('<span class="form-error"></span>').text(msg).insertAfter($box);
-    }
-    function checkPw() { pwMsg($('#password'), $('#password').val().length < 8 ? 'Password must be at least 8 characters.' : ''); }
-    function checkConfirm() { pwMsg($('#password_confirm'), $('#password_confirm').val() !== $('#password').val() ? 'Passwords do not match.' : ''); }
-    $('#password').on('blur', function () {
-        checkPw();
-        if ($('#password_confirm').val() !== '') checkConfirm();
-    }).on('input', function () {
-        if ($(this).hasClass('error')) checkPw();
-        if ($('#password_confirm').val() !== '') checkConfirm();
-    });
-    $('#password_confirm').on('blur', checkConfirm).on('input', function () {
-        if ($(this).hasClass('error')) checkConfirm();
-    });
-
-    // Live phone check: must be 11 digits.
-    $('#phone').on('blur input', function (ev) {
-        var $in = $(this), v = $in.val();
-        if (ev.type === 'input' && !$in.hasClass('error')) return; // wait for blur first
-        var bad = !/^\d{11}$/.test(v);
-        $in.siblings('.form-error').remove();
-        $in.toggleClass('error', bad);
-        if (bad) $('<span class="form-error">Enter a valid 11-digit mobile number (e.g. 09123456789).</span>').insertAfter($in);
-    });
-});
-</script>
-
-<style>
-/* Register head: title on the left, Google sign up on the right */
-.reg-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--space-4) var(--space-8);
-    margin-bottom: var(--space-6);
-}
-.reg-head .auth-header { margin-bottom: 0; }
-.auth-card .reg-head a.auth-google { width: auto; min-width: 280px; padding: 0 var(--space-6); }
-
-/* Rows of two fields: both columns always line up, whatever is shown */
-.reg-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-6); }
-.reg-pair > * { min-width: 0; }
-/* Info boxes (qualifications / which apply) share a row and match height */
-.reg-info { align-items: stretch; }
-.reg-info > .qual-box { margin-bottom: var(--space-4); }
-
-.reg-submit {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: var(--space-4);
-    margin-top: var(--space-2);
-}
-.reg-submit .btn { min-width: 240px; }
-
-.sex-toggle {
-    display: flex;
-    gap: var(--space-2);
-    height: 44px;
-}
-.sex-btn {
-    width: 56px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-elevated);
-    color: var(--text-secondary);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.sex-btn.active {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
-}
-.sex-toggle.error .sex-btn { border-color: var(--error); }
-
-.qual-box {
-    background: var(--bg-subtle);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: var(--space-3) var(--space-4);
-    margin-bottom: var(--space-4);
-    font-size: var(--text-sm);
-}
-.qual-box-title {
-    font-weight: var(--weight-semibold);
-    color: var(--text-primary);
-    margin-bottom: var(--space-2);
-    font-size: var(--text-sm);
-}
-.qual-list {
-    list-style: none; padding: 0; margin: 0;
-    display: flex; flex-direction: column;
-    gap: var(--space-1);
-    color: var(--text-secondary);
-}
-.qual-list li::before { content: '· '; color: var(--accent); font-weight: var(--weight-semibold); }
-
-/* Narrow screens: one field per row */
-@media (max-width: 640px) {
-    .reg-pair { grid-template-columns: 1fr; }
-    .auth-card .reg-head a.auth-google { width: 100%; min-width: 0; }
-    .reg-submit .btn { width: 100%; min-width: 0; }
-}
-</style>
+<script type="application/json" id="reg-data"><?= json_encode([
+    'strandMap'   => get_all_strand_map(),
+    'allStrands'  => SHS_STRANDS,
+    'savedStrand' => $old['shs_strand'] ?? '',
+], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 <?php
 $content        = ob_get_clean();
 $pageTitle      = 'Create Account';
 $authWide       = true;
+$pageStyles      = ['css/pages/auth-register.css'];
+$pageScripts     = ['js/pages/auth-register.js', 'js/pages/auth-register-validate.js'];
 $authTopbarLink = ['text' => 'Already have an account?', 'label' => 'Sign in', 'href' => url('/login')];
 include VIEWS_PATH . '/layouts/auth.php';

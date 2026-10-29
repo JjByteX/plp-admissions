@@ -53,7 +53,7 @@ if (($action = require_post_action()) !== null) {
             $insUser->execute([$name, $email, $hash, $role, $dept]);
             $newId = (int)$insUser->fetchColumn();
             audit_log(
-                'user_created',
+                AuditAction::USER_CREATED,
                 "Created {$role} account for {$name} ({$email})"
                     . ($dept !== '' ? " in {$dept}" : ''),
                 'user',
@@ -83,7 +83,7 @@ if (($action = require_post_action()) !== null) {
             if ($uid === $adminId) { $errors[] = 'You cannot deactivate your own account.'; break; }
             $db->prepare('UPDATE users SET is_active=? WHERE id=?')->execute([$active ? 0 : 1, $uid]);
             $newStatus = $active ? 'deactivated' : 'activated';
-            audit_log('user_status_changed', "User ID {$uid} {$newStatus}", 'user', $uid);
+            audit_log(AuditAction::USER_STATUS_CHANGED, "User ID {$uid} {$newStatus}", 'user', $uid);
             $success[] = 'User status updated.';
             break;
 
@@ -93,7 +93,7 @@ if (($action = require_post_action()) !== null) {
             if (strlen($newPass) < 8) { $errors[] = 'Password must be at least 8 characters.'; break; }
             $hash = password_hash($newPass, PASSWORD_BCRYPT, ['cost' => 12]);
             $db->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([$hash, $uid]);
-            audit_log('user_password_reset', "Reset password for user ID {$uid}", 'user', $uid);
+            audit_log(AuditAction::USER_PASSWORD_RESET, "Reset password for user ID {$uid}", 'user', $uid);
             Auth::rememberRevokeAll($uid);
             $success[] = 'Password reset successfully.';
             break;
@@ -102,15 +102,15 @@ if (($action = require_post_action()) !== null) {
             $uid = post_int('user_id');
             if ($uid === $adminId) { $errors[] = 'You cannot delete your own account.'; break; }
             $db->prepare('DELETE FROM users WHERE id=? AND role != \'student\'')->execute([$uid]);
-            audit_log('user_deleted', "Deleted user ID {$uid}", 'user', $uid);
+            audit_log(AuditAction::USER_DELETED, "Deleted user ID {$uid}", 'user', $uid);
             $success[] = 'User deleted.';
             break;
     }
 }
 
 // Filters: search + department
-$filterDept = trim($_GET['department'] ?? '');
-$filterQ    = trim($_GET['q'] ?? '');
+$filterDept = get_str('department');
+$filterQ    = get_str('q');
 $availableDepts = departments_list();
 if ($filterDept !== '' && !in_array($filterDept, $availableDepts, true)) {
     $filterDept = '';

@@ -26,7 +26,7 @@ switch ($action) {
 
     case 'read_one':
         csrf_check();
-        $notifId = (int)($_POST['id'] ?? 0);
+        $notifId = post_int('id');
         if ($notifId) {
             try {
                 db()->prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?')

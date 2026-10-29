@@ -5,7 +5,7 @@
 // Cloudflare Turnstile, a line of text. No layout, no auth card.
 // A pass is kept in the session, then the visitor goes on to the page
 // they asked for (sign in, register or forgot password).
-// See captcha_gate() in core/helpers.php.
+// See captcha_gate() in core/helpers/auth_pages.php.
 // ============================================================
 
 require_once CORE_PATH . '/bootstrap.php';
@@ -49,23 +49,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
 <title>Security verification</title>
-<style>
-html, body { height: 100%; margin: 0; }
-body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #fff;
-    color: #333;
-    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    text-align: center;
-}
-main { padding: 24px; }
-h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
-p { margin: 0 0 20px; color: #666; font-size: 14px; }
-a { color: #2d6a4f; }
-.cf-turnstile { display: inline-block; min-height: 65px; }
-</style>
+<link rel="stylesheet" href="<?= e(asset('css/pages/security-check.css')) ?>">
 </head>
 <body>
 <main>
@@ -82,8 +66,8 @@ a { color: #2d6a4f; }
                  data-callback="done"></div>
         </form>
         <noscript><p>JavaScript is required to finish this check.</p></noscript>
+        <script src="<?= e(asset('js/pages/security-check.js')) ?>"></script>
         <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-        <script>function done() { document.getElementById('f').submit(); }</script>
     <?php endif; ?>
 </main>
 </body>

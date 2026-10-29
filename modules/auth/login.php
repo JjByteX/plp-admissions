@@ -56,12 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 clear_login_attempts($email);
                 Auth::login($user, !empty($_POST['remember']));
-                audit_log('login', "Successful login: {$user['email']}", 'user', $user['id']);
+                audit_log(AuditAction::LOGIN, "Successful login: {$user['email']}", 'user', $user['id']);
                 header("Location: " . Auth::homeUrl()); exit;
             }
         } else {
             record_failed_login($email);
-            audit_log('login_failed', "Failed login attempt for: {$email}");
+            audit_log(AuditAction::LOGIN_FAILED, "Failed login attempt for: {$email}");
             $errors['general'] = 'Incorrect email or password.';
         }
     }
@@ -164,18 +164,8 @@ ob_start();
 
 </div>
 
-<script>
-(function () {
-    // Carry the Remember me tick through the Google redirect
-    var g = document.getElementById('auth-google'), rem = document.getElementById('remember');
-    if (g && rem) {
-        g.addEventListener('click', function () {
-            g.href = g.href.split('?')[0] + (rem.checked ? '?remember=1' : '');
-        });
-    }
-})();
-</script>
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Sign In';
+$pageScripts = ['js/pages/auth-login.js'];
 include VIEWS_PATH . '/layouts/auth.php';

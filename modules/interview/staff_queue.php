@@ -35,7 +35,7 @@ if (Auth::role() === ROLE_SSO) {
 
 $db        = db();
 $staffId   = Auth::id();
-$today     = date('Y-m-d');
+$today     = now_date();
 $role      = Auth::role();
 $isAdmin   = $role === ROLE_ADMIN;
 $isSSO     = $role === ROLE_SSO;
@@ -59,7 +59,7 @@ $staffDept = StaffScope::current()->department(); // '' unless Dean
 // Dean and Professor never reach the picker — Dean is auto-scoped
 // to their own department, Professor to their own owned sessions.
 // ----------------------------------------------------------------
-$collegeFilter = trim((string)($_GET['college'] ?? ''));
+$collegeFilter = get_str('college');
 $showAll       = ($collegeFilter === '__all__');
 if ($canSeeAll && $collegeFilter === '') {
     // Admin/SSO landing without a college - hand off to the picker.
@@ -305,9 +305,9 @@ function queue_status_badge(string $status): array {
 // the chosen date is dropped, the same cascade the old client-side
 // filter did.
 // ----------------------------------------------------------------
-$filterQ    = trim((string)($_GET['q'] ?? ''));
-$filterDate = trim((string)($_GET['date'] ?? ''));
-$filterSlot = (int)($_GET['slot'] ?? 0);
+$filterQ    = get_str('q');
+$filterDate = get_str('date');
+$filterSlot = get_int('slot');
 
 $slotById = [];
 foreach ($slotMap as $sl) { $slotById[(int)$sl['id']] = $sl; }
@@ -359,44 +359,6 @@ $queueUrl = function (array $merge = []) use ($canSeeAll, $collegeFilter, $filte
 ob_start();
 ?>
 
-<style>
-@keyframes pulse-dot {
-    0%,100%{opacity:1;transform:scale(1)}
-    50%   {opacity:.5;transform:scale(1.3)}
-}
-
-/* Empty state only: stretch the card to fill the .page area. A populated
-   queue uses .auto-table-wrap (app.css) instead. */
-.page:has(.iq-table-card) { display:flex; flex-direction:column; }
-.iq-table-card { flex:1; min-height:300px; }
-
-/* Row tints by status, matches existing badge palette. */
-.iq-row-in-progress td { background: rgba(45,106,79,0.06); }
-.iq-row-no-show     td,
-.iq-row-completed   td { color: var(--text-tertiary); }
-
-.iq-name-cell      { font-weight: var(--weight-medium); }
-.iq-name-cell .sub {
-    display:block;
-    font-size:var(--text-xs);
-    color:var(--text-tertiary);
-    font-weight:var(--weight-regular);
-    margin-top:2px;
-}
-
-.iq-eval-summary {
-    font-size:var(--text-xs);
-    color:var(--text-tertiary);
-    max-width:240px;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-}
-
-/* Pass/Reject buttons inside the Evaluation modal */
-.btn-pass   { background: var(--success-bg, #d1fae5); color: var(--success, #15803d); border-color: var(--success, #15803d); }
-.btn-reject { background: var(--error-bg, #fee2e2);   color: var(--error, #b91c1c);     border-color: var(--error, #b91c1c); }
-</style>
 
 <?php if ($msg = Session::getFlash('success')): ?>
     <div id="iq-flash-success" class="alert alert-success" style="margin-bottom:var(--space-4);display:flex;align-items:center;gap:var(--space-3);flex-shrink:0">
@@ -412,17 +374,6 @@ ob_start();
         <button onclick="this.parentElement.remove()" class="btn btn-icon" style="color:inherit" aria-label="Dismiss">&times;</button>
     </div>
 <?php endif; ?>
-<script>
-// Auto-dismiss flash alerts after 5 seconds
-['iq-flash-success','iq-flash-error'].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) setTimeout(function() {
-        el.style.transition = 'opacity .4s';
-        el.style.opacity = '0';
-        setTimeout(function() { el.remove(); }, 400);
-    }, 5000);
-});
-</script>
 
 <!-- ============================================================
      BACK BUTTON / CONTEXT HEADER
@@ -816,135 +767,16 @@ ob_start();
     </div>
 </div>
 
-<style>
-.eval-details {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-3) var(--space-5);
-    font-size: var(--text-sm);
-}
-.eval-details > div { min-width: 0; overflow-wrap: anywhere; }
-.eval-details .eval-full { grid-column: 1 / -1; }
-.eval-k {
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 2px;
-}
-@media (max-width: 480px) { .eval-details { grid-template-columns: 1fr; } }
-</style>
-
-<!-- ============================================================
-     SCRIPT
-============================================================ -->
-<script>
-// Evaluation modal handlers
-const evalModal = document.getElementById('eval-modal');
-
-function _showField(id, value) {
-    var wrap = document.getElementById(id + '-wrap');
-    var el   = document.getElementById(id);
-    if (value) {
-        el.textContent = value;
-        if (wrap) wrap.style.display = '';
-    } else {
-        if (wrap) wrap.style.display = 'none';
-    }
-}
-
-function openEvalModal(d) {
-    document.getElementById('eval-form').action =
-        '<?= e(url('/staff/interviews/')) ?>' + d.queueId;
-
-    // Applicant details panel
-    document.getElementById('eval-detail-name').textContent = d.name || '';
-    document.getElementById('eval-detail-email').textContent = d.email || '';
-    document.getElementById('eval-detail-type').textContent = d.type ? d.type.charAt(0).toUpperCase() + d.type.slice(1) : '-';
-    document.getElementById('eval-detail-course').textContent = d.course || '-';
-
-    _showField('eval-detail-phone', d.phone);
-    _showField('eval-detail-bday', d.birthdate);
-    _showField('eval-detail-sex', d.sex === 'M' ? 'Male' : (d.sex === 'F' ? 'Female' : ''));
-    _showField('eval-detail-address', d.address);
-    _showField('eval-detail-strand', d.strand);
-    _showField('eval-detail-sy', d.school_year);
-
-    // Exam score
-    var examWrap = document.getElementById('eval-detail-exam-wrap');
-    var examEl   = document.getElementById('eval-detail-exam');
-    if (d.exam_score !== null && d.exam_total !== null) {
-        var scoreText = d.exam_score + '/' + d.exam_total;
-        if (d.exam_passed === 1) {
-            scoreText += ' - <span style="color:var(--success);font-weight:var(--weight-semibold)">Passed</span>';
-        } else if (d.exam_passed === 0) {
-            scoreText += ' - <span style="color:var(--error);font-weight:var(--weight-semibold)">Did not pass</span>';
-        }
-        examEl.innerHTML = scoreText;
-        examWrap.style.display = '';
-    } else {
-        examWrap.style.display = 'none';
-    }
-
-    document.getElementById('eval-notes').value = d.notes || '';
-    document.getElementById('eval-result-input').value = '';
-    evalModal.style.display = 'flex';
-    setTimeout(() => document.getElementById('eval-notes').focus(), 50);
-}
-
-function closeEvalModal() {
-    evalModal.style.display = 'none';
-}
-
-evalModal.addEventListener('click', function (e) {
-    if (e.target === evalModal) closeEvalModal();
-});
-
-document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && evalModal.style.display === 'flex') {
-        closeEvalModal();
-    }
-});
-
-// Submission guard — make sure the user actually clicked Pass or Reject
-document.getElementById('eval-form').addEventListener('submit', function (e) {
-    const form = e.currentTarget;
-    if (form.dataset.ok) { delete form.dataset.ok; return; }   // replay after OK
-    const decision = document.getElementById('eval-result-input').value;
-    e.preventDefault();
-    if (decision !== 'pass' && decision !== 'reject') return false;
-    const submitter = e.submitter;
-    ui.confirm('Mark this interview as ' + (decision === 'pass' ? 'PASS' : 'FAIL') + '?',
-               { danger: decision === 'reject', ok: 'Confirm' })
-        .then(function (ok) { if (ok) { form.dataset.ok = '1'; form.requestSubmit(submitter); } });
-    return false;
-});
-
-// Auto-refresh every 60s, but pause when a textarea/input is focused or
-// has been edited recently (so we don't blow away typed-but-unsaved notes,
-// and so the modal doesn't get clobbered mid-evaluation).
-let lastFocusTime = 0;
-document.addEventListener('focusin', (e) => {
-    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
-        lastFocusTime = Date.now();
-    }
-});
-document.addEventListener('input', (e) => {
-    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
-        lastFocusTime = Date.now();
-    }
-});
-setInterval(() => {
-    if (Date.now() - lastFocusTime < 120000) return;
-    if (evalModal.style.display === 'flex') return;
-    window.location.reload();
-}, 60000);
-</script>
+<script>window.PAGE = <?= json_encode([
+    'interviewUrl' => url('/staff/interviews/'),
+], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;</script>
 
 <?php
 // Slide-in applicant detail drawer (markup + JS opener).
 include VIEWS_PATH . '/partials/applicant_drawer.php';
 
+$pageStyles  = ['css/pages/interview-queue.css'];
+$pageScripts = ['js/pages/interview-queue.js'];
 $content   = ob_get_clean();
 if ($canSeeAll) {
     $pageTitle = $showAll

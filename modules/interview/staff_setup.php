@@ -29,11 +29,11 @@ $errors  = [];
 
 $staffDept   = user_department($staffId);
 $departments = departments_list();
-$today       = date('Y-m-d');
+$today       = now_date();
 
 // ── Routing ──────────────────────────────────────────────────
 $college    = get_str('college');
-$legacyDesk = (int)($_GET['desk'] ?? 0);
+$legacyDesk = get_int('desk');
 
 // Legacy desk URL → resolve a department from any session linked to that user
 // so old bookmarks still land on the right college.
@@ -93,7 +93,7 @@ if (($action = require_post_action()) !== null) {
                 ]);
                 $newSlotId = (int)$insSlot->fetchColumn();
                 audit_log(
-                    'interview_slot_created',
+                    AuditAction::INTERVIEW_SLOT_CREATED,
                     "Created session #{$newSlotId} on {$date} for {$dept} (assigned to user #{$assignedTo})",
                     'interview_slot',
                     $newSlotId
@@ -157,7 +157,7 @@ if (($action = require_post_action()) !== null) {
                     $date, $time, $endTime, $capacity,
                     $assignedTo, $label, ($notes ?: null), $slotId,
                 ]);
-                audit_log('interview_slot_edited', "Edited session #{$slotId}", 'interview_slot', $slotId);
+                audit_log(AuditAction::INTERVIEW_SLOT_EDITED, "Edited session #{$slotId}", 'interview_slot', $slotId);
                 ok('Session updated.', '/staff/interviews/setup?college=' . urlencode($deptVal));
             }
         }
@@ -201,7 +201,7 @@ if (($action = require_post_action()) !== null) {
                 Session::flash('error', "Cannot remove a session with {$booked} booked applicant(s).");
             } else {
                 $db->prepare('DELETE FROM interview_slots WHERE id=?')->execute([$slotId]);
-                audit_log('interview_slot_deleted', "Deleted session #{$slotId}");
+                audit_log(AuditAction::INTERVIEW_SLOT_DELETED, "Deleted session #{$slotId}");
                 Session::flash('success', 'Session removed.');
             }
             redirect('/staff/interviews/setup?college=' . urlencode($deptVal));
@@ -304,6 +304,7 @@ if ($college !== '') {
             : [['label' => 'Interview Sessions', 'to' => '/staff/interviews']]);
     $activeNav = 'interviews';
     $pageWide  = true;
+    $pageScripts = ['js/pages/interview-setup-sessions.js'];
     include VIEWS_PATH . '/layouts/app.php';
     exit;
 }

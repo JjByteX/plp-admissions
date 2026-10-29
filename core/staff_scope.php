@@ -33,6 +33,12 @@ final class StaffScope
         return self::$current;
     }
 
+    /** Build a scope from known values (no session or database), e.g. for tests. */
+    public static function make(bool $restricted, array $courses = [], string $department = ''): self
+    {
+        return new self($restricted, $department, array_values($courses));
+    }
+
     /** True when the viewer is limited to their own college (Dean). */
     public function restricted(): bool { return $this->restricted; }
 

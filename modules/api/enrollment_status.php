@@ -53,7 +53,7 @@ try {
     $stmt->execute([$stage, $studentNumber, $applicantId, $stage]);
 
     if ($stmt->rowCount() > 0) {
-        audit_log('enrollment_status_' . $stage, "Applicant {$applicantId}: Enrollment reports {$stage} {$studentNumber}", 'applicant', $applicantId);
+        audit_log(AuditAction::ENROLLMENT_STATUS_PREFIX . $stage, "Applicant {$applicantId}: Enrollment reports {$stage} {$studentNumber}", 'applicant', $applicantId);
         json_response(['status' => 'recorded'], 200);
     }
 

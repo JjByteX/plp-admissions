@@ -30,7 +30,7 @@ Auth::requireRole(ROLE_DEAN, ROLE_ADMIN);
 csrf_check();
 
 $db          = db();
-$applicantId = (int)($_GET['id'] ?? 0);
+$applicantId = get_int('id');
 $action      = $_POST['action']  ?? 'release';
 $staffId     = Auth::id();
 $role        = Auth::role();
@@ -72,7 +72,7 @@ if ($action === 'override') {
     notify_stage_transition($applicantId, 'released', 'Result updated: ' . ucfirst($decision));
 
     audit_log(
-        'admission_result_override',
+        AuditAction::ADMISSION_RESULT_OVERRIDE,
         "Admin override: applicant {$applicantId} {$prev} → {$decision}. Reason: {$remarks}",
         'applicant', $applicantId
     );
@@ -157,14 +157,14 @@ notify_stage_transition($applicantId, 'released', 'Result: ' . (RESULT_LABELS[$d
 
 if ($isOverride) {
     audit_log(
-        'admission_result_released_override',
+        AuditAction::ADMISSION_RESULT_RELEASED_OVERRIDE,
         "Released applicant {$applicantId} as {$decision} "
         . "(Professor recommended " . ucfirst($recommended) . "). Reason: {$reason}",
         'applicant', $applicantId
     );
 } else {
     audit_log(
-        'admission_result_released',
+        AuditAction::ADMISSION_RESULT_RELEASED,
         "Released applicant {$applicantId} as {$decision}",
         'applicant', $applicantId
     );

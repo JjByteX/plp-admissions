@@ -10,7 +10,7 @@ Auth::requireRole(ROLE_DEAN, ROLE_ADMIN);
 csrf_check();
 
 $db          = db();
-$applicantId = (int)($_GET['id'] ?? 0);
+$applicantId = get_int('id');
 
 if (!$applicantId) {
     fail('Missing applicant.', '/staff/results');

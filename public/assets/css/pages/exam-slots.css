@@ -1,0 +1,71 @@
+/* Generic flash-message colors handled by the layout. */
+
+/* Card base, grid and hover come from the shared selector-card rules in app.css. */
+
+/* Active access-code badge on a slot card */
+.es-card-code-badge {
+    background: var(--success-muted, #e6f4ec);
+    color: var(--success, #2d6a4f);
+    font-family: monospace;
+    font-weight: var(--weight-semibold);
+    letter-spacing: .08em;
+}
+.es-card-code-badge.is-warn { background: #fef3c7; color: #92400e; }
+
+/* Roster code panel (proctor-facing) */
+.es-code-panel {
+    display: flex; align-items: center; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+}
+.es-code-panel-label {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: var(--text-sm); color: var(--text-secondary);
+    flex-shrink: 0;
+}
+.es-code-display {
+    font-family: monospace;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
+    letter-spacing: .15em;
+    padding: 4px 12px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+}
+.es-code-display.is-empty {
+    color: var(--text-tertiary);
+    font-weight: normal;
+    letter-spacing: normal;
+}
+.es-code-timer {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--success, #2d6a4f);
+}
+.es-code-timer.is-warn   { color: #d97706; }
+.es-code-timer.is-expired { color: var(--error); }
+
+.es-card-edit-btn {
+    position: absolute; top: var(--space-3); right: var(--space-3);
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: var(--radius);
+    background: var(--bg-subtle); color: var(--text-secondary);
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+.es-card-edit-btn:hover { border-color: var(--border); color: var(--accent); }
+
+/* ── Bulk-select mode for slot cards ────────────────────────── */
+/* Hide the per-card edit pencil while selecting so the click is unambiguous. */
+.es-slot-grid.is-selecting .es-card-edit-btn { display:none !important; }
+
+/* Roster page — the table is an .auto-table-wrap (app.css) that fills the page
+   height left under these rows; keep the rows above it from shrinking. */
+.es-code-panel { flex-shrink: 0; }

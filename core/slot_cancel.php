@@ -54,7 +54,7 @@ function cancel_slot_and_move(array $cfg): never
         fail('Please enter a reason - it\'s shown to the affected students.', $cfg['redirect']);
     }
 
-    $today    = date('Y-m-d');
+    $today    = now_date();
     $movedIds = [];
     $newSlot  = null;
     $errMsg   = null;

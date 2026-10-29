@@ -16,8 +16,8 @@ csrf_check();
 
 $db      = db();
 $staffId = Auth::id();
-$id      = (int)($_GET['id'] ?? 0);
-$action  = $_POST['action'] ?? '';
+$id      = get_int('id');
+$action  = post_str('action');
 
 switch ($action) {
 
@@ -45,7 +45,7 @@ switch ($action) {
         // row — SSO releases manually from the Results page after seeing
         // the Pass/Reject eval. We still leave the applicant in 'interview'
         // so the Results page bucket logic picks it up correctly.
-        audit_log('interview_completed', "Marked interview queue ID {$id} as completed", 'interview_queue', $id);
+        audit_log(AuditAction::INTERVIEW_COMPLETED, "Marked interview queue ID {$id} as completed", 'interview_queue', $id);
         ok('Interview marked as completed.', '/staff/interviews/queue');
         break;
 
@@ -90,7 +90,7 @@ switch ($action) {
               WHERE id = ? AND overall_status IN ('interview','exam')"
         )->execute([$row['applicant_id']]);
 
-        audit_log('interview_completed_with_eval',
+        audit_log(AuditAction::INTERVIEW_COMPLETED_WITH_EVAL,
             "Completed interview queue ID {$id}: {$evalResult}",
             'interview_queue', $id);
         ok('Interview completed - ' . ucfirst($evalResult) . '.', '/staff/interviews/queue');
@@ -119,7 +119,7 @@ switch ($action) {
              WHERE  s.id = q.slot_id
                AND  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?"
         )->execute([$id, $staffId]);
-        audit_log('interview_no_show', "Marked interview queue ID {$id} as no-show", 'interview_queue', $id);
+        audit_log(AuditAction::INTERVIEW_NO_SHOW, "Marked interview queue ID {$id} as no-show", 'interview_queue', $id);
 
         // B1: Auto-reschedule no-show to next available slot
         $qRow = $db->prepare('SELECT applicant_id FROM interview_queue WHERE id = ?');
@@ -160,7 +160,7 @@ switch ($action) {
                AND  q.id = ? AND q.status = 'checked_in'
                AND  COALESCE(s.assigned_to, s.created_by) = ?"
         )->execute([$id, $staffId]);
-        audit_log('interview_started', "Started interview for queue ID {$id}", 'interview_queue', $id);
+        audit_log(AuditAction::INTERVIEW_STARTED, "Started interview for queue ID {$id}", 'interview_queue', $id);
         ok('Interview started.', '/staff/interviews/queue');
         break;
 
@@ -176,7 +176,7 @@ switch ($action) {
              WHERE  s.id = q.slot_id
                AND  q.id = ? AND COALESCE(s.assigned_to, s.created_by) = ?'
         )->execute([$notes ?: null, $id, $staffId]);
-        audit_log('interview_notes_saved', "Saved notes for interview queue ID {$id}", 'interview_queue', $id);
+        audit_log(AuditAction::INTERVIEW_NOTES_SAVED, "Saved notes for interview queue ID {$id}", 'interview_queue', $id);
         ok('Notes saved.', '/staff/interviews/queue');
         break;
 
@@ -196,7 +196,7 @@ switch ($action) {
             'DELETE FROM interview_slots
              WHERE id = ? AND COALESCE(assigned_to, created_by) = ?'
         )->execute([$id, $staffId]);
-        audit_log('interview_slot_deleted', "Deleted interview slot ID {$id}", 'interview_slot', $id);
+        audit_log(AuditAction::INTERVIEW_SLOT_DELETED, "Deleted interview slot ID {$id}", 'interview_slot', $id);
         ok('Session deleted.', '/staff/interviews');
         break;
 
@@ -241,7 +241,7 @@ switch ($action) {
             "UPDATE interview_slots SET status='open'
              WHERE id=? AND COALESCE(assigned_to, created_by) = ?"
         )->execute([$id, $staffId]);
-        audit_log('interview_slot_reopened', "Reopened interview slot ID {$id}", 'interview_slot', $id);
+        audit_log(AuditAction::INTERVIEW_SLOT_REOPENED, "Reopened interview slot ID {$id}", 'interview_slot', $id);
         ok('Session reopened.', '/staff/interviews');
         break;
 
@@ -292,7 +292,7 @@ switch ($action) {
         $db->prepare('UPDATE interview_queue SET slot_id = ? WHERE id = ?')
            ->execute([$targetSlotId, $id]);
 
-        audit_log('interview_reassigned',
+        audit_log(AuditAction::INTERVIEW_REASSIGNED,
             "Reassigned queue #{$id} from slot #{$qEntry['slot_id']} to slot #{$targetSlotId}",
             'interview_queue', $id);
         ok('Student reassigned to new session.', '/staff/interviews/queue');

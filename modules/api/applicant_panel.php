@@ -17,7 +17,7 @@ Auth::requireRole(ROLE_STAFF, ROLE_SSO, ROLE_DEAN, ROLE_ADMIN);
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store');
 
-$applicantId = (int) ($_GET['id'] ?? 0);
+$applicantId = get_int('id');
 if ($applicantId <= 0) {
     http_response_code(400);
     echo '<div class="ap-drawer-error">Missing or invalid applicant id.</div>';

@@ -144,7 +144,7 @@ $rescheduleApproved = $myReschedule
     && (int)$myReschedule['queue_id'] !== (int)$myEntry['id'];
 
 $errors = [];
-$today  = date('Y-m-d');
+$today  = now_date();
 
 // This page no longer accepts POST. The previous "I'm Here" check-in is
 // now performed automatically at slot assignment time — see
@@ -361,7 +361,7 @@ ob_start();
         </div>
         <?php endif; ?>
 
-        <script>setTimeout(function(){ window.location.reload(); }, 30000);</script>
+        <?php $pageAutoReload = true; ?>
 
     <?php else: ?>
         <!-- ============================================================
@@ -557,4 +557,7 @@ $content     = ob_get_clean();
 $pageTitle   = 'My Interview';
 $activeNav   = 'interview';
 $showStepper = true;
+if (!empty($pageAutoReload)) {
+    $pageScripts = ['js/pages/interview-student-reload.js'];
+}
 include VIEWS_PATH . '/layouts/app.php';

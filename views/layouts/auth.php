@@ -12,6 +12,8 @@
 //                             wide top bar
 //   $hidePrivacyLink  bool    Hide the footer Privacy Policy link
 //   $loadTurnstile    bool    Security check page only: load the Turnstile script
+//   $pageStyles       array   Extra stylesheets (paths under public/assets)
+//   $pageScripts      array   Extra scripts (paths under public/assets), loaded before jQuery
 // ============================================================
 $schoolName  = school_setting('school_name', 'Pamantasan ng Lungsod ng Pasig');
 $accentColor = school_setting('accent_color', '#2d6a4f');
@@ -43,26 +45,19 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     <?= phosphor_head() ?>
 
     <!-- Critical canvas colour: applies before app.css arrives so page switches never flash -->
-    <style>
-        html{background:#fff;color-scheme:light}
-    </style>
+    <link rel="stylesheet" href="<?= asset('css/auth-critical.css') ?>">
     <!-- Bootstrap 5.3.3 + Bootstrap Icons, served locally (works offline). Order: Bootstrap -> bootstrap-compat.css -> app.css -->
     <link rel="stylesheet" href="<?= asset('vendor/bootstrap/bootstrap.min.css') ?>">
     <link rel="stylesheet" href="<?= asset('vendor/bootstrap-icons/bootstrap-icons.min.css') ?>">
     <link rel="stylesheet" href="<?= asset('css/bootstrap-compat.css') ?>">
     <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
+    <?php foreach (($pageStyles ?? []) as $pageStyle): ?>
+    <link rel="stylesheet" href="<?= asset($pageStyle) ?>">
+    <?php endforeach; ?>
 
-    <script>
-        (function(){
-            // Auth pages are always light (no theme switch here).
-            window.PLP_FORCE_LIGHT = true;
-            document.documentElement.dataset.theme = 'light';
-            var fs = null; try { fs = localStorage.getItem('plp_font_size'); } catch (e) {}
-            document.documentElement.dataset.fontSize = ['small','medium','large','xlarge'].indexOf(fs) > -1 ? fs : 'medium';
-        })();
-    </script>
+    <script src="<?= asset('js/auth-head.js') ?>"></script>
 </head>
-<body>
+<body data-accent="<?= e($accentColor) ?>">
 
 <?php if (!empty($authWide)): ?>
 <div class="auth-page auth-page--wide">
@@ -119,59 +114,14 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 </div>
 <?php endif; ?>
 
+<?php /* Page scripts load before jquery/app.js, the same point the old inline blocks ran at. */ ?>
+<?php foreach (($pageScripts ?? []) as $pageScript): ?>
+<script src="<?= asset($pageScript) ?>"></script>
+<?php endforeach; ?>
 <script src="<?= asset('js/jquery.min.js') ?>"></script>
 <script src="<?= asset('vendor/bootstrap/bootstrap.bundle.min.js') ?>"></script>
 <script src="<?= asset('js/app.js') ?>"></script>
-<script>setAccentColor('<?= e($accentColor) ?>');</script>
-<script>
-// Auth UI (jQuery): show-password toggle, confirm-password check, loading label.
-jQuery(function ($) {
-    var eye = '<i class="ph-bold ph-eye" style="font-size:var(--text-xl)" aria-hidden="true"></i>';
-
-    // One show/hide password toggle for every auth page.
-    $('input[type="password"]').each(function () {
-        var $in = $(this);
-        if ($in.parent().hasClass('auth-pw')) return;
-        var $wrap = $('<div class="auth-pw"></div>');
-        $in.wrap($wrap);
-        $('<button type="button" class="auth-pw-eye" aria-label="Show password"></button>')
-            .html(eye)
-            .insertAfter($in)
-            .on('click', function () {
-                var show = $in.attr('type') === 'password';
-                $in.attr('type', show ? 'text' : 'password');
-                $(this).toggleClass('on', show).attr('aria-label', show ? 'Hide password' : 'Show password');
-                $(this).find('i').toggleClass('ph-eye', !show).toggleClass('ph-eye-slash', show);
-            });
-    });
-
-    // Confirm password must match (client hint only; server still validates).
-    var $pw = $('#password'), $cf = $('#password_confirm');
-    if ($pw.length && $cf.length) {
-        $cf.on('input blur', function () {
-            var bad = $cf.val() !== '' && $cf.val() !== $pw.val();
-            $cf.toggleClass('error', bad);
-        });
-    }
-
-    // Live email check on blur (shows the red message before submit).
-    var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    $('input[type="email"]').on('blur input', function (ev) {
-        var $in = $(this), v = $.trim($in.val());
-        if (ev.type === 'input' && !$in.hasClass('error')) return;
-        var bad = v !== '' && !emailRe.test(v);
-        $in.siblings('.form-error').remove();
-        $in.toggleClass('error', bad);
-        if (bad) $('<span class="form-error">Enter a valid email address.</span>').insertAfter($in);
-    });
-
-    // Loading label on submit (app.js already disables the button).
-    $('form[data-once]').on('submit', function () {
-        var $b = $(this).find('[type="submit"]').first();
-        if ($b.length && !$b.data('label')) $b.data('label', $b.text()).attr('aria-busy', 'true');
-    });
-});
-</script>
+<script src="<?= asset('js/auth-ui.js') ?>"></script>
 <?php if (CAPTCHA_ENABLED && !empty($loadTurnstile)): ?>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <?php endif; ?>
