@@ -76,13 +76,17 @@ if ($canSeeAll && $collegeFilter === '') {
 $deskLabel = '';
 $deskNotes = '';
 if (!$isAdmin && !$isSSO && !$isDean) {
+    // Only an active session counts: open and not already past. A closed
+    // or finished session must not leave its room/notes on screen.
     try {
         $deskStmt = $db->prepare(
             "SELECT location_label, location_notes
                FROM interview_slots
               WHERE COALESCE(assigned_to, created_by) = ?
+                AND status = 'open'
+                AND slot_date >= CAST(? AS date)
                 AND location_label != ''
-              ORDER BY ABS(slot_date - CAST(? AS date)) ASC, slot_time ASC NULLS FIRST
+              ORDER BY slot_date ASC, slot_time ASC NULLS FIRST
               LIMIT 1"
         );
         $deskStmt->execute([$staffId, $today]);
@@ -92,16 +96,6 @@ if (!$isAdmin && !$isSSO && !$isDean) {
             $deskNotes = $deskRow['location_notes'] ?? '';
         }
     } catch (\Throwable $e) {}
-
-    if (!$deskLabel) {
-        try {
-            $deskStmt = $db->prepare('SELECT desk_label, desk_notes FROM users WHERE id=?');
-            $deskStmt->execute([$staffId]);
-            $deskRow   = $deskStmt->fetch();
-            $deskLabel = $deskRow['desk_label'] ?? '';
-            $deskNotes = $deskRow['desk_notes'] ?? '';
-        } catch (\Throwable $e) {}
-    }
 }
 
 // ----------------------------------------------------------------
@@ -615,8 +609,8 @@ ob_start();
                                     aria-label="View applicant details">
                                 <?= icon('ic_fluent_eye_show_24_regular', 14) ?>
                             </button>
-                            <?php if ($isFinal): ?>
-                                <?php // Final-state rows: View-only. The Status
+                            <?php if ($isFinal || $isDean): ?>
+                                <?php // Final-state rows and Dean (oversight, read-only): View-only. The Status
                                       // column already shows Pass / Decline / No-show,
                                       // so we don't repeat it here. ?>
                             <?php else: ?>
@@ -772,7 +766,7 @@ ob_start();
 include VIEWS_PATH . '/partials/applicant_drawer.php';
 
 $pageStyles  = ['css/pages/interview-queue.css'];
-$pageScripts = ['js/pages/interview-queue.js'];
+$pageScripts = ['js/pages/interview-queue.js', 'js/pages/live-search.js'];
 $content   = ob_get_clean();
 if ($canSeeAll) {
     $pageTitle = $showAll

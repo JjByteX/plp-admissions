@@ -153,3 +153,31 @@ function suggest_alt_courses(int $score, int $total, string $appliedCourse): arr
     }
     return $suggestions;
 }
+
+/**
+ * Seats still open for a course this school year.
+ * Returns null when the course has no cap (nothing to enforce), otherwise
+ * max_slots minus applicants already released as 'accepted' (never below 0).
+ * Used by the Results release handlers to refuse accepting past the cap.
+ */
+function course_slots_remaining(PDO $db, string $course, string $schoolYear): ?int
+{
+    $stmt = $db->prepare(
+        "SELECT cc.max_slots,
+                (SELECT COUNT(*)
+                   FROM admission_results r
+                   JOIN applicants a ON a.id = r.applicant_id
+                  WHERE a.course_applied = cc.course_name
+                    AND a.school_year    = cc.school_year
+                    AND r.result = 'accepted') AS accepted
+           FROM course_caps cc
+          WHERE cc.course_name = ? AND cc.school_year = ?
+            AND cc.max_slots IS NOT NULL AND cc.max_slots > 0"
+    );
+    $stmt->execute([$course, $schoolYear]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return null;
+    }
+    return max(0, (int)$row['max_slots'] - (int)$row['accepted']);
+}

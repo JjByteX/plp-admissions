@@ -7,28 +7,32 @@
 
 $departments = function_exists('departments_list') ? departments_list() : [];
 
-// Per-college: today's session + queue counts
+// Per-college: sessions today, upcoming sessions, applicants booked from today
+// onward, and today's live counts (in progress / waiting).
+$qEmpty  = ['queue' => 0, 'sessions' => 0, 'upcoming' => 0, 'in_progress' => 0, 'waiting' => 0];
 $qCounts = [];
 foreach ($departments as $d) {
-    $qCounts[$d] = ['queue' => 0, 'sessions' => 0, 'in_progress' => 0, 'waiting' => 0];
+    $qCounts[$d] = $qEmpty;
 }
 try {
     $stmt = $db->prepare(
         "SELECT s.department,
-                COUNT(DISTINCT s.id) AS sessions,
-                COUNT(q.id)          AS queue_total,
-                SUM(CASE WHEN q.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
-                SUM(CASE WHEN q.status = 'checked_in'  THEN 1 ELSE 0 END) AS waiting
+                COUNT(DISTINCT CASE WHEN s.slot_date =  CAST(:d1 AS date) THEN s.id END) AS sessions,
+                COUNT(DISTINCT CASE WHEN s.slot_date >  CAST(:d2 AS date) THEN s.id END) AS upcoming,
+                COUNT(q.id) AS queue_total,
+                SUM(CASE WHEN s.slot_date = CAST(:d3 AS date) AND q.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+                SUM(CASE WHEN s.slot_date = CAST(:d4 AS date) AND q.status = 'checked_in'  THEN 1 ELSE 0 END) AS waiting
            FROM interview_slots s
            LEFT JOIN interview_queue q ON q.slot_id = s.id
-          WHERE s.slot_date = ?
+          WHERE s.slot_date >= CAST(:d5 AS date)
           GROUP BY s.department"
     );
-    $stmt->execute([$today]);
+    $stmt->execute([':d1' => $today, ':d2' => $today, ':d3' => $today, ':d4' => $today, ':d5' => $today]);
     foreach ($stmt->fetchAll() as $row) {
         $qCounts[$row['department']] = [
             'queue'       => (int) $row['queue_total'],
             'sessions'    => (int) $row['sessions'],
+            'upcoming'    => (int) $row['upcoming'],
             'in_progress' => (int) $row['in_progress'],
             'waiting'     => (int) $row['waiting'],
         ];
@@ -43,7 +47,7 @@ ob_start();
 <?php else: ?>
     <div class="select-grid college-grid">
         <?php foreach ($departments as $dept):
-            $info  = $qCounts[$dept] ?? ['queue' => 0, 'sessions' => 0, 'in_progress' => 0, 'waiting' => 0];
+            $info  = $qCounts[$dept] ?? $qEmpty;
             $live  = $info['in_progress'] > 0 || $info['waiting'] > 0;
         ?>
             <a href="<?= url('/staff/interviews/queue') ?>?college=<?= urlencode($dept) ?>"
@@ -55,12 +59,14 @@ ob_start();
                 <div class="select-card-meta">
                     <div class="select-card-meta-row">
                         <?= $info['sessions'] ?> session<?= $info['sessions'] !== 1 ? 's' : '' ?> today
+                        &middot; <?= $info['upcoming'] ?> upcoming
                     </div>
-                    <?php if ($info['queue'] > 0): ?>
-                        <div class="select-card-meta-row">
-                            <?= $info['queue'] ?> applicant<?= $info['queue'] !== 1 ? 's' : '' ?>
-                        </div>
-                    <?php endif; ?>
+                    <div class="select-card-meta-row">
+                        <?= $info['queue'] ?> applicant<?= $info['queue'] !== 1 ? 's' : '' ?>
+                        <?php if ($info['waiting'] > 0 || $info['in_progress'] > 0): ?>
+                            &middot; <?= $info['waiting'] ?> waiting, <?= $info['in_progress'] ?> in progress
+                        <?php endif; ?>
+                    </div>
                 </div>
             </a>
         <?php endforeach; ?>

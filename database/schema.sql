@@ -874,7 +874,7 @@ INSERT INTO departments (code, name) VALUES
     ('COE', 'College of Education'),
     ('CAS', 'College of Arts and Sciences'),
     ('CEN', 'College of Engineering'),
-    ('HM',  'College of Hospitality Management');
+    ('HM',  'College of International Hospitality Management');
 
 -- 9d. Course to department mapping (covers all courses in PLP_COURSES)
 INSERT INTO course_departments (course_name, department_id) VALUES

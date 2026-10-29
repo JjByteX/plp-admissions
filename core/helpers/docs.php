@@ -118,6 +118,31 @@ function required_docs_all_approved(PDO $db, int $applicantId): bool
     return (int)$stmt->fetchColumn() === count($slugs);
 }
 
+// True when every required slot has a file the student actually submitted
+// (uploaded, under review or already approved). A missing or rejected slot
+// means the submission is incomplete and must not be bulk-approved.
+function required_docs_all_submitted(PDO $db, int $applicantId): bool
+{
+    $stmt = $db->prepare('SELECT applicant_type, doc_flags FROM applicants WHERE id = ?');
+    $stmt->execute([$applicantId]);
+    $a = $stmt->fetch();
+    if (!$a) {
+        return false;
+    }
+    $slugs = array_keys(docs_for_type($a['applicant_type'], $a['doc_flags'] ?? null));
+    if (!$slugs) {
+        return false;
+    }
+    $in = implode(',', array_fill(0, count($slugs), '?'));
+    $stmt = $db->prepare(
+        "SELECT COUNT(DISTINCT doc_type) FROM documents
+          WHERE applicant_id = ? AND file_path IS NOT NULL AND file_path <> ''
+            AND status IN ('uploaded','under_review','approved') AND doc_type IN ($in)"
+    );
+    $stmt->execute(array_merge([$applicantId], $slugs));
+    return (int)$stmt->fetchColumn() === count($slugs);
+}
+
 // Slots that would be dropped by $newFlags but already hold an approved file.
 // Returns their labels; empty array means the flag change is allowed.
 function doc_flags_blocked_slots(PDO $db, int $applicantId, array $newFlags): array

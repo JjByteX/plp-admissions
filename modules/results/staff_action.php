@@ -60,6 +60,17 @@ if ($action === 'override') {
         fail('Cannot override - applicant has no released result yet.', '/staff/results');
     }
 
+    // Switching to Accepted must still respect the course's Max Slots.
+    if ($decision === 'accepted' && $prev !== 'accepted') {
+        $cp = $db->prepare('SELECT course_applied, school_year FROM applicants WHERE id = ?');
+        $cp->execute([$applicantId]);
+        $cRow = $cp->fetch(PDO::FETCH_ASSOC) ?: [];
+        $left = course_slots_remaining($db, (string)($cRow['course_applied'] ?? ''), (string)($cRow['school_year'] ?? ''));
+        if ($left !== null && $left <= 0) {
+            fail('Slots are full for ' . ($cRow['course_applied'] ?? 'this course') . '. Cannot accept more applicants.', '/staff/results');
+        }
+    }
+
     $db->prepare(
         'UPDATE admission_results
          SET result = ?, remarks = ?, released_by = ?, released_at = NOW()
@@ -87,7 +98,7 @@ if ($action === 'override') {
 // counts as an "override" (in which case a written reason is required
 // and gets stored as the remarks for the audit trail).
 $stmt = $db->prepare(
-    'SELECT a.id, a.overall_status,
+    'SELECT a.id, a.overall_status, a.course_applied, a.school_year,
             ar.result AS existing_result,
             er.passed AS exam_passed,
             iq.evaluation_result
@@ -140,6 +151,14 @@ if ($isOverride && $reason === '') {
 }
 
 $remarks = $isOverride ? $reason : null;
+
+// Max Slots: never accept past the course cap.
+if ($decision === 'accepted') {
+    $left = course_slots_remaining($db, (string)$row['course_applied'], (string)$row['school_year']);
+    if ($left !== null && $left <= 0) {
+        fail('Slots are full for ' . $row['course_applied'] . '. Cannot accept more applicants.', '/staff/results');
+    }
+}
 
 $db->prepare(
     'INSERT INTO admission_results (applicant_id, result, remarks, released_by, released_at)

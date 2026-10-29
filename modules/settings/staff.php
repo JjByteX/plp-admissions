@@ -80,6 +80,9 @@ ob_start();
                     <input type="password" id="staff_confirm_password" name="confirm_password" class="form-control" required>
                 </div>
             </div>
+            <label class="flex align-items-center gap-2 text-sm mt-4" for="staff_show_password">
+                <input type="checkbox" id="staff_show_password" class="js-show-password"> Show passwords
+            </label>
             <div class="mt-5">
                 <button type="submit" class="btn btn-primary">Update Password</button>
             </div>
@@ -110,6 +113,7 @@ ob_start();
 <?php
 $content   = ob_get_clean();
 $pageTitle = 'Settings';
+$pageScripts = ['js/pages/show-password.js'];
 require_once VIEWS_PATH . '/partials/page_header.php';
 $pageBreadcrumb = [page_home_crumb()];
 $activeNav = 'settings';

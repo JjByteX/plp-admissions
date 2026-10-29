@@ -278,10 +278,10 @@ if ($college !== '') {
     }
 
     // Staff dropdown (interviewers in this college, plus admins).
-    // Deans only appear for their own college, same as staff.
+    // Only Professors (and Admins) interview. Deans never appear here.
     $staffStmt = $db->prepare(
         "SELECT id, name FROM users
-          WHERE role IN ('staff','dean','admin') AND is_active = 1
+          WHERE role IN ('staff','admin') AND is_active = 1
             AND (department = ? OR ? = '' OR role = 'admin')
           ORDER BY name"
     );

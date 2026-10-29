@@ -67,6 +67,18 @@ switch ($action) {
         // Approve all uploaded/under_review documents for this applicant in one shot.
         // $id here is the applicant ID (passed via the form action URL).
         // AI-flagged documents are skipped until staff confirm the category.
+        // Incomplete submissions (a required document missing or rejected)
+        // cannot be bulk-approved; staff review those one by one.
+        if (!required_docs_all_submitted($db, (int)$id)) {
+            $incMsg = 'Approve All is only available once the student has uploaded all required documents.';
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => false, 'message' => $incMsg]);
+                exit;
+            }
+            fail($incMsg, '/staff/applicants/' . $id);
+        }
+
         $res      = doc_approve_unflagged($db, (int)$id, $staffId);
         $affected = $res['approved'];
         $skipped  = $res['skipped'];

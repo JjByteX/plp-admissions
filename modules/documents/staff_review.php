@@ -24,7 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
     $approved  = 0;
     $advanced  = 0;
     $confirmed = 0;
+    $incomplete = 0;
     foreach ($ids as $aid) {
+        // Incomplete submissions are never bulk-approved.
+        if (!required_docs_all_submitted($db, (int)$aid)) {
+            $incomplete++;
+            continue;
+        }
         // Staff picked these applicants on purpose, so AI-flagged documents are
         // approved too. Approving a flagged document confirms its category,
         // the same as the single Approve button does.
@@ -60,6 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk_
     $flashMsg = "Approved documents for {$approved} applicant(s). {$advanced} advanced to exam.";
     if ($confirmed > 0) {
         $flashMsg .= " {$confirmed} AI-flagged document" . ($confirmed != 1 ? 's' : '') . ' approved with the category confirmed.';
+    }
+    if ($incomplete > 0) {
+        $flashMsg .= " {$incomplete} skipped because required documents are incomplete.";
     }
     Session::flash('success', $flashMsg);
     redirect('/staff/applicants');
@@ -139,15 +148,24 @@ if ($applicantId) {
     $approvable = array_filter($docRows, fn($d) => in_array($d['status'], ['uploaded','under_review'], true));
     $approvableCount = count(array_filter($approvable, fn($d) => !isset($aiFlags[(int)$d['id']])));
     $flaggedPending  = count($approvable) - $approvableCount;
+    // Approve All needs a complete submission (every required slot filled).
+    $docsComplete    = required_docs_all_submitted($db, $applicantId);
+    $approveAllTip   = 'Available once the student has uploaded all required documents.';
 
     ob_start();
 ?>
 <div id="doc-review">
 <div class="flex align-items-center gap-3 mb-6">
     <div class="ms-auto"></div>
-    <?php if ($approvableCount > 0): ?>
+    <?php if ($approvableCount > 0 && $docsComplete): ?>
         <button type="button" class="btn btn-success btn-sm" id="approve-all-btn"
                 onclick="approveAllAjax()">
+            <?= icon('ic_fluent_checkmark_circle_24_regular', 15) ?>
+            Approve All (<?= $approvableCount ?>)
+        </button>
+    <?php elseif ($approvableCount > 0): ?>
+        <button type="button" class="btn btn-success btn-sm" disabled
+                title="<?= e($approveAllTip) ?>">
             <?= icon('ic_fluent_checkmark_circle_24_regular', 15) ?>
             Approve All (<?= $approvableCount ?>)
         </button>
@@ -449,6 +467,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
 <script>window.PAGE = <?= json_encode([
     'docUrl'       => url('/staff/documents/'),
     'applicantUrl' => url('/staff/documents/' . $applicantId),
+    'listUrl'      => url('/staff/applicants'),
     'csrf'         => csrf_token(),
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;</script>
 
@@ -460,7 +479,12 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
     $pageTitle = 'Review: ' . format_full_name($applicant);  
     $pageBreadcrumb = [['label' => 'Documents', 'to' => '/staff/applicants']];
     $pageActions = ui_button('Print', ['variant' => 'secondary', 'icon' => 'printer', 'href' => url('/print/admission?id=' . (int)$applicantId), 'attrs' => ['target' => '_blank', 'rel' => 'noopener']])
-        . ($approvableCount > 0 ? ui_button('Approve All (' . (int)$approvableCount . ')', ['variant' => 'success', 'icon' => 'ic_fluent_checkmark_circle_24_regular', 'attrs' => ['id' => 'approve-all-btn', 'onclick' => 'approveAllAjax()']]) : '');
+        . ($approvableCount > 0
+            ? ui_button('Approve All (' . (int)$approvableCount . ')', ['variant' => 'success', 'icon' => 'ic_fluent_checkmark_circle_24_regular',
+                'attrs' => $docsComplete
+                    ? ['id' => 'approve-all-btn', 'onclick' => 'approveAllAjax()']
+                    : ['disabled' => 'disabled', 'title' => $approveAllTip]])
+            : '');
     $activeNav = 'documents';
     include VIEWS_PATH . '/layouts/app.php';
     return;
@@ -727,7 +751,7 @@ $sortParams = ['status' => $statusFilter, 'type' => $typeFilter, 'course' => $co
 
 <?php
 $pageStyles  = ['css/pages/documents-list.css'];
-$pageScripts = ['js/pages/documents-bulk.js'];
+$pageScripts = ['js/pages/documents-bulk.js', 'js/pages/live-search.js'];
 $content   = ob_get_clean();
 $pageTitle = 'Documents';
 $activeNav = 'documents';

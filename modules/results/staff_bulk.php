@@ -100,7 +100,7 @@ if (empty($ids) || !in_array($action, ['release_selected', 'bulk_accept', 'bulk_
 // Pull bucket inputs for every selected applicant in one shot.
 [$placeholders] = sql_in($ids);
 $stmt = $db->prepare(
-    "SELECT a.id, a.overall_status,
+    "SELECT a.id, a.overall_status, a.course_applied, a.school_year,
             ar.result AS existing_result,
             er.passed AS exam_passed,
             iq.evaluation_result
@@ -125,6 +125,8 @@ $upStatus = $db->prepare("UPDATE applicants SET overall_status = 'released' WHER
 
 $counts  = ['accepted' => 0, 'rejected' => 0];
 $skipped = 0;
+$full     = 0;   // accepts refused because the course is at Max Slots
+$slotsLeft = [];  // course|school_year => seats still open, tracked across this batch
 $overrideReason = post_str('reason');
 
 foreach ($rows as $row) {
@@ -156,6 +158,21 @@ foreach ($rows as $row) {
         $decision = 'rejected';
     }
 
+    // Max Slots: stop accepting once the course is full (counted across the batch).
+    if ($decision === 'accepted') {
+        $capKey = $row['course_applied'] . '|' . $row['school_year'];
+        if (!array_key_exists($capKey, $slotsLeft)) {
+            $slotsLeft[$capKey] = course_slots_remaining($db, (string)$row['course_applied'], (string)$row['school_year']);
+        }
+        if ($slotsLeft[$capKey] !== null && $slotsLeft[$capKey] <= 0) {
+            $full++;
+            continue;
+        }
+        if ($slotsLeft[$capKey] !== null) {
+            $slotsLeft[$capKey]--;
+        }
+    }
+
     $isOverride = ($decision !== $recommended);
     if ($isOverride && $overrideReason === '') {
         // For bulk overrides we still want a single shared reason — if
@@ -185,7 +202,10 @@ $released = $counts['accepted'] + $counts['rejected'];
 if ($released > 0) {
     $msg = "Released {$released} result(s): {$counts['accepted']} accepted, {$counts['rejected']} rejected.";
     if ($skipped > 0) $msg .= " {$skipped} skipped (still awaiting interview or already released).";
+    if ($full > 0)    $msg .= " {$full} not accepted because the course slots are full.";
     Session::flash('success', $msg);
+} elseif ($full > 0) {
+    Session::flash('error', "Slots are full. {$full} applicant(s) could not be accepted.");
 } else {
     Session::flash('info', 'No applicants were eligible for release.');
 }

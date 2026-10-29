@@ -28,18 +28,21 @@ DELETE FROM users WHERE email IN (
     'dean.coe@plp.edu.ph',
     'dean.cas@plp.edu.ph',
     'dean.cen@plp.edu.ph',
+    'dean.cihm@plp.edu.ph',
     'staff.ccs@plp.edu.ph',
     'staff.con@plp.edu.ph',
     'staff.cba@plp.edu.ph',
     'staff.coe@plp.edu.ph',
     'staff.cas@plp.edu.ph',
     'staff.cen@plp.edu.ph',
+    'staff.cihm@plp.edu.ph',
     'proctor.ccs@plp.edu.ph',
     'proctor.con@plp.edu.ph',
     'proctor.cba@plp.edu.ph',
     'proctor.coe@plp.edu.ph',
     'proctor.cas@plp.edu.ph',
-    'proctor.cen@plp.edu.ph'
+    'proctor.cen@plp.edu.ph',
+    'proctor.cihm@plp.edu.ph'
 );
 
 -- Admin --------------------------------------------------
@@ -125,6 +128,15 @@ VALUES
      '$2b$12$zziXN8OOGOv.vm2PaCGpO.CF247JYvoigABbEVBwJi/Q1LkKe5Dc2',
      'dean', 'College of Engineering', 1);
 
+-- College of International Hospitality Management
+INSERT INTO users
+    (name, first_name, last_name, email, password_hash, role, department, email_verified)
+VALUES
+    ('CIHM Dean', 'CIHM', 'Dean',
+     'dean.cihm@plp.edu.ph',
+     '$2b$12$Y8.9C.EsgGjOUAtWZa5D.eDZkJ3slub7J4.9qyMRamskaMRwtS/lK',
+     'dean', 'College of International Hospitality Management', 1);
+
 -- Professors (legacy 'staff' role, one per college) ------
 -- These are faculty who conduct interviews.
 -- The DB enum value stays 'staff' for compatibility; the UI shows
@@ -185,6 +197,15 @@ VALUES
      '$2b$12$euGKeofGDb/1XMIinGyopOzQ7NqxJI0N.LR3dALq18BgGYOcYkvZG',
      'staff', 'College of Engineering', 1);
 
+-- College of International Hospitality Management
+INSERT INTO users
+    (name, first_name, last_name, email, password_hash, role, department, email_verified)
+VALUES
+    ('CIHM Staff', 'CIHM', 'Staff',
+     'staff.cihm@plp.edu.ph',
+     '$2b$12$cc4Lhsf4526jZ2Tn6TGuAOykOKIAvlHkEQc3PMqHRIDDooSV5II.a',
+     'staff', 'College of International Hospitality Management', 1);
+
 -- Proctors (one per college) ------------------------------
 -- These are faculty who proctor exams (generate access codes,
 -- manage exam-day room operations). They do NOT conduct interviews.
@@ -243,3 +264,12 @@ VALUES
      'proctor.cen@plp.edu.ph',
      '$2b$12$ywUI.JzgtkdBKAVmxKJ6AOLX8FM2g9YT8WdeojgSFABdBwzEA5Q7i',
      'proctor', 'College of Engineering', 1);
+
+-- College of International Hospitality Management
+INSERT INTO users
+    (name, first_name, last_name, email, password_hash, role, department, email_verified)
+VALUES
+    ('CIHM Proctor', 'CIHM', 'Proctor',
+     'proctor.cihm@plp.edu.ph',
+     '$2b$12$.lGP7mVx9dWuyPBh.G9Hz.ZBMvmdaIRO02reU6F3W0uIsxY9ARz3O',
+     'proctor', 'College of International Hospitality Management', 1);
