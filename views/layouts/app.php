@@ -181,37 +181,37 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
         </div>
 
         <!-- Notification bell + Profile menu -->
-        <div style="display:flex;align-items:center;gap:var(--space-3);justify-content:flex-end">
+        <div class="flex align-items-center gap-3 justify-content-end">
 
         <!-- Notification Bell -->
         <?php $notifCount = notification_count(Auth::id()); ?>
         <div class="dropdown" id="notif-dropdown">
-            <button class="btn-icon" data-dropdown type="button" aria-label="Notifications" style="position:relative">
+            <button class="btn-icon position-relative" data-dropdown type="button" aria-label="Notifications">
                 <?= icon('bell', 20) ?>
                 <?php if ($notifCount > 0): ?>
                 <span class="notif-badge" id="notif-badge"><?= $notifCount > 9 ? '9+' : $notifCount ?></span>
                 <?php endif; ?>
             </button>
-            <div class="dropdown-menu" style="width:320px;max-height:400px;overflow-y:auto;right:0;left:auto" id="notif-menu">
-                <div style="padding:var(--space-3) var(--space-4);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">
-                    <strong style="font-size:var(--text-sm)">Notifications</strong>
+            <div class="dropdown-menu overflow-y-auto" style="width:320px;max-height:400px;right:0;left:auto" id="notif-menu">
+                <div class="py-3 px-4 flex justify-content-between align-items-center bd-b">
+                    <strong class="text-sm">Notifications</strong>
                     <?php if ($notifCount > 0): ?>
-                    <button class="btn btn-ghost btn-sm" onclick="markAllRead()" style="font-size:var(--text-xs)">Mark all read</button>
+                    <button class="btn btn-ghost btn-sm text-xs" onclick="markAllRead()">Mark all read</button>
                     <?php endif; ?>
                 </div>
                 <div id="notif-list">
                     <?php
                     $notifications = get_notifications(Auth::id(), 10);
                     if (empty($notifications)): ?>
-                        <div style="padding:var(--space-6);text-align:center;color:var(--text-tertiary);font-size:var(--text-sm)">No notifications</div>
+                        <div class="p-6 text-center text-tertiary text-sm">No notifications</div>
                     <?php else:
                         foreach ($notifications as $n): ?>
                         <a href="<?= $n['link'] ? url($n['link']) : '#' ?>" class="dropdown-item" style="flex-direction:column;align-items:flex-start;gap:2px;padding:var(--space-3) var(--space-4);<?= !$n['is_read'] ? 'background:var(--bg-secondary)' : '' ?>">
                             <div style="font-weight:<?= !$n['is_read'] ? 'var(--weight-semibold)' : 'normal' ?>;font-size:var(--text-sm)"><?= e($n['title']) ?></div>
                             <?php if ($n['message']): ?>
-                            <div style="font-size:var(--text-xs);color:var(--text-tertiary);line-height:1.4"><?= e(mb_strimwidth($n['message'], 0, 80, '...')) ?></div>
+                            <div class="text-xs text-tertiary" style="line-height:1.4"><?= e(mb_strimwidth($n['message'], 0, 80, '...')) ?></div>
                             <?php endif; ?>
-                            <div style="font-size:var(--text-2xs);color:var(--text-tertiary);margin-top:2px"><?= date('M j, g:i A', strtotime($n['created_at'])) ?></div>
+                            <div class="text-tertiary" style="font-size:var(--text-2xs);margin-top:2px"><?= date('M j, g:i A', strtotime($n['created_at'])) ?></div>
                         </a>
                     <?php endforeach;
                     endif; ?>
@@ -238,18 +238,12 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                     document.documentElement.dataset.theme = t;
                     localStorage.setItem('plp_theme', t);
                     document.querySelectorAll('.theme-pill').forEach(p => p.dataset.theme = t);" style="cursor:pointer;justify-content:space-between;">
-                    <span style="display:flex;align-items:center;gap:var(--space-2)">
+                    <span class="flex align-items-center gap-2">
                         <?= icon('ic_fluent_weather_moon_24_regular', 15) ?>
                         Dark Mode
                     </span>
-                    <div class="theme-pill" data-theme="light" style="
-                        position:relative;width:32px;height:18px;border-radius:var(--radius);
-                        background:var(--border);transition:background .2s;flex-shrink:0;pointer-events:none;">
-                        <div style="
-                            position:absolute;top:3px;left:3px;width:12px;height:12px;
-                            border-radius:50%;background:var(--white);
-                            transition:transform .2s;
-                            transform:translateX(0);">
+                    <div class="theme-pill position-relative rounded flex-shrink-0 pe-none" data-theme="light" style="width:32px;height:18px;background:var(--border);transition:background .2s">
+                        <div class="position-absolute rounded-circle" style="top:3px;left:3px;width:12px;height:12px;background:var(--white);transition:transform .2s;transform:translateX(0)">
                         </div>
                     </div>
                 </div>
@@ -348,23 +342,17 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                             <?= icon('gear', 15) ?>
                             Settings
                         </a>
-                        <div class="dropdown-item theme-toggle-row" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="
+                        <div class="dropdown-item theme-toggle-row pointer justify-content-between" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="
                             const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
                             document.documentElement.dataset.theme = t;
                             localStorage.setItem('plp_theme', t);
-                            document.querySelector('.theme-pill').dataset.theme = t;" style="cursor:pointer;justify-content:space-between;">
-                            <span style="display:flex;align-items:center;gap:var(--space-2)">
+                            document.querySelector('.theme-pill').dataset.theme = t;">
+                            <span class="flex align-items-center gap-2">
                                 <?= icon('ic_fluent_weather_moon_24_regular', 15) ?>
                                 Dark Mode
                             </span>
-                            <div class="theme-pill" data-theme="light" style="
-                                position:relative;width:32px;height:18px;border-radius:var(--radius);
-                                background:var(--border);transition:background .2s;flex-shrink:0;pointer-events:none;">
-                                <div style="
-                                    position:absolute;top:3px;left:3px;width:12px;height:12px;
-                                    border-radius:50%;background:var(--white);
-                                    transition:transform .2s;
-                                    transform:translateX(0);">
+                            <div class="theme-pill position-relative rounded flex-shrink-0 pe-none" data-theme="light" style="width:32px;height:18px;background:var(--border);transition:background .2s">
+                                <div class="position-absolute rounded-circle" style="top:3px;left:3px;width:12px;height:12px;background:var(--white);transition:transform .2s;transform:translateX(0)">
                                 </div>
                             </div>
                         </div>
@@ -469,25 +457,22 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 
 <?php if (Auth::check() && !$isEmbed): ?>
 <!-- ── Session timeout warning ──────────────────────────────── -->
-<div id="session-timeout-modal" style="
-    display:none;position:fixed;inset:0;z-index:9999;
-    background:rgba(0,0,0,.55);backdrop-filter:blur(4px);
-    align-items:center;justify-content:center;">
+<div id="session-timeout-modal" class="align-items-center justify-content-center" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(4px)">
     <div class="session-modal">
         <div class="session-modal-icon">
             <?= icon('ic_fluent_warning_24_regular', 24) ?>
         </div>
-        <div style="font-weight:var(--weight-semibold);font-size:var(--text-lg);margin-bottom:var(--space-2)">
+        <div class="text-lg mb-2" style="font-weight:var(--weight-semibold)">
             Session Expiring Soon
         </div>
-        <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-6)">
+        <div class="text-sm text-secondary mb-6">
             You'll be logged out in <strong id="session-countdown"></strong> due to inactivity.
         </div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-3)">
-            <button onclick="keepAlive()" class="btn btn-primary" style="width:100%">
+        <div class="flex gap-3" style="flex-direction:column">
+            <button onclick="keepAlive()" class="btn btn-primary w-100">
                 Stay Logged In
             </button>
-            <button onclick="logOutNow()" class="btn btn-ghost" style="width:100%;color:var(--text-tertiary)">
+            <button onclick="logOutNow()" class="btn btn-ghost w-100 text-tertiary">
                 Log Out Now
             </button>
         </div>
@@ -499,7 +484,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 <?php if ($isStudent && !empty($_canWithdraw)): ?>
 <!-- Global Withdraw Application Modal -->
 <div id="withdraw-modal" class="modal-backdrop" style="display:none" aria-modal="true" role="dialog">
-    <div class="modal" style="max-width:440px">
+    <div class="modal mwpx-440">
         <div class="modal-header">
             <div class="modal-title">Withdraw Application</div>
             <button class="btn-icon" onclick="document.getElementById('withdraw-modal').style.display='none'" type="button">
@@ -509,13 +494,13 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
         <form method="POST" action="<?= url('/student/result') ?>">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="withdraw">
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:var(--space-4)">
-                    <div style="display:flex;gap:var(--space-3);align-items:flex-start">
+            <div class="modal-body flex flex-column gap-4">
+                <div class="rounded p-4" style="background:var(--warning-bg);border:1px solid var(--warning)">
+                    <div class="flex gap-3 align-items-start">
                         <?= icon('warning-circle:fill', 18, 'margin-top:1px;color:#f97316') ?>
                         <div>
-                            <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:var(--warning);margin-bottom:2px">This cannot be undone</div>
-                            <p style="font-size:var(--text-sm);color:var(--text-secondary)">
+                            <div class="fw-semibold text-sm text-warning" style="margin-bottom:2px">This cannot be undone</div>
+                            <p class="text-sm text-secondary">
                                 Withdrawing permanently removes you from the admissions process.
                             </p>
                         </div>
@@ -528,7 +513,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                            oninput="document.getElementById('withdraw-submit-btn').disabled = this.value.trim().toLowerCase() !== 'withdraw'">
                 </div>
                 <div>
-                    <label class="form-label" for="withdraw-reason">Reason <span style="color:var(--text-tertiary);font-weight:var(--weight-regular)">(optional)</span></label>
+                    <label class="form-label" for="withdraw-reason">Reason <span class="text-tertiary fw-normal">(optional)</span></label>
                     <textarea name="withdraw_reason" id="withdraw-reason" class="form-control" rows="2"
                               placeholder="e.g. Enrolling at a different school"></textarea>
                 </div>
@@ -546,12 +531,12 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 <?php if (Auth::check()): ?>
 <!-- Logout confirmation (opened by any [data-logout] link) -->
 <div id="logout-modal" class="modal-backdrop" style="display:none" aria-modal="true" role="dialog" aria-labelledby="logout-modal-title">
-    <div class="modal" style="max-width:380px">
+    <div class="modal mwpx-380">
         <div class="modal-header">
             <div class="modal-title" id="logout-modal-title">Log out</div>
         </div>
         <div class="modal-body">
-            <p style="font-size:var(--text-sm);color:var(--text-secondary)">Are you sure you want to log out?</p>
+            <p class="text-sm text-secondary">Are you sure you want to log out?</p>
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-ghost" id="logout-cancel-btn">Cancel</button>

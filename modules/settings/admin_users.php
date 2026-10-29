@@ -169,10 +169,10 @@ ob_start();
 ?>
 
 <?php foreach ($errors as $err): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-3);flex-shrink:0"><?= e($err) ?></div>
+    <div class="alert alert-error mb-3 flex-shrink-0"><?= e($err) ?></div>
 <?php endforeach; ?>
 <?php foreach ($success as $suc): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-3);flex-shrink:0"><?= e($suc) ?></div>
+    <div class="alert alert-success mb-3 flex-shrink-0"><?= e($suc) ?></div>
 <?php endforeach; ?>
 
 <div class="auto-table-wrap" data-auto-page-size="admin-users" data-current-per-page="<?= (int)$perPage ?>">
@@ -186,7 +186,7 @@ ob_start();
             <input type="text" name="q" class="form-input" aria-label="Search users" placeholder="Search by name or email…" value="<?= e($filterQ) ?>">
         </div>
 
-        <select name="department" class="form-input" style="width:240px" onchange="this.form.submit()" aria-label="Department">
+        <select name="department" class="form-input wpx-240" onchange="this.form.submit()" aria-label="Department">
             <option value="">All departments</option>
             <?php foreach ($availableDepts as $deptName): ?>
                 <option value="<?= e($deptName) ?>" <?= $filterDept === $deptName ? 'selected' : '' ?>>
@@ -204,12 +204,12 @@ ob_start();
         <table class="auto-table">
             <thead>
                 <tr>
-                    <th style="width:200px">Name</th>
+                    <th class="wpx-200">Name</th>
                     <th>Email</th>
-                    <th style="width:120px">Role</th>
-                    <th style="width:240px">Department</th>
-                    <th style="width:100px">Status</th>
-                    <th style="width:120px">Created</th>
+                    <th class="wpx-120">Role</th>
+                    <th class="wpx-240">Department</th>
+                    <th class="wpx-100">Status</th>
+                    <th class="wpx-120">Created</th>
                     <th style="width:220px"></th>
                 </tr>
             </thead>
@@ -217,23 +217,23 @@ ob_start();
             <tbody>
             <?php foreach ($staffUsers as $u): ?>
                 <tr>
-                    <td style="font-weight:var(--weight-medium)"><span class="auto-table-clip"><?= e($u['name']) ?></span></td>
-                    <td style="font-size:var(--text-sm);color:var(--text-secondary)"><span class="auto-table-clip"><?= e($u['email']) ?></span></td>
+                    <td class="fw-medium"><span class="auto-table-clip"><?= e($u['name']) ?></span></td>
+                    <td class="text-sm text-secondary"><span class="auto-table-clip"><?= e($u['email']) ?></span></td>
                     <td>
                         <?php
                             $roleBadge = role_badge_class($u['role']);
                         ?>
                         <span class="badge badge-<?= e($roleBadge) ?>"><?= e(Auth::roleLabel($u['role'])) ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm)">
+                    <td class="text-sm">
                         <?php if (in_array($u['role'], [ROLE_ADMIN, ROLE_SSO], true)): ?>
-                            <span style="color:var(--text-secondary);font-size:var(--text-xs)">-</span>
+                            <span class="text-secondary text-xs">-</span>
                         <?php else: ?>
                         <form method="POST" style="display:block">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="update_department">
                             <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
-                            <select name="department" class="form-control" style="width:100%" aria-label="Department"
+                            <select name="department" class="form-control w-100" aria-label="Department"
                                     onchange="this.form.submit()">
                                 <option value="">- none -</option>
                                 <?php foreach ($availableDepts as $deptName): ?>
@@ -253,9 +253,9 @@ ob_start();
                             <span class="badge badge-neutral">Inactive</span>
                         <?php endif; ?>
                     </td>
-                    <td style="font-size:var(--text-sm);color:var(--text-secondary)"><?= format_date($u['created_at'], 'M j, Y') ?></td>
+                    <td class="text-sm text-secondary"><?= format_date($u['created_at'], 'M j, Y') ?></td>
                     <td>
-                        <div style="display:flex;gap:var(--space-2);align-items:center">
+                        <div class="flex gap-2 align-items-center">
                             <button class="btn btn-secondary btn-sm"
                                     onclick="openResetModal(<?= $u['id'] ?>, <?= json_encode($u['name']) ?>)">
                                 Reset PW
@@ -305,9 +305,9 @@ ob_start();
             </span>
         <?php endif; ?>
 
-        <span style="padding:0 var(--space-1);font-size:var(--text-sm);color:var(--text-tertiary);white-space:nowrap">
-            Page <strong style="color:var(--text-primary);font-weight:var(--weight-semibold)"><?= $page ?></strong>
-            of <strong style="color:var(--text-primary);font-weight:var(--weight-semibold)"><?= $pages ?></strong>
+        <span class="py-0 px-1 text-sm text-tertiary text-nowrap">
+            Page <strong class="text-main fw-semibold"><?= $page ?></strong>
+            of <strong class="text-main fw-semibold"><?= $pages ?></strong>
         </span>
 
         <?php if ($page < $pages): ?>
@@ -331,7 +331,7 @@ ob_start();
 
 <!-- Create user modal -->
 <div id="create-user-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:420px">
+    <div class="modal mwpx-420">
         <div class="modal-header">
             <div class="modal-title">New User</div>
             <button class="btn-icon" onclick="document.getElementById('create-user-modal').style.display='none'">
@@ -341,17 +341,17 @@ ob_start();
         <form method="POST">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="create_user">
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="modal-body flex flex-column gap-4">
                 <div>
-                    <label class="form-label" for="create_user_name">Full Name <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="create_user_name">Full Name <span class="text-error">*</span></label>
                     <input type="text" id="create_user_name" name="name" class="form-control" required>
                 </div>
                 <div>
-                    <label class="form-label" for="create_user_email">Email <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="create_user_email">Email <span class="text-error">*</span></label>
                     <input type="email" id="create_user_email" name="email" class="form-control" required>
                 </div>
                 <div>
-                    <label class="form-label" for="role-select">Role <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="role-select">Role <span class="text-error">*</span></label>
                     <select name="role" id="role-select" class="form-control" required>
                         <option value="">Select role…</option>
                         <option value="<?= ROLE_STAFF ?>">Professor (conduct interviews)</option>
@@ -374,9 +374,9 @@ ob_start();
                     </select>
                 </div>
                 <div>
-                    <label class="form-label" for="create_user_password">Password <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="create_user_password">Password <span class="text-error">*</span></label>
                     <input type="password" id="create_user_password" name="password" class="form-control" minlength="8" required>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">Minimum 8 characters.</p>
+                    <p class="text-xs text-tertiary mt-1">Minimum 8 characters.</p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -389,7 +389,7 @@ ob_start();
 
 <!-- Reset password modal -->
 <div id="reset-pw-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:380px">
+    <div class="modal mwpx-380">
         <div class="modal-header">
             <div class="modal-title">Reset Password</div>
             <button class="btn-icon" onclick="document.getElementById('reset-pw-modal').style.display='none'">
@@ -401,8 +401,8 @@ ob_start();
             <input type="hidden" name="action" value="reset_password">
             <input type="hidden" name="user_id" id="reset-uid">
             <div class="modal-body">
-                <p id="reset-name" style="font-weight:var(--weight-medium);margin-bottom:var(--space-4)"></p>
-                <label class="form-label" for="reset_new_password">New Password <span style="color:var(--error)">*</span></label>
+                <p id="reset-name" class="mb-4" style="font-weight:var(--weight-medium)"></p>
+                <label class="form-label" for="reset_new_password">New Password <span class="text-error">*</span></label>
                 <input type="password" id="reset_new_password" name="new_password" class="form-control" minlength="8" required>
             </div>
             <div class="modal-footer">

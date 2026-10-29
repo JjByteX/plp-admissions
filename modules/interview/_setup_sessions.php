@@ -16,13 +16,13 @@ function _session_expired(string $date, ?string $endTime, string $today, string 
 ?>
 
 <?php foreach ($errors as $e): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($e) ?></div>
+    <div class="alert alert-error mb-4"><?= e($e) ?></div>
 <?php endforeach; ?>
 <?php if ($msg = Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+    <div class="alert alert-success mb-4"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+    <div class="alert alert-error mb-4"><?= e($msg) ?></div>
 <?php endif; ?>
 
 <div data-page-actions>
@@ -195,17 +195,17 @@ foreach ($byDate as $date => $dateSlots) {
 <?php if ($canManage && !empty($byDate)): ?>
 <!-- Floating bar for bulk delete (visible while in select mode). -->
 <div id="sess-bulk-bar" class="select-bulk-bar sess-bulk-bar">
-    <span id="sess-bulk-count" style="font-weight:var(--weight-medium)">0 selected</span>
+    <span id="sess-bulk-count" class="fw-medium">0 selected</span>
     <form method="POST" action="<?= url('/staff/interviews/setup') ?>" id="sess-bulk-form"
-          style="display:flex;gap:var(--space-2);align-items:center;margin:0">
+          class="flex gap-2 align-items-center m-0">
         <?= csrf_field() ?>
         <input type="hidden" name="action" value="delete_sessions_bulk">
         <input type="hidden" name="college" value="<?= e($college) ?>">
         <input type="hidden" name="ids"     id="sess-bulk-ids" value="">
         <button type="button" class="btn btn-ghost btn-sm"
                 onclick="cancelSessSelectMode()">Cancel</button>
-        <button type="submit" class="btn btn-sm" id="sess-bulk-delete-btn"
-                style="background:var(--error);color:var(--white);border-color:var(--error)"
+        <button type="submit" class="btn btn-sm text-white" id="sess-bulk-delete-btn"
+                style="background:var(--error);border-color:var(--error)"
                 onclick="return confirmSessBulkDelete(this)">
             Delete Selected
         </button>
@@ -220,7 +220,7 @@ foreach ($byDate as $date => $dateSlots) {
      `add_session` or `batch_create`.
 ───────────────────────────────────────────────────────── -->
 <div id="add-session-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:560px">
+    <div class="modal mwpx-560">
         <div class="modal-header">
             <div class="modal-title">Add Session</div>
             <button class="btn-icon" onclick="document.getElementById('add-session-modal').style.display='none'">
@@ -232,10 +232,10 @@ foreach ($byDate as $date => $dateSlots) {
             <input type="hidden" name="action" id="add-action" value="add_session">
             <input type="hidden" name="department" value="<?= e($college) ?>">
 
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="modal-body flex flex-column gap-4">
 
                 <!-- Mode toggle -->
-                <div class="seg-control" style="align-self:flex-start">
+                <div class="seg-control align-self-start">
                     <button type="button" id="add-mode-single"
                             class="seg-control-item active"
                             onclick="setAddMode('single')">Single session</button>
@@ -246,7 +246,7 @@ foreach ($byDate as $date => $dateSlots) {
 
                 <!-- Shared fields: interviewer + location -->
                 <div>
-                    <label class="form-label" for="add_assigned_to">Assigned Interviewer <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="add_assigned_to">Assigned Interviewer <span class="text-error">*</span></label>
                     <select name="assigned_to" id="add_assigned_to" class="form-control" required>
                         <option value="">- Select staff -</option>
                         <?php foreach ($staffList as $s): ?>
@@ -255,37 +255,37 @@ foreach ($byDate as $date => $dateSlots) {
                     </select>
                 </div>
                 <div>
-                    <label class="form-label" for="add_location_label">Location Label <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="add_location_label">Location Label <span class="text-error">*</span></label>
                     <input type="text" name="location_label" id="add_location_label" class="form-control" required
                            placeholder="e.g. Room 201, Desk A">
                 </div>
                 <div>
                     <label class="form-label" for="add_location_notes">
                         Directions / Notes
-                        <span style="color:var(--text-tertiary);font-weight:400"> - optional</span>
+                        <span class="text-tertiary" style="font-weight:400"> - optional</span>
                     </label>
                     <input type="text" name="location_notes" id="add_location_notes" class="form-control"
                            placeholder="e.g. 2nd floor, turn left at the bulletin board">
                 </div>
 
                 <!-- ── Single-session fields ─────────────────────── -->
-                <div id="add-single-fields" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div id="add-single-fields" class="flex flex-column gap-4">
                     <div>
-                        <label class="form-label" for="add_slot_date">Date <span style="color:var(--error)">*</span></label>
+                        <label class="form-label" for="add_slot_date">Date <span class="text-error">*</span></label>
                         <input type="date" name="slot_date" id="add_slot_date" class="form-control"
                                value="<?= date('Y-m-d', strtotime('+1 day')) ?>">
                     </div>
-                    <div class="row row-cols-1 row-cols-md-3" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                    <div class="row row-cols-1 row-cols-md-3 gutter-3">
                         <div>
-                            <label class="form-label" for="add_slot_time">Start Time <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="add_slot_time">Start Time <span class="text-error">*</span></label>
                             <input type="time" name="slot_time" id="add_slot_time" class="form-control" value="09:00">
                         </div>
                         <div>
-                            <label class="form-label" for="add_slot_end_time">End Time <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="add_slot_end_time">End Time <span class="text-error">*</span></label>
                             <input type="time" name="slot_end_time" id="add_slot_end_time" class="form-control" value="16:00">
                         </div>
                         <div>
-                            <label class="form-label" for="add_capacity">Capacity <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="add_capacity">Capacity <span class="text-error">*</span></label>
                             <input type="number" name="capacity" id="add_capacity" class="form-control"
                                    value="30" min="1" max="500">
                         </div>
@@ -293,23 +293,23 @@ foreach ($byDate as $date => $dateSlots) {
                 </div>
 
                 <!-- ── Recurring (batch) fields ──────────────────── -->
-                <div id="add-batch-fields" style="display:none;flex-direction:column;gap:var(--space-4)">
+                <div id="add-batch-fields" class="flex-column gap-4" style="display:none">
                     <p class="text-secondary-sm">
                         One session is created per selected weekday in the date range.
                     </p>
-                    <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                    <div class="row row-cols-1 row-cols-md-2 gutter-3">
                         <div>
-                            <label class="form-label" for="add_start_date">Start Date <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="add_start_date">Start Date <span class="text-error">*</span></label>
                             <input type="date" name="start_date" id="add_start_date" class="form-control"
                                    value="<?= date('Y-m-d', strtotime('+1 day')) ?>">
                         </div>
                         <div>
-                            <label class="form-label" for="add_end_date">End Date <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="add_end_date">End Date <span class="text-error">*</span></label>
                             <input type="date" name="end_date" id="add_end_date" class="form-control"
                                    value="<?= date('Y-m-d', strtotime('+14 days')) ?>">
                         </div>
                     </div>
-                    <div class="row row-cols-1 row-cols-md-3" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                    <div class="row row-cols-1 row-cols-md-3 gutter-3">
                         <div>
                             <label class="form-label" for="add_start_time">Start Time</label>
                             <input type="time" name="start_time" id="add_start_time" class="form-control" value="09:00">
@@ -324,15 +324,15 @@ foreach ($byDate as $date => $dateSlots) {
                         </div>
                     </div>
                     <div>
-                        <span class="form-label" style="margin-bottom:var(--space-2)">Days of Week</span>
-                        <div style="display:flex;flex-wrap:wrap;gap:var(--space-3)">
+                        <span class="form-label mb-2">Days of Week</span>
+                        <div class="flex flex-wrap gap-3">
                             <?php foreach ([1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri'] as $dn => $dl): ?>
-                                <label class="form-check" style="gap:var(--space-1)">
+                                <label class="form-check gap-1">
                                     <input type="checkbox" name="days[]" value="<?= $dn ?>" checked>
                                     <?= $dl ?>
                                 </label>
                             <?php endforeach; ?>
-                            <label class="form-check" style="gap:var(--space-1)">
+                            <label class="form-check gap-1">
                                 <input type="checkbox" name="days[]" value="6"> Sat
                             </label>
                         </div>
@@ -354,7 +354,7 @@ foreach ($byDate as $date => $dateSlots) {
      so the cards themselves stay clean.
 ───────────────────────────────────────────────────────── -->
 <div id="edit-session-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:560px">
+    <div class="modal mwpx-560">
         <div class="modal-header">
             <div class="modal-title">Edit Session</div>
             <button class="btn-icon" onclick="document.getElementById('edit-session-modal').style.display='none'">
@@ -365,9 +365,9 @@ foreach ($byDate as $date => $dateSlots) {
             <?= csrf_field() ?>
             <input type="hidden" name="action"  value="edit_session">
             <input type="hidden" name="slot_id" id="edit-sess-id">
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="modal-body flex flex-column gap-4">
                 <div>
-                    <label class="form-label" for="edit-sess-assigned">Assigned Interviewer <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="edit-sess-assigned">Assigned Interviewer <span class="text-error">*</span></label>
                     <select name="assigned_to" id="edit-sess-assigned" class="form-control" required>
                         <option value="">- Select staff -</option>
                         <?php foreach ($staffList as $s): ?>
@@ -376,7 +376,7 @@ foreach ($byDate as $date => $dateSlots) {
                     </select>
                 </div>
                 <div>
-                    <label class="form-label" for="edit-sess-label">Location Label <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="edit-sess-label">Location Label <span class="text-error">*</span></label>
                     <input type="text" name="location_label" id="edit-sess-label" class="form-control" required>
                 </div>
                 <div>
@@ -384,46 +384,46 @@ foreach ($byDate as $date => $dateSlots) {
                     <input type="text" name="location_notes" id="edit-sess-notes" class="form-control">
                 </div>
                 <div>
-                    <label class="form-label" for="edit-sess-date">Date <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="edit-sess-date">Date <span class="text-error">*</span></label>
                     <input type="date" name="slot_date" id="edit-sess-date" class="form-control" required>
                 </div>
-                <div class="row row-cols-1 row-cols-md-3" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                <div class="row row-cols-1 row-cols-md-3 gutter-3">
                     <div>
-                        <label class="form-label" for="edit-sess-time">Start Time <span style="color:var(--error)">*</span></label>
+                        <label class="form-label" for="edit-sess-time">Start Time <span class="text-error">*</span></label>
                         <input type="time" name="slot_time" id="edit-sess-time" class="form-control" required>
                     </div>
                     <div>
-                        <label class="form-label" for="edit-sess-end">End Time <span style="color:var(--error)">*</span></label>
+                        <label class="form-label" for="edit-sess-end">End Time <span class="text-error">*</span></label>
                         <input type="time" name="slot_end_time" id="edit-sess-end" class="form-control" required>
                     </div>
                     <div>
-                        <label class="form-label" for="edit-sess-cap">Capacity <span style="color:var(--error)">*</span></label>
+                        <label class="form-label" for="edit-sess-cap">Capacity <span class="text-error">*</span></label>
                         <input type="number" name="capacity" id="edit-sess-cap" class="form-control"
                                min="1" max="500" required>
                     </div>
                 </div>
 
                 <div id="edit-sess-bookinfo"
-                     style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:-4px"></div>
+                     class="text-xs" style="color:var(--text-tertiary);margin-top:-4px"></div>
             </div>
-            <div class="modal-footer" style="justify-content:space-between">
+            <div class="modal-footer justify-content-between">
                 <!-- Destructive actions on the left -->
-                <div style="display:flex;gap:var(--space-2)">
+                <div class="flex gap-2">
                     <button type="button" id="edit-sess-toggle"
-                            class="btn btn-ghost"
-                            style="font-size:var(--text-xs)"
+                            class="btn btn-ghost text-xs"
+                           
                             onclick="submitSessionAction(this.dataset.next)">
                         Close session
                     </button>
                     <button type="button" id="edit-sess-delete"
-                            class="btn btn-ghost"
-                            style="font-size:var(--text-xs);color:var(--error)"
+                            class="btn btn-ghost text-xs"
+                            style="color:var(--error)"
                             data-confirm="Remove this session?" data-confirm-danger data-confirm-ok="Remove"
                             onclick="submitSessionAction('delete_session')">
                         Remove
                     </button>
                 </div>
-                <div style="display:flex;gap:var(--space-2)">
+                <div class="flex gap-2">
                     <button type="button" class="btn btn-ghost"
                             onclick="document.getElementById('edit-session-modal').style.display='none'">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Changes</button>

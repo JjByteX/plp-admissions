@@ -165,8 +165,8 @@ foreach ($slots as $s) {
 ob_start();
 ?>
 
-<div class="card" style="padding:var(--space-6);margin-bottom:var(--space-5);flex-shrink:0">
-    <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin:0 0 var(--space-2)">
+<div class="card p-6 mb-5 flex-shrink-0">
+    <h2 class="text-xl fw-semibold" style="margin:0 0 var(--space-2)">
         Cancel an exam slot
     </h2>
     <p class="text-secondary-sm">
@@ -179,21 +179,20 @@ ob_start();
 </div>
 
 <?php if (empty($cancellable)): ?>
-    <div class="card" style="padding:var(--space-8);text-align:center;color:var(--text-tertiary)">
+    <div class="card p-8 text-center text-tertiary">
         No upcoming exam slots with bookings to cancel.
     </div>
 <?php else: ?>
-    <div class="card" style="padding:0;overflow:hidden">
+    <div class="card p-0 overflow-hidden">
         <div class="table-responsive">
-        <table style="width:100%;border-collapse:collapse">
+        <table class="w-100" style="border-collapse:collapse">
             <thead>
-                <tr style="background:var(--bg-subtle);text-align:left;font-size:var(--text-xs);
-                            color:var(--text-secondary)">
-                    <th style="padding:var(--space-3) var(--space-4)">Slot</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Room</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Department</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Filled</th>
-                    <th style="padding:var(--space-3) var(--space-4)">Move everyone to…</th>
+                <tr class="bg-subtle text-start text-xs text-secondary">
+                    <th class="py-3 px-4">Slot</th>
+                    <th class="py-3 px-4">Room</th>
+                    <th class="py-3 px-4">Department</th>
+                    <th class="py-3 px-4">Filled</th>
+                    <th class="py-3 px-4">Move everyone to…</th>
                 </tr>
             </thead>
             <tbody>
@@ -209,28 +208,28 @@ ob_start();
                     return true;
                 });
             ?>
-                <tr style="border-top:1px solid var(--border);font-size:var(--text-sm);vertical-align:top">
-                    <td style="padding:var(--space-3) var(--space-4);white-space:nowrap">
+                <tr class="bd-t text-sm" style="vertical-align:top">
+                    <td class="py-3 px-4 text-nowrap">
                         <?php // Single-line slot label: "May 14, 2026 · 9:00 AM – 11:00 AM" ?>
                         <span class="auto-table-clip">
-                            <span style="font-weight:var(--weight-medium)"><?= format_date($s['exam_date']) ?></span>
+                            <span class="fw-medium"><?= format_date($s['exam_date']) ?></span>
                             <?php if ($s['slot_time']): ?>
-                                <span style="color:var(--text-tertiary)"> · <?= format_time($s['slot_time']) ?><?= $s['end_time'] ? '–' . format_time($s['end_time']) : '' ?></span>
+                                <span class="text-tertiary"> · <?= format_time($s['slot_time']) ?><?= $s['end_time'] ? '–' . format_time($s['end_time']) : '' ?></span>
                             <?php endif; ?>
                         </span>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4)"><?= e($s['room_label'] ?: '-') ?></td>
-                    <td style="padding:var(--space-3) var(--space-4)"><?= e($s['department'] ?: 'any') ?></td>
-                    <td style="padding:var(--space-3) var(--space-4)">
+                    <td class="py-3 px-4"><?= e($s['room_label'] ?: '-') ?></td>
+                    <td class="py-3 px-4"><?= e($s['department'] ?: 'any') ?></td>
+                    <td class="py-3 px-4">
                         <strong><?= (int)$s['filled'] ?></strong> / <?= (int)$s['capacity'] ?>
                     </td>
-                    <td style="padding:var(--space-3) var(--space-4)">
+                    <td class="py-3 px-4">
                         <?php if (empty($options)): ?>
-                            <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                            <div class="text-xs text-tertiary">
                                 No open slot has enough capacity yet - create one first.
                             </div>
                         <?php else: ?>
-                            <form method="POST" style="display:flex;flex-direction:column;gap:var(--space-2)"
+                            <form method="POST" class="flex flex-column gap-2"
                                   data-confirm="Cancel this slot and move all <?= (int)$s['filled'] ?> applicant(s)?" data-confirm-danger data-confirm-ok="Cancel slot">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="cancel_slot">
@@ -250,10 +249,10 @@ ob_start();
                                 </select>
                                 <input type="text" id="cancel_reason_<?= (int)$s['id'] ?>" name="reason" required maxlength="500" aria-label="Reason"
                                        placeholder="Reason shown to students (e.g. Typhoon Pepito)"
-                                       class="form-control"
-                                       style="font-size:var(--text-xs);height:var(--control-height);min-height:var(--control-height);padding:0 var(--space-2)">
-                                <button type="submit" class="btn btn-sm btn-primary"
-                                        style="height:var(--control-height);min-height:var(--control-height);padding:0 var(--space-3);font-size:var(--text-xs)">
+                                       class="form-control text-xs h-control mh-control py-0 px-2"
+                                      >
+                                <button type="submit" class="btn btn-sm btn-primary h-control mh-control py-0 px-3 text-xs"
+                                       >
                                     Cancel slot & move all
                                 </button>
                             </form>

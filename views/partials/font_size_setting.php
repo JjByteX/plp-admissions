@@ -1,5 +1,5 @@
 <div>
-    <div style="font-size:var(--text-sm);font-weight:var(--weight-medium)">Text Size</div>
+    <div class="text-sm fw-medium">Text Size</div>
     <div class="font-size-slider-wrap">
         <div class="font-size-current" data-font-size-label>Medium</div>
         <div class="font-size-slider-row">

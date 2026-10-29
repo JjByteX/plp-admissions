@@ -182,18 +182,18 @@ ob_start();
 ?>
 
 <?php foreach ($errors as $err): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($err) ?></div>
+    <div class="alert alert-error mb-4"><?= e($err) ?></div>
 <?php endforeach; ?>
 
 <?php if (!$eligibleForInterview): ?>
     <!-- ============================================================
          Student still needs to finish earlier steps (docs / exam).
     ============================================================ -->
-    <div class="card" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">
+    <div class="card p-6">
+        <div class="fw-semibold mb-2">
             Interview not yet available
         </div>
-        <div style="font-size:var(--text-sm);color:var(--text-secondary)">
+        <div class="text-sm text-secondary">
             You'll be able to see your interview schedule after you've
             completed the documents and exam steps.
         </div>
@@ -211,21 +211,20 @@ ob_start();
         <!-- ============================================================
              COMPLETED - evaluated by staff
         ============================================================ -->
-        <div class="card" style="padding:var(--space-6)">
-            <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5)">
-                <div style="width:48px;height:48px;border-radius:var(--radius);
-                             background:var(--success-bg);display:flex;align-items:center;justify-content:center">
+        <div class="card p-6">
+            <div class="flex align-items-center gap-4 mb-5">
+                <div class="rounded flex align-items-center justify-content-center" style="width:48px;height:48px;background:var(--success-bg)">
                     <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?>
                 </div>
                 <div>
-                    <div style="font-weight:var(--weight-semibold)">Interview Completed</div>
-                    <div style="font-size:var(--text-sm);color:var(--text-tertiary)">
+                    <div class="fw-semibold">Interview Completed</div>
+                    <div class="text-sm text-tertiary">
                         Your interview has been recorded
                     </div>
                 </div>
-                <span class="badge badge-neutral" style="margin-left:auto">Completed</span>
+                <span class="badge badge-neutral ms-auto">Completed</span>
             </div>
-            <div class="alert alert-info" style="margin-top:var(--space-2)">
+            <div class="alert alert-info mt-2">
                 Your results will be released by the admissions office. You will be notified once available.
             </div>
         </div>
@@ -234,12 +233,12 @@ ob_start();
         <!-- ============================================================
              ABSENT - staff will reschedule
         ============================================================ -->
-        <div class="card" style="padding:var(--space-6)">
-            <div class="alert alert-error" style="margin-bottom:var(--space-4)">
+        <div class="card p-6">
+            <div class="alert alert-error mb-4">
                 You were marked as absent for your scheduled interview on
                 <strong><?= format_date($myEntry['slot_date']) ?></strong>.
             </div>
-            <div style="font-size:var(--text-sm);color:var(--text-secondary)">
+            <div class="text-sm text-secondary">
                 The admissions office will reschedule your interview shortly.
                 Please check back on this page - a new slot will appear
                 automatically once it's assigned.
@@ -252,22 +251,20 @@ ob_start();
              (auto-checked-in at assignment time; only show queue UI on
              the actual interview day)
         ============================================================ -->
-        <div class="card" style="padding:var(--space-6);text-align:center;margin-bottom:var(--space-4)">
+        <div class="card p-6 text-center mb-4">
 
             <?php if ($myEntry['status'] === 'in_progress'): ?>
-                <div class="badge badge-info"
-                     style="font-size:var(--text-sm);padding:var(--space-2) var(--space-4);margin-bottom:var(--space-4)">
+                <div class="badge badge-info text-sm py-2 px-4 mb-4"
+                    >
                     Your interview is now in progress
                 </div>
             <?php else: ?>
-                <div style="display:inline-flex;align-items:center;gap:var(--space-2);
-                            background:var(--success-bg);color:var(--success);border-radius:var(--radius);
-                            padding:var(--space-2) var(--space-4);margin-bottom:var(--space-4);font-weight:var(--weight-semibold)">
+                <div class="inline-flex align-items-center gap-2 text-success rounded py-2 px-4 mb-4 fw-semibold" style="background:var(--success-bg)">
                     <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
                     Checked In
                 </div>
                 <?php if ($queuePosition !== null): ?>
-                    <div style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-4)">
+                    <div class="text-sm text-secondary mb-4">
                         <?php if ($queuePosition === 1): ?>
                             You are <strong>next</strong> - please be ready!
                         <?php else: ?>
@@ -281,23 +278,21 @@ ob_start();
 
             <!-- Desk instructions -->
             <?php if ($myEntry['desk_label']): ?>
-                <div style="background:var(--bg-subtle);border-radius:var(--radius);
-                             padding:var(--space-4) var(--space-5);text-align:left;margin-bottom:var(--space-4)">
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
-                                 color:var(--text-tertiary);margin-bottom:var(--space-2)">Proceed to</div>
+                <div class="bg-subtle rounded py-4 px-5 text-start mb-4">
+                    <div class="text-xs text-uppercase text-tertiary mb-2" style="letter-spacing:.07em">Proceed to</div>
                     <div style="font-weight:var(--weight-semibold);font-size:var(--text-lg);
                                  margin-bottom:<?= $myEntry['desk_notes'] ? 'var(--space-2)' : '0' ?>">
                         <?= e($myEntry['desk_label']) ?>
                     </div>
                     <?php if ($myEntry['desk_notes']): ?>
-                        <div style="font-size:var(--text-sm);color:var(--text-secondary);white-space:pre-line">
+                        <div class="text-sm text-secondary pre-line">
                             <?= e($myEntry['desk_notes']) ?>
                         </div>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
 
-            <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
+            <div class="text-xs text-tertiary">
                 Checked in at <?= date('g:i A', strtotime($myEntry['checked_in_at'])) ?>
                 &nbsp;·&nbsp;
                 <?= format_date($myEntry['slot_date']) ?>
@@ -310,51 +305,50 @@ ob_start();
         </div>
 
         <?php if ($myEntry['status'] !== 'in_progress'): ?>
-        <div class="card" style="padding:var(--space-4);margin-top:var(--space-4)">
+        <div class="card p-4 mt-4">
             <?php if ($reschedulePending): ?>
                 <!-- The request is sitting in the SSO/Admin/Dean queue.
                      Hide the form so the student can't submit a duplicate. -->
-                <div style="display:flex;align-items:center;gap:var(--space-3)">
+                <div class="flex align-items-center gap-3">
                     <?= icon('ic_fluent_hourglass_24_regular', 18, 'color:var(--warning)') ?>
                     <div>
-                        <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">
+                        <div class="fw-semibold text-sm">
                             Reschedule request submitted
                         </div>
-                        <div style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                        <div class="text-xs text-tertiary">
                             Submitted <?= date('M j, g:i A', strtotime($myReschedule['created_at'])) ?>
                             - awaiting staff review.
                         </div>
                     </div>
                 </div>
                 <?php if (!empty($myReschedule['reason'])): ?>
-                    <div style="margin-top:var(--space-3);padding:var(--space-3) var(--space-4);background:var(--bg-subtle);
-                                 border-radius:var(--radius);font-size:var(--text-sm);white-space:pre-line;color:var(--text-secondary)">
+                    <div class="mt-3 py-3 px-4 bg-subtle rounded text-sm pre-line text-secondary">
                         <?= e($myReschedule['reason']) ?>
                     </div>
                 <?php endif; ?>
             <?php else: ?>
                 <?php if ($rescheduleDenied): ?>
-                    <div class="alert alert-warning" style="margin-bottom:var(--space-3);font-size:var(--text-sm)">
+                    <div class="alert alert-warning mb-3 text-sm">
                         Your previous reschedule request was not approved - you've kept your current slot.
                         <?php if (!empty($myReschedule['deny_reason'])): ?>
-                            <div style="margin-top:var(--space-2);font-weight:var(--weight-medium)">
+                            <div class="mt-2 fw-medium">
                                 Reason from staff:
-                                <span style="font-weight:var(--weight-regular);white-space:pre-line">
+                                <span class="fw-normal pre-line">
                                     <?= e($myReschedule['deny_reason']) ?>
                                 </span>
                             </div>
                         <?php endif; ?>
-                        <div style="margin-top:var(--space-2)">You may submit a new request below if needed.</div>
+                        <div class="mt-2">You may submit a new request below if needed.</div>
                     </div>
                 <?php endif; ?>
                 <details>
-                    <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
+                    <summary class="pointer text-sm text-accent fw-medium">
                         Need to reschedule?
                     </summary>
-                    <form method="POST" action="<?= url('/api/reschedule-request') ?>" style="margin-top:var(--space-3)">
+                    <form method="POST" action="<?= url('/api/reschedule-request') ?>" class="mt-3">
                         <?= csrf_field() ?>
-                        <textarea name="reschedule_reason" aria-label="Reason for rescheduling" class="form-textarea" rows="3" placeholder="Why do you need to reschedule? (e.g. emergency)" required style="margin-bottom:var(--space-3)"></textarea>
-                        <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
+                        <textarea name="reschedule_reason" aria-label="Reason for rescheduling" class="form-textarea mb-3" rows="3" placeholder="Why do you need to reschedule? (e.g. emergency)" required></textarea>
+                        <button type="submit" class="btn btn-ghost w-100">Submit Reschedule Request</button>
                     </form>
                 </details>
             <?php endif; ?>
@@ -367,34 +361,30 @@ ob_start();
         <!-- ============================================================
              FUTURE CONFIRMED BOOKING
         ============================================================ -->
-        <div class="card" style="padding:var(--space-6)">
-            <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-5)">
-                <div style="width:48px;height:48px;border-radius:var(--radius);
-                             background:var(--success-bg);display:flex;align-items:center;justify-content:center">
+        <div class="card p-6">
+            <div class="flex align-items-center gap-4 mb-5">
+                <div class="rounded flex align-items-center justify-content-center" style="width:48px;height:48px;background:var(--success-bg)">
                     <?= icon('ic_fluent_checkmark_circle_24_regular', 22, 'color:var(--success)') ?>
                 </div>
                 <div>
-                    <div style="font-weight:var(--weight-semibold)">Interview Scheduled</div>
-                    <div style="font-size:var(--text-sm);color:var(--text-tertiary)">
+                    <div class="fw-semibold">Interview Scheduled</div>
+                    <div class="text-sm text-tertiary">
                         <?= format_date($myEntry['slot_date'], 'l, F j, Y') ?>
                         <?php if ($myEntry['slot_time']): ?>
                             &nbsp;·&nbsp;<?= format_time($myEntry['slot_time']) ?><?= $myEntry['end_time'] ? ' – ' . format_time($myEntry['end_time']) : '' ?>
                         <?php endif; ?>
                     </div>
                 </div>
-                <span class="badge badge-success" style="margin-left:auto">Confirmed</span>
+                <span class="badge badge-success ms-auto">Confirmed</span>
             </div>
 
             <!-- Desk location — show even before interview day -->
             <?php if ($myEntry['desk_label']): ?>
-                <div style="background:var(--bg-subtle);border-radius:var(--radius);
-                             padding:var(--space-4) var(--space-5);margin-bottom:var(--space-4)">
-                    <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;
-                                 color:var(--text-tertiary);margin-bottom:var(--space-1)">Report to</div>
-                    <div style="font-weight:var(--weight-semibold)"><?= e($myEntry['desk_label']) ?></div>
+                <div class="bg-subtle rounded py-4 px-5 mb-4">
+                    <div class="text-xs text-uppercase text-tertiary mb-1" style="letter-spacing:.07em">Report to</div>
+                    <div class="fw-semibold"><?= e($myEntry['desk_label']) ?></div>
                     <?php if ($myEntry['desk_notes']): ?>
-                        <div style="font-size:var(--text-sm);color:var(--text-secondary);
-                                     margin-top:var(--space-1);white-space:pre-line">
+                        <div class="text-sm text-secondary mt-1 pre-line">
                             <?= e($myEntry['desk_notes']) ?>
                         </div>
                     <?php endif; ?>
@@ -405,21 +395,18 @@ ob_start();
             <?php if ($reschedulePending): ?>
                 <!-- Pending review — the page has "changed" the moment they
                      submitted, so they see status instead of the form. -->
-                <div style="margin-top:var(--space-4);padding:var(--space-4) var(--space-5);
-                             background:var(--warning-bg);border-radius:var(--radius);
-                             display:flex;align-items:flex-start;gap:var(--space-3)">
+                <div class="mt-4 py-4 px-5 rounded flex align-items-start gap-3" style="background:var(--warning-bg)">
                     <?= icon('ic_fluent_hourglass_24_regular', 18, 'color:var(--warning)') ?>
-                    <div style="flex:1">
-                        <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:var(--warning)">
+                    <div class="flex-1">
+                        <div class="fw-semibold text-sm text-warning">
                             Reschedule request submitted
                         </div>
-                        <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:var(--space-1)">
+                        <div class="text-xs text-secondary mt-1">
                             Submitted <?= date('M j, g:i A', strtotime($myReschedule['created_at'])) ?>
                             - awaiting staff review. You'll see a new slot here once it's approved.
                         </div>
                         <?php if (!empty($myReschedule['reason'])): ?>
-                            <div style="margin-top:var(--space-2);font-size:var(--text-sm);color:var(--text-secondary);
-                                         white-space:pre-line">
+                            <div class="mt-2 text-sm text-secondary pre-line">
                                 <?= e($myReschedule['reason']) ?>
                             </div>
                         <?php endif; ?>
@@ -427,31 +414,31 @@ ob_start();
                 </div>
             <?php else: ?>
                 <?php if ($rescheduleApproved): ?>
-                    <div class="alert alert-success" style="margin-top:var(--space-4);font-size:var(--text-sm)">
+                    <div class="alert alert-success mt-4 text-sm">
                         Your reschedule request was approved - you've been moved to the slot shown above.
                     </div>
                 <?php elseif ($rescheduleDenied): ?>
-                    <div class="alert alert-warning" style="margin-top:var(--space-4);font-size:var(--text-sm)">
+                    <div class="alert alert-warning mt-4 text-sm">
                         Your previous reschedule request was not approved - you've kept your current slot.
                         <?php if (!empty($myReschedule['deny_reason'])): ?>
-                            <div style="margin-top:var(--space-2);font-weight:var(--weight-medium)">
+                            <div class="mt-2 fw-medium">
                                 Reason from staff:
-                                <span style="font-weight:var(--weight-regular);white-space:pre-line">
+                                <span class="fw-normal pre-line">
                                     <?= e($myReschedule['deny_reason']) ?>
                                 </span>
                             </div>
                         <?php endif; ?>
-                        <div style="margin-top:var(--space-2)">You may submit a new request below if needed.</div>
+                        <div class="mt-2">You may submit a new request below if needed.</div>
                     </div>
                 <?php endif; ?>
-                <details style="margin-top:var(--space-4)">
-                    <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
+                <details class="mt-4">
+                    <summary class="pointer text-sm text-accent fw-medium">
                         Need to reschedule?
                     </summary>
-                    <form method="POST" action="<?= url('/api/reschedule-request') ?>" style="margin-top:var(--space-3)">
+                    <form method="POST" action="<?= url('/api/reschedule-request') ?>" class="mt-3">
                         <?= csrf_field() ?>
-                        <textarea name="reschedule_reason" aria-label="Reason for rescheduling" class="form-textarea" rows="3" placeholder="Why do you need to reschedule?" required style="margin-bottom:var(--space-3)"></textarea>
-                        <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
+                        <textarea name="reschedule_reason" aria-label="Reason for rescheduling" class="form-textarea mb-3" rows="3" placeholder="Why do you need to reschedule?" required></textarea>
+                        <button type="submit" class="btn btn-ghost w-100">Submit Reschedule Request</button>
                     </form>
                 </details>
             <?php endif; ?>
@@ -473,14 +460,14 @@ ob_start();
          WAITING - passed exam, no slot yet.  Staff will auto-assign
          as soon as a slot opens up for the student's department.
     ============================================================ -->
-    <div class="card" style="padding:var(--space-6);text-align:center">
-        <div style="margin-bottom:var(--space-3)">
+    <div class="card p-6 text-center">
+        <div class="mb-3">
             <?= icon('ic_fluent_hourglass_24_regular', 28, 'color:var(--text-tertiary)') ?>
         </div>
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">
+        <div class="fw-semibold mb-2">
             Waiting for interview assignment
         </div>
-        <div style="font-size:var(--text-sm);color:var(--text-secondary);max-width:480px;margin:0 auto">
+        <div class="text-sm text-secondary mwpx-480 my-0 mx-auto">
             You've passed the exam. The admissions office will automatically
             assign you an interview slot
             <?php if ($studentDept !== ''): ?>

@@ -76,39 +76,39 @@ ob_start();
 ?>
 
 <?php foreach ($errors as $e): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
+    <div class="alert alert-error mb-3"><?= e($e) ?></div>
 <?php endforeach; ?>
 <?php foreach ($success as $s): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
+    <div class="alert alert-success mb-3"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div style="display:flex;flex-direction:column;gap:var(--space-6);max-width:560px;margin:0 auto">
+<div class="flex flex-column gap-6 mwpx-560 my-0 mx-auto">
 
        <!-- Appearance (per-device text size + dark mode) -->
-    <div class="card" data-settings-section="appearance" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-4)">Appearance</div>
+    <div class="card p-6" data-settings-section="appearance">
+        <div class="fw-semibold mb-4">Appearance</div>
         <?php include VIEWS_PATH . '/partials/font_size_setting.php'; ?>
         <?php include VIEWS_PATH . '/partials/dark_mode_setting.php'; ?>
     </div>
 
     <!-- Branding -->
-    <div class="card" data-settings-section="branding" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-5)">School Branding</div>
+    <div class="card p-6" data-settings-section="branding">
+        <div class="fw-semibold mb-5">School Branding</div>
         <form method="POST" enctype="multipart/form-data">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="update_branding">
-            <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="flex flex-column gap-4">
                 <?php if ($schoolLogo): ?>
                     <div>
                         <span class="form-label">Current Logo</span>
                         <img src="<?= str_starts_with($schoolLogo, 'http') ? e($schoolLogo) : e(url('/'. $schoolLogo)) ?>" alt="Logo"
-                             style="height:48px;border-radius:var(--radius);display:block">
+                             class="rounded" style="height:48px;display:block">
                     </div>
                 <?php endif; ?>
                 <div>
                     <label class="form-label" for="school_logo">School Logo</label>
                     <input type="file" id="school_logo" name="school_logo" class="form-control" accept=".jpg,.jpeg,.png,.webp,.svg">
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">JPG, PNG, WEBP, or SVG · max 2 MB</p>
+                    <p class="text-xs text-tertiary mt-1">JPG, PNG, WEBP, or SVG · max 2 MB</p>
                 </div>
                 <div>
                     <label class="form-label" for="school_name">School Name</label>
@@ -116,9 +116,9 @@ ob_start();
                 </div>
                 <div>
                     <label class="form-label" for="color-picker">Accent Color</label>
-                    <div style="display:flex;align-items:center;gap:var(--space-3)">
+                    <div class="flex align-items-center gap-3">
                         <input type="color" name="accent_color" value="<?= e($accentColor) ?>"
-                               style="width:44px;height:36px;padding:2px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;background:none"
+                               class="bd rounded pointer" style="width:44px;height:36px;padding:2px;background:none"
                                id="color-picker">
                         <input type="text" class="form-control" style="max-width:120px" aria-label="Accent color hex"
                                value="<?= e($accentColor) ?>" id="hex-input"
@@ -126,19 +126,19 @@ ob_start();
                     </div>
                 </div>
             </div>
-            <div style="margin-top:var(--space-5)">
+            <div class="mt-5">
                 <button type="submit" class="btn btn-primary">Save Branding</button>
             </div>
         </form>
     </div>
 
     <!-- Password -->
-    <div class="card" data-settings-section="password" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-5)">Change Password</div>
+    <div class="card p-6" data-settings-section="password">
+        <div class="fw-semibold mb-5">Change Password</div>
         <form method="POST">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="change_password">
-            <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="flex flex-column gap-4">
                 <div>
                     <label class="form-label" for="admin_current_password">Current Password</label>
                     <input type="password" id="admin_current_password" name="current_password" class="form-control" required>
@@ -152,7 +152,7 @@ ob_start();
                     <input type="password" id="admin_confirm_password" name="confirm_password" class="form-control" required>
                 </div>
             </div>
-            <div style="margin-top:var(--space-5)">
+            <div class="mt-5">
                 <button type="submit" class="btn btn-primary">Update Password</button>
             </div>
         </form>

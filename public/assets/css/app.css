@@ -1840,12 +1840,86 @@ hr, .divider, .dropdown-separator, .dp-divider, .step-connector, .auth-topbar,
 .dropdown-item.danger:hover { background: var(--error-bg); }
 /* Danger card */
 
+/* ============================================================
+   UTILITIES: use these instead of style="".
+   Spacing (m*-, p*-, gap- 0-5) and layout (flex-column, align-items-*,
+   justify-content-*, w-100, ms-auto, rounded, text-center, text-nowrap...)
+   come from Bootstrap + bootstrap-compat.css. Token-based ones live here.
+   Everything except display is !important so it behaves like the inline
+   style it replaced; display stays overridable so JS can still toggle it.
+   ============================================================ */
 .flex          { display: flex; }
+.inline-flex   { display: inline-flex; }
+.flex-1        { flex: 1 !important; }
+.min-w-0       { min-width: 0 !important; }
+.pointer       { cursor: pointer !important; }
+.pre-line      { white-space: pre-line !important; }
+.accent-c      { accent-color: var(--accent) !important; }
 
-.text-sm       { font-size: var(--text-sm); }
-.text-xs       { font-size: var(--text-xs); }
-.text-secondary{ color: var(--text-secondary); }
-.text-tertiary { color: var(--text-tertiary); }
+.text-2xl      { font-size: var(--text-2xl) !important; }
+.text-xl       { font-size: var(--text-xl) !important; }
+.text-lg       { font-size: var(--text-lg) !important; }
+.text-base     { font-size: var(--text-base) !important; }
+.text-sm       { font-size: var(--text-sm) !important; }
+.text-xs       { font-size: var(--text-xs) !important; }
+.fw-semibold   { font-weight: var(--weight-semibold) !important; }
+.fw-medium     { font-weight: var(--weight-medium) !important; }
+.fw-normal     { font-weight: var(--weight-regular) !important; }
+
+.text-main     { color: var(--text-primary) !important; }
+.text-secondary{ color: var(--text-secondary) !important; }
+.text-tertiary { color: var(--text-tertiary) !important; }
+.text-accent   { color: var(--accent) !important; }
+.text-error    { color: var(--error) !important; }
+.text-warning  { color: var(--warning) !important; }
+.text-success  { color: var(--success) !important; }
+.text-white    { color: var(--white) !important; }
+
+.bg-subtle     { background: var(--bg-subtle) !important; }
+.bg-elevated   { background: var(--bg-elevated) !important; }
+.bd            { border: 1px solid var(--border) !important; }
+.bd-t          { border-top: 1px solid var(--border) !important; }
+.bd-b          { border-bottom: 1px solid var(--border) !important; }
+.h-control     { height: var(--control-height) !important; }
+.mh-control    { min-height: var(--control-height) !important; }
+
+/* Spacing steps past bootstrap-compat's 0-5 */
+.p-6   { padding: var(--space-6) !important; }
+.p-8   { padding: var(--space-8) !important; }
+.p-12  { padding: var(--space-12) !important; }
+.px-6  { padding-left: var(--space-6) !important; padding-right: var(--space-6) !important; }
+.px-8  { padding-left: var(--space-8) !important; padding-right: var(--space-8) !important; }
+.py-6  { padding-top: var(--space-6) !important; padding-bottom: var(--space-6) !important; }
+.py-8  { padding-top: var(--space-8) !important; padding-bottom: var(--space-8) !important; }
+.py-12 { padding-top: var(--space-12) !important; padding-bottom: var(--space-12) !important; }
+.mt-6  { margin-top: var(--space-6) !important; }
+.mt-8  { margin-top: var(--space-8) !important; }
+.mb-6  { margin-bottom: var(--space-6) !important; }
+.my-12 { margin-top: var(--space-12) !important; margin-bottom: var(--space-12) !important; }
+.gap-6 { gap: var(--space-6) !important; }
+
+/* Bootstrap row gutters on the app spacing scale */
+.gutter-3 { --bs-gutter-x: var(--space-3) !important; --bs-gutter-y: var(--space-3) !important; }
+.gutter-4 { --bs-gutter-x: var(--space-4) !important; --bs-gutter-y: var(--space-4) !important; }
+
+/* Fixed widths (px) used by filters and inline fields */
+.wpx-100 { width: 100px !important; }
+.wpx-110 { width: 110px !important; }
+.wpx-120 { width: 120px !important; }
+.wpx-140 { width: 140px !important; }
+.wpx-160 { width: 160px !important; }
+.wpx-170 { width: 170px !important; }
+.wpx-180 { width: 180px !important; }
+.wpx-190 { width: 190px !important; }
+.wpx-200 { width: 200px !important; }
+.wpx-240 { width: 240px !important; }
+.wpx-260 { width: 260px !important; }
+.mwpx-380 { max-width: 380px !important; }
+.mwpx-420 { max-width: 420px !important; }
+.mwpx-440 { max-width: 440px !important; }
+.mwpx-480 { max-width: 480px !important; }
+.mwpx-520 { max-width: 520px !important; }
+.mwpx-560 { max-width: 560px !important; }
 
 .truncate {
     overflow: hidden;

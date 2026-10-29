@@ -143,8 +143,8 @@ if ($applicantId) {
     ob_start();
 ?>
 <div id="doc-review">
-<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-6)">
-    <div style="margin-left:auto"></div>
+<div class="flex align-items-center gap-3 mb-6">
+    <div class="ms-auto"></div>
     <?php if ($approvableCount > 0): ?>
         <button type="button" class="btn btn-success btn-sm" id="approve-all-btn"
                 onclick="approveAllAjax()">
@@ -155,13 +155,13 @@ if ($applicantId) {
 </div>
 
 <?php if ($msg = Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+    <div class="alert alert-success mb-4"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+    <div class="alert alert-error mb-4"><?= e($msg) ?></div>
 <?php endif; ?>
 
-<div style="display:flex;flex-direction:column;gap:var(--space-3)">
+<div class="flex flex-column gap-3">
 <?php foreach ($requiredDocs as $slug => $label):
     $doc    = $docRows[$slug] ?? null;
     $status = $doc['status'] ?? 'pending';
@@ -176,18 +176,18 @@ if ($applicantId) {
         }
     }
 ?>
-    <div class="card" style="padding:var(--space-4) var(--space-5)">
-        <div style="display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap">
-            <div style="flex:1;min-width:0">
-                <div style="font-weight:var(--weight-medium)"><?= e($label) ?></div>
+    <div class="card py-4 px-5">
+        <div class="flex align-items-center gap-4 flex-wrap">
+            <div class="flex-1 min-w-0">
+                <div class="fw-medium"><?= e($label) ?></div>
                 <?php if ($doc && $doc['staff_remarks']): ?>
-                    <div style="font-size:var(--text-sm);color:var(--text-tertiary);margin-top:2px">Remark: <?= e($doc['staff_remarks']) ?></div>
+                    <div class="text-sm text-tertiary" style="margin-top:2px">Remark: <?= e($doc['staff_remarks']) ?></div>
                 <?php endif; ?>
                 <?php if ($flag): ?>
-                    <div class="ai-flag" data-doc="<?= (int)$doc['id'] ?>" style="margin-top:var(--space-2)">
-                        <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;font-size:var(--text-sm)">
+                    <div class="ai-flag mt-2" data-doc="<?= (int)$doc['id'] ?>">
+                        <div class="flex align-items-center gap-2 flex-wrap text-sm">
                             <span class="badge badge-review">AI flag</span>
-                            <span style="color:var(--text-secondary)">
+                            <span class="text-secondary">
                                 <?php if ($flag['source'] === 'applicant_pick'): ?>
                                     Applicant pick: <?= e($aiLabel($flag['pick'])) ?>
                                     <?php if ($flag['guess']): ?> · AI guess: <?= e($aiLabel($flag['guess'])) ?><?php endif; ?>
@@ -197,7 +197,7 @@ if ($applicantId) {
                             </span>
                         </div>
                         <?php if (in_array($status, ['uploaded','under_review'], true)): ?>
-                            <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2)">
+                            <div class="flex align-items-center gap-2 flex-wrap mt-2">
                                 <button type="button" class="btn btn-secondary btn-sm js-cat-ok">Category OK</button>
                                 <?php if ($emptySlots): ?>
                                     <select class="form-control js-target" style="width:auto;max-width:260px" aria-label="Move to">
@@ -208,7 +208,7 @@ if ($applicantId) {
                                     </select>
                                     <button type="button" class="btn btn-secondary btn-sm js-change-type">Change type</button>
                                 <?php else: ?>
-                                    <span style="font-size:var(--text-xs);color:var(--text-tertiary)">No empty slot to move to</span>
+                                    <span class="text-xs text-tertiary">No empty slot to move to</span>
                                 <?php endif; ?>
                             </div>
                         <?php endif; ?>
@@ -226,10 +226,10 @@ if ($applicantId) {
                     Review
                 </button>
             <?php else: ?>
-                <span style="font-size:var(--text-sm);color:var(--text-tertiary)">No file</span>
+                <span class="text-sm text-tertiary">No file</span>
             <?php endif; ?>
             <?php if ($doc && in_array($status, ['uploaded','under_review'], true)): ?>
-                <div style="display:flex;gap:var(--space-2)">
+                <div class="flex gap-2">
                     <form method="POST" action="<?= url('/staff/documents/' . $doc['id']) ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="approve">
@@ -244,7 +244,7 @@ if ($applicantId) {
                       data-confirm="Undo approval for this document?" data-confirm-ok="Undo">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="unapprove">
-                    <button class="btn btn-ghost btn-sm" style="color:var(--text-tertiary);font-size:var(--text-xs)">Undo</button>
+                    <button class="btn btn-ghost btn-sm text-tertiary text-xs">Undo</button>
                 </form>
             <?php endif; ?>
         </div>
@@ -260,8 +260,8 @@ $allApproved = count($allDocs) === count($requiredDocs)
     && count(array_filter($allDocs, fn($d) => $d['status'] === 'approved')) === count($requiredDocs);
 if ($allApproved && $applicant['overall_status'] === 'documents'):
 ?>
-    <div class="alert alert-success" style="margin-top:var(--space-6);display:flex;align-items:center;gap:var(--space-4)">
-        <div style="flex:1"><strong>All documents approved.</strong> Advance applicant to entrance exam stage?</div>
+    <div class="alert alert-success mt-6 flex align-items-center gap-4">
+        <div class="flex-1"><strong>All documents approved.</strong> Advance applicant to entrance exam stage?</div>
         <form method="POST" action="<?= url('/staff/documents/' . $applicantId) ?>">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="advance_to_exam">
@@ -283,10 +283,10 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="request_resubmission">
             <div class="modal-body">
-                <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">
+                <p class="text-sm text-secondary mb-3">
                     The student will be notified and asked to upload a corrected version.
                 </p>
-                <label class="form-label" for="resubmit-remarks">What needs to be corrected? <span style="color:var(--error)">*</span></label>
+                <label class="form-label" for="resubmit-remarks">What needs to be corrected? <span class="text-error">*</span></label>
                 <textarea id="resubmit-remarks" name="remarks" class="form-control" rows="3"
                           placeholder="e.g. Document is blurry, wrong page uploaded, expired ID" required></textarea>
             </div>
@@ -307,54 +307,34 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
     if (!$studentFullName) $studentFullName = $applicant['student_name'] ?? '-';
     $strandLabel = isset(SHS_STRANDS[$applicant['shs_strand'] ?? '']) ? SHS_STRANDS[$applicant['shs_strand']] : ($applicant['shs_strand'] ?? '');
 ?>
-<div id="file-viewer-modal" style="
-    display:none;
-    position:fixed;inset:0;z-index:9999;
-    background:rgba(0,0,0,0.82);
-    backdrop-filter:blur(4px);
-    align-items:center;justify-content:center;
-" aria-modal="true" role="dialog" aria-label="Document Review">
+<div id="file-viewer-modal" class="align-items-center justify-content-center" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.82);backdrop-filter:blur(4px)" aria-modal="true" role="dialog" aria-label="Document Review">
 
-    <div style="
-        position:relative;
-        width:min(96vw,1400px);
-        height:min(92vh,900px);
-        background:var(--bg-elevated);
-        border-radius:var(--radius);
-        box-shadow:var(--shadow-lg);
-        display:flex;flex-direction:column;
-        overflow:hidden;
-    ">
+    <div class="position-relative bg-elevated rounded flex flex-column overflow-hidden" style="width:min(96vw,1400px);height:min(92vh,900px);box-shadow:var(--shadow-lg)">
         <!-- Header -->
-        <div style="
-            display:flex;align-items:center;gap:var(--space-3);
-            padding:var(--space-3) var(--space-5);
-            border-bottom:1px solid var(--border);
-            flex-shrink:0;
-        ">
+        <div class="flex align-items-center gap-3 py-3 px-5 bd-b flex-shrink-0">
             <!-- Prev -->
-            <button id="fv-prev" onclick="fvNavigate(-1)" type="button" class="btn btn-secondary" style="width:var(--control-height);padding:0;flex-shrink:0" title="Previous (←)">
+            <button id="fv-prev" onclick="fvNavigate(-1)" type="button" class="btn btn-secondary p-0 flex-shrink-0" style="width:var(--control-height)" title="Previous (←)">
                 <?= icon('ic_fluent_chevron_left_24_regular', 15) ?>
             </button>
 
             <!-- Label + counter -->
-            <div style="flex:1;min-width:0">
-                <div id="fv-label" style="font-weight:var(--weight-semibold);font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
-                <div id="fv-counter" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:1px"></div>
+            <div class="flex-1 min-w-0">
+                <div id="fv-label" class="text-sm text-nowrap" style="font-weight:var(--weight-semibold);overflow:hidden;text-overflow:ellipsis"></div>
+                <div id="fv-counter" class="text-xs" style="color:var(--text-tertiary);margin-top:1px"></div>
             </div>
 
             <!-- Next -->
-            <button id="fv-next" onclick="fvNavigate(1)" type="button" class="btn btn-secondary" style="width:var(--control-height);padding:0;flex-shrink:0" title="Next (→)">
+            <button id="fv-next" onclick="fvNavigate(1)" type="button" class="btn btn-secondary p-0 flex-shrink-0" style="width:var(--control-height)" title="Next (→)">
                 <?= icon('ic_fluent_chevron_right_24_regular', 15) ?>
             </button>
 
-            <div style="width:1px;height:24px;background:var(--border);flex-shrink:0"></div>
+            <div class="flex-shrink-0" style="width:1px;height:24px;background:var(--border)"></div>
 
             <!-- Zoom controls -->
             <button onclick="fvZoom(-0.25)" type="button" class="fv-ctrl-btn" title="Zoom out (−)">
                 <?= icon('ic_fluent_subtract_24_regular', 14) ?>
             </button>
-            <span id="fv-zoom-label" style="font-size:var(--text-xs);color:var(--text-secondary);min-width:38px;text-align:center;font-variant-numeric:tabular-nums">100%</span>
+            <span id="fv-zoom-label" class="text-xs text-center" style="color:var(--text-secondary);min-width:38px;font-variant-numeric:tabular-nums">100%</span>
             <button onclick="fvZoom(0.25)" type="button" class="fv-ctrl-btn" title="Zoom in (+)">
                 <?= icon('ic_fluent_add_24_regular', 14) ?>
             </button>
@@ -362,7 +342,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                 <?= icon('ic_fluent_arrow_sync_24_regular', 14) ?>
             </button>
 
-            <div style="width:1px;height:24px;background:var(--border);flex-shrink:0"></div>
+            <div class="flex-shrink-0" style="width:1px;height:24px;background:var(--border)"></div>
 
             <!-- Close -->
             <button onclick="closeFileViewer()" type="button" class="fv-ctrl-btn" title="Close (Esc)" aria-label="Close">
@@ -371,44 +351,26 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
         </div>
 
         <!-- Two-panel body -->
-        <div style="flex:1;display:flex;overflow:hidden;min-height:0">
+        <div class="flex-1 flex overflow-hidden" style="min-height:0">
             <!-- LEFT: Document preview -->
-            <div style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden">
-                <div id="fv-viewport" style="
-                    flex:1;overflow:hidden;position:relative;
-                    background:var(--bg-subtle);
-                    cursor:default;user-select:none;
-                ">
-                    <div id="fv-transform-wrap" style="
-                        position:absolute;top:0;left:0;
-                        width:100%;height:100%;
-                        display:flex;align-items:center;justify-content:center;
-                        will-change:transform;
-                        transform-origin:center center;
-                    "></div>
-                    <div id="fv-hint" style="
-                        position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
-                        background:rgba(0,0,0,0.55);color:var(--white);
-                        font-size:var(--text-xs);padding:5px 14px;border-radius:var(--radius);
-                        pointer-events:none;opacity:0;transition:opacity .4s ease;white-space:nowrap;
-                    ">Scroll to zoom · Drag to pan when zoomed in</div>
+            <div class="flex-1 min-w-0 flex flex-column overflow-hidden">
+                <div id="fv-viewport" class="position-relative" style="flex:1;overflow:hidden;background:var(--bg-subtle);cursor:default;user-select:none">
+                    <div id="fv-transform-wrap" class="position-absolute flex align-items-center justify-content-center" style="top:0;left:0;width:100%;height:100%;will-change:transform;transform-origin:center center"></div>
+                    <div id="fv-hint" class="position-absolute text-xs rounded pe-none text-nowrap" style="bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);color:var(--white);padding:5px 14px;opacity:0;transition:opacity .4s ease">Scroll to zoom · Drag to pan when zoomed in</div>
                 </div>
                 <!-- Nav dots -->
-                <div id="fv-dots" style="
-                    display:flex;align-items:center;justify-content:center;gap:6px;
-                    padding:var(--space-2);border-top:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
-                "></div>
+                <div id="fv-dots" class="flex align-items-center justify-content-center p-2 bd-t flex-shrink-0 flex-wrap" style="gap:6px"></div>
             </div>
 
             <!-- RIGHT: Student details + actions -->
-            <div style="width:360px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;background:var(--bg)">
-                <div style="padding:var(--space-5);flex:1">
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-base);margin-bottom:var(--space-4)">Applicant Details</div>
+            <div class="flex-shrink-0 flex flex-column overflow-y-auto" style="width:360px;border-left:1px solid var(--border);background:var(--bg)">
+                <div class="p-5 flex-1">
+                    <div class="fw-semibold text-base mb-4">Applicant Details</div>
 
-                    <div style="display:flex;flex-direction:column;gap:var(--space-3);font-size:var(--text-sm)">
+                    <div class="flex flex-column gap-3 text-sm">
                         <div>
                             <div class="label-caps-tight">Full Name</div>
-                            <div style="font-weight:var(--weight-medium)"><?= e($studentFullName) ?></div>
+                            <div class="fw-medium"><?= e($studentFullName) ?></div>
                         </div>
                         <div>
                             <div class="label-caps-tight">Email</div>
@@ -439,7 +401,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                         </div>
                         <?php endif; ?>
 
-                        <div style="border-top:1px solid var(--border);margin:var(--space-2) 0"></div>
+                        <div class="bd-t my-2 mx-0"></div>
 
                         <div>
                             <div class="label-caps-tight">Applicant Type</div>
@@ -447,7 +409,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                         </div>
                         <div>
                             <div class="label-caps-tight">Course Applied</div>
-                            <div style="font-weight:var(--weight-medium)"><?= e($applicant['course_applied'] ?? '-') ?></div>
+                            <div class="fw-medium"><?= e($applicant['course_applied'] ?? '-') ?></div>
                         </div>
                         <?php if ($strandLabel): ?>
                         <div>
@@ -463,11 +425,11 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                 </div>
 
                 <!-- Action buttons (shown/hidden based on doc status) -->
-                <div id="fv-actions" style="padding:var(--space-4) var(--space-5);border-top:1px solid var(--border);display:flex;flex-direction:column;gap:var(--space-2);flex-shrink:0">
+                <div id="fv-actions" class="py-4 px-5 bd-t flex flex-column gap-2 flex-shrink-0">
                     <form method="POST" id="fv-approve-form" action="" style="display:none">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="approve">
-                        <button type="submit" class="btn btn-success" style="width:100%">
+                        <button type="submit" class="btn btn-success w-100">
                             <?= icon('ic_fluent_checkmark_circle_24_regular', 15, 'margin-right:4px') ?>
                             Approve
                         </button>
@@ -477,7 +439,7 @@ if ($allApproved && $applicant['overall_status'] === 'documents'):
                         <?= icon('ic_fluent_arrow_undo_24_regular', 15, 'margin-right:4px') ?>
                         Request Resubmission
                     </button>
-                    <div id="fv-status-msg" style="text-align:center;font-size:var(--text-sm);color:var(--text-tertiary);display:none"></div>
+                    <div id="fv-status-msg" class="text-center text-sm" style="color:var(--text-tertiary);display:none"></div>
                 </div>
             </div>
         </div>
@@ -577,10 +539,10 @@ ob_start();
 ?>
 
 <?php if ($msg = Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
+    <div class="alert alert-success mb-4 flex-shrink-0"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
+    <div class="alert alert-error mb-4 flex-shrink-0"><?= e($msg) ?></div>
 <?php endif; ?>
 
 <?php
@@ -632,13 +594,13 @@ $sortParams = ['status' => $statusFilter, 'type' => $typeFilter, 'course' => $co
             <input type="text" name="q" class="form-input" aria-label="Search applicants" placeholder="Search name, email, course…" value="<?= e($search) ?>">
         </div>
 
-        <select name="type" class="form-input" style="width:160px" onchange="this.form.submit()" aria-label="Applicant type">
+        <select name="type" class="form-input wpx-160" onchange="this.form.submit()" aria-label="Applicant type">
             <?php foreach ($typeOptions as $val => $label): ?>
                 <option value="<?= e($val) ?>" <?= $typeFilter === $val ? 'selected' : '' ?>><?= e($label) ?></option>
             <?php endforeach; ?>
         </select>
 
-        <select name="course" class="form-input" style="width:240px" onchange="this.form.submit()" aria-label="Course">
+        <select name="course" class="form-input wpx-240" onchange="this.form.submit()" aria-label="Course">
             <option value="">All Courses</option>
             <?php foreach ($courseList as $c): ?>
                 <option value="<?= e($c) ?>" <?= $courseFilter === $c ? 'selected' : '' ?>><?= e($c) ?></option>
@@ -658,7 +620,7 @@ $sortParams = ['status' => $statusFilter, 'type' => $typeFilter, 'course' => $co
                 <tr>
                     <th class="col-check">
                         <input type="checkbox" id="bulk-select-all" aria-label="Select all applicants" onchange="bulkToggleAll(this)"
-                               style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                               class="pointer accent-c" style="width:16px;height:16px">
                     </th>
                     <?= sortable_th('applicant',    'Applicant',    $sortCol, $sortDir, $sortParams) ?>
                     <?= sortable_th('type',         'Type',         $sortCol, $sortDir, $sortParams, 'width:120px') ?>
@@ -676,26 +638,26 @@ $sortParams = ['status' => $statusFilter, 'type' => $typeFilter, 'course' => $co
                 ?>
                 <tr class="bulk-row <?= $hasPending ? 'has-pending-docs' : '' ?>" data-id="<?= (int)$row['id'] ?>">
                     <td class="col-check">
-                        <input type="checkbox" class="bulk-check" aria-label="Select applicant" value="<?= (int)$row['id'] ?>"
+                        <input type="checkbox" class="bulk-check pointer accent-c" aria-label="Select applicant" value="<?= (int)$row['id'] ?>"
                                onchange="bulkUpdateSelection()"
-                               style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                               style="width:16px;height:16px">
                     </td>
                     <td>
                         <?php // Single-line row - the email lives in the review detail
                               // page; the tooltip surfaces it on hover for quick context. ?>
-                        <span class="auto-table-clip" style="font-weight:var(--weight-medium)" title="<?= e($row['email']) ?>"><?= e(format_full_name($row)) ?></span>
+                        <span class="auto-table-clip fw-medium" title="<?= e($row['email']) ?>"><?= e(format_full_name($row)) ?></span>
                     </td>
                     <td><span class="badge badge-neutral"><?= e(ucfirst($row['applicant_type'])) ?></span></td>
-                    <td style="font-size:var(--text-sm)"><span class="auto-table-clip" title="<?= e($row['course_applied']) ?>"><?= e($row['course_applied']) ?></span></td>
+                    <td class="text-sm"><span class="auto-table-clip" title="<?= e($row['course_applied']) ?>"><?= e($row['course_applied']) ?></span></td>
                     <td><span class="badge badge-<?= e($row['overall_status']) ?>"><?= e(ucfirst(str_replace('_',' ',$row['overall_status']))) ?></span></td>
                     <td>
                         <?php if ($hasPending): ?>
-                            <span style="color:var(--warning);font-weight:var(--weight-semibold);font-size:var(--text-sm)"><?= (int)$row['pending_review'] ?> to review</span>
+                            <span class="text-warning fw-semibold text-sm"><?= (int)$row['pending_review'] ?> to review</span>
                         <?php else: ?>
-                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">-</span>
+                            <span class="text-tertiary text-sm">-</span>
                         <?php endif; ?>
                     </td>
-                    <td style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= format_date($row['created_at'], 'M j, Y') ?></td>
+                    <td class="text-sm text-tertiary"><?= format_date($row['created_at'], 'M j, Y') ?></td>
                     <td>
                         <a href="<?= url('/staff/applicants/' . $row['id']) ?>" class="btn btn-secondary btn-sm">Review</a>
                         <a href="<?= url('/print/admission?id=' . (int)$row['id']) ?>" class="btn btn-secondary btn-sm" target="_blank" rel="noopener" title="Print admission" aria-label="Print admission"><?= icon('printer', 14) ?></a>
@@ -726,43 +688,29 @@ $sortParams = ['status' => $statusFilter, 'type' => $typeFilter, 'course' => $co
 <!-- ============================================================
      BULK ACTION TOOLBAR (floating, appears on selection)
 ============================================================ -->
-<div id="bulk-toolbar" style="
-    display:none;
-    position:fixed;bottom:var(--space-6);left:50%;transform:translateX(-50%);z-index:500;
-    background:var(--bg-elevated);border:1px solid var(--border);
-    border-radius:var(--radius);box-shadow:var(--shadow-lg);
-    padding:var(--space-3) var(--space-5);
-    display:none;align-items:center;gap:var(--space-4);
-    animation:bulkToolbarSlideUp .2s ease-out;
-">
-    <div style="display:flex;align-items:center;gap:var(--space-2)">
-        <span id="bulk-count" style="
-            display:inline-flex;align-items:center;justify-content:center;
-            min-width:24px;height:24px;padding:0 var(--space-2);
-            border-radius:var(--radius);
-            background:var(--accent);color:var(--accent-text);
-            font-size:var(--text-xs);font-weight:var(--weight-semibold);
-        ">0</span>
-        <span style="font-size:var(--text-sm);color:var(--text-secondary);white-space:nowrap">selected</span>
+<div id="bulk-toolbar" class="bd rounded py-3 px-5 align-items-center gap-4" style="display:none;position:fixed;bottom:var(--space-6);left:50%;transform:translateX(-50%);z-index:500;background:var(--bg-elevated);box-shadow:var(--shadow-lg);display:none;animation:bulkToolbarSlideUp .2s ease-out">
+    <div class="flex align-items-center gap-2">
+        <span id="bulk-count" class="inline-flex align-items-center justify-content-center py-0 px-2 rounded text-xs" style="min-width:24px;height:24px;background:var(--accent);color:var(--accent-text);font-weight:var(--weight-semibold)">0</span>
+        <span class="text-sm text-secondary text-nowrap">selected</span>
     </div>
 
     <div style="width:1px;height:24px;background:var(--border)"></div>
 
-    <button type="button" class="btn btn-success btn-sm" onclick="bulkApproveSelected()"
-            style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+    <button type="button" class="btn btn-success btn-sm flex align-items-center text-nowrap" onclick="bulkApproveSelected()"
+            style="gap:5px">
         <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
         Approve Docs
     </button>
-    <button type="button" class="btn btn-secondary btn-sm" onclick="bulkExportCsv()"
-            style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+    <button type="button" class="btn btn-secondary btn-sm flex align-items-center text-nowrap" onclick="bulkExportCsv()"
+            style="gap:5px">
         <?= icon('ic_fluent_arrow_download_24_regular', 14) ?>
         Export CSV
     </button>
 
     <div style="width:1px;height:24px;background:var(--border)"></div>
 
-    <button type="button" class="btn btn-ghost btn-sm" onclick="bulkClearSelection()"
-            style="color:var(--text-tertiary);font-size:var(--text-xs);white-space:nowrap">
+    <button type="button" class="btn btn-ghost btn-sm text-tertiary text-xs text-nowrap" onclick="bulkClearSelection()"
+           >
         Clear
     </button>
 </div>

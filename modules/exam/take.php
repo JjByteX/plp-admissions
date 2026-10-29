@@ -182,15 +182,14 @@ $examRescheduleApproved = $myExamReschedule
 if (!$mySlot) {
     ob_start();
     ?>
-    <div style="max-width:480px;margin:var(--space-12) auto;text-align:center">
-        <div style="width:72px;height:72px;border-radius:50%;background:var(--bg-subtle);
-                    display:flex;align-items:center;justify-content:center;margin:0 auto var(--space-6)">
+    <div class="mwpx-480 my-12 mx-auto text-center">
+        <div class="rounded-circle bg-subtle flex align-items-center justify-content-center" style="width:72px;height:72px;margin:0 auto var(--space-6)">
             <?= icon('clock:fill', 32, 'color:var(--text-secondary)') ?>
         </div>
-        <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">
+        <h2 class="text-2xl fw-semibold mb-2">
             Awaiting Slot Assignment
         </h2>
-        <p style="color:var(--text-secondary)">
+        <p class="text-secondary">
             Your documents are approved. The admissions office will assign you to an exam date and room shortly. Check back here, or watch your email for a notification.
         </p>
     </div>
@@ -211,20 +210,20 @@ $slotTimeNice = date('g:i A',     strtotime($mySlot['slot_time']));
 if ($isSlotFuture) {
     ob_start();
     ?>
-    <div style="max-width:520px;margin:var(--space-12) auto">
-        <div class="card" style="padding:var(--space-6);text-align:center">
-            <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">
+    <div class="mwpx-520 my-12 mx-auto">
+        <div class="card p-6 text-center">
+            <div class="text-xs text-tertiary text-uppercase fw-semibold mb-2" style="letter-spacing:.06em">
                 Your Exam is Scheduled
             </div>
-            <div style="font-size:var(--text-3xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">
+            <div class="fw-semibold mb-1" style="font-size:var(--text-3xl)">
                 <?= e($slotDateNice) ?>
             </div>
-            <div style="font-size:var(--text-lg);color:var(--text-secondary);margin-bottom:var(--space-5)">
+            <div class="text-lg text-secondary mb-5">
                 <?= e($slotTimeNice) ?>
             </div>
-            <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-4);margin-bottom:var(--space-5)">
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Room</div>
-                <div style="font-size:var(--text-lg);font-weight:var(--weight-medium)"><?= e($mySlot['room_label']) ?></div>
+            <div class="bg-subtle rounded p-4 mb-5">
+                <div class="text-xs text-tertiary text-uppercase fw-semibold mb-1" style="letter-spacing:.06em">Room</div>
+                <div class="text-lg fw-medium"><?= e($mySlot['room_label']) ?></div>
             </div>
             <p class="text-secondary-sm">
                 On exam day, log in here. The proctor in your room will announce the access code when the exam opens - you'll have 5 minutes to enter it to start.
@@ -235,52 +234,50 @@ if ($isSlotFuture) {
             <!-- Pending review — hide the form so the student can't
                  submit a duplicate. Page has "changed" the moment they
                  hit submit. -->
-            <div style="margin-top:var(--space-4);padding:var(--space-4) var(--space-5);
-                        background:var(--warning-bg);border-radius:var(--radius)">
-                <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:var(--warning)">
+            <div class="mt-4 py-4 px-5 rounded" style="background:var(--warning-bg)">
+                <div class="fw-semibold text-sm text-warning">
                     Reschedule request submitted
                 </div>
-                <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px">
+                <div class="text-xs text-secondary" style="margin-top:2px">
                     Submitted <?= date('M j, g:i A', strtotime($myExamReschedule['created_at'])) ?>
                     - awaiting staff review. You'll see a new slot here once it's approved.
                 </div>
                 <?php if (!empty($myExamReschedule['reason'])): ?>
-                    <div style="margin-top:var(--space-2);font-size:var(--text-sm);color:var(--text-secondary);
-                                 white-space:pre-line">
+                    <div class="mt-2 text-sm text-secondary pre-line">
                         <?= e($myExamReschedule['reason']) ?>
                     </div>
                 <?php endif; ?>
             </div>
         <?php else: ?>
             <?php if ($examRescheduleApproved): ?>
-                <div class="alert alert-success" style="margin-top:var(--space-4);font-size:var(--text-sm)">
+                <div class="alert alert-success mt-4 text-sm">
                     Your reschedule request was approved - you've been moved to the slot shown above.
                 </div>
             <?php elseif ($examRescheduleDenied): ?>
-                <div class="alert alert-warning" style="margin-top:var(--space-4);font-size:var(--text-sm)">
+                <div class="alert alert-warning mt-4 text-sm">
                     Your previous reschedule request was not approved - you've kept your current slot.
                     <?php if (!empty($myExamReschedule['deny_reason'])): ?>
-                        <div style="margin-top:var(--space-2);font-weight:var(--weight-medium)">
+                        <div class="mt-2 fw-medium">
                             Reason from staff:
-                            <span style="font-weight:var(--weight-regular);white-space:pre-line">
+                            <span class="fw-normal pre-line">
                                 <?= e($myExamReschedule['deny_reason']) ?>
                             </span>
                         </div>
                     <?php endif; ?>
-                    <div style="margin-top:var(--space-2)">You may submit a new request below if needed.</div>
+                    <div class="mt-2">You may submit a new request below if needed.</div>
                 </div>
             <?php endif; ?>
-            <div class="card" style="padding:var(--space-4);margin-top:var(--space-4)">
+            <div class="card p-4 mt-4">
                 <details>
-                    <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
+                    <summary class="pointer text-sm text-accent fw-medium">
                         Need to reschedule?
                     </summary>
-                    <form method="POST" action="<?= url('/api/exam-reschedule-request') ?>" style="margin-top:var(--space-3)">
+                    <form method="POST" action="<?= url('/api/exam-reschedule-request') ?>" class="mt-3">
                         <?= csrf_field() ?>
-                        <textarea id="resched_reason" name="reschedule_reason" aria-label="Reschedule reason" class="form-textarea" rows="3"
+                        <textarea id="resched_reason" name="reschedule_reason" aria-label="Reschedule reason" class="form-textarea mb-3" rows="3"
                                   placeholder="Why do you need to reschedule? (e.g. emergency)"
-                                  required style="margin-bottom:var(--space-3)"></textarea>
-                        <button type="submit" class="btn btn-ghost" style="width:100%">Submit Reschedule Request</button>
+                                  required></textarea>
+                        <button type="submit" class="btn btn-ghost w-100">Submit Reschedule Request</button>
                     </form>
                 </details>
             </div>
@@ -304,8 +301,8 @@ if ($isSlotFuture) {
 if ($isSlotPast) {
     ob_start();
     ?>
-    <div style="max-width:520px;margin:var(--space-12) auto;text-align:center">
-        <div class="alert alert-warning" style="text-align:left">
+    <div class="mwpx-520 my-12 mx-auto text-center">
+        <div class="alert alert-warning text-start">
             <strong>Your exam date has passed.</strong>
             <p style="margin:var(--space-2) 0 0">
                 Your scheduled exam was on <?= e($slotDateNice) ?> in <?= e($mySlot['room_label']) ?>.
@@ -316,48 +313,46 @@ if ($isSlotPast) {
         </div>
 
         <?php if ($examReschedulePending): ?>
-            <div style="margin-top:var(--space-4);padding:var(--space-4) var(--space-5);
-                        background:var(--warning-bg);border-radius:var(--radius);text-align:left">
-                <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:var(--warning)">
+            <div class="mt-4 py-4 px-5 rounded text-start" style="background:var(--warning-bg)">
+                <div class="fw-semibold text-sm text-warning">
                     Reschedule request submitted
                 </div>
-                <div style="font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px">
+                <div class="text-xs text-secondary" style="margin-top:2px">
                     Submitted <?= date('M j, g:i A', strtotime($myExamReschedule['created_at'])) ?>
                     - awaiting staff review.
                 </div>
                 <?php if (!empty($myExamReschedule['reason'])): ?>
-                    <div style="margin-top:var(--space-2);font-size:var(--text-sm);color:var(--text-secondary);
-                                 white-space:pre-line">
+                    <div class="mt-2 text-sm text-secondary pre-line">
                         <?= e($myExamReschedule['reason']) ?>
                     </div>
                 <?php endif; ?>
             </div>
         <?php else: ?>
             <?php if ($examRescheduleDenied): ?>
-                <div class="alert alert-warning" style="margin-top:var(--space-4);font-size:var(--text-sm);text-align:left">
+                <div class="alert alert-warning mt-4 text-sm text-start">
                     Your previous reschedule request was not approved.
                     <?php if (!empty($myExamReschedule['deny_reason'])): ?>
-                        <div style="margin-top:var(--space-2);font-weight:var(--weight-medium)">
+                        <div class="mt-2 fw-medium">
                             Reason from staff:
-                            <span style="font-weight:var(--weight-regular);white-space:pre-line">
+                            <span class="fw-normal pre-line">
                                 <?= e($myExamReschedule['deny_reason']) ?>
                             </span>
                         </div>
                     <?php endif; ?>
-                    <div style="margin-top:var(--space-2)">You may submit a new request below.</div>
+                    <div class="mt-2">You may submit a new request below.</div>
                 </div>
             <?php endif; ?>
-            <div class="card" style="padding:var(--space-4);margin-top:var(--space-4);text-align:left">
+            <div class="card p-4 mt-4 text-start">
                 <details open>
-                    <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--accent);font-weight:var(--weight-medium)">
+                    <summary class="pointer text-sm text-accent fw-medium">
                         Request a reschedule
                     </summary>
-                    <form method="POST" action="<?= url('/api/exam-reschedule-request') ?>" style="margin-top:var(--space-3)">
+                    <form method="POST" action="<?= url('/api/exam-reschedule-request') ?>" class="mt-3">
                         <?= csrf_field() ?>
-                        <textarea id="missed_reason" name="reschedule_reason" aria-label="Reschedule reason" class="form-textarea" rows="3"
+                        <textarea id="missed_reason" name="reschedule_reason" aria-label="Reschedule reason" class="form-textarea mb-3" rows="3"
                                   placeholder="Why did you miss the exam, and why reschedule?"
-                                  required style="margin-bottom:var(--space-3)"></textarea>
-                        <button type="submit" class="btn btn-primary" style="width:100%">Submit Reschedule Request</button>
+                                  required></textarea>
+                        <button type="submit" class="btn btn-primary w-100">Submit Reschedule Request</button>
                     </form>
                 </details>
             </div>
@@ -425,25 +420,24 @@ if ($needsPwGate && !$isUnlocked) {
         // Show the password entry screen instead of the exam
         ob_start();
         ?>
-        <div style="max-width:420px;margin:var(--space-12) auto;text-align:center">
-            <div style="width:72px;height:72px;border-radius:50%;background:var(--bg-subtle);
-                        display:flex;align-items:center;justify-content:center;margin:0 auto var(--space-6)">
+        <div class="mwpx-420 my-12 mx-auto text-center">
+            <div class="rounded-circle bg-subtle flex align-items-center justify-content-center" style="width:72px;height:72px;margin:0 auto var(--space-6)">
                 <?= icon('lock:fill', 32, 'color:var(--text-secondary)') ?>
             </div>
-            <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">
+            <h2 class="text-2xl fw-semibold mb-2">
                 Exam Access Code
             </h2>
-            <p style="color:var(--text-secondary);margin-bottom:var(--space-6)">
+            <p class="text-secondary mb-6">
                 Your proctor will give you an access code before the exam begins.
                 Enter it below to start.
             </p>
 
             <?php if (isset($pwError)): ?>
-                <div class="alert alert-error" style="margin-bottom:var(--space-4);text-align:left"><?= e($pwError) ?></div>
+                <div class="alert alert-error mb-4 text-start"><?= e($pwError) ?></div>
             <?php endif; ?>
 
             <?php if (!$pwValid): ?>
-                <div class="alert alert-warning" style="margin-bottom:var(--space-4);text-align:left">
+                <div class="alert alert-warning mb-4 text-start">
                     <strong>No active code right now.</strong>
                     The access code has not been issued yet or has expired.
                     Please wait for your proctor to provide one - they will generate a fresh
@@ -451,23 +445,22 @@ if ($needsPwGate && !$isUnlocked) {
                 </div>
             <?php endif; ?>
 
-            <form method="POST" style="text-align:left">
+            <form method="POST" class="text-start">
                 <?= csrf_field() ?>
-                <label class="form-label" for="exam_access_password" style="display:block;margin-bottom:var(--space-2)">
+                <label class="form-label mb-2" for="exam_access_password" style="display:block">
                     Access Code
                 </label>
-                <input type="text" id="exam_access_password" name="exam_access_password" class="form-control"
+                <input type="text" id="exam_access_password" name="exam_access_password" class="form-control text-2xl text-center text-uppercase mb-4"
                        autocomplete="off" autocorrect="off" spellcheck="false"
-                       style="font-family:monospace;font-size:var(--text-2xl);letter-spacing:.4em;
-                              text-align:center;text-transform:uppercase;margin-bottom:var(--space-4)"
+                       style="font-family:monospace;letter-spacing:.4em"
                        placeholder="Access code" <?= !$pwValid ? 'disabled' : '' ?>
                        oninput="this.value=this.value.toUpperCase()">
                 <?php if ($pwValid): ?>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-4)">
+                    <p class="text-xs text-tertiary mb-4">
                         Code expires in <strong id="gate-timer" data-secs="<?= (int) $pwSecsLeft ?>"><?= $pwSecsLeft ?></strong> seconds.
                     </p>
                 <?php endif; ?>
-                <button type="submit" class="btn btn-primary" style="width:100%" <?= !$pwValid ? 'disabled' : '' ?>>
+                <button type="submit" class="btn btn-primary w-100" <?= !$pwValid ? 'disabled' : '' ?>>
                     Enter Exam
                 </button>
             </form>
@@ -581,10 +574,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Inline result screen ──────────────────────────────────────
     ob_start();
     ?>
-    <div style="max-width:520px;margin:0 auto;padding:var(--space-4) 0">
+    <div class="mwpx-520 my-0 mx-auto py-4 px-0">
 
         <!-- Score card -->
-        <div class="card" style="padding:var(--space-8);text-align:center;margin-bottom:var(--space-5)">
+        <div class="card p-8 text-center mb-5">
 
             <!-- Big rank circle -->
             <div style="width:96px;height:96px;border-radius:50%;
@@ -614,60 +607,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php endif; ?>
             </div>
 
-            <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">
+            <h2 class="text-xl fw-semibold mb-1">
                 <?= $passed ? 'Congratulations!' : 'Better luck next time.' ?>
             </h2>
-            <p style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:var(--space-6)">
+            <p class="text-secondary text-sm mb-6">
                 <?= $passed
                     ? 'You passed the entrance exam. Proceed to the next step.'
                     : 'Your score did not meet the passing threshold for your chosen course.' ?>
             </p>
 
             <!-- Score breakdown grid -->
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3);
-                        background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5)">
+            <div class="gap-3 bg-subtle rounded p-5" style="display:grid;grid-template-columns:repeat(3,1fr)">
                 <div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Raw Score</div>
-                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-semibold)"><?= $score ?></div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary)">out of <?= $totalPoints ?></div>
+                    <div class="text-xs text-tertiary text-uppercase mb-1" style="letter-spacing:.06em">Raw Score</div>
+                    <div class="text-2xl fw-semibold"><?= $score ?></div>
+                    <div class="text-xs text-tertiary">out of <?= $totalPoints ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Percentage</div>
-                    <div style="font-size:var(--text-2xl);font-weight:var(--weight-semibold)"><?= $pct ?>%</div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary)">of total items</div>
+                    <div class="text-xs text-tertiary text-uppercase mb-1" style="letter-spacing:.06em">Percentage</div>
+                    <div class="text-2xl fw-semibold"><?= $pct ?>%</div>
+                    <div class="text-xs text-tertiary">of total items</div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Tier</div>
+                    <div class="text-xs text-tertiary text-uppercase mb-1" style="letter-spacing:.06em">Tier</div>
                     <div style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);color:<?= $tierInfo['color'] ?>"><?= $rank ?></div>
                     <div style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:<?= $tierInfo['color'] ?>"><?= $tierInfo['label'] ?> tier</div>
                 </div>
             </div>
 
             <!-- Course + threshold row -->
-            <div style="margin-top:var(--space-4);padding:var(--space-3) var(--space-4);
-                        border:1px solid var(--border);border-radius:var(--radius);
-                        font-size:var(--text-xs);color:var(--text-secondary);text-align:left;
-                        display:flex;justify-content:space-between;align-items:center">
+            <div class="mt-4 py-3 px-4 bd rounded text-xs text-secondary text-start flex justify-content-between align-items-center">
                 <div>
-                    <span style="color:var(--text-tertiary)">Course applied:</span>
-                    <strong style="margin-left:4px"><?= e($applicant['course_applied']) ?></strong>
+                    <span class="text-tertiary">Course applied:</span>
+                    <strong class="ms-1"><?= e($applicant['course_applied']) ?></strong>
                 </div>
                 <div>
-                    <span style="color:var(--text-tertiary)">Passing rank:</span>
-                    <strong style="margin-left:4px">≥ <?= get_pass_threshold($applicant['course_applied']) ?></strong>
+                    <span class="text-tertiary">Passing rank:</span>
+                    <strong class="ms-1">≥ <?= get_pass_threshold($applicant['course_applied']) ?></strong>
                 </div>
             </div>
         </div>
 
         <?php if ($passed): ?>
         <!-- Passed → next step CTA -->
-        <div class="card" style="padding:var(--space-5);display:flex;align-items:center;gap:var(--space-4)">
-            <div style="width:40px;height:40px;border-radius:50%;background:var(--success-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <div class="card p-5 flex align-items-center gap-4">
+            <div class="rounded-circle flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;background:var(--success-bg)">
                 <?= icon('check', 18, 'color:#22c55e') ?>
             </div>
-            <div style="flex:1">
-                <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">Next: Interview</div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">The admissions office will automatically assign you an interview slot. No action required.</div>
+            <div class="flex-1">
+                <div class="fw-semibold text-sm">Next: Interview</div>
+                <div class="text-xs text-tertiary" style="margin-top:2px">The admissions office will automatically assign you an interview slot. No action required.</div>
             </div>
             <a href="<?= url('/student/interview') ?>" class="btn btn-primary btn-sm">Continue <?= icon('ic_fluent_arrow_right_24_regular', 16) ?></a>
         </div>
@@ -675,50 +664,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php else: ?>
         <!-- Failed → course suggestion panel -->
         <?php if (!empty($altCourses)): ?>
-        <div class="card" style="padding:var(--space-5);margin-bottom:var(--space-4)">
-            <div style="display:flex;align-items:flex-start;gap:var(--space-3);margin-bottom:var(--space-4)">
-                <div style="width:36px;height:36px;border-radius:50%;background:var(--warning-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <div class="card p-5 mb-4">
+            <div class="flex align-items-start gap-3 mb-4">
+                <div class="rounded-circle flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;background:var(--warning-bg)">
                     <?= icon('warning-circle:fill', 16, 'color:#f59e0b') ?>
                 </div>
                 <div>
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm)">Available Alternatives</div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
+                    <div class="fw-semibold text-sm">Available Alternatives</div>
+                    <div class="text-xs text-tertiary" style="margin-top:2px">
                         Your score (rank <?= $rank ?>) qualifies for the following courses that still have available slots.
                         Your admissions officer can process a course shift for you.
                     </div>
                 </div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+            <div class="flex flex-column gap-2">
                 <?php foreach ($altCourses as $alt):
                     $altThreshold = get_pass_threshold($alt);
                     $altTier      = rank_tier_info($rank);
                 ?>
-                <div style="display:flex;align-items:center;justify-content:space-between;
-                             padding:var(--space-3) var(--space-4);
-                             background:var(--bg-subtle);border-radius:var(--radius);
-                             border:1px solid var(--border)">
+                <div class="flex align-items-center justify-content-between py-3 px-4 bg-subtle rounded bd">
                     <div>
-                        <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($alt) ?></div>
-                        <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">
+                        <div class="fw-medium text-sm"><?= e($alt) ?></div>
+                        <div class="text-xs text-tertiary" style="margin-top:2px">
                             Passing rank: ≥ <?= $altThreshold ?> &nbsp;·&nbsp;
                             Your rank: <span style="color:<?= $altTier['color'] ?>;font-weight:var(--weight-semibold)"><?= $rank ?> (<?= $altTier['label'] ?>)</span>
                         </div>
                     </div>
-                    <span class="badge badge-approved" style="flex-shrink:0">Qualifies</span>
+                    <span class="badge badge-approved flex-shrink-0">Qualifies</span>
                 </div>
                 <?php endforeach; ?>
             </div>
-            <p style="margin-top:var(--space-3);font-size:var(--text-xs);color:var(--text-tertiary)">
+            <p class="mt-3 text-xs text-tertiary">
                 ℹ Please approach the admissions office to request a course change. Final assignment is subject to staff approval.
             </p>
         </div>
         <?php else: ?>
-        <div class="card" style="padding:var(--space-5);margin-bottom:var(--space-4)">
-            <div style="display:flex;align-items:center;gap:var(--space-3)">
-                <div style="width:36px;height:36px;border-radius:50%;background:var(--error-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <div class="card p-5 mb-4">
+            <div class="flex align-items-center gap-3">
+                <div class="rounded-circle flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;background:var(--error-bg)">
                     <?= icon('x', 16, 'color:#ef4444') ?>
                 </div>
-                <div style="font-size:var(--text-sm);color:var(--text-secondary)">
+                <div class="text-sm text-secondary">
                     Unfortunately, your score does not currently qualify for any available course.
                     Please contact the admissions office for further guidance.
                 </div>
@@ -726,8 +712,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <?php endif; ?>
 
-        <div class="card" style="padding:var(--space-4);background:var(--bg-subtle)">
-            <p style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:center">
+        <div class="card p-4 bg-subtle">
+            <p class="text-xs text-tertiary text-center">
                 Your result has been recorded. The admissions office will follow up with next steps.
                 You may also visit the office directly for assistance.
             </p>

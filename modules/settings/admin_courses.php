@@ -314,17 +314,17 @@ try {
 ob_start();
 ?>
 <?php foreach ($errors as $e): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
+    <div class="alert alert-error mb-3"><?= e($e) ?></div>
 <?php endforeach; ?>
 <?php foreach ($success as $s): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
+    <div class="alert alert-success mb-3"><?= e($s) ?></div>
 <?php endforeach; ?>
 
 <?php
 // Strand pills for a table cell. Neutral badges, same as the other tables.
 $strandPills = function (array $list): string {
-    if (!$list) return '<span style="font-size:var(--text-xs);color:var(--text-tertiary)">-</span>';
-    $out = '<div style="display:flex;gap:4px;flex-wrap:wrap;padding:var(--space-2) 0">';
+    if (!$list) return '<span class="text-xs text-tertiary">-</span>';
+    $out = '<div class="flex gap-1 flex-wrap py-2 px-0">';
     foreach ($list as $sk) $out .= '<span class="badge badge-neutral">' . e($sk) . '</span>';
     return $out . '</div>';
 };
@@ -333,10 +333,10 @@ $customByName = array_column($customCourses, null, 'course_name');
 <div>
 
     <!-- ── Courses & Settings table ─────────────────────────────── -->
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4)">
+    <div class="flex align-items-start justify-content-between gap-4 mb-4">
         <div>
-            <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">Courses & Settings</div>
-            <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
+            <div class="fw-semibold text-base">Courses & Settings</div>
+            <div class="text-xs text-tertiary mt-1">
                 School year <strong><?= e($schoolYear) ?></strong>. Tiers use rank scores 1–10; passing = Average and above. Enrollment cap auto-disables a course when full; leave blank for unlimited.
             </div>
         </div>
@@ -353,14 +353,14 @@ $customByName = array_column($customCourses, null, 'course_name');
                        placeholder="Search course or strand…" aria-label="Search courses">
             </div>
 
-            <select class="form-input" style="width:180px" data-st-filter="strand" aria-label="Strand">
+            <select class="form-input wpx-180" data-st-filter="strand" aria-label="Strand">
                 <option value="">All strands</option>
                 <?php foreach (SHS_STRANDS as $sKey => $sLabel): ?>
                     <option value="<?= e($sKey) ?>"><?= e($sKey) ?></option>
                 <?php endforeach; ?>
             </select>
 
-            <select class="form-input" style="width:180px" data-st-filter="status" aria-label="Status">
+            <select class="form-input wpx-180" data-st-filter="status" aria-label="Status">
                 <option value="">All statuses</option>
                 <option value="full">Full</option>
                 <option value="nocap">No cap set</option>
@@ -374,12 +374,12 @@ $customByName = array_column($customCourses, null, 'course_name');
                 <thead>
                     <tr>
                         <th>Course</th>
-                        <th style="width:240px">Strands</th>
+                        <th class="wpx-240">Strands</th>
                         <th class="col-center" style="width:90px">High</th>
-                        <th class="col-center" style="width:110px">Average</th>
+                        <th class="col-center wpx-110">Average</th>
                         <th class="col-center" style="width:90px">Low</th>
-                        <th class="col-center" style="width:110px">Accepted</th>
-                        <th class="col-center" style="width:110px">Max Slots</th>
+                        <th class="col-center wpx-110">Accepted</th>
+                        <th class="col-center wpx-110">Max Slots</th>
                         <th style="width:130px"></th>
                     </tr>
                 </thead>
@@ -407,51 +407,50 @@ $customByName = array_column($customCourses, null, 'course_name');
                         data-strand="<?= e(implode('|', $strands)) ?>"
                         data-status="<?= $rowStatus ?>">
                         <td>
-                            <span style="display:flex;align-items:center;gap:var(--space-2);min-width:0">
+                            <span class="flex align-items-center gap-2 min-w-0">
                                 <span class="auto-table-clip" title="<?= e($course) ?>"><?= e($course) ?></span>
                                 <?php if ($isFull): ?>
-                                    <span class="badge badge-error" style="flex-shrink:0">Full</span>
+                                    <span class="badge badge-error flex-shrink-0">Full</span>
                                 <?php endif; ?>
                             </span>
                         </td>
                         <td class="cell-wrap"><?= $strandPills($strands) ?></td>
                         <td class="col-center">
-                            <span class="cell-view" style="color:var(--text-secondary)"><?= $highFrom ?>–10</span>
+                            <span class="cell-view text-secondary"><?= $highFrom ?>–10</span>
                             <input type="number" form="row-form-<?= $ci ?>" name="scores[<?= $enc ?>][high]"
-                                   class="form-control tier-high cell-edit" data-row="<?= $ci ?>"
+                                   class="form-control tier-high cell-edit text-sm text-center w-100" data-row="<?= $ci ?>"
                                    value="<?= $highFrom ?>" min="2" max="10" aria-label="High from"
-                                   style="font-size:var(--text-sm);padding:5px 8px;text-align:center;width:100%">
+                                   style="padding:5px 8px">
                         </td>
                         <td class="col-center">
-                            <span class="cell-view" style="color:var(--text-secondary)"><?= $avgFrom ?>–<?= $highFrom - 1 ?></span>
+                            <span class="cell-view text-secondary"><?= $avgFrom ?>–<?= $highFrom - 1 ?></span>
                             <input type="number" form="row-form-<?= $ci ?>" name="scores[<?= $enc ?>][avg]"
-                                   class="form-control tier-avg cell-edit" data-row="<?= $ci ?>"
+                                   class="form-control tier-avg cell-edit text-sm text-center w-100" data-row="<?= $ci ?>"
                                    value="<?= $avgFrom ?>" min="1" max="9" aria-label="Average from"
-                                   style="font-size:var(--text-sm);padding:5px 8px;text-align:center;width:100%">
+                                   style="padding:5px 8px">
                         </td>
-                        <td class="col-center low-label" data-orig="<?= e($lowText) ?>" style="color:var(--text-secondary)"><?= e($lowText) ?></td>
+                        <td class="col-center low-label text-secondary" data-orig="<?= e($lowText) ?>"><?= e($lowText) ?></td>
                         <td class="col-center"><strong><?= (int)$accepted ?></strong></td>
                         <?php if ($canEditMaxSlots): ?>
-                        <td class="col-center" style="position:relative;color:var(--text-tertiary)">
+                        <td class="col-center position-relative text-tertiary">
                             <span class="cell-view">
                                 <?php if ($needsCap): ?>
-                                    <span title="Max slots not set" style="position:absolute;top:8px;right:10px;
-                                                 width:8px;height:8px;border-radius:50%;background:var(--error)"></span>
+                                    <span title="Max slots not set" class="position-absolute rounded-circle" style="top:8px;right:10px;width:8px;height:8px;background:var(--error)"></span>
                                 <?php endif; ?>
                                 <?= $maxSlots !== null ? (int)$maxSlots : '∞' ?>
                             </span>
                             <input type="number" form="row-form-<?= $ci ?>" name="caps[<?= $enc ?>]"
-                                   class="form-control cell-edit" min="0" max="99999"
+                                   class="form-control cell-edit text-sm text-center w-100" min="0" max="99999"
                                    value="<?= $maxSlots !== null ? (int)$maxSlots : '' ?>" placeholder="∞"
                                    aria-label="Max slots"
-                                   style="font-size:var(--text-sm);padding:5px 8px;text-align:center;width:100%">
+                                   style="padding:5px 8px">
                         </td>
                         <?php else: ?>
-                        <td class="col-center" style="color:var(--text-tertiary)"><?= $maxSlots !== null ? (int)$maxSlots : '∞' ?></td>
+                        <td class="col-center text-tertiary"><?= $maxSlots !== null ? (int)$maxSlots : '∞' ?></td>
                         <?php endif; ?>
                         <td class="col-center">
-                            <button type="button" class="btn-icon cell-view" title="Edit"
-                                    onclick="startRowEdit(<?= $ci ?>)" style="color:var(--text-tertiary)">
+                            <button type="button" class="btn-icon cell-view text-tertiary" title="Edit"
+                                    onclick="startRowEdit(<?= $ci ?>)">
                                 <?= icon('ic_fluent_edit_24_regular', 14) ?>
                             </button>
                             <form method="POST" id="row-form-<?= $ci ?>" class="row-edit-form">
@@ -459,8 +458,8 @@ $customByName = array_column($customCourses, null, 'course_name');
                                 <input type="hidden" name="action" value="update_tiers">
                                 <input type="hidden" name="scores[<?= $enc ?>][course]" value="<?= $enc ?>">
                                 <button type="button" class="btn btn-primary btn-sm" onclick="saveRowEdit(<?= $ci ?>)">Save</button>
-                                <button type="button" class="btn-icon" title="Cancel"
-                                        onclick="cancelRowEdit(<?= $ci ?>)" style="color:var(--text-tertiary)">
+                                <button type="button" class="btn-icon text-tertiary" title="Cancel"
+                                        onclick="cancelRowEdit(<?= $ci ?>)">
                                     <?= icon('ic_fluent_dismiss_24_regular', 14) ?>
                                 </button>
                             </form>
@@ -492,10 +491,10 @@ $customByName = array_column($customCourses, null, 'course_name');
               Strand reference are out of scope for that role. */ ?>
 
     <!-- ── Custom Courses table ─────────────────────────────────── -->
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4)">
+    <div class="flex align-items-start justify-content-between gap-4 mb-4">
         <div>
-            <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">Custom Courses</div>
-            <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
+            <div class="fw-semibold text-base">Custom Courses</div>
+            <div class="text-xs text-tertiary mt-1">
                 Additional programs you've added. They appear in dropdowns and strand-match suggestions.
             </div>
         </div>
@@ -511,7 +510,7 @@ $customByName = array_column($customCourses, null, 'course_name');
                        placeholder="Search custom courses…" aria-label="Search custom courses">
             </div>
 
-            <select class="form-input" style="width:180px" data-st-filter="status" aria-label="Status">
+            <select class="form-input wpx-180" data-st-filter="status" aria-label="Status">
                 <option value="">All statuses</option>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
@@ -525,10 +524,10 @@ $customByName = array_column($customCourses, null, 'course_name');
                 <thead>
                     <tr>
                         <th>Course</th>
-                        <th style="width:240px">College</th>
-                        <th style="width:260px">Strands</th>
-                        <th style="width:110px">Status</th>
-                        <th class="col-center" style="width:110px"></th>
+                        <th class="wpx-240">College</th>
+                        <th class="wpx-260">Strands</th>
+                        <th class="wpx-110">Status</th>
+                        <th class="col-center wpx-110"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -539,7 +538,7 @@ $customByName = array_column($customCourses, null, 'course_name');
                         data-search="<?= e(mb_strtolower($cc['course_name'] . ' ' . ($cc['college_name'] ?? '') . ' ' . implode(' ', $ccStrands))) ?>"
                         data-strand="<?= e(implode('|', $ccStrands)) ?>"
                         data-status="<?= $cc['is_active'] ? 'active' : 'inactive' ?>">
-                        <td style="font-weight:var(--weight-medium)">
+                        <td class="fw-medium">
                             <span class="auto-table-clip" title="<?= e($cc['course_name']) ?>"><?= e($cc['course_name']) ?></span>
                         </td>
                         <td>
@@ -553,7 +552,7 @@ $customByName = array_column($customCourses, null, 'course_name');
                             <?php if ($ccStrands): ?>
                                 <?= $strandPills($ccStrands) ?>
                             <?php else: ?>
-                                <span style="font-size:var(--text-xs);color:var(--text-tertiary)">No strands set</span>
+                                <span class="text-xs text-tertiary">No strands set</span>
                             <?php endif; ?>
                         </td>
                         <td>
@@ -564,10 +563,10 @@ $customByName = array_column($customCourses, null, 'course_name');
                             <?php endif; ?>
                         </td>
                         <td class="col-center">
-                            <div style="display:flex;gap:var(--space-2);align-items:center;justify-content:center">
-                                <button type="button" class="btn-icon" title="Edit"
+                            <div class="flex gap-2 align-items-center justify-content-center">
+                                <button type="button" class="btn-icon text-tertiary" title="Edit"
                                         onclick="openEditModal(<?= (int)$cc['id'] ?>, <?= e(json_encode($cc['course_name'])) ?>, <?= e(json_encode($ccStrands)) ?>, <?= (int)$cc['is_active'] ?>, <?= (int)($cc['department_id'] ?? 0) ?>)"
-                                        style="color:var(--text-tertiary)">
+                                       >
                                     <?= icon('ic_fluent_edit_24_regular', 14) ?>
                                 </button>
                                 <form method="POST" style="display:inline"
@@ -575,7 +574,7 @@ $customByName = array_column($customCourses, null, 'course_name');
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="action" value="delete_course">
                                     <input type="hidden" name="course_id" value="<?= (int)$cc['id'] ?>">
-                                    <button type="submit" class="btn-icon" title="Delete" style="color:var(--error)">
+                                    <button type="submit" class="btn-icon text-error" title="Delete">
                                         <?= icon('ic_fluent_delete_24_regular', 14) ?>
                                     </button>
                                 </form>
@@ -604,7 +603,7 @@ $customByName = array_column($customCourses, null, 'course_name');
     </div>
 
     <!-- ── SHS Strand Reference table ───────────────────────────── -->
-    <div style="font-weight:var(--weight-semibold);font-size:var(--text-base);margin-bottom:var(--space-4)">SHS Strand Reference</div>
+    <div class="fw-semibold text-base mb-4">SHS Strand Reference</div>
 
     <div class="auto-table-card auto-table-card--scroll" data-scroll-table data-limit="10" data-batch="10">
 
@@ -622,15 +621,15 @@ $customByName = array_column($customCourses, null, 'course_name');
             <table class="auto-table">
                 <thead>
                     <tr>
-                        <th style="width:160px">Strand</th>
+                        <th class="wpx-160">Strand</th>
                         <th>Description</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach (SHS_STRANDS as $key => $label): ?>
                     <tr data-st-row data-search="<?= e(mb_strtolower($key . ' ' . $label)) ?>">
-                        <td style="font-weight:var(--weight-semibold)"><?= e($key) ?></td>
-                        <td style="color:var(--text-secondary)"><span class="auto-table-clip" title="<?= e($label) ?>"><?= e($label) ?></span></td>
+                        <td class="fw-semibold"><?= e($key) ?></td>
+                        <td class="text-secondary"><span class="auto-table-clip" title="<?= e($label) ?>"><?= e($label) ?></span></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
@@ -652,12 +651,10 @@ $customByName = array_column($customCourses, null, 'course_name');
 
 <!-- ── Add Course Modal ───────────────────────────────────────────────── -->
 <div id="add-course-modal"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;
-            align-items:center;justify-content:center;padding:var(--space-4)">
-    <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-6);
-                max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
-            <div style="font-weight:var(--weight-semibold);font-size:var(--text-lg)">Add Custom Course</div>
+     class="align-items-center justify-content-center p-4" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000">
+    <div class="bg-elevated bd rounded p-6 mwpx-520 w-100 overflow-y-auto" style="max-height:90vh;box-shadow:var(--shadow-lg)">
+        <div class="flex align-items-center justify-content-between mb-5">
+            <div class="fw-semibold text-lg">Add Custom Course</div>
             <button type="button" class="btn-icon" onclick="document.getElementById('add-course-modal').style.display='none'">
                 <?= icon('ic_fluent_dismiss_24_regular', 16) ?>
             </button>
@@ -665,49 +662,49 @@ $customByName = array_column($customCourses, null, 'course_name');
         <form method="POST">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="add_course">
-            <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="flex flex-column gap-4">
                 <div>
-                    <label class="form-label" for="add-course-name">Course / Program Name <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="add-course-name">Course / Program Name <span class="text-error">*</span></label>
                     <input type="text" id="add-course-name" name="course_name" class="form-control"
                            placeholder="e.g. BS Data Science (BSDS)" required>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
+                    <p class="text-xs text-tertiary mt-1">
                         Use the full official name with the course code in brackets at the end. The same code must exist in Enrollment.
                     </p>
                 </div>
                 <div>
-                    <label class="form-label" for="add-course-college">College <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="add-course-college">College <span class="text-error">*</span></label>
                     <select id="add-course-college" name="department_id" class="form-control" required>
                         <option value="">Select a college</option>
                         <?php foreach ($colleges as $col): ?>
                             <option value="<?= (int)$col['id'] ?>"><?= e($col['name']) ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
+                    <p class="text-xs text-tertiary mt-1">
                         Exam and interview slots and the Dean's view follow the college.
                     </p>
                 </div>
                 <div>
                     <span class="form-label">Accepted SHS Strands</span>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-2)">
+                    <p class="text-xs text-tertiary mb-2">
                         Check all strands whose graduates may apply for this course.
                     </p>
                     <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-2);--bs-gutter-y:var(--space-2)">
                     <?php foreach (SHS_STRANDS as $sKey => $sLabel): ?>
-                        <label style="display:flex;align-items:flex-start;gap:var(--space-2);cursor:pointer">
+                        <label class="flex align-items-start gap-2 pointer">
                             <input type="checkbox" name="strands[]" value="<?= e($sKey) ?>"
-                                   style="accent-color:var(--accent);margin-top:2px">
-                            <span style="font-size:var(--text-xs)">
+                                   class="accent-c" style="margin-top:2px">
+                            <span class="text-xs">
                                 <strong><?= e($sKey) ?></strong><br>
-                                <span style="color:var(--text-tertiary)"><?= e($sLabel) ?></span>
+                                <span class="text-tertiary"><?= e($sLabel) ?></span>
                             </span>
                         </label>
                     <?php endforeach; ?>
                     </div>
                 </div>
-                <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin:0">
+                <p class="text-xs text-tertiary m-0">
                     After adding, set this course's tier thresholds in the <strong>Tier Thresholds</strong> table above. Defaults: Pass = Avg 4, High = 7.
                 </p>
-                <div style="display:flex;gap:var(--space-2);justify-content:flex-end;padding-top:var(--space-2)">
+                <div class="flex gap-2 justify-content-end pt-2">
                     <button type="button" class="btn btn-ghost"
                             onclick="document.getElementById('add-course-modal').style.display='none'">
                         Cancel
@@ -721,12 +718,10 @@ $customByName = array_column($customCourses, null, 'course_name');
 
 <!-- ── Edit Course Modal ──────────────────────────────────────────────── -->
 <div id="edit-course-modal"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;
-            align-items:center;justify-content:center;padding:var(--space-4)">
-    <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-6);
-                max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
-            <div style="font-weight:var(--weight-semibold);font-size:var(--text-lg)">Edit Course</div>
+     class="align-items-center justify-content-center p-4" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000">
+    <div class="bg-elevated bd rounded p-6 mwpx-520 w-100 overflow-y-auto" style="max-height:90vh;box-shadow:var(--shadow-lg)">
+        <div class="flex align-items-center justify-content-between mb-5">
+            <div class="fw-semibold text-lg">Edit Course</div>
             <button type="button" class="btn-icon" onclick="document.getElementById('edit-course-modal').style.display='none'">
                 <?= icon('ic_fluent_dismiss_24_regular', 16) ?>
             </button>
@@ -735,13 +730,13 @@ $customByName = array_column($customCourses, null, 'course_name');
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="edit_course">
             <input type="hidden" name="course_id" id="edit-course-id">
-            <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="flex flex-column gap-4">
                 <div>
-                    <label class="form-label" for="edit-course-name">Course / Program Name <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="edit-course-name">Course / Program Name <span class="text-error">*</span></label>
                     <input type="text" name="course_name" id="edit-course-name" class="form-control" required>
                 </div>
                 <div>
-                    <label class="form-label" for="edit-course-college">College <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="edit-course-college">College <span class="text-error">*</span></label>
                     <select name="department_id" id="edit-course-college" class="form-control" required>
                         <option value="">Select a college</option>
                         <?php foreach ($colleges as $col): ?>
@@ -753,28 +748,28 @@ $customByName = array_column($customCourses, null, 'course_name');
                     <span class="form-label">Accepted SHS Strands</span>
                     <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-2);--bs-gutter-y:var(--space-2)" id="edit-strand-grid">
                     <?php foreach (SHS_STRANDS as $sKey => $sLabel): ?>
-                        <label style="display:flex;align-items:flex-start;gap:var(--space-2);cursor:pointer">
+                        <label class="flex align-items-start gap-2 pointer">
                             <input type="checkbox" name="strands[]"
-                                   class="edit-strand-cb" value="<?= e($sKey) ?>"
-                                   style="accent-color:var(--accent);margin-top:2px">
-                            <span style="font-size:var(--text-xs)">
+                                   class="edit-strand-cb accent-c" value="<?= e($sKey) ?>"
+                                   style="margin-top:2px">
+                            <span class="text-xs">
                                 <strong><?= e($sKey) ?></strong><br>
-                                <span style="color:var(--text-tertiary)"><?= e($sLabel) ?></span>
+                                <span class="text-tertiary"><?= e($sLabel) ?></span>
                             </span>
                         </label>
                     <?php endforeach; ?>
                     </div>
                 </div>
                 <div>
-                    <label style="display:flex;align-items:center;gap:var(--space-3);cursor:pointer">
-                        <input type="checkbox" name="is_active" id="edit-is-active" style="accent-color:var(--accent)">
-                        <span style="font-size:var(--text-sm)">Active (visible to the system)</span>
+                    <label class="flex align-items-center gap-3 pointer">
+                        <input type="checkbox" name="is_active" id="edit-is-active" class="accent-c">
+                        <span class="text-sm">Active (visible to the system)</span>
                     </label>
                 </div>
-                <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin:0">
+                <p class="text-xs text-tertiary m-0">
                     Tier thresholds are managed in the <strong>Tier Thresholds</strong> table on this page.
                 </p>
-                <div style="display:flex;gap:var(--space-2);justify-content:flex-end;padding-top:var(--space-2)">
+                <div class="flex gap-2 justify-content-end pt-2">
                     <button type="button" class="btn btn-ghost"
                             onclick="document.getElementById('edit-course-modal').style.display='none'">
                         Cancel

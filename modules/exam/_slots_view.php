@@ -10,11 +10,11 @@
 
 <?php if (!empty($errors)): ?>
     <?php foreach ($errors as $err): ?>
-        <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($err) ?></div>
+        <div class="alert alert-error mb-3"><?= e($err) ?></div>
     <?php endforeach; ?>
 <?php endif; ?>
 <?php foreach ($success as $s): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
+    <div class="alert alert-success mb-3"><?= e($s) ?></div>
 <?php endforeach; ?>
 
 <?php if ($mode === 'colleges'): ?>
@@ -237,17 +237,17 @@
     <?php if ($canManage && !empty($slotsForCollege)): ?>
     <!-- Floating bar for bulk delete (visible while in select mode). -->
     <div id="es-bulk-bar" class="select-bulk-bar es-bulk-bar">
-        <span id="es-bulk-count" style="font-weight:var(--weight-medium)">0 selected</span>
+        <span id="es-bulk-count" class="fw-medium">0 selected</span>
         <form method="POST" id="es-bulk-form"
-              style="display:flex;gap:var(--space-2);align-items:center;margin:0">
+              class="flex gap-2 align-items-center m-0">
             <?= csrf_field() ?>
             <input type="hidden" name="action"      value="delete_slots_bulk">
             <input type="hidden" name="ctx_college" value="<?= e($collegeParam) ?>">
             <input type="hidden" name="ids"         id="es-bulk-ids" value="">
             <button type="button" class="btn btn-ghost btn-sm"
                     onclick="cancelEsSelectMode()">Cancel</button>
-            <button type="submit" class="btn btn-sm" id="es-bulk-delete-btn"
-                    style="background:var(--error);color:var(--white);border-color:var(--error)"
+            <button type="submit" class="btn btn-sm text-white" id="es-bulk-delete-btn"
+                    style="background:var(--error);border-color:var(--error)"
                     onclick="return confirmEsBulkDelete(this)">
                 Delete Selected
             </button>
@@ -281,49 +281,47 @@
     ?>
 
     <!-- Slot summary strip -->
-    <div style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);
-                margin-bottom:var(--space-4);background:var(--bg-elevated);border:1px solid var(--border);
-                border-radius:var(--radius);font-size:var(--text-sm);flex-wrap:wrap;flex-shrink:0">
+    <div class="flex align-items-center gap-3 py-3 px-4 mb-4 bg-elevated bd rounded text-sm flex-wrap flex-shrink-0">
         <?= icon('ic_fluent_location_24_regular', 14, 'color:var(--text-tertiary);flex-shrink:0') ?>
 
         <?php if ($canManage && !$isPast): ?>
             <!-- Inline-editable room label (Admin/SSO only). Click the pencil to rename. -->
-            <span id="room-label-view" style="display:inline-flex;align-items:center;gap:6px">
+            <span id="room-label-view" class="inline-flex align-items-center" style="gap:6px">
                 <span id="room-label-text" style="font-weight:var(--weight-medium)"><?= e($slotDetail['room_label']) ?></span>
-                <button type="button" class="btn-icon" title="Rename room"
+                <button type="button" class="btn-icon text-tertiary" title="Rename room"
                         onclick="startRoomLabelEdit()"
-                        style="padding:2px;color:var(--text-tertiary)">
+                        style="padding:2px">
                     <?= icon('ic_fluent_edit_24_regular', 12) ?>
                 </button>
             </span>
-            <span id="room-label-edit" style="display:none;align-items:center;gap:4px">
-                <input type="text" id="room-label-input" aria-label="Room label" class="form-control"
+            <span id="room-label-edit" class="align-items-center gap-1" style="display:none">
+                <input type="text" id="room-label-input" aria-label="Room label" class="form-control text-sm"
                        value="<?= e($slotDetail['room_label']) ?>"
                        maxlength="80"
-                       style="font-size:var(--text-sm);padding:2px 8px;height:auto;min-height:0;width:240px">
-                <button type="button" class="btn btn-primary btn-sm"
+                       style="padding:2px 8px;height:auto;min-height:0;width:240px">
+                <button type="button" class="btn btn-primary btn-sm text-xs"
                         onclick="saveRoomLabel(<?= $sid ?>)"
-                        style="font-size:var(--text-xs);padding:2px 8px;height:auto;min-height:0">Save</button>
-                <button type="button" class="btn btn-ghost btn-sm"
+                        style="padding:2px 8px;height:auto;min-height:0">Save</button>
+                <button type="button" class="btn btn-ghost btn-sm text-xs"
                         onclick="cancelRoomLabelEdit()"
-                        style="font-size:var(--text-xs);padding:2px 8px;height:auto;min-height:0">Cancel</button>
+                        style="padding:2px 8px;height:auto;min-height:0">Cancel</button>
             </span>
         <?php else: ?>
-            <span style="font-weight:var(--weight-medium)"><?= e($slotDetail['room_label']) ?></span>
+            <span class="fw-medium"><?= e($slotDetail['room_label']) ?></span>
         <?php endif; ?>
 
-        <span style="color:var(--text-tertiary)">
+        <span class="text-tertiary">
             <?= e(format_date($slotDetail['exam_date'], 'D, M j, Y')) ?>
             · <?= e(format_time($slotDetail['slot_time'])) ?><?php if (!empty($slotDetail['end_time'])): ?>–<?= e(format_time($slotDetail['end_time'])) ?><?php endif; ?>
             · <?= e($slotDetail['department']) ?>
         </span>
-        <span style="margin-left:auto;font-size:var(--text-xs);color:var(--text-tertiary)">
+        <span class="ms-auto text-xs text-tertiary">
             <strong style="<?= $filled >= $cap ? 'color:var(--error)' : '' ?>">
                 <?= $filled ?> / <?= $cap ?>
             </strong>
             seats filled
             <?php if ($isPast): ?>
-                <span class="badge badge-neutral" style="margin-left:var(--space-2)">Ended</span>
+                <span class="badge badge-neutral ms-2">Ended</span>
             <?php endif; ?>
         </span>
     </div>
@@ -358,7 +356,7 @@
         </span>
 
         <?php if ($rosterCanGenerate): ?>
-            <div style="margin-left:auto;display:flex;gap:var(--space-2)">
+            <div class="ms-auto flex gap-2">
                 <button type="button" id="slot-code-extend-btn"
                         class="btn btn-ghost btn-sm"
                         onclick="extendSlotCode()"
@@ -373,12 +371,12 @@
                 </button>
             </div>
         <?php else: ?>
-            <span style="margin-left:auto;font-size:var(--text-xs);color:var(--text-tertiary)">
+            <span class="ms-auto text-xs text-tertiary">
                 <?= icon('ic_fluent_eye_24_regular', 12) ?> Read-only
             </span>
         <?php endif; ?>
     </div>
-    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin:-2px 0 var(--space-4) 2px;flex-shrink:0">
+    <div class="text-xs text-tertiary flex-shrink-0" style="margin:-2px 0 var(--space-4) 2px">
         <?php if ($rosterCodeActive): ?>
             Codes are valid for 5 minutes. Use <strong>Extend</strong> to give late
             but legitimate applicants another 5 minutes from now, or <strong>New</strong>
@@ -433,7 +431,7 @@
                 <input type="text" id="roster_q" name="q" aria-label="Search" class="form-input" placeholder="Search name, email, course…" value="<?= e($rosterSearch) ?>">
             </div>
 
-            <select name="type" class="form-input" style="width:160px" onchange="this.form.submit()" aria-label="Applicant type">
+            <select name="type" class="form-input wpx-160" onchange="this.form.submit()" aria-label="Applicant type">
                 <option value="">All Types</option>
                 <option value="freshman"   <?= $rosterType === 'freshman'   ? 'selected' : '' ?>>Freshman</option>
                 <option value="transferee" <?= $rosterType === 'transferee' ? 'selected' : '' ?>>Transferee</option>
@@ -452,12 +450,12 @@
                 <thead>
                     <tr>
                         <th style="min-width:220px">Applicant</th>
-                        <th style="width:240px">Email</th>
-                        <th style="width:240px">Course</th>
-                        <th style="width:120px">Type</th>
-                        <th style="width:160px">Assigned</th>
+                        <th class="wpx-240">Email</th>
+                        <th class="wpx-240">Course</th>
+                        <th class="wpx-120">Type</th>
+                        <th class="wpx-160">Assigned</th>
                         <?php if ($canManage && !$isPast): ?>
-                            <th style="width:100px">Action</th>
+                            <th class="wpx-100">Action</th>
                         <?php endif; ?>
                     </tr>
                 </thead>
@@ -465,13 +463,13 @@
                 <tbody>
                 <?php foreach ($slotRoster as $row): ?>
                     <tr>
-                        <td style="font-size:var(--text-sm)" title="<?= e(format_full_name($row)) ?>">
-                            <span class="auto-table-clip" style="font-weight:var(--weight-medium)"><?= e(format_full_name($row)) ?></span>
+                        <td class="text-sm" title="<?= e(format_full_name($row)) ?>">
+                            <span class="auto-table-clip fw-medium"><?= e(format_full_name($row)) ?></span>
                         </td>
-                        <td style="font-size:var(--text-xs);color:var(--text-tertiary)" title="<?= e($row['student_email'] ?? '') ?>">
+                        <td class="text-xs text-tertiary" title="<?= e($row['student_email'] ?? '') ?>">
                             <span class="auto-table-clip"><?= e(!empty($row['student_email']) ? $row['student_email'] : '-') ?></span>
                         </td>
-                        <td style="font-size:var(--text-sm)" title="<?= e($row['course_applied'] ?? '') ?>">
+                        <td class="text-sm" title="<?= e($row['course_applied'] ?? '') ?>">
                             <span class="auto-table-clip"><?= e($row['course_applied'] ?: '-') ?></span>
                         </td>
                         <td>
@@ -479,7 +477,7 @@
                                 <?= e(ucfirst($row['applicant_type'] ?? '')) ?>
                             </span>
                         </td>
-                        <td style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                        <td class="text-xs text-tertiary">
                             <span class="auto-table-clip">
                             <?= $row['assigned_at']
                                 ? e(date('M j, g:i A', strtotime($row['assigned_at'])))
@@ -488,14 +486,14 @@
                         </td>
                         <?php if ($canManage && !$isPast): ?>
                             <td>
-                                <form method="POST" style="margin:0"
+                                <form method="POST" class="m-0"
                                       data-confirm="Remove this applicant from the slot?" data-confirm-danger data-confirm-ok="Remove">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="action"       value="unassign">
                                     <input type="hidden" name="ctx_slot"     value="<?= $sid ?>">
                                     <input type="hidden" name="applicant_id" value="<?= (int)$row['applicant_id'] ?>">
-                                    <button type="submit" class="btn btn-ghost btn-sm"
-                                            style="color:var(--error);font-size:var(--text-xs)">
+                                    <button type="submit" class="btn btn-ghost btn-sm text-error text-xs"
+                                           >
                                         Remove
                                     </button>
                                 </form>
@@ -513,7 +511,7 @@
                 <?php if ($rosterHasFilters): ?>
                     <div>No applicants match your filters.</div>
                 <?php else: ?>
-                    <div style="max-width:420px">
+                    <div class="mwpx-420">
                         No applicants assigned to this slot yet. Use the
                         <a href="<?= e($collegeUrl) ?>">college view</a>
                         to assign applicants from the awaiting list.
@@ -543,7 +541,7 @@
 
     <!-- ── Add Slot Modal (Single + Recurring) ────────────────── -->
     <div id="add-slot-modal" class="modal-backdrop" style="display:none">
-        <div class="modal" style="max-width:480px">
+        <div class="modal mwpx-480">
             <div class="modal-header">
                 <div class="modal-title">Add Slot</div>
                 <button class="btn-icon" type="button"
@@ -555,10 +553,10 @@
                 <?= csrf_field() ?>
                 <input type="hidden" name="action"      id="add-slot-action" value="add_slot">
                 <input type="hidden" name="ctx_college" value="<?= e($collegeParam) ?>">
-                <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div class="modal-body flex flex-column gap-4">
 
                     <!-- Mode toggle -->
-                    <div class="seg-control" style="align-self:flex-start">
+                    <div class="seg-control align-self-start">
                         <button type="button" id="add-slot-mode-single"
                                 class="seg-control-item active"
                                 onclick="setSlotMode('single')">Single slot</button>
@@ -575,32 +573,32 @@
                            value="<?= e($canManage ? $collegeParam : $staffDept) ?>">
 
                     <!-- ── Single slot fields ─────────────────── -->
-                    <div id="add-slot-single-fields" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                    <div id="add-slot-single-fields" class="flex flex-column gap-4">
                         <div>
-                            <label class="form-label" for="add-slot-date">Exam Date <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="add-slot-date">Exam Date <span class="text-error">*</span></label>
                             <input type="date" id="add-slot-date" name="exam_date" class="form-control" required
                                    value="<?= e($defaultDate) ?>" min="<?= now_date() ?>">
                         </div>
-                        <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                        <div class="row row-cols-1 row-cols-md-2 gutter-3">
                             <div>
-                                <label class="form-label" for="add-slot-time">Opens <span style="color:var(--error)">*</span></label>
+                                <label class="form-label" for="add-slot-time">Opens <span class="text-error">*</span></label>
                                 <input type="time" name="slot_time" id="add-slot-time"
                                        class="form-control" value="08:00" required>
                             </div>
                             <div>
-                                <label class="form-label" for="add-slot-end">Closes <span style="color:var(--error)">*</span></label>
+                                <label class="form-label" for="add-slot-end">Closes <span class="text-error">*</span></label>
                                 <input type="time" name="end_time" id="add-slot-end"
                                        class="form-control" value="09:30" required>
                             </div>
                         </div>
-                        <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                        <div class="row row-cols-1 row-cols-md-2 gutter-3">
                             <div>
-                                <label class="form-label" for="add-slot-cap">Capacity <span style="color:var(--error)">*</span></label>
+                                <label class="form-label" for="add-slot-cap">Capacity <span class="text-error">*</span></label>
                                 <input type="number" id="add-slot-cap" name="capacity" class="form-control"
                                        value="<?= $examRoomCap ?>" min="1" max="500" required>
                             </div>
                             <div>
-                                <label class="form-label" for="add-slot-room">Room Label <span style="color:var(--error)">*</span></label>
+                                <label class="form-label" for="add-slot-room">Room Label <span class="text-error">*</span></label>
                                 <input type="text" id="add-slot-room" name="room_label" class="form-control" required
                                        placeholder="e.g. Room 101" maxlength="80">
                             </div>
@@ -608,30 +606,30 @@
                     </div>
 
                     <!-- ── Recurring (batch) fields ───────────── -->
-                    <div id="add-slot-batch-fields" style="display:none;flex-direction:column;gap:var(--space-4)">
+                    <div id="add-slot-batch-fields" class="flex-column gap-4" style="display:none">
                         <p class="text-secondary-sm">
                             One slot is created per room per selected weekday in the date range.
                         </p>
-                        <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                        <div class="row row-cols-1 row-cols-md-2 gutter-3">
                             <div>
-                                <label class="form-label" for="add-batch-start">Start Date <span style="color:var(--error)">*</span></label>
+                                <label class="form-label" for="add-batch-start">Start Date <span class="text-error">*</span></label>
                                 <input type="date" id="add-batch-start" name="batch_start_date" class="form-control"
                                        value="<?= e($defaultDate) ?>" required>
                             </div>
                             <div>
-                                <label class="form-label" for="add-batch-end">End Date <span style="color:var(--error)">*</span></label>
+                                <label class="form-label" for="add-batch-end">End Date <span class="text-error">*</span></label>
                                 <input type="date" id="add-batch-end" name="batch_end_date" class="form-control"
                                        value="<?= e(date('Y-m-d', strtotime($defaultDate . ' +6 days'))) ?>" required>
                             </div>
                         </div>
-                        <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                        <div class="row row-cols-1 row-cols-md-2 gutter-3">
                             <div>
-                                <label class="form-label" for="batch-time">Opens <span style="color:var(--error)">*</span></label>
+                                <label class="form-label" for="batch-time">Opens <span class="text-error">*</span></label>
                                 <input type="time" name="batch_time" id="batch-time"
                                        class="form-control" value="08:00" required>
                             </div>
                             <div>
-                                <label class="form-label" for="batch-end-time">Closes <span style="color:var(--error)">*</span></label>
+                                <label class="form-label" for="batch-end-time">Closes <span class="text-error">*</span></label>
                                 <input type="time" name="batch_end_time" id="batch-end-time"
                                        class="form-control" value="09:30" required>
                             </div>
@@ -643,19 +641,19 @@
                         </div>
                         <div>
                             <span class="form-label">Rooms</span>
-                            <div id="batch-rooms-list" style="display:flex;flex-direction:column;gap:var(--space-2)">
+                            <div id="batch-rooms-list" class="flex flex-column gap-2">
                                 <input type="text" name="batch_rooms[]" aria-label="Room" class="form-control"
                                        placeholder="e.g. Room 101" required>
                             </div>
-                            <button type="button" class="btn btn-ghost btn-sm"
-                                    style="margin-top:var(--space-2);font-size:var(--text-xs)"
+                            <button type="button" class="btn btn-ghost btn-sm mt-2 text-xs"
+                                   
                                     onclick="addBatchRoom()">+ Add another room</button>
                         </div>
                         <div>
                             <span class="form-label">Days of Week</span>
-                            <div style="display:flex;flex-wrap:wrap;gap:var(--space-2)">
+                            <div class="flex flex-wrap gap-2">
                                 <?php foreach ([1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri',6=>'Sat',0=>'Sun'] as $dv => $dl): ?>
-                                    <label style="display:flex;align-items:center;gap:4px;font-size:var(--text-sm)">
+                                    <label class="flex align-items-center gap-1 text-sm">
                                         <input type="checkbox" name="batch_days[]" value="<?= $dv ?>"
                                             <?= $dv >= 1 && $dv <= 5 ? 'checked' : '' ?>>
                                         <?= $dl ?>
@@ -665,7 +663,7 @@
                         </div>
                     </div>
 
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:-2px">
+                    <div class="text-xs text-tertiary" style="margin-top:-2px">
                         Exam closes at <strong>Closes</strong>. Duration is the difference between the two.
                     </div>
                 </div>
@@ -680,7 +678,7 @@
 
     <!-- ── Edit Slot Modal ────────────────────────────────────── -->
     <div id="edit-slot-modal" class="modal-backdrop" style="display:none">
-        <div class="modal" style="max-width:420px">
+        <div class="modal mwpx-420">
             <div class="modal-header">
                 <div class="modal-title">Edit Slot</div>
                 <button class="btn-icon" type="button"
@@ -694,9 +692,9 @@
                 <input type="hidden" name="ctx_college" value="<?= e($collegeParam) ?>">
                 <input type="hidden" name="ctx_slot"    id="edit-slot-ctx-slot" value="<?= $slotIdParam ?: '' ?>">
                 <input type="hidden" name="slot_id"     id="edit-slot-id">
-                <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div class="modal-body flex flex-column gap-4">
                     <div>
-                        <label class="form-label" for="edit-slot-dept">College / Department <span style="color:var(--error)">*</span></label>
+                        <label class="form-label" for="edit-slot-dept">College / Department <span class="text-error">*</span></label>
                         <?php if ($canManage): ?>
                             <select name="department" id="edit-slot-dept" class="form-control" required>
                                 <option value="">- Select college -</option>
@@ -710,37 +708,37 @@
                         <?php endif; ?>
                     </div>
                     <div>
-                        <label class="form-label" for="edit-slot-date">Exam Date <span style="color:var(--error)">*</span></label>
+                        <label class="form-label" for="edit-slot-date">Exam Date <span class="text-error">*</span></label>
                         <input type="date" name="exam_date" id="edit-slot-date"
                                class="form-control" required min="<?= now_date() ?>">
                     </div>
-                    <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                    <div class="row row-cols-1 row-cols-md-2 gutter-3">
                         <div>
-                            <label class="form-label" for="edit-slot-time">Opens <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="edit-slot-time">Opens <span class="text-error">*</span></label>
                             <input type="time" name="slot_time" id="edit-slot-time" class="form-control" required>
                         </div>
                         <div>
-                            <label class="form-label" for="edit-slot-end">Closes <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="edit-slot-end">Closes <span class="text-error">*</span></label>
                             <input type="time" name="end_time" id="edit-slot-end" class="form-control" required>
                         </div>
                     </div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:-2px">
+                    <div class="text-xs text-tertiary" style="margin-top:-2px">
                         Exam closes at <strong>Closes</strong>. Duration is the difference between the two.
                     </div>
-                    <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-3);--bs-gutter-y:var(--space-3)">
+                    <div class="row row-cols-1 row-cols-md-2 gutter-3">
                         <div>
-                            <label class="form-label" for="edit-slot-cap">Capacity <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="edit-slot-cap">Capacity <span class="text-error">*</span></label>
                             <input type="number" name="capacity" id="edit-slot-cap"
                                    class="form-control" min="1" max="500" required>
                         </div>
                         <div>
-                            <label class="form-label" for="edit-slot-room">Room Label <span style="color:var(--error)">*</span></label>
+                            <label class="form-label" for="edit-slot-room">Room Label <span class="text-error">*</span></label>
                             <input type="text" name="room_label" id="edit-slot-room"
                                    class="form-control" required maxlength="80">
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer" style="justify-content:space-between">
+                <div class="modal-footer justify-content-between">
                     <?php // Inline delete (only when slot is empty - server still validates) ?>
                     <button type="submit" form="delete-slot-form" class="btn btn-ghost"
                             id="edit-slot-delete-btn"
@@ -748,7 +746,7 @@
                             data-confirm="Delete this slot? Only allowed if it has no applicants." data-confirm-danger data-confirm-ok="Delete">
                         Delete
                     </button>
-                    <div style="display:flex;gap:var(--space-2)">
+                    <div class="flex gap-2">
                         <button type="button" class="btn btn-ghost"
                                 onclick="document.getElementById('edit-slot-modal').style.display='none'">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -767,7 +765,7 @@
 
     <!-- ── Exam Config Modal ──────────────────────────────────── -->
     <div id="exam-config-modal" class="modal-backdrop" style="display:none">
-        <div class="modal" style="max-width:420px">
+        <div class="modal mwpx-420">
             <div class="modal-header">
                 <div class="modal-title">Exam Config</div>
                 <button class="btn-icon" type="button"
@@ -779,7 +777,7 @@
                 <?= csrf_field() ?>
                 <input type="hidden" name="action"      value="update_exam_config">
                 <input type="hidden" name="ctx_college" value="<?= e($collegeParam) ?>">
-                <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+                <div class="modal-body flex flex-column gap-4">
                     <div>
                         <label class="form-label" for="cfg-room-cap">Default Seats per Room</label>
                         <input type="number" id="cfg-room-cap" name="exam_room_capacity" class="form-control"
@@ -791,9 +789,7 @@
                                value="<?= $examDailyCap ?>" min="1" max="10000">
                     </div>
                     <?php $roomsNeeded = $examRoomCap > 0 ? ceil($examDailyCap / $examRoomCap) : '-'; ?>
-                    <div style="background:var(--bg-subtle);border-radius:var(--radius);
-                                padding:var(--space-3) var(--space-4);font-size:var(--text-xs);
-                                color:var(--text-secondary)">
+                    <div class="bg-subtle rounded py-3 px-4 text-xs text-secondary">
                         <?= $examDailyCap ?> applicants &divide; <?= $examRoomCap ?>/room
                         = <strong>~<?= $roomsNeeded ?> rooms/day</strong>
                     </div>

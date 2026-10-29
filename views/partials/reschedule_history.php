@@ -12,14 +12,14 @@ $historyExtraStyle = $historyExtraStyle ?? '';
 ?>
 <?php if (!empty($pastReschedules)): ?>
     <details style="margin-top:var(--space-4);<?= e($historyExtraStyle) ?>">
-        <summary style="cursor:pointer;font-size:var(--text-xs);color:var(--text-tertiary)">
+        <summary class="pointer text-xs text-tertiary">
             Past reschedule requests (<?= count($pastReschedules) ?>)
         </summary>
-        <div style="margin-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)">
+        <div class="mt-3 flex flex-column gap-2">
             <?php foreach ($pastReschedules as $h): ?>
-                <div style="padding:var(--space-3);background:var(--bg-subtle);border-radius:var(--radius);font-size:var(--text-xs)">
-                    <div style="display:flex;justify-content:space-between;gap:var(--space-3);align-items:flex-start">
-                        <div style="color:var(--text-tertiary)">
+                <div class="p-3 bg-subtle rounded text-xs">
+                    <div class="flex justify-content-between gap-3 align-items-start">
+                        <div class="text-tertiary">
                             <?= date('M j, Y · g:i A', strtotime($h['created_at'])) ?>
                         </div>
                         <?php
@@ -32,12 +32,12 @@ $historyExtraStyle = $historyExtraStyle ?? '';
                         </span>
                     </div>
                     <?php if (!empty($h['reason'])): ?>
-                        <div style="margin-top:var(--space-2);color:var(--text-secondary);white-space:pre-line">
+                        <div class="mt-2 text-secondary pre-line">
                             <?= e($h['reason']) ?>
                         </div>
                     <?php endif; ?>
                     <?php if ($h['status'] === 'denied' && !empty($h['deny_reason'])): ?>
-                        <div style="margin-top:var(--space-2);color:var(--text-tertiary)">
+                        <div class="mt-2 text-tertiary">
                             Staff: <?= e($h['deny_reason']) ?>
                         </div>
                     <?php endif; ?>

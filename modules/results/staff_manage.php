@@ -236,16 +236,16 @@ ob_start();
 ?>
 
 <?php if ($msg = Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
+    <div class="alert alert-success mb-4 flex-shrink-0"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
+    <div class="alert alert-error mb-4 flex-shrink-0"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('info')): ?>
-    <div class="alert alert-info" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($msg) ?></div>
+    <div class="alert alert-info mb-4 flex-shrink-0"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($role === ROLE_ADMIN && ($programWarning = enrollment_program_warning()) !== ''): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4);flex-shrink:0"><?= e($programWarning) ?></div>
+    <div class="alert alert-error mb-4 flex-shrink-0"><?= e($programWarning) ?></div>
 <?php endif; ?>
 
 <!-- ============================================================
@@ -282,22 +282,16 @@ $awaitingCount = (int)$countRows['awaiting_count'];
      SSO can't release these here (Professor hasn't evaluated yet), so
      surface them as a quiet pointer to the Interviews page where the
      action actually lives. -->
-<div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-3);flex-shrink:0">
+<div class="flex justify-content-end mb-3 flex-shrink-0">
     <a href="<?= url('/staff/interviews/queue') ?>"
-       style="
-           display:inline-flex;align-items:center;gap:var(--space-2);
-           padding:4px var(--space-3);border-radius:var(--radius);
-           background:var(--bg-secondary);border:1px solid var(--border);
-           font-size:var(--text-xs);color:var(--text-tertiary);text-decoration:none;
-           transition:background var(--transition-fast),color var(--transition-fast);
-       "
+       class="inline-flex align-items-center gap-2 py-1 px-3 rounded bd text-xs text-tertiary" style="background:var(--bg-secondary);text-decoration:none;transition:background var(--transition-fast),color var(--transition-fast)"
        onmouseover="this.style.background='var(--bg-overlay)';this.style.color='var(--text-secondary)'"
        onmouseout="this.style.background='var(--bg-secondary)';this.style.color='var(--text-tertiary)'"
        onfocus="this.style.background='var(--bg-overlay)';this.style.color='var(--text-secondary)'"
        onblur="this.style.background='var(--bg-secondary)';this.style.color='var(--text-tertiary)'"
        title="Open the Interviews queue to record Pass/Decline">
         <?= icon('ic_fluent_clock_24_regular', 12) ?>
-        <span><strong style="color:var(--text-secondary);font-weight:var(--weight-medium)"><?= $awaitingCount ?></strong>
+        <span><strong class="text-secondary fw-medium"><?= $awaitingCount ?></strong>
             applicant<?= $awaitingCount === 1 ? '' : 's' ?> awaiting Professor evaluation</span>
         <?= icon('ic_fluent_chevron_right_24_regular', 12) ?>
     </a>
@@ -306,7 +300,7 @@ $awaitingCount = (int)$countRows['awaiting_count'];
 
 <?php if (!empty($slotCaps)): ?>
 <!-- ── Slot capacity indicator ────────────────────────────── -->
-<div style="display:flex;flex-wrap:nowrap;overflow-x:auto;gap:var(--space-2);margin-bottom:var(--space-3);flex-shrink:0">
+<div class="flex gap-2 mb-3 flex-shrink-0" style="flex-wrap:nowrap;overflow-x:auto">
     <?php foreach ($slotCaps as $cap):
         $accepted = (int)$cap['accepted_count'];
         $pending  = (int)$cap['pending_accept_count'];
@@ -327,8 +321,8 @@ $awaitingCount = (int)$countRows['awaiting_count'];
         font-size:var(--text-xs);
         min-width:180px;flex-shrink:0;
     ">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3)">
-            <span style="color:var(--text-secondary);font-weight:var(--weight-medium);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px" title="<?= e($cap['course_name']) ?>">
+        <div class="flex justify-content-between align-items-center gap-3">
+            <span class="text-secondary fw-medium text-nowrap overflow-hidden" style="text-overflow:ellipsis;max-width:140px" title="<?= e($cap['course_name']) ?>">
                 <?= e($cap['course_name']) ?>
             </span>
             <span style="color:<?= $barColor ?>;font-weight:var(--weight-semibold);white-space:nowrap">
@@ -336,15 +330,15 @@ $awaitingCount = (int)$countRows['awaiting_count'];
             </span>
         </div>
         <!-- Progress bar -->
-        <div style="height:4px;background:var(--border);border-radius:var(--radius);overflow:hidden">
+        <div class="rounded overflow-hidden" style="height:4px;background:var(--border)">
             <div style="height:100%;width:<?= $pct ?>%;background:<?= $barColor ?>;border-radius:var(--radius);transition:width .3s"></div>
         </div>
-        <div style="color:var(--text-tertiary)">
+        <div class="text-tertiary">
             <?= $accepted ?> accepted<?= $pending > 0 ? ' · <strong style="color:' . $barColor . '">' . $pending . ' pending</strong>' : '' ?>
             <?php if ($overLimit): ?>
-                &nbsp;<span style="color:var(--error);font-weight:var(--weight-semibold)">· Over limit!</span>
+                &nbsp;<span class="text-error fw-semibold">· Over limit!</span>
             <?php elseif ($nearLimit): ?>
-                &nbsp;<span style="color:var(--warning)">· Near limit</span>
+                &nbsp;<span class="text-warning">· Near limit</span>
             <?php endif; ?>
         </div>
     </div>
@@ -405,13 +399,13 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                     <?php if ($canRelease): ?>
                     <th class="col-check">
                         <input type="checkbox" id="res-select-all" aria-label="Select all" onchange="resToggleAll(this)"
-                               style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                               class="pointer accent-c" style="width:16px;height:16px">
                     </th>
                     <?php endif; ?>
                     <?= sortable_th('applicant', 'Applicant', $sortCol, $sortDir, $sortParams) ?>
                     <?= sortable_th('course',    'Course',    $sortCol, $sortDir, $sortParams) ?>
-                    <th style="width:100px">Exam Score</th>
-                    <th style="width:120px">Interview</th>
+                    <th class="wpx-100">Exam Score</th>
+                    <th class="wpx-120">Interview</th>
                     <?= sortable_th('result',    'Result',    $sortCol, $sortDir, $sortParams, 'width:220px') ?>
                     <?= sortable_th('released',  'Released',  $sortCol, $sortDir, $sortParams, 'width:120px') ?>
                     <th style="width:320px">Actions</th>
@@ -429,9 +423,9 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                     <?php if ($canRelease): ?>
                     <td class="col-check">
                         <?php if ($selectable): ?>
-                        <input type="checkbox" class="res-check" aria-label="Select applicant" value="<?= (int)$row['id'] ?>"
+                        <input type="checkbox" class="res-check pointer accent-c" aria-label="Select applicant" value="<?= (int)$row['id'] ?>"
                                onchange="resUpdateSelection()"
-                               style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                               style="width:16px;height:16px">
                         <?php endif; ?>
                     </td>
                     <?php endif; ?>
@@ -439,18 +433,18 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                     <td>
                         <?php // Single-line row - plain name (email on hover).
                               // Details open from the eye View button only. ?>
-                        <span class="auto-table-clip" title="<?= e($row['email']) ?>"
-                              style="font-weight:var(--weight-medium);color:var(--text-primary)"><?= e($fullName) ?></span>
+                        <span class="auto-table-clip fw-medium text-main" title="<?= e($row['email']) ?>"
+                             ><?= e($fullName) ?></span>
                     </td>
 
-                    <td style="font-size:var(--text-sm)" title="<?= e($row['course_applied']) ?>">
+                    <td class="text-sm" title="<?= e($row['course_applied']) ?>">
                         <span class="auto-table-clip"><?= e($row['course_applied']) ?></span>
                     </td>
 
                     <!-- Exam score — color carries the pass/fail signal so we
                          don't repeat it as text. Tooltip stays explicit for
                          hover + screen-reader users. -->
-                    <td style="font-size:var(--text-sm)">
+                    <td class="text-sm">
                         <?php if ($row['exam_score'] !== null):
                             $_examScoreColor = ((int)$row['exam_passed'] === 1) ? 'var(--success)'
                                               : (((int)$row['exam_passed'] === 0) ? 'var(--error)' : 'inherit');
@@ -462,10 +456,10 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                                 <?= (int)$row['exam_score'] ?>/<?= (int)$row['exam_total'] ?>
                             </span>
                             <?php if (!empty($row['exam_note'])): ?>
-                                <div style="font-size:var(--text-xs);color:var(--text-tertiary)"><?= e($row['exam_note']) ?></div>
+                                <div class="text-xs text-tertiary"><?= e($row['exam_note']) ?></div>
                             <?php endif; ?>
                         <?php else: ?>
-                            <span style="color:var(--text-tertiary)">-</span>
+                            <span class="text-tertiary">-</span>
                         <?php endif; ?>
                     </td>
 
@@ -475,7 +469,7 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                          "Completed · Pass" (which double-states the outcome).
                          For other statuses (Scheduled, In Progress, No-show, etc.)
                          we show the status as-is, since there's no result yet. -->
-                    <td style="font-size:var(--text-sm)">
+                    <td class="text-sm">
                         <?php if ($row['interview_status']):
                             $iMap = [
                                 'scheduled'   => ['badge-uploaded', 'Scheduled'],
@@ -502,7 +496,7 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                                 <?= e($ilabel) ?>
                             </span>
                         <?php else: ?>
-                            <span style="color:var(--text-tertiary)">-</span>
+                            <span class="text-tertiary">-</span>
                         <?php endif; ?>
                     </td>
 
@@ -520,24 +514,24 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                         <?php elseif ($bucket === 'ready_reject'): ?>
                             <span class="badge badge-rejected" title="Professor recommends: Decline">Recommended: Decline</span>
                         <?php else: /* awaiting */ ?>
-                            <span style="color:var(--text-tertiary);font-size:var(--text-sm)">Awaiting interview</span>
+                            <span class="text-tertiary text-sm">Awaiting interview</span>
                         <?php endif; ?>
                     </td>
 
                     <!-- Released-on date -->
-                    <td style="font-size:var(--text-sm);color:var(--text-tertiary)">
+                    <td class="text-sm text-tertiary">
                         <?= $row['released_at'] ? format_date($row['released_at'], 'M j, Y') : '-' ?>
                     </td>
 
                     <!-- Actions -->
                     <td>
-                        <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:nowrap">
+                        <div class="flex align-items-center gap-2" style="flex-wrap:nowrap">
 
                         <!-- View Details button — visible to all roles -->
-                        <button type="button" class="btn btn-ghost btn-sm"
+                        <button type="button" class="btn btn-ghost btn-sm text-xs inline-flex align-items-center gap-1"
                                 data-applicant-panel="<?= (int)$row['id'] ?>"
                                 title="View applicant details"
-                                style="font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px">
+                               >
                             <?= icon('ic_fluent_eye_show_24_regular', 13) ?>
                             View
                         </button>
@@ -557,10 +551,10 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                                         <span class="badge badge-approved" title="This applicant has an Enrollment account">Sent to Enrollment</span>
                                     <?php endif; ?>
                                 <?php else: ?>
-                                    <form method="POST" action="<?= url('/staff/results/send-enrollment/' . $row['id']) ?>" style="margin:0">
+                                    <form method="POST" action="<?= url('/staff/results/send-enrollment/' . $row['id']) ?>" class="m-0">
                                         <?= csrf_field() ?>
-                                        <button type="submit" class="btn btn-secondary btn-sm"
-                                                style="font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px"
+                                        <button type="submit" class="btn btn-secondary btn-sm text-xs inline-flex align-items-center gap-1"
+                                               
                                                 <?= !empty($row['handoff_error']) ? 'title="' . e($row['handoff_error']) . '"' : '' ?>
                                                 data-confirm="Send <?= e($fullName) ?> to Enrollment?" data-confirm-ok="Send">
                                             Send to Enrollment
@@ -569,8 +563,8 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                                 <?php endif; ?>
                             <?php endif; ?>
                             <?php if ($canOverride): ?>
-                                <button type="button" class="btn btn-ghost btn-sm"
-                                        style="font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px"
+                                <button type="button" class="btn btn-ghost btn-sm text-xs inline-flex align-items-center gap-1"
+                                       
                                         onclick="openOverrideModal(<?= (int)$row['id'] ?>, <?= htmlspecialchars(json_encode($fullName), ENT_QUOTES) ?>, '<?= e($row['admission_result']) ?>', <?= htmlspecialchars(json_encode((string)($row['admission_remarks'] ?? '')), ENT_QUOTES) ?>)">
                                     <?= icon('ic_fluent_edit_24_regular', 13) ?>
                                     Edit
@@ -589,12 +583,12 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                             <!-- Accept button -->
                             <?php if ($recAccept): ?>
                                 <!-- Matches recommendation: direct release with a confirm. -->
-                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
+                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" class="m-0">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="action"   value="release">
                                     <input type="hidden" name="decision" value="accepted">
-                                    <button type="submit" class="btn btn-sm"
-                                            style="background:var(--success);color:var(--white);border-color:var(--success);font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px"
+                                    <button type="submit" class="btn btn-sm text-white text-xs inline-flex align-items-center gap-1"
+                                            style="background:var(--success);border-color:var(--success)"
                                             data-confirm="<?= e($confirmAccept) ?>" data-confirm-ok="Accept">
                                         <?= icon('ic_fluent_checkmark_circle_24_regular', 13) ?>
                                         Accept
@@ -602,8 +596,8 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                                 </form>
                             <?php else: ?>
                                 <!-- Override: Professor recommended Reject. Demand a reason. -->
-                                <button type="button" class="btn btn-ghost btn-sm"
-                                        style="font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px;border:1px dashed var(--success);color:var(--success)"
+                                <button type="button" class="btn btn-ghost btn-sm text-xs inline-flex align-items-center gap-1 text-success"
+                                        style="border:1px dashed var(--success)"
                                         title="Override Professor recommendation (reason required)"
                                         onclick="openReleaseOverrideModal(<?= (int)$row['id'] ?>, <?= $nameJson ?>, 'accepted', <?= $bucketJson ?>)">
                                     <?= icon('ic_fluent_checkmark_circle_24_regular', 13) ?>
@@ -614,12 +608,12 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                             <!-- Decline button (DB value stays 'rejected') -->
                             <?php if (!$recAccept): ?>
                                 <!-- Matches recommendation: direct release with a confirm. -->
-                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" style="margin:0">
+                                <form method="POST" action="<?= url('/staff/results/' . $row['id']) ?>" class="m-0">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="action"   value="release">
                                     <input type="hidden" name="decision" value="rejected">
-                                    <button type="submit" class="btn btn-sm"
-                                            style="background:var(--error);color:var(--white);border-color:var(--error);font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px"
+                                    <button type="submit" class="btn btn-sm text-white text-xs inline-flex align-items-center gap-1"
+                                            style="background:var(--error);border-color:var(--error)"
                                             data-confirm="<?= e($confirmReject) ?>" data-confirm-danger data-confirm-ok="Decline">
                                         <?= icon('ic_fluent_dismiss_circle_24_regular', 13) ?>
                                         Decline
@@ -627,8 +621,8 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                                 </form>
                             <?php else: ?>
                                 <!-- Override: Professor recommended Accept. Demand a reason. -->
-                                <button type="button" class="btn btn-ghost btn-sm"
-                                        style="font-size:var(--text-xs);display:inline-flex;align-items:center;gap:4px;border:1px dashed var(--error);color:var(--error)"
+                                <button type="button" class="btn btn-ghost btn-sm text-xs inline-flex align-items-center gap-1 text-error"
+                                        style="border:1px dashed var(--error)"
                                         title="Override Professor recommendation (reason required)"
                                         onclick="openReleaseOverrideModal(<?= (int)$row['id'] ?>, <?= $nameJson ?>, 'rejected', <?= $bucketJson ?>)">
                                     <?= icon('ic_fluent_dismiss_circle_24_regular', 13) ?>
@@ -637,13 +631,13 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
                             <?php endif; ?>
 
                         <?php elseif ($bucket === 'ready_accept'): ?>
-                            <span style="font-size:var(--text-xs);color:var(--success);font-weight:var(--weight-medium)">Recommended: Accept</span>
+                            <span class="text-xs text-success fw-medium">Recommended: Accept</span>
 
                         <?php elseif ($bucket === 'ready_reject'): ?>
-                            <span style="font-size:var(--text-xs);color:var(--error);font-weight:var(--weight-medium)">Recommended: Decline</span>
+                            <span class="text-xs text-error fw-medium">Recommended: Decline</span>
 
                         <?php else: /* awaiting */ ?>
-                            <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Awaiting interview</span>
+                            <span class="text-xs text-tertiary">Awaiting interview</span>
                         <?php endif; ?>
 
                         </div><!-- /actions flex -->
@@ -684,24 +678,22 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
         <form method="POST" id="override-form" action="">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="override">
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div style="background:var(--warning-bg,rgba(245,158,11,.08));border:1px solid var(--warning);
-                            border-radius:var(--radius);padding:var(--space-3) var(--space-4);
-                            font-size:var(--text-xs);color:var(--text-secondary)">
-                    <strong style="color:var(--warning)">Admin override.</strong>
+            <div class="modal-body flex flex-column gap-4">
+                <div class="rounded py-3 px-4 text-xs text-secondary" style="background:var(--warning-bg,rgba(245,158,11,.08));border:1px solid var(--warning)">
+                    <strong class="text-warning">Admin override.</strong>
                     Changing a released result is audited. Use only when correcting a clerical error or
                     handling an exceptional case (e.g. flagged for review).
                 </div>
-                <p id="override-name" style="font-weight:var(--weight-medium);margin:0"></p>
+                <p id="override-name" class="m-0" style="font-weight:var(--weight-medium)"></p>
                 <div>
-                    <label class="form-label" for="override-result">Result <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="override-result">Result <span class="text-error">*</span></label>
                     <select name="result" class="form-control" id="override-result" required>
                         <option value="accepted">Accepted</option>
                         <option value="rejected">Declined</option>
                     </select>
                 </div>
                 <div>
-                    <label class="form-label" for="override-remarks">Reason / remarks <span style="color:var(--error)">*</span></label>
+                    <label class="form-label" for="override-remarks">Reason / remarks <span class="text-error">*</span></label>
                     <textarea name="remarks" class="form-control" rows="3" id="override-remarks" required
                               placeholder="Why is this result being changed?"></textarea>
                 </div>
@@ -722,7 +714,7 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
      Professor flagged Reject). A written reason is mandatory; it
      gets stored on admission_results.remarks and audited. -->
 <div id="release-override-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:480px">
+    <div class="modal mwpx-480">
         <div class="modal-header">
             <div class="modal-title">Override Professor recommendation</div>
             <button class="btn-icon" onclick="document.getElementById('release-override-modal').style.display='none'">
@@ -734,24 +726,20 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
             <?= csrf_field() ?>
             <input type="hidden" name="action"   value="release">
             <input type="hidden" name="decision" id="release-override-decision" value="">
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div id="release-override-warning" style="
-                    background:var(--warning-bg,rgba(245,158,11,.08));
-                    border:1px solid var(--warning);
-                    border-radius:var(--radius);padding:var(--space-3) var(--space-4);
-                    font-size:var(--text-xs);color:var(--text-secondary)">
-                    <strong style="color:var(--warning)">Heads up.</strong>
+            <div class="modal-body flex flex-column gap-4">
+                <div id="release-override-warning" class="rounded py-3 px-4 text-xs text-secondary" style="background:var(--warning-bg,rgba(245,158,11,.08));border:1px solid var(--warning)">
+                    <strong class="text-warning">Heads up.</strong>
                     The Professor interviewed this applicant face-to-face. Overriding their
                     recommendation requires a written reason and will be recorded in the audit log.
                 </div>
-                <p id="release-override-name" style="font-weight:var(--weight-medium);margin:0"></p>
+                <p id="release-override-name" class="m-0" style="font-weight:var(--weight-medium)"></p>
                 <div>
-                    <span class="form-label">Result <span style="color:var(--error)">*</span></span>
-                    <div id="release-override-result-label" style="font-size:var(--text-sm);color:var(--text-secondary)"></div>
+                    <span class="form-label">Result <span class="text-error">*</span></span>
+                    <div id="release-override-result-label" class="text-sm" style="color:var(--text-secondary)"></div>
                 </div>
                 <div>
                     <label class="form-label" for="release-override-reason">
-                        Reason for override <span style="color:var(--error)">*</span>
+                        Reason for override <span class="text-error">*</span>
                     </label>
                     <textarea name="reason" id="release-override-reason" class="form-control"
                               rows="4" required
@@ -773,7 +761,7 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
      reason is requested for the audit trail; if left blank the
      server falls back to a generic note. -->
 <div id="close-admissions-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:480px">
+    <div class="modal mwpx-480">
         <div class="modal-header">
             <div class="modal-title">Close Admissions Cycle</div>
             <button class="btn-icon" onclick="document.getElementById('close-admissions-modal').style.display='none'">
@@ -783,12 +771,9 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
         <form method="POST" action="<?= url('/staff/results/bulk') ?>">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="close_admissions">
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
-                <div style="background:var(--error-bg,rgba(220,38,38,.08));
-                            border:1px solid var(--error);
-                            border-radius:var(--radius);padding:var(--space-3) var(--space-4);
-                            font-size:var(--text-xs);color:var(--text-secondary)">
-                    <strong style="color:var(--error)">Irreversible.</strong>
+            <div class="modal-body flex flex-column gap-4">
+                <div class="rounded py-3 px-4 text-xs text-secondary" style="background:var(--error-bg,rgba(220,38,38,.08));border:1px solid var(--error)">
+                    <strong class="text-error">Irreversible.</strong>
                     All unreleased applicants will be marked <strong>Declined</strong>
                     and emailed. Withdrawn and already-released applicants are not affected.
                 </div>
@@ -803,7 +788,7 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-ghost" onclick="document.getElementById('close-admissions-modal').style.display='none'">Cancel</button>
-                <button type="submit" class="btn" style="background:var(--error);color:var(--white);border-color:var(--error)"
+                <button type="submit" class="btn text-white" style="background:var(--error);border-color:var(--error)"
                         data-confirm="Close admissions? All unreleased applicants will be rejected. Irreversible." data-confirm-danger data-confirm-ok="Close admissions">
                     Close Admissions
                 </button>
@@ -824,44 +809,30 @@ $sortParams = ['q' => $search, 'result' => $filterRes, 'per_page' => $perPage, '
      as Accepted OR as Rejected. The server still skips rows that are
      already released, withdrawn, or still awaiting interview.
 ============================================================ -->
-<div id="res-bulk-toolbar" style="
-    display:none;
-    position:fixed;bottom:var(--space-6);left:50%;transform:translateX(-50%);z-index:500;
-    background:var(--bg-elevated);border:1px solid var(--border);
-    border-radius:var(--radius);box-shadow:var(--shadow-lg);
-    padding:var(--space-3) var(--space-5);
-    align-items:center;gap:var(--space-4);
-    animation:resToolbarSlideUp .2s ease-out;
-">
-    <div style="display:flex;align-items:center;gap:var(--space-2)">
-        <span id="res-bulk-count" style="
-            display:inline-flex;align-items:center;justify-content:center;
-            min-width:24px;height:24px;padding:0 var(--space-2);
-            border-radius:var(--radius);
-            background:var(--accent);color:var(--accent-text);
-            font-size:var(--text-xs);font-weight:var(--weight-semibold);
-        ">0</span>
-        <span style="font-size:var(--text-sm);color:var(--text-secondary);white-space:nowrap">selected</span>
+<div id="res-bulk-toolbar" class="bd rounded py-3 px-5 align-items-center gap-4" style="display:none;position:fixed;bottom:var(--space-6);left:50%;transform:translateX(-50%);z-index:500;background:var(--bg-elevated);box-shadow:var(--shadow-lg);animation:resToolbarSlideUp .2s ease-out">
+    <div class="flex align-items-center gap-2">
+        <span id="res-bulk-count" class="inline-flex align-items-center justify-content-center py-0 px-2 rounded text-xs" style="min-width:24px;height:24px;background:var(--accent);color:var(--accent-text);font-weight:var(--weight-semibold)">0</span>
+        <span class="text-sm text-secondary text-nowrap">selected</span>
     </div>
 
     <div style="width:1px;height:24px;background:var(--border)"></div>
 
-    <button type="button" class="btn btn-sm" onclick="resBulkRelease('accepted')"
-            style="background:var(--success);color:var(--white);border-color:var(--success);display:flex;align-items:center;gap:5px;white-space:nowrap">
+    <button type="button" class="btn btn-sm text-white flex align-items-center text-nowrap" onclick="resBulkRelease('accepted')"
+            style="background:var(--success);border-color:var(--success);gap:5px">
         <?= icon('ic_fluent_checkmark_circle_24_regular', 14) ?>
         Accept Selected
     </button>
 
-    <button type="button" class="btn btn-sm" onclick="resBulkRelease('rejected')"
-            style="background:var(--error);color:var(--white);border-color:var(--error);display:flex;align-items:center;gap:5px;white-space:nowrap">
+    <button type="button" class="btn btn-sm text-white flex align-items-center text-nowrap" onclick="resBulkRelease('rejected')"
+            style="background:var(--error);border-color:var(--error);gap:5px">
         <?= icon('ic_fluent_dismiss_circle_24_regular', 14) ?>
         Decline Selected
     </button>
 
     <div style="width:1px;height:24px;background:var(--border)"></div>
 
-    <button type="button" class="btn btn-ghost btn-sm" onclick="resClearSelection()"
-            style="color:var(--text-tertiary);font-size:var(--text-xs);white-space:nowrap">
+    <button type="button" class="btn btn-ghost btn-sm text-tertiary text-xs text-nowrap" onclick="resClearSelection()"
+           >
         Clear
     </button>
 </div>

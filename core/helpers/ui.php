@@ -169,7 +169,7 @@ function sortable_th(
          . 'style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;'
          . 'color:inherit;white-space:nowrap;">'
          . htmlspecialchars($label)
-         . '<span style="color:' . $sortColor . ';display:flex;align-items:center;margin-left:2px;">'
+         . '<span class="flex align-items-center" style="color:' . $sortColor . ';margin-left:2px">'
          . $sortIcon . '</span>'
          . '</a></th>';
 }
@@ -232,13 +232,13 @@ function auto_table_footer(array $result, callable $urlFor, string $noun = 'reco
 
     $strong = 'style="color:var(--text-primary);font-weight:var(--weight-semibold)"';
     return '<div class="auto-table-pagination">'
-         . '<p class="auto-table-pagination-info" style="margin:0">Showing <strong>'
+         . '<p class="auto-table-pagination-info m-0">Showing <strong>'
          . number_format($from) . '–' . number_format($to)
          . '</strong> of <strong>' . number_format($total) . '</strong> ' . htmlspecialchars($noun) . '</p>'
          . '<div class="auto-table-pagination-controls">'
          . $btn($page > 1, $page - 1, 'ic_fluent_chevron_left_24_regular', 'Previous page')
-         . '<span style="padding:0 var(--space-1);font-size:var(--text-sm);'
-         . 'color:var(--text-tertiary);white-space:nowrap">'
+         . '<span class="py-0 px-1 text-sm text-nowrap" style="'
+         . 'color:var(--text-tertiary)">'
          . 'Page <strong ' . $strong . '>' . $page . '</strong> of '
          . '<strong ' . $strong . '>' . $pages . '</strong></span>'
          . $btn($page < $pages, $page + 1, 'ic_fluent_chevron_right_24_regular', 'Next page')

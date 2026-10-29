@@ -266,8 +266,8 @@ ob_start();
         <div class="db-controls" data-page-actions>
 
             <?php if (count($allSYs) > 1): ?>
-            <div style="display:flex;align-items:center;gap:var(--space-2);">
-                <label for="db-school-year" style="font-size:var(--text-sm);color:var(--text-secondary);white-space:nowrap;">School Year</label>
+            <div class="flex align-items-center gap-2">
+                <label for="db-school-year" class="text-sm text-secondary text-nowrap">School Year</label>
                 <select id="db-school-year" class="toolbar-select" onchange="location.href=this.value">
                     <?php foreach ($allSYs as $sy): ?>
                         <?php
@@ -285,14 +285,7 @@ ob_start();
             <?php endif; ?>
 
             <div class="dp-wrap" id="dpWrap">
-                <button class="db-pill-btn" onclick="dpToggle(event)" type="button" style="
-                    display:flex;align-items:center;gap:var(--space-2);
-                    height:var(--control-height);padding:0 var(--space-3);
-                    border:1px solid var(--border);border-radius:var(--radius);
-                    background:var(--bg-elevated);color:var(--text-secondary);
-                    font-size:var(--text-sm);cursor:pointer;white-space:nowrap;
-                    transition:border-color var(--transition-fast),color var(--transition-fast);
-                ">
+                <button class="db-pill-btn flex align-items-center gap-2 h-control py-0 px-3 bd rounded bg-elevated text-secondary text-sm pointer text-nowrap" onclick="dpToggle(event)" type="button" style="transition:border-color var(--transition-fast),color var(--transition-fast)">
                     <span id="dpLabel"><?= e($rangeLabel) ?></span>
                     <?= icon('caret-down', 10) ?>
                 </button>
@@ -313,19 +306,12 @@ ob_start();
                     <div class="dp-custom-row <?= $range==='custom'?'show':''?>" id="dpCustomRow">
                         <input type="date" class="dp-date-in" id="dpFrom" aria-label="From date" value="<?= e($fromDate ?? '') ?>">
                         <input type="date" class="dp-date-in" id="dpTo" aria-label="To date" value="<?= e($toDate   ?? '') ?>">
-                        <button class="btn btn-primary" style="padding:var(--space-1) var(--space-3);font-size:var(--text-sm)" onclick="dpApply()">Go</button>
+                        <button class="btn btn-primary py-1 px-3 text-sm" onclick="dpApply()">Go</button>
                     </div>
                 </div>
             </div>
 
-            <a class="db-pill-btn" href="<?= $exportUrl ?>" style="
-                display:flex;align-items:center;gap:var(--space-2);
-                height:var(--control-height);padding:0 var(--space-3);
-                border:1px solid var(--border);border-radius:var(--radius);
-                background:var(--bg-elevated);color:var(--text-secondary);
-                font-size:var(--text-sm);cursor:pointer;white-space:nowrap;text-decoration:none;
-                transition:border-color var(--transition-fast),color var(--transition-fast);
-            ">
+            <a class="db-pill-btn flex align-items-center gap-2 h-control py-0 px-3 bd rounded bg-elevated text-secondary text-sm pointer text-nowrap" href="<?= $exportUrl ?>" style="text-decoration:none;transition:border-color var(--transition-fast),color var(--transition-fast)">
                 <?= icon('download-simple', 14) ?>
                 Export CSV
             </a>
@@ -337,10 +323,10 @@ ob_start();
     <div class="db-grid">
 
         <!-- Cell 1 — Key Metrics -->
-        <div class="card db-c-kpi" style="padding:var(--space-5);">
-            <div style="display:flex;align-items:baseline;justify-content:space-between;">
+        <div class="card db-c-kpi p-5">
+            <div class="flex justify-content-between" style="align-items:baseline">
                 <span class="card-title">Key metrics</span>
-                <span style="font-size:var(--text-sm);color:var(--text-tertiary);"><?= e($rangeLabel) ?></span>
+                <span class="text-sm text-tertiary"><?= e($rangeLabel) ?></span>
             </div>
             <div class="db-kpi-grid">
                 <div class="db-kpi-item">
@@ -370,14 +356,14 @@ ob_start();
         </div>
 
         <!-- Cell 2 — Pipeline -->
-        <div class="card db-c-pipeline" style="padding:var(--space-5);">
+        <div class="card db-c-pipeline p-5">
             <div class="db-ch">
                 <span class="card-title">Pipeline</span>
                 <span class="db-ch-sub"><?= number_format($total) ?> total</span>
             </div>
-            <div style="display:flex;gap:0;align-items:center;flex:1;">
+            <div class="flex gap-0 align-items-center flex-1">
                 <!-- Chart -->
-                <div style="flex:1;min-width:0;padding-right:var(--space-4);">
+                <div class="flex-1 min-w-0 pe-4">
                     <?php if ($total === 0): ?>
                         <div class="db-empty">No applicants in this range.</div>
                     <?php else: ?>
@@ -387,9 +373,9 @@ ob_start();
                     <?php endif; ?>
                 </div>
                 <!-- Divider -->
-                <div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch;"></div>
+                <div class="flex-shrink-0" style="width:1px;background:var(--border);align-self:stretch"></div>
                 <!-- Donut — flex:1 mirrors the Sex side below -->
-                <div style="flex:1;min-width:0;padding-left:var(--space-4);display:flex;align-items:center;justify-content:center;">
+                <div class="flex-1 min-w-0 ps-4 flex align-items-center justify-content-center">
                     <div class="db-donut-wrap" title="<?= $completionPct ?>% released">
                         <svg class="db-donut" viewBox="0 0 58 58" role="img" aria-label="<?= $completionPct ?>% released">
                             <circle class="db-donut-bg"   cx="29" cy="29" r="24" fill="none" stroke-width="7"/>
@@ -408,7 +394,7 @@ ob_start();
         </div>
 
         <!-- Cell 3 — Course -->
-        <div class="card db-c-course" style="padding:var(--space-5);">
+        <div class="card db-c-course p-5">
             <div class="db-ch">
                 <span class="card-title">Course</span>
                 <span class="db-ch-sub"><?= $courseCount ?> courses</span>
@@ -416,7 +402,7 @@ ob_start();
             <?php if ($total === 0): ?>
                 <div class="db-empty">No applicants in this range.</div>
             <?php else: ?>
-            <div style="width:100%;flex:1;min-height:200px;max-height:380px;overflow-y:auto;">
+            <div class="w-100 flex-1 overflow-y-auto" style="min-height:200px;max-height:380px">
                 <div style="position:relative;width:100%;height:<?= (int)$courseCanvasH ?>px;">
                     <canvas id="chartCourse"></canvas>
                 </div>
@@ -425,7 +411,7 @@ ob_start();
         </div>
 
         <!-- Cell 4 — SHS Strand -->
-        <div class="card db-c-strand" style="padding:var(--space-5);">
+        <div class="card db-c-strand p-5">
             <div class="db-ch">
                 <span class="card-title">SHS Strand</span>
                 <span class="db-ch-sub">by strand</span>
@@ -433,7 +419,7 @@ ob_start();
             <?php if ($total === 0): ?>
                 <div class="db-empty">No applicants in this range.</div>
             <?php else: ?>
-            <div style="position:relative;width:100%;flex:1;min-height:200px;">
+            <div class="position-relative w-100 flex-1" style="min-height:200px">
                 <canvas id="chartStrand"></canvas>
             </div>
             <?php endif; ?>

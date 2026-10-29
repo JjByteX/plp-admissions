@@ -246,12 +246,12 @@ ob_start();
 
 <!-- ── Idle Applicant Alerts ─────────────────────────────── -->
 <?php if ($totalIdle > 0): ?>
-<div class="card" style="padding:var(--space-4);margin-bottom:var(--space-6)">
-    <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3)">
+<div class="card p-4 mb-6">
+    <div class="flex align-items-center gap-3 mb-3">
         <?= icon('warning-circle:fill', 18, 'color:#f97316') ?>
-        <strong style="font-size:var(--text-sm)">Idle Applicants (<?= $totalIdle ?> waiting ><?= $idleDays ?> days)</strong>
+        <strong class="text-sm">Idle Applicants (<?= $totalIdle ?> waiting ><?= $idleDays ?> days)</strong>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:var(--space-3)">
+    <div class="flex flex-wrap gap-3">
         <?php
         $stageLabels = [
             'pending' => 'Pending registration',
@@ -266,8 +266,8 @@ ob_start();
         <div class="idle-alert">
             <div class="idle-alert-count"><?= (int)$idle['count'] ?></div>
             <div>
-                <div style="font-weight:var(--weight-medium)"><?= e($label) ?></div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary)">Max <?= (int)$idle['max_days'] ?> days idle</div>
+                <div class="fw-medium"><?= e($label) ?></div>
+                <div class="text-xs text-tertiary">Max <?= (int)$idle['max_days'] ?> days idle</div>
             </div>
         </div>
         <?php endforeach; ?>
@@ -276,11 +276,11 @@ ob_start();
 <?php endif; ?>
 
 <!-- ── Quick Actions ─ -->
-<div class="card" style="padding:var(--space-4);margin-bottom:var(--space-6)">
-    <strong style="font-size:var(--text-sm);display:block;margin-bottom:var(--space-3)">Quick Actions</strong>
-    <div style="display:flex;flex-wrap:wrap;gap:var(--space-3)">
+<div class="card p-4 mb-6">
+    <strong class="text-sm mb-3" style="display:block">Quick Actions</strong>
+    <div class="flex flex-wrap gap-3">
         <?php if (Auth::role() === ROLE_ADMIN): ?>
-        <form method="POST" action="<?= url('/staff/results/auto-release') ?>" style="margin:0">
+        <form method="POST" action="<?= url('/staff/results/auto-release') ?>" class="m-0">
             <?= csrf_field() ?>
             <button type="submit" class="btn btn-sm"
                     data-confirm="Auto-release results for all eligible applicants?" data-confirm-ok="Release">
@@ -293,7 +293,7 @@ ob_start();
             <?= icon('ic_fluent_calendar_add_24_regular', 14) ?>
             Batch Create Interviews
         </a>
-        <form method="POST" action="<?= url('/staff/dashboard') ?>" style="margin:0">
+        <form method="POST" action="<?= url('/staff/dashboard') ?>" class="m-0">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="approve_all_pending_docs">
             <button type="submit" class="btn btn-sm"
@@ -302,7 +302,7 @@ ob_start();
                 Approve All Pending Docs
             </button>
         </form>
-        <form method="POST" action="<?= url('/staff/dashboard') ?>" style="margin:0">
+        <form method="POST" action="<?= url('/staff/dashboard') ?>" class="m-0">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="reschedule_absent">
             <button type="submit" class="btn btn-sm"
@@ -315,7 +315,7 @@ ob_start();
             <?= icon('ic_fluent_clock_24_regular', 14) ?>
             View Idle Applicants
         </a>
-        <form method="POST" action="<?= url('/staff/dashboard') ?>" style="margin:0">
+        <form method="POST" action="<?= url('/staff/dashboard') ?>" class="m-0">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="send_doc_reminders">
             <button type="submit" class="btn btn-sm"
@@ -324,7 +324,7 @@ ob_start();
                 Send Doc Reminders
             </button>
         </form>
-        <form method="POST" action="<?= url('/staff/dashboard') ?>" style="margin:0">
+        <form method="POST" action="<?= url('/staff/dashboard') ?>" class="m-0">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="close_expired_sessions">
             <button type="submit" class="btn btn-sm"
@@ -380,7 +380,7 @@ ob_start();
             <?php endforeach; ?>
         </div>
 
-        <h2 class="chart-title" style="margin-top:var(--space-6)">Applicant type</h2>
+        <h2 class="chart-title mt-6">Applicant type</h2>
         <div class="bar-list">
             <?php foreach ($typePipeline as $row):
                 $pctVal = pct($row['count'], $total);

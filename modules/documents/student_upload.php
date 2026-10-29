@@ -682,19 +682,19 @@ if ($docDeadlinePassed && !$isSubmitted && !$pastDocuments) {
     ob_start();
     $deadlineFormatted = date('F j, Y', strtotime($docDeadlineStr));
 ?>
-<div style="display:flex;align-items:center;justify-content:center;min-height:60vh">
-    <div style="text-align:center;max-width:480px;padding:var(--space-8)">
-        <div style="margin-bottom:var(--space-4)">
+<div class="flex align-items-center justify-content-center" style="min-height:60vh">
+    <div class="text-center mwpx-480 p-8">
+        <div class="mb-4">
             <?= icon('ic_fluent_dismiss_circle_24_regular', 48) ?>
         </div>
-        <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-3);color:var(--text-primary)">
+        <h2 class="text-xl fw-semibold mb-3 text-main">
             Document Submission Closed
         </h2>
-        <p style="font-size:var(--text-sm);color:var(--text-secondary);line-height:1.6;margin-bottom:var(--space-4)">
+        <p class="text-sm text-secondary mb-4" style="line-height:1.6">
             The deadline for submitting documents was <strong><?= e($deadlineFormatted) ?></strong>.
             Unfortunately, we are no longer accepting document submissions for this admissions period.
         </p>
-        <p style="font-size:var(--text-xs);color:var(--text-tertiary);line-height:1.5">
+        <p class="text-xs text-tertiary" style="line-height:1.5">
             If you believe this is an error or have special circumstances, please contact the admissions office for assistance.
         </p>
     </div>

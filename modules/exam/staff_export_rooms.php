@@ -197,7 +197,7 @@ if ($format === 'print') {
 <div class="toolbar no-print">
     <div class="left">
         <a href="<?= url('/staff/exam/slots') ?>" class="btn">← Back to Slots</a>
-        <form method="GET" action="" style="display:flex;gap:8px;align-items:center;margin-left:8px">
+        <form method="GET" action="" class="flex align-items-center" style="gap:8px;margin-left:8px">
             <label for="room_date" style="font-size:10pt;color:var(--muted)">Date:</label>
             <select id="room_date" name="date" class="toolbar-select" onchange="this.form.submit()">
                 <option value="">All upcoming</option>
@@ -238,7 +238,7 @@ if ($format === 'print') {
 <?php if (!$slots): ?>
     <div class="empty">
         <h2 style="margin:0 0 8px;font-size:14pt">No exam slots match these filters.</h2>
-        <p style="margin:0;color:var(--muted)">Try a different date or college, or create slots first.</p>
+        <p class="m-0" style="color:var(--muted)">Try a different date or college, or create slots first.</p>
     </div>
 <?php else: ?>
     <?php foreach ($slots as $slot):
@@ -443,7 +443,7 @@ ob_start();
             <input type="text" id="room_q" name="q" aria-label="Search" class="form-input" placeholder="Search name, course, room…" value="<?= e($search) ?>">
         </div>
 
-        <select name="date" class="form-input" style="width:180px" aria-label="Exam date"
+        <select name="date" class="form-input wpx-180" aria-label="Exam date"
                 onchange="this.form.slot.value='';this.form.submit()">
             <option value="">All upcoming</option>
             <?php foreach ($datesAvail as $d): ?>
@@ -454,7 +454,7 @@ ob_start();
         </select>
 
         <?php if ($isAdmin && $deptsAvail): ?>
-        <select name="dept" class="form-input" style="width:200px" aria-label="College"
+        <select name="dept" class="form-input wpx-200" aria-label="College"
                 onchange="this.form.slot.value='';this.form.submit()">
             <option value="">All colleges</option>
             <?php foreach ($deptsAvail as $d): ?>
@@ -463,7 +463,7 @@ ob_start();
         </select>
         <?php endif; ?>
 
-        <select name="slot" class="form-input" style="width:200px" aria-label="Room" onchange="this.form.submit()">
+        <select name="slot" class="form-input wpx-200" aria-label="Room" onchange="this.form.submit()">
             <option value="">All rooms</option>
             <?php foreach ($roomOptions as $ro):
                 $roomLabel = ($filterDate === '' ? date('M j', strtotime($ro['exam_date'])) . ' · ' : '')
@@ -497,35 +497,35 @@ ob_start();
             <thead>
                 <tr>
                     <th style="width:130px">Date</th>
-                    <th style="width:100px">Time</th>
+                    <th class="wpx-100">Time</th>
                     <th style="width:220px">College</th>
-                    <th style="width:120px">Room</th>
+                    <th class="wpx-120">Room</th>
                     <th style="width:64px">#</th>
                     <th style="min-width:240px">Name (Surname, First Middle)</th>
-                    <th style="width:260px">Course</th>
+                    <th class="wpx-260">Course</th>
                 </tr>
             </thead>
             <?php if (!empty($rosterRows)): ?>
             <tbody>
                 <?php foreach ($rosterRows as $r): ?>
                 <tr>
-                    <td style="font-size:var(--text-sm)">
+                    <td class="text-sm">
                         <span class="auto-table-clip" title="<?= e(date('l', strtotime($r['exam_date']))) ?>"><?= e(date('M j, Y', strtotime($r['exam_date']))) ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm)">
+                    <td class="text-sm">
                         <span class="auto-table-clip"><?= e(date('g:i A', strtotime($r['slot_time']))) ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm)" title="<?= e($r['department'] ?: '-') ?>">
+                    <td class="text-sm" title="<?= e($r['department'] ?: '-') ?>">
                         <span class="auto-table-clip"><?= e($r['department'] ?: '-') ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm)" title="<?= e($r['room_label']) ?> (<?= (int)$r['capacity'] ?> seats)">
-                        <span class="auto-table-clip" style="font-weight:var(--weight-medium)"><?= e($r['room_label']) ?></span>
+                    <td class="text-sm" title="<?= e($r['room_label']) ?> (<?= (int)$r['capacity'] ?> seats)">
+                        <span class="auto-table-clip fw-medium"><?= e($r['room_label']) ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm);color:var(--text-secondary)"><?= (int)$r['seat_no'] ?>.</td>
-                    <td style="font-size:var(--text-sm)" title="<?= e(format_exam_roster_name($r)) ?>">
-                        <span class="auto-table-clip" style="font-weight:var(--weight-medium)"><?= e(format_exam_roster_name($r)) ?></span>
+                    <td class="text-sm text-secondary"><?= (int)$r['seat_no'] ?>.</td>
+                    <td class="text-sm" title="<?= e(format_exam_roster_name($r)) ?>">
+                        <span class="auto-table-clip fw-medium"><?= e(format_exam_roster_name($r)) ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm);color:var(--text-secondary)" title="<?= e($r['course_applied'] ?? '') ?>">
+                    <td class="text-sm text-secondary" title="<?= e($r['course_applied'] ?? '') ?>">
                         <span class="auto-table-clip"><?= e(($r['course_applied'] ?? '') !== '' ? $r['course_applied'] : '-') ?></span>
                     </td>
                 </tr>

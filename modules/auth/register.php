@@ -454,9 +454,9 @@ ob_start();
                 </p>
                 <?php $_stage = doc_stage_of($old['doc_flags'] ?? []); ?>
                 <!-- Freshmen pick exactly one (required); it decides Form 138 or Form 137 -->
-                <div data-types="freshman" role="radiogroup" aria-required="true" style="margin-bottom:var(--space-3)">
-                    <div style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--text-secondary);margin-bottom:var(--space-2)">Select one <span style="color:var(--error)">*</span></div>
-                    <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+                <div data-types="freshman" role="radiogroup" aria-required="true" class="mb-3">
+                    <div class="text-xs fw-medium text-secondary mb-2">Select one <span class="text-error">*</span></div>
+                    <div class="flex flex-column gap-2">
                         <label class="form-check">
                             <input type="radio" name="flags[stage]" value="grade12" <?= $_stage === 'grade12' ? 'checked' : '' ?>>
                             <span>I am currently in Grade 12</span>
@@ -470,8 +470,8 @@ ob_start();
                         <span class="form-error"><?= e($errors['stage']) ?></span>
                     <?php endif; ?>
                 </div>
-                <div style="font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--text-secondary);margin-bottom:var(--space-2)">Also tick if they apply</div>
-                <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+                <div class="text-xs fw-medium text-secondary mb-2">Also tick if they apply</div>
+                <div class="flex flex-column gap-2">
                     <label class="form-check">
                         <input type="checkbox" name="flags[married]" value="1" <?= !empty($old['doc_flags']['married']) ? 'checked' : '' ?>>
                         <span>I am married</span>

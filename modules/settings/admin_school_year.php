@@ -289,10 +289,10 @@ ob_start();
 ?>
 
 <?php foreach ($errors as $e): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
+    <div class="alert alert-error mb-3"><?= e($e) ?></div>
 <?php endforeach; ?>
 <?php foreach ($success as $s): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
+    <div class="alert alert-success mb-3"><?= e($s) ?></div>
 <?php endforeach; ?>
 
 <div class="sy-card">
@@ -300,8 +300,8 @@ ob_start();
 
     <!-- Admissions window -->
     <div class="sy-sec">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)">
-            <div class="card-title" style="margin:0">Admissions Window</div>
+        <div class="flex align-items-center justify-content-between mb-5">
+            <div class="card-title m-0">Admissions Window</div>
             <?php if ($isOpen): ?>
                 <span class="badge badge-approved">Open</span>
             <?php elseif ($admissionsOpen || $admissionsClose): ?>
@@ -314,7 +314,7 @@ ob_start();
         <form method="POST" id="apw-form">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="set_admissions_window">
-            <div class="sy-date-grid" style="margin-bottom:var(--space-3)">
+            <div class="sy-date-grid mb-3">
                 <div>
                     <label class="form-label" for="apw-open">Admissions Opens</label>
                     <input type="date" id="apw-open" name="admissions_open" class="form-input"
@@ -331,16 +331,16 @@ ob_start();
                            value="<?= e($docDeadline) ?>" required>
                 </div>
             </div>
-            <div id="apw-hint" style="display:none;font-size:var(--text-sm);color:var(--error);margin-bottom:var(--space-3)"></div>
+            <div id="apw-hint" class="text-sm mb-3" style="display:none;color:var(--error)"></div>
             <button type="submit" id="apw-save" class="btn btn-primary" disabled>Save Window</button>
         </form>
     </div>
 
     <!-- ── Import Historical Records ──────────────────────────────── -->
     <div class="sy-sec">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2)">
-            <div class="card-title" style="margin:0">Import Historical Records</div>
-            <button class="btn btn-secondary" onclick="openLegacyImportModal()" style="display:flex;align-items:center;gap:6px">
+        <div class="flex align-items-center justify-content-between mb-2">
+            <div class="card-title m-0">Import Historical Records</div>
+            <button class="btn btn-secondary flex align-items-center" onclick="openLegacyImportModal()" style="gap:6px">
                 <?= icon('arrow-circle-down', 14) ?>
                 Import with AI
             </button>
@@ -362,31 +362,31 @@ ob_start();
     <!-- Historical summary -->
     <?php if (!empty($statsByYear)): ?>
     <div class="sy-sec sy-grow">
-        <div class="card-title" style="margin-bottom:var(--space-5)">Applicant History</div>
+        <div class="card-title mb-5">Applicant History</div>
         <div class="sy-years">
         <?php foreach ($statsByYear as $year => $statuses):
             $total = array_sum($statuses);
         ?>
             <div class="sy-year">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3)">
+                <div class="flex align-items-center justify-content-between mb-3">
                     <div>
-                        <span style="font-weight:var(--weight-semibold)"><?= e($year) ?></span>
+                        <span class="fw-semibold"><?= e($year) ?></span>
                         <?php if ($year === $currentYear): ?>
-                            <span class="badge badge-approved" style="margin-left:var(--space-2)">Current</span>
+                            <span class="badge badge-approved ms-2">Current</span>
                         <?php endif; ?>
                     </div>
-                    <span style="font-size:var(--text-sm);color:var(--text-tertiary)"><?= $total ?> total</span>
+                    <span class="text-sm text-tertiary"><?= $total ?> total</span>
                 </div>
-                <div style="display:flex;gap:var(--space-4);flex-wrap:wrap">
+                <div class="flex gap-4 flex-wrap">
                     <?php
                     $stages = ['pending','documents','submitted','exam','interview','released'];
                     foreach ($stages as $stage):
                         $cnt = $statuses[$stage] ?? 0;
                         if (!$cnt) continue;
                     ?>
-                        <div style="font-size:var(--text-sm)">
-                            <span style="color:var(--text-tertiary)"><?= ucfirst($stage) ?>:</span>
-                            <span style="font-weight:var(--weight-semibold);margin-left:4px"><?= $cnt ?></span>
+                        <div class="text-sm">
+                            <span class="text-tertiary"><?= ucfirst($stage) ?>:</span>
+                            <span class="fw-semibold ms-1"><?= $cnt ?></span>
                         </div>
                     <?php endforeach; ?>
                 </div>
@@ -396,8 +396,8 @@ ob_start();
     </div>
     <?php else: ?>
     <div class="sy-sec sy-grow">
-        <div class="card-title" style="margin-bottom:var(--space-3)">Applicant History</div>
-        <p class="card-description" style="margin:0">No applicant history yet.</p>
+        <div class="card-title mb-3">Applicant History</div>
+        <p class="card-description m-0">No applicant history yet.</p>
     </div>
     <?php endif; ?>
 
@@ -411,25 +411,25 @@ ob_start();
 
 <!-- Confirm: start new cycle (destructive) -->
 <div id="new-cycle-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:440px">
+    <div class="modal mwpx-440">
         <form method="POST" autocomplete="off">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="new_cycle">
-            <div class="modal-header" style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)">
-                <div style="font-weight:var(--weight-semibold);font-size:var(--text-base);color:var(--error)">Start New Admission Cycle</div>
+            <div class="modal-header py-4 px-5 bd-b">
+                <div class="fw-semibold text-base text-error">Start New Admission Cycle</div>
                 <button type="button" class="btn-icon" onclick="closeNewCycleModal()">
                     <?= icon('ic_fluent_dismiss_24_regular', 18) ?>
                 </button>
             </div>
             <div class="modal-body">
-                <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0 0 var(--space-4)">
+                <p class="text-sm text-secondary" style="margin:0 0 var(--space-4)">
                     The current exam will be deactivated. Previous applicant data is preserved.
                 </p>
                 <label class="form-label" for="new-cycle-confirm">Type <strong>Start new cycle</strong> to confirm</label>
                 <input type="text" id="new-cycle-confirm" name="confirm_text" class="form-input"
                        placeholder="Start new cycle" autocomplete="off">
             </div>
-            <div class="modal-footer" style="border-top:1px solid var(--border)">
+            <div class="modal-footer bd-t">
                 <button type="button" class="btn btn-ghost" onclick="closeNewCycleModal()">Cancel</button>
                 <button type="submit" class="btn btn-danger">Start New Cycle</button>
             </div>
@@ -438,18 +438,18 @@ ob_start();
 </div>
 
 <div id="legacy-import-modal" class="modal-backdrop" style="display:none">
-    <div class="modal" style="max-width:600px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal flex flex-column" style="max-width:600px;max-height:90vh">
         <?= csrf_field() ?>
 
         <!-- Header — same accent-box + subtitle pattern as exam import -->
-        <div class="modal-header" style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)">
-            <div style="display:flex;align-items:center;gap:var(--space-3)">
-                <div style="width:34px;height:34px;border-radius:var(--radius);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <div class="modal-header py-4 px-5 bd-b">
+            <div class="flex align-items-center gap-3">
+                <div class="rounded flex align-items-center justify-content-center flex-shrink-0" style="width:34px;height:34px;background:var(--accent)">
                     <?= icon('sparkle', 17, 'color:#fff') ?>
                 </div>
                 <div>
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-base)">Import Historical Records with AI</div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:1px">Upload an old file and AI will read the records</div>
+                    <div class="fw-semibold text-base">Import Historical Records with AI</div>
+                    <div class="text-xs text-tertiary" style="margin-top:1px">Upload an old file and AI will read the records</div>
                 </div>
             </div>
             <button class="btn-icon" onclick="closeLegacyImportModal()">
@@ -458,13 +458,13 @@ ob_start();
         </div>
 
         <!-- Body -->
-        <div class="modal-body" style="overflow-y:auto;display:flex;flex-direction:column;gap:var(--space-4)">
+        <div class="modal-body overflow-y-auto flex flex-column gap-4">
 
             <!-- Puter status bar -->
             <div id="legacy-puter-status" class="ai-status-bar disconnected">
                 <div class="ai-status-dot"></div>
                 <div id="legacy-puter-status-text" style="flex:1">Checking Puter connection…</div>
-                <a id="legacy-puter-link" href="https://puter.com" target="_blank" style="display:none;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--accent);text-decoration:none;white-space:nowrap">Create account <?= icon('ic_fluent_arrow_right_24_regular', 14) ?></a>
+                <a id="legacy-puter-link" href="https://puter.com" target="_blank" class="text-xs text-nowrap" style="display:none;font-weight:var(--weight-medium);color:var(--accent);text-decoration:none">Create account <?= icon('ic_fluent_arrow_right_24_regular', 14) ?></a>
                 <button id="legacy-puter-signin-btn" onclick="legacyPuterSignIn()" class="btn btn-ghost btn-sm" style="display:none;color:var(--accent)">Sign in <?= icon('ic_fluent_arrow_right_24_regular', 14) ?></button>
                 <button id="legacy-puter-signout-btn" onclick="legacyPuterSignOut()" class="btn btn-ghost btn-sm" style="display:none">Sign out</button>
             </div>
@@ -473,18 +473,18 @@ ob_start();
             <div id="legacy-step-upload">
 
                 <!-- School year picker -->
-                <div style="margin-bottom:var(--space-4)">
+                <div class="mb-4">
                     <label class="form-label" for="legacy-sy-input">Target School Year</label>
-                    <div style="display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap">
-                        <input type="text" id="legacy-sy-input" class="form-control"
-                               style="width:140px;padding:var(--space-1) var(--space-2)"
+                    <div class="flex gap-2 align-items-center flex-wrap">
+                        <input type="text" id="legacy-sy-input" class="form-control py-1 px-2"
+                               style="width:140px"
                                placeholder="e.g. 2023-2024" pattern="\d{4}-\d{4}"
                                value="<?= e(date('Y') - 1) . '-' . e(date('Y')) ?>">
-                        <span style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                        <span class="text-xs text-tertiary">
                             Current SY: <strong><?= e($currentYear) ?></strong>. Import into a past year only.
                         </span>
                     </div>
-                    <div id="legacy-sy-hint" style="display:none;font-size:var(--text-xs);color:var(--error);margin-top:4px"></div>
+                    <div id="legacy-sy-hint" class="text-xs" style="display:none;color:var(--error);margin-top:4px"></div>
                 </div>
 
                 <!-- Drop zone -->
@@ -497,9 +497,9 @@ ob_start();
                     <div class="ai-dropzone-icon">
                         <?= icon('file', 20, 'color:var(--text-tertiary)') ?>
                     </div>
-                    <div id="legacy-dropzone-label" style="font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-secondary)">Drop file here or <span style="color:var(--accent)">click to browse</span></div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:4px">CSV, Excel, PDF, DOCX, JPG or PNG. Columns can be in any order.</div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">Need a template? <a href="/sample-legacy-admissions.csv" download style="color:var(--accent)" onclick="event.stopPropagation()">Download sample CSV</a></div>
+                    <div id="legacy-dropzone-label" class="text-sm" style="font-weight:var(--weight-medium);color:var(--text-secondary)">Drop file here or <span class="text-accent">click to browse</span></div>
+                    <div class="text-xs text-tertiary mt-1">CSV, Excel, PDF, DOCX, JPG or PNG. Columns can be in any order.</div>
+                    <div class="text-xs text-tertiary" style="margin-top:2px">Need a template? <a href="/sample-legacy-admissions.csv" download class="text-accent" onclick="event.stopPropagation()">Download sample CSV</a></div>
                     <div id="legacy-file-tag-wrap" style="display:none;margin-top:var(--space-3)">
                         <span class="ai-file-tag">
                             <?= icon('file', 12, 'color:#fff') ?>
@@ -515,44 +515,44 @@ ob_start();
             </div>
 
             <!-- Step: processing -->
-            <div id="legacy-step-processing" style="display:none;flex-direction:column;gap:var(--space-3);padding:var(--space-6) 0;text-align:center">
-                <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)" id="legacy-processing-label">AI is processing your file…</div>
-                <div class="ai-progress-wrap" style="padding:0">
+            <div id="legacy-step-processing" class="flex-column gap-3 py-6 px-0 text-center" style="display:none">
+                <div class="text-sm" style="font-weight:var(--weight-medium)" id="legacy-processing-label">AI is processing your file…</div>
+                <div class="ai-progress-wrap p-0">
                     <div class="ai-progress-track">
                         <div class="ai-progress-fill" id="legacy-progress-fill"></div>
                     </div>
                 </div>
                 <div class="ai-progress-step" id="legacy-progress-step">Preparing…</div>
-                <div style="font-size:var(--text-xs);color:var(--text-tertiary);opacity:.7;margin-top:var(--space-1)">A Puter sign-in popup may appear</div>
+                <div class="text-xs text-tertiary mt-1" style="opacity:.7">A Puter sign-in popup may appear</div>
                 <div class="ai-progress-step" id="legacy-progress-pct" style="display:none">0%</div>
             </div>
 
             <!-- Step: preview -->
-            <div id="legacy-step-preview" style="display:none;flex-direction:column;gap:var(--space-3)">
-                <div style="display:flex;align-items:center;justify-content:space-between">
-                    <div style="font-size:var(--text-sm);font-weight:var(--weight-semibold)" id="legacy-preview-count"></div>
+            <div id="legacy-step-preview" class="flex-column gap-3" style="display:none">
+                <div class="flex align-items-center justify-content-between">
+                    <div class="text-sm" style="font-weight:var(--weight-semibold)" id="legacy-preview-count"></div>
                     <button class="btn btn-ghost btn-sm" onclick="resetLegacyImport()"><?= icon('ic_fluent_arrow_left_24_regular', 16) ?> Try again</button>
                 </div>
                 <div class="ai-warn-strip">
                     <?= icon('warning:fill', 14, 'margin-top:1px;color:#d97706') ?>
                     <span>AI results may not be 100% accurate. <strong>Review each row and uncheck any you want to skip</strong> before saving.</span>
                 </div>
-                <div style="display:flex;justify-content:flex-end">
-                    <label style="font-size:var(--text-xs);color:var(--text-tertiary);display:flex;align-items:center;gap:6px;cursor:pointer">
+                <div class="flex justify-content-end">
+                    <label class="text-xs text-tertiary flex align-items-center pointer" style="gap:6px">
                         <input type="checkbox" id="legacy-check-all" checked onchange="toggleAllLegacyRows(this.checked)"> Select all
                     </label>
                 </div>
-                <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)">
+                <div class="overflow-y-auto bd rounded" style="max-height:300px">
                     <div class="table-responsive">
-            <table style="width:100%;border-collapse:collapse;font-size:var(--text-sm)">
+            <table class="w-100 text-sm" style="border-collapse:collapse">
                         <thead>
-                            <tr style="background:var(--bg-subtle);position:sticky;top:0;z-index:1">
-                                <th style="padding:8px 10px;text-align:left;font-weight:var(--weight-semibold);border-bottom:1px solid var(--border);width:28px"></th>
-                                <th style="padding:8px 10px;text-align:left;font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)">Name</th>
-                                <th style="padding:8px 10px;text-align:left;font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)">Type</th>
-                                <th style="padding:8px 10px;text-align:left;font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)">Course</th>
-                                <th style="padding:8px 10px;text-align:left;font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)">Result</th>
-                                <th style="padding:8px 10px;text-align:left;font-weight:var(--weight-semibold);border-bottom:1px solid var(--border)">Score</th>
+                            <tr class="bg-subtle" style="position:sticky;top:0;z-index:1">
+                                <th class="text-start fw-semibold bd-b" style="padding:8px 10px;width:28px"></th>
+                                <th class="text-start fw-semibold bd-b" style="padding:8px 10px">Name</th>
+                                <th class="text-start fw-semibold bd-b" style="padding:8px 10px">Type</th>
+                                <th class="text-start fw-semibold bd-b" style="padding:8px 10px">Course</th>
+                                <th class="text-start fw-semibold bd-b" style="padding:8px 10px">Result</th>
+                                <th class="text-start fw-semibold bd-b" style="padding:8px 10px">Score</th>
                             </tr>
                         </thead>
                         <tbody id="legacy-preview-tbody"></tbody>
@@ -562,18 +562,18 @@ ob_start();
             </div>
 
             <!-- Step: error -->
-            <div id="legacy-step-error" style="display:none;flex-direction:column;gap:var(--space-3)">
-                <div style="display:flex;align-items:flex-start;gap:10px;background:var(--error-bg);border:1px solid var(--error);border-radius:var(--radius);padding:12px 14px;font-size:var(--text-sm);color:var(--error)">
+            <div id="legacy-step-error" class="flex-column gap-3" style="display:none">
+                <div class="flex align-items-start rounded text-sm text-error" style="gap:10px;background:var(--error-bg);border:1px solid var(--error);padding:12px 14px">
                     <?= icon('warning-circle:fill', 16, 'margin-top:1px') ?>
                     <span id="legacy-error-msg"></span>
                 </div>
-                <button class="btn btn-ghost btn-sm" style="align-self:flex-start" onclick="resetLegacyImport()"><?= icon('ic_fluent_arrow_left_24_regular', 16) ?> Try again</button>
+                <button class="btn btn-ghost btn-sm align-self-start" onclick="resetLegacyImport()"><?= icon('ic_fluent_arrow_left_24_regular', 16) ?> Try again</button>
             </div>
 
         </div><!-- /modal-body -->
 
         <!-- Footer: upload step -->
-        <div class="modal-footer" id="legacy-modal-footer" style="border-top:1px solid var(--border)">
+        <div class="modal-footer bd-t" id="legacy-modal-footer">
             <button type="button" class="btn btn-ghost" onclick="closeLegacyImportModal()">Cancel</button>
             <button type="button" class="btn btn-primary" id="legacy-process-btn" onclick="startLegacyProcessing()" disabled>
                 <?= icon('sparkle', 14, 'margin-right:5px') ?>
@@ -582,7 +582,7 @@ ob_start();
         </div>
 
         <!-- Footer: save step -->
-        <div class="modal-footer" id="legacy-save-footer" style="display:none;border-top:1px solid var(--border)">
+        <div class="modal-footer bd-t" id="legacy-save-footer" style="display:none">
             <button type="button" class="btn btn-ghost" onclick="closeLegacyImportModal()">Cancel</button>
             <button type="button" class="btn btn-primary" id="legacy-save-btn" onclick="saveLegacyRows()">
                 <?= icon('floppy-disk', 14, 'margin-right:5px') ?>

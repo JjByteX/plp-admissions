@@ -22,7 +22,7 @@
     </div>
 </div>
 
-<div class="alert alert-warning" style="margin-bottom:var(--space-6)">
+<div class="alert alert-warning mb-6">
     <?= icon('ic_fluent_warning_24_regular', 16) ?>
     <span>You can only submit <strong>once</strong>. Do not close this page until you click <strong>Submit Exam</strong>.</span>
     <?php
@@ -42,13 +42,13 @@
 
     <!-- Sticky progress bar -->
     <div class="exam-progress" id="exam-progress">
-        <span style="font-size:var(--text-xs);color:var(--text-tertiary);white-space:nowrap" id="answered-label">0 / <?= count($questions) ?> answered</span>
+        <span class="text-xs text-nowrap" style="color:var(--text-tertiary)" id="answered-label">0 / <?= count($questions) ?> answered</span>
         <div class="progress-bar-wrap">
             <div class="progress-bar-fill" id="progress-fill"></div>
         </div>
     </div>
 
-    <div id="exam-content" style="display:flex;flex-direction:column;gap:var(--space-4)">
+    <div id="exam-content" class="flex flex-column gap-4">
     <?php
     // Build shuffle index for choices if needed
     $shuffleChoices = (bool)$exam['shuffle_choices'];
@@ -199,8 +199,8 @@
     ?>
     </div>
 
-    <div style="margin-top:var(--space-8);display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:var(--text-sm);color:var(--text-tertiary)" id="answered-count">
+    <div class="mt-8 flex justify-content-between align-items-center">
+        <div class="text-sm" style="color:var(--text-tertiary)" id="answered-count">
             0 of <?= count($questions) ?> answered
         </div>
         <button type="button" class="btn btn-primary" id="submit-btn" onclick="confirmSubmit()">Submit Exam</button>
@@ -212,7 +212,7 @@
     <div class="modal" style="max-width:400px">
         <div class="modal-header"><div class="modal-title">Submit Exam?</div></div>
         <div class="modal-body">
-            <p style="color:var(--text-secondary);font-size:var(--text-sm)" id="confirm-message">
+            <p class="text-sm" style="color:var(--text-secondary)" id="confirm-message">
                 Once submitted, your answers cannot be changed.
             </p>
         </div>
@@ -223,8 +223,8 @@
     </div>
 </div>
 
-<div id="exam-status-msg" class="alert alert-warning" role="status"
-     style="display:none;position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;max-width:92vw;margin:0"></div>
+<div id="exam-status-msg" class="alert alert-warning m-0" role="status"
+     style="display:none;position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;max-width:92vw"></div>
 
 <?php
 // Closes at the slot's explicit end_time (per-room window).
@@ -243,7 +243,7 @@ $secondsRemaining = max(0, $slotWindow['closes']->getTimestamp() - time());
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;</script>
 
 <!-- Step navigation -->
-<div class="step-nav" style="margin-top:var(--space-4)">
+<div class="step-nav mt-4">
     <a href="<?= url('/student/documents') ?>" class="btn btn-ghost"><?= icon('ic_fluent_arrow_left_24_regular', 16) ?> Documents</a>
     <span></span>
 </div>

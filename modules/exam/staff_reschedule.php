@@ -453,7 +453,7 @@ ob_start();
         </div>
 
         <?php if ($deptOptions): ?>
-        <select name="dept" class="form-input" style="width:200px" onchange="this.form.submit()" aria-label="Department">
+        <select name="dept" class="form-input wpx-200" onchange="this.form.submit()" aria-label="Department">
             <option value="">All departments</option>
             <?php foreach ($deptOptions as $d): ?>
                 <option value="<?= e($d) ?>" <?= $filterDept === $d ? 'selected' : '' ?>><?= e($d) ?></option>
@@ -461,7 +461,7 @@ ob_start();
         </select>
         <?php endif; ?>
 
-        <input type="date" name="date" class="form-input" style="width:160px" value="<?= e($filterDate) ?>"
+        <input type="date" name="date" class="form-input wpx-160" value="<?= e($filterDate) ?>"
                onchange="this.form.submit()" aria-label="Submitted on">
 
         <?php if ($hasFilters): ?>
@@ -475,15 +475,15 @@ ob_start();
         <table class="auto-table">
             <thead>
                 <tr>
-                    <th style="width:170px">Student</th>
-                    <th style="width:190px">Course / Dept</th>
+                    <th class="wpx-170">Student</th>
+                    <th class="wpx-190">Course / Dept</th>
                     <th style="width:210px">Current Slot</th>
                     <th style="min-width:140px">Reason</th>
-                    <th style="width:140px">Submitted</th>
+                    <th class="wpx-140">Submitted</th>
                     <?php if ($canReschedule): ?>
-                    <th style="width:190px">Move to</th>
-                    <th style="width:160px">Deny reason</th>
-                    <th style="width:180px">Action</th>
+                    <th class="wpx-190">Move to</th>
+                    <th class="wpx-160">Deny reason</th>
+                    <th class="wpx-180">Action</th>
                     <?php endif; ?>
                 </tr>
             </thead>
@@ -508,20 +508,20 @@ ob_start();
                 $denyFormId    = 'resched-deny-'    . (int)$rr['id'];
             ?>
                 <tr>
-                    <td style="font-size:var(--text-sm)">
-                        <span class="auto-table-clip" style="font-weight:var(--weight-medium)"
+                    <td class="text-sm">
+                        <span class="auto-table-clip fw-medium"
                               title="<?= e($rr['student_email']) ?>"><?= e(format_full_name($rr)) ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm)" title="<?= e($courseLabel) ?>">
-                        <span class="auto-table-clip"><?= e($rr['course_applied'] ?: '-') ?><?php if ($rr['student_department']): ?><span style="color:var(--text-tertiary)"> · <?= e($rr['student_department']) ?></span><?php endif; ?></span>
+                    <td class="text-sm" title="<?= e($courseLabel) ?>">
+                        <span class="auto-table-clip"><?= e($rr['course_applied'] ?: '-') ?><?php if ($rr['student_department']): ?><span class="text-tertiary"> · <?= e($rr['student_department']) ?></span><?php endif; ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm)" title="<?= e($curSlotLabel) ?>">
+                    <td class="text-sm" title="<?= e($curSlotLabel) ?>">
                         <span class="auto-table-clip"><?= e($curSlotLabel) ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm);color:var(--text-secondary)" title="<?= e($rr['reason']) ?>">
+                    <td class="text-sm text-secondary" title="<?= e($rr['reason']) ?>">
                         <span class="auto-table-clip"><?= e($rr['reason']) ?></span>
                     </td>
-                    <td style="font-size:var(--text-sm)">
+                    <td class="text-sm">
                         <span class="auto-table-clip"><?= date('M j, g:i A', strtotime($rr['created_at'])) ?></span>
                     </td>
                     <?php if ($canReschedule): ?>
@@ -547,26 +547,26 @@ ob_start();
                                placeholder="Optional, shown to student"
                                title="Reason shown to the student if you deny"
                                maxlength="500"
-                               class="form-control"
-                               style="font-size:var(--text-xs);height:var(--control-height);min-height:var(--control-height);padding:0 var(--space-2)">
+                               class="form-control text-xs h-control mh-control py-0 px-2"
+                              >
                     </td>
                     <td>
-                        <div style="display:flex;gap:var(--space-2);align-items:center">
-                            <form id="<?= $approveFormId ?>" method="POST" style="margin:0">
+                        <div class="flex gap-2 align-items-center">
+                            <form id="<?= $approveFormId ?>" method="POST" class="m-0">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="approve_reschedule">
                                 <input type="hidden" name="request_id" value="<?= (int)$rr['id'] ?>">
-                                <button type="submit" class="btn btn-sm btn-primary"
-                                        style="height:var(--control-height);min-height:var(--control-height);padding:0 var(--space-3);font-size:var(--text-xs)"
+                                <button type="submit" class="btn btn-sm btn-primary h-control mh-control py-0 px-3 text-xs"
+                                       
                                         title="Approve and assign new slot">Approve</button>
                             </form>
-                            <form id="<?= $denyFormId ?>" method="POST" style="margin:0"
+                            <form id="<?= $denyFormId ?>" method="POST" class="m-0"
                                   data-confirm="Deny this exam reschedule request? The student keeps their current slot." data-confirm-danger data-confirm-ok="Deny">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="deny_reschedule">
                                 <input type="hidden" name="request_id" value="<?= (int)$rr['id'] ?>">
-                                <button type="submit" class="btn btn-sm btn-ghost"
-                                        style="height:var(--control-height);min-height:var(--control-height);padding:0 var(--space-3);font-size:var(--text-xs);color:var(--error)"
+                                <button type="submit" class="btn btn-sm btn-ghost h-control mh-control py-0 px-3 text-xs text-error"
+                                       
                                         title="Deny request">Deny</button>
                             </form>
                         </div>

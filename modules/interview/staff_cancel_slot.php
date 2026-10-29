@@ -216,8 +216,8 @@ $pageUrl  = fn(int $p): string => url('/staff/interviews/cancel-slot') . '?' . h
 ob_start();
 ?>
 
-<div class="card" style="padding:var(--space-6);margin-bottom:var(--space-5);flex-shrink:0">
-    <h2 style="font-size:var(--text-xl);font-weight:var(--weight-semibold);margin:0 0 var(--space-2)">
+<div class="card p-6 mb-5 flex-shrink-0">
+    <h2 class="text-xl fw-semibold" style="margin:0 0 var(--space-2)">
         Cancel an interview slot
     </h2>
     <p class="text-secondary-sm">
@@ -260,9 +260,9 @@ ob_start();
                 <tr>
                     <th style="width:270px">Slot</th>
                     <th style="width:150px">Interviewer</th>
-                    <th style="width:120px">Department</th>
+                    <th class="wpx-120">Department</th>
                     <th style="width:80px">Booked</th>
-                    <th style="width:240px">Move everyone to…</th>
+                    <th class="wpx-240">Move everyone to…</th>
                     <th style="min-width:180px">Reason</th>
                     <th style="width:210px">Action</th>
                 </tr>
@@ -278,7 +278,7 @@ ob_start();
                 $formId = 'cancel-slot-' . (int)$s['id'];
             ?>
                 <tr>
-                    <td style="font-size:var(--text-sm)">
+                    <td class="text-sm">
                         <?php
                             // Single-line slot label: "May 14, 2026 · 9:00 AM–11:00 AM · Room 101"
                             $_slotParts = [];
@@ -290,19 +290,19 @@ ob_start();
                             if (!empty($s['location_label'])) $_slotParts[] = $s['location_label'];
                         ?>
                         <span class="auto-table-clip">
-                            <span style="font-weight:var(--weight-medium)"><?= format_date($s['slot_date']) ?></span>
+                            <span class="fw-medium"><?= format_date($s['slot_date']) ?></span>
                             <?php if (!empty($_slotParts)): ?>
-                                <span style="color:var(--text-tertiary)"> · <?= e(implode(' · ', $_slotParts)) ?></span>
+                                <span class="text-tertiary"> · <?= e(implode(' · ', $_slotParts)) ?></span>
                             <?php endif; ?>
                         </span>
                     </td>
-                    <td style="font-size:var(--text-sm)"><span class="auto-table-clip"><?= e($s['interviewer_name'] ?: '-') ?></span></td>
-                    <td style="font-size:var(--text-sm)"><span class="auto-table-clip"><?= e($s['department'] ?: 'any') ?></span></td>
-                    <td style="font-size:var(--text-sm)">
+                    <td class="text-sm"><span class="auto-table-clip"><?= e($s['interviewer_name'] ?: '-') ?></span></td>
+                    <td class="text-sm"><span class="auto-table-clip"><?= e($s['department'] ?: 'any') ?></span></td>
+                    <td class="text-sm">
                         <strong><?= (int)$s['booked'] ?></strong> / <?= (int)$s['capacity'] ?>
                     </td>
                     <?php if (empty($options)): ?>
-                    <td colspan="3" style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                    <td colspan="3" class="text-xs text-tertiary">
                         <span class="auto-table-clip">No open slot has enough capacity yet - create one first.</span>
                     </td>
                     <?php else: ?>
@@ -324,17 +324,17 @@ ob_start();
                     <td>
                         <input type="text" name="reason" aria-label="Cancellation reason" form="<?= $formId ?>" required maxlength="500"
                                placeholder="Reason shown to students (e.g. Typhoon Pepito)"
-                               class="form-control"
-                               style="font-size:var(--text-xs);height:var(--control-height);min-height:var(--control-height);padding:0 var(--space-2)">
+                               class="form-control text-xs h-control mh-control py-0 px-2"
+                              >
                     </td>
                     <td>
-                        <form id="<?= $formId ?>" method="POST" style="margin:0"
+                        <form id="<?= $formId ?>" method="POST" class="m-0"
                               data-confirm="Cancel this slot and move all <?= (int)$s['booked'] ?> applicant(s)?" data-confirm-danger data-confirm-ok="Cancel slot">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="cancel_slot">
                             <input type="hidden" name="source_slot_id" value="<?= (int)$s['id'] ?>">
-                            <button type="submit" class="btn btn-sm btn-primary"
-                                    style="height:var(--control-height);min-height:var(--control-height);padding:0 var(--space-3);font-size:var(--text-xs)">
+                            <button type="submit" class="btn btn-sm btn-primary h-control mh-control py-0 px-3 text-xs"
+                                   >
                                 Cancel slot &amp; move all
                             </button>
                         </form>

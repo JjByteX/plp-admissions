@@ -104,31 +104,31 @@ ob_start();
 ?>
 
 <?php foreach ($errors as $e): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-3)"><?= e($e) ?></div>
+    <div class="alert alert-error mb-3"><?= e($e) ?></div>
 <?php endforeach; ?>
 <?php foreach ($success as $s): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-3)"><?= e($s) ?></div>
+    <div class="alert alert-success mb-3"><?= e($s) ?></div>
 <?php endforeach; ?>
 
-<div style="display:flex;flex-direction:column;gap:var(--space-6);max-width:560px;margin:0 auto">
+<div class="flex flex-column gap-6 mwpx-560 my-0 mx-auto">
 
     <!-- Appearance (per-device text size) -->
-    <div class="card" data-settings-section="appearance" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-4)">Appearance</div>
+    <div class="card p-6" data-settings-section="appearance">
+        <div class="fw-semibold mb-4">Appearance</div>
         <?php include VIEWS_PATH . '/partials/font_size_setting.php'; ?>
         <?php include VIEWS_PATH . '/partials/dark_mode_setting.php'; ?>
     </div>
 
     <!-- Profile -->
-    <div class="card" data-settings-section="profile" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-5)">Profile</div>
+    <div class="card p-6" data-settings-section="profile">
+        <div class="fw-semibold mb-5">Profile</div>
         <form method="POST">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="update_profile">
-            <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="flex flex-column gap-4">
 
                 <!-- Row 1: First / Middle -->
-                <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-4);--bs-gutter-y:var(--space-4)">
+                <div class="row row-cols-1 row-cols-md-2 gutter-4">
                     <div>
                         <label class="form-label" for="st_first_name">First Name *</label>
                         <input type="text" id="st_first_name" name="first_name" class="form-control"
@@ -142,7 +142,7 @@ ob_start();
                 </div>
 
                 <!-- Row 2: Last / Suffix -->
-                <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-4);--bs-gutter-y:var(--space-4)">
+                <div class="row row-cols-1 row-cols-md-2 gutter-4">
                     <div>
                         <label class="form-label" for="st_last_name">Last Name *</label>
                         <input type="text" id="st_last_name" name="last_name" class="form-control"
@@ -157,7 +157,7 @@ ob_start();
                 </div>
 
                 <!-- Row 3: Birthdate / Sex -->
-                <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-4);--bs-gutter-y:var(--space-4)">
+                <div class="row row-cols-1 row-cols-md-2 gutter-4">
                     <div>
                         <label class="form-label" for="st_birthdate">Birthdate *</label>
                         <input type="date" id="st_birthdate" name="birthdate" class="form-control"
@@ -179,24 +179,23 @@ ob_start();
                 <!-- Row 4: Address -->
                 <div>
                     <label class="form-label" for="st_address">Address *</label>
-                    <div class="input-wrapper has-suffix" style="position:relative">
+                    <div class="input-wrapper has-suffix position-relative">
                         <input type="text" id="st_address" name="address" class="form-control"
                             value="<?= e($addressDisplay) ?>"
                             placeholder="Street / Barangay"
                             style="padding-right:100px" required>
-                        <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);
-                            font-size:var(--text-sm);color:var(--text-tertiary);pointer-events:none">
+                        <span class="position-absolute text-sm text-tertiary pe-none" style="right:10px;top:50%;transform:translateY(-50%)">
                             , Pasig City
                         </span>
                     </div>
                 </div>
 
                 <!-- Row 5: Email (read-only) / Phone -->
-                <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-4);--bs-gutter-y:var(--space-4)">
+                <div class="row row-cols-1 row-cols-md-2 gutter-4">
                     <div>
                         <label class="form-label" for="st_email">Email</label>
                         <input type="email" id="st_email" class="form-control" value="<?= e($user['email']) ?>" disabled>
-                        <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-1)">
+                        <p class="text-xs text-tertiary mt-1">
                             Email cannot be changed.
                         </p>
                     </div>
@@ -209,7 +208,7 @@ ob_start();
                 </div>
 
             </div>
-            <div style="margin-top:var(--space-5)">
+            <div class="mt-5">
                 <button type="submit" class="btn btn-primary">Save Changes</button>
             </div>
         </form>
@@ -217,8 +216,8 @@ ob_start();
 
     <?php if ($isGoogleUser): ?>
     <!-- Password (Google account) -->
-    <div class="card" data-settings-section="password" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-3)">Password</div>
+    <div class="card p-6" data-settings-section="password">
+        <div class="fw-semibold mb-3">Password</div>
         <p class="text-secondary-sm">
             You sign in with Google. To set a password as well, use
             <a href="<?= url('/forgot-password') ?>">Forgot password</a> on the sign in page.
@@ -226,12 +225,12 @@ ob_start();
     </div>
     <?php else: ?>
     <!-- Password -->
-    <div class="card" data-settings-section="password" style="padding:var(--space-6)">
-        <div style="font-weight:var(--weight-semibold);margin-bottom:var(--space-5)">Change Password</div>
+    <div class="card p-6" data-settings-section="password">
+        <div class="fw-semibold mb-5">Change Password</div>
         <form method="POST">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="change_password">
-            <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div class="flex flex-column gap-4">
                 <div>
                     <label class="form-label" for="st_current_password">Current Password</label>
                     <input type="password" id="st_current_password" name="current_password" class="form-control" required>
@@ -245,7 +244,7 @@ ob_start();
                     <input type="password" id="st_confirm_password" name="confirm_password" class="form-control" required>
                 </div>
             </div>
-            <div style="margin-top:var(--space-5)">
+            <div class="mt-5">
                 <button type="submit" class="btn btn-primary">Update Password</button>
             </div>
         </form>

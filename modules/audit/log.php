@@ -181,7 +181,7 @@ ob_start();
         </div>
         <?php endif; ?>
 
-        <select id="audit_action" name="action" aria-label="Filter by action" class="form-input" style="width:200px" onchange="this.form.submit()">
+        <select id="audit_action" name="action" aria-label="Filter by action" class="form-input wpx-200" onchange="this.form.submit()">
             <option value="">All actions</option>
             <?php foreach ($actionGroups as $group => $actions): ?>
                 <optgroup label="<?= e($group) ?>">
@@ -194,7 +194,7 @@ ob_start();
             <?php endforeach; ?>
         </select>
 
-        <input type="date" id="audit_date" name="date" aria-label="Filter by date" class="form-input" style="width:160px" value="<?= e($filterDate) ?>"
+        <input type="date" id="audit_date" name="date" aria-label="Filter by date" class="form-input wpx-160" value="<?= e($filterDate) ?>"
                onchange="this.form.submit()">
 
         <?php if ($hasFilters): ?>
@@ -208,20 +208,20 @@ ob_start();
         <table class="auto-table">
             <thead>
                 <tr>
-                    <th style="width:170px">Date &amp; Time</th>
+                    <th class="wpx-170">Date &amp; Time</th>
                     <?php if ($isAdmin): ?>
                     <th style="width:20%">User</th>
                     <?php endif; ?>
                     <th style="width:22%">Action</th>
                     <th>Description</th>
-                    <th style="width:96px;text-align:right">Details</th>
+                    <th class="text-end" style="width:96px">Details</th>
                 </tr>
             </thead>
             <?php if (!empty($logs)): ?>
             <tbody>
                 <?php foreach ($logs as $log): ?>
                 <tr>
-                    <td style="font-size:var(--text-xs);color:var(--text-secondary)">
+                    <td class="text-xs text-secondary">
                         <?= e(format_datetime($log['created_at'])) ?>
                     </td>
                     <?php if ($isAdmin): ?>
@@ -232,9 +232,9 @@ ob_start();
                                 ? Auth::roleLabel($log['user_role'])
                                 : 'System';
                         ?>
-                        <span class="auto-table-clip" style="font-size:var(--text-sm);font-weight:var(--weight-medium);line-height:1.3"
+                        <span class="auto-table-clip text-sm fw-medium" style="line-height:1.3"
                               title="<?= e($log['user_name']) ?>"><?= e($log['user_name']) ?></span>
-                        <span class="auto-table-clip" style="font-size:var(--text-xs);color:var(--text-tertiary);line-height:1.3"><?= e($roleLabel) ?></span>
+                        <span class="auto-table-clip text-xs text-tertiary" style="line-height:1.3"><?= e($roleLabel) ?></span>
                     </td>
                     <?php endif; ?>
                     <td>
@@ -242,11 +242,11 @@ ob_start();
                             <?= e($actionLabel($log['action'])) ?>
                         </span>
                     </td>
-                    <td style="font-size:var(--text-sm);color:var(--text-secondary)"
+                    <td class="text-sm text-secondary"
                         title="<?= e($log['description'] ?? '') ?>">
                         <span class="auto-table-clip"><?= e($log['description'] ?? '-') ?></span>
                     </td>
-                    <td style="text-align:right">
+                    <td class="text-end">
                         <?php
                             $entity = $log['entity_type']
                                 ? ucwords(str_replace('_', ' ', $log['entity_type'])) . ($log['entity_id'] ? ' #' . $log['entity_id'] : '')
@@ -302,9 +302,9 @@ ob_start();
             </span>
         <?php endif; ?>
 
-        <span style="padding:0 var(--space-1);font-size:var(--text-sm);color:var(--text-tertiary);white-space:nowrap">
-            Page <strong style="color:var(--text-primary);font-weight:var(--weight-semibold)"><?= $page ?></strong>
-            of <strong style="color:var(--text-primary);font-weight:var(--weight-semibold)"><?= $pages ?></strong>
+        <span class="py-0 px-1 text-sm text-tertiary text-nowrap">
+            Page <strong class="text-main fw-semibold"><?= $page ?></strong>
+            of <strong class="text-main fw-semibold"><?= $pages ?></strong>
         </span>
 
         <?php if ($page < $pages): ?>
@@ -324,7 +324,7 @@ ob_start();
 
 <!-- Details modal: the same on every screen size, so nothing in the table has to be read from a clipped cell -->
 <div id="audit-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="audit-modal-title">
-    <div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto">
+    <div class="modal mwpx-560 overflow-y-auto" style="max-height:92vh">
         <div class="modal-header">
             <div class="modal-title" id="audit-modal-title">Log details</div>
             <button type="button" class="btn-icon" data-audit-close aria-label="Close">

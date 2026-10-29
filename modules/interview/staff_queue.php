@@ -361,16 +361,16 @@ ob_start();
 
 
 <?php if ($msg = Session::getFlash('success')): ?>
-    <div id="iq-flash-success" class="alert alert-success" style="margin-bottom:var(--space-4);display:flex;align-items:center;gap:var(--space-3);flex-shrink:0">
+    <div id="iq-flash-success" class="alert alert-success mb-4 flex align-items-center gap-3 flex-shrink-0">
         <?= icon('ic_fluent_checkmark_circle_24_regular', 16) ?>
-        <span style="flex:1"><?= e($msg) ?></span>
+        <span class="flex-1"><?= e($msg) ?></span>
         <button onclick="this.parentElement.remove()" class="btn btn-icon" style="color:inherit" aria-label="Dismiss">&times;</button>
     </div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('error')): ?>
-    <div id="iq-flash-error" class="alert alert-error" style="margin-bottom:var(--space-4);display:flex;align-items:center;gap:var(--space-3);flex-shrink:0">
+    <div id="iq-flash-error" class="alert alert-error mb-4 flex align-items-center gap-3 flex-shrink-0">
         <?= icon('ic_fluent_info_24_regular', 16) ?>
-        <span style="flex:1"><?= e($msg) ?></span>
+        <span class="flex-1"><?= e($msg) ?></span>
         <button onclick="this.parentElement.remove()" class="btn btn-icon" style="color:inherit" aria-label="Dismiss">&times;</button>
     </div>
 <?php endif; ?>
@@ -384,8 +384,8 @@ ob_start();
        (this IS their primary view), so no back button.
 ============================================================ -->
 <?php if ($canSeeAll): ?>
-    <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-5);flex-wrap:wrap">
-        <span style="font-size:var(--text-sm);color:var(--text-secondary)">
+    <div class="flex align-items-center gap-3 mb-5 flex-wrap">
+        <span class="text-sm text-secondary">
             <?php if ($showAll): ?>
                 <strong>All colleges</strong>
             <?php else: ?>
@@ -402,14 +402,11 @@ ob_start();
      - setup is not the professor's responsibility.
 ============================================================ -->
 <?php if (!$isAdmin && !$isSSO && !$isDean && $deskLabel): ?>
-    <div style="display:flex;align-items:center;gap:var(--space-3);flex-shrink:0;
-                 padding:var(--space-3) var(--space-4);margin-bottom:var(--space-4);
-                 background:var(--bg-elevated);border:1px solid var(--border);
-                 border-radius:var(--radius);font-size:var(--text-sm)">
+    <div class="flex align-items-center gap-3 flex-shrink-0 py-3 px-4 mb-4 bg-elevated bd rounded text-sm">
         <?= icon('ic_fluent_location_24_regular', 13, 'color:var(--text-tertiary);flex-shrink:0') ?>
-        <span style="font-weight:var(--weight-medium)"><?= e($deskLabel) ?></span>
+        <span class="fw-medium"><?= e($deskLabel) ?></span>
         <?php if ($deskNotes): ?>
-            <span style="color:var(--text-tertiary)"><?= e($deskNotes) ?></span>
+            <span class="text-tertiary"><?= e($deskNotes) ?></span>
         <?php endif; ?>
     </div>
 <?php endif; ?>
@@ -441,15 +438,15 @@ ob_start();
         (the .page:has(.iq-table-card) rule above turns the page into a
         flex column, and flex:1 makes this card claim the leftover space).
     -->
-    <div class="card iq-table-card"
-         style="padding:var(--space-12) var(--space-8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-3);text-align:center">
-        <div style="width:56px;height:56px;border-radius:var(--radius);background:var(--bg-subtle);color:var(--text-tertiary);display:flex;align-items:center;justify-content:center">
+    <div class="card iq-table-card py-12 px-8 flex flex-column align-items-center justify-content-center gap-3 text-center"
+        >
+        <div class="rounded bg-subtle text-tertiary flex align-items-center justify-content-center" style="width:56px;height:56px">
             <?= icon('ic_fluent_calendar_ltr_24_regular', 28) ?>
         </div>
-        <div style="font-size:var(--text-base);font-weight:var(--weight-semibold);color:var(--text-primary)">
+        <div class="text-base fw-semibold text-main">
             <?= e($emptyTitle) ?>
         </div>
-        <div style="max-width:480px;font-size:var(--text-sm);color:var(--text-tertiary);line-height:1.5">
+        <div class="mwpx-480 text-sm text-tertiary" style="line-height:1.5">
             <?= e($emptyBody) ?>
         </div>
     </div>
@@ -495,7 +492,7 @@ ob_start();
         <?php endif; ?>
 
         <?php if (count($slotMap) > 1): ?>
-        <select name="slot" class="form-input" aria-label="Interview slot" style="width:260px" onchange="this.form.submit()"
+        <select name="slot" class="form-input wpx-260" aria-label="Interview slot" onchange="this.form.submit()"
                 title="Filter by specific slot within the selected date">
             <?php $totalSlotApplicants = array_sum(array_column($slotMap, 'count')); ?>
             <option value="">
@@ -539,12 +536,12 @@ ob_start();
                 <tr>
                     <th>Applicant</th>
                     <?php if ($canSeeAll && $showAll): ?>
-                        <th style="width:140px">College</th>
+                        <th class="wpx-140">College</th>
                     <?php endif; ?>
                     <th>Course</th>
-                    <th style="width:110px">Type</th>
-                    <th style="width:120px">Status</th>
-                    <th style="width:190px">Actions</th>
+                    <th class="wpx-110">Type</th>
+                    <th class="wpx-120">Status</th>
+                    <th class="wpx-190">Actions</th>
                 </tr>
             </thead>
             <?php if (!empty($pageRows)): ?>
@@ -568,18 +565,18 @@ ob_start();
                     </td>
 
                     <?php if ($canSeeAll && $showAll): ?>
-                        <td style="font-size:var(--text-sm)">
+                        <td class="text-sm">
                             <?php $col = (string)($r['slot_department'] ?? ''); ?>
-                            <span class="auto-table-clip"><?= $col !== '' ? e($col) : '<span style="color:var(--text-tertiary)">-</span>' ?></span>
+                            <span class="auto-table-clip"><?= $col !== '' ? e($col) : '<span class="text-tertiary">-</span>' ?></span>
                         </td>
                     <?php endif; ?>
 
-                    <td style="font-size:var(--text-sm)" title="<?= e($course) ?>">
-                        <span class="auto-table-clip"><?= $course !== '' ? e($course) : '<span style="color:var(--text-tertiary)">-</span>' ?></span>
+                    <td class="text-sm" title="<?= e($course) ?>">
+                        <span class="auto-table-clip"><?= $course !== '' ? e($course) : '<span class="text-tertiary">-</span>' ?></span>
                     </td>
 
-                    <td style="font-size:var(--text-sm)">
-                        <span class="auto-table-clip"><?= $type !== '' ? e(ucfirst($type)) : '<span style="color:var(--text-tertiary)">-</span>' ?></span>
+                    <td class="text-sm">
+                        <span class="auto-table-clip"><?= $type !== '' ? e(ucfirst($type)) : '<span class="text-tertiary">-</span>' ?></span>
                     </td>
 
                     <td>
@@ -603,8 +600,7 @@ ob_start();
                         <span class="badge <?= $statusBadgeClass ?>"
                               <?= ($isFinal && $existing !== '') ? 'title="' . e($existing) . '"' : '' ?>>
                             <?php if ($isInProg): ?>
-                                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;
-                                             background:var(--white);animation:pulse-dot 1.4s infinite;margin-right:4px"></span>
+                                <span class="rounded-circle me-1" style="display:inline-block;width:6px;height:6px;background:var(--white);animation:pulse-dot 1.4s infinite"></span>
                             <?php endif; ?>
                             <?= e($statusBadgeText) ?>
                         </span>
@@ -677,7 +673,7 @@ ob_start();
      EVALUATION MODAL - notes + Pass / Reject
 ============================================================ -->
 <div id="eval-modal" class="modal-backdrop" style="display:none" aria-hidden="true">
-    <div class="modal" style="max-width:860px;max-height:calc(100vh - 2 * var(--space-4));display:flex;flex-direction:column;overflow:hidden">
+    <div class="modal flex flex-column overflow-hidden" style="max-width:860px;max-height:calc(100vh - 2 * var(--space-4))">
         <div class="modal-header">
             <div class="modal-title">Interview Evaluation</div>
             <button class="btn-icon" type="button" onclick="closeEvalModal()">
@@ -685,24 +681,24 @@ ob_start();
             </button>
         </div>
 
-        <form method="POST" id="eval-form" action="" style="display:flex;flex-direction:column;flex:1;min-height:0">
+        <form method="POST" id="eval-form" action="" class="flex flex-column" style="flex:1;min-height:0">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="complete_with_evaluation">
             <input type="hidden" name="evaluation_result" id="eval-result-input" value="">
 
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--space-4);flex:1;min-height:0;overflow-y:auto">
+            <div class="modal-body flex flex-column gap-4 flex-1 overflow-y-auto" style="min-height:0">
                 <div>
                     <label class="form-label" for="eval-notes">Interview notes</label>
                     <textarea id="eval-notes" name="interview_notes" class="form-control"
                               rows="6" placeholder="Interview notes / evaluation remarks…"></textarea>
-                    <div style="margin-top:var(--space-2);font-size:var(--text-xs);color:var(--text-tertiary)">
+                    <div class="mt-2 text-xs text-tertiary">
                         Choose Pass or Decline to finalize this interview.
                     </div>
                 </div>
 
                 <!-- Applicant details: two columns, long fields use the full row -->
-                <div style="border-top:1px solid var(--border);padding-top:var(--space-4)">
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-3)">Applicant Details</div>
+                <div class="bd-t pt-4">
+                    <div class="fw-semibold text-sm mb-3">Applicant Details</div>
                     <div class="eval-details">
                         <div class="eval-full">
                             <div class="eval-k">Full Name</div>
@@ -752,7 +748,7 @@ ob_start();
                 </div>
             </div>
 
-            <div class="modal-footer" style="display:flex;gap:var(--space-2);justify-content:flex-end">
+            <div class="modal-footer flex gap-2 justify-content-end">
                 <button type="button" class="btn btn-ghost" onclick="closeEvalModal()">Cancel</button>
                 <button type="submit" class="btn btn-reject"
                         onclick="document.getElementById('eval-result-input').value='reject'">

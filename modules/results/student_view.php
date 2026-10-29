@@ -82,61 +82,61 @@ ob_start();
 ?>
 
 <?php if ($msg = Session::getFlash('success')): ?>
-    <div class="alert alert-success" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+    <div class="alert alert-success mb-4"><?= e($msg) ?></div>
 <?php endif; ?>
 <?php if ($msg = Session::getFlash('error')): ?>
-    <div class="alert alert-error" style="margin-bottom:var(--space-4)"><?= e($msg) ?></div>
+    <div class="alert alert-error mb-4"><?= e($msg) ?></div>
 <?php endif; ?>
 
 <?php if ($isWithdrawn): ?>
 <!-- ── Withdrawn state ──────────────────────────────────────── -->
     <div class="card withdrawn-card">
-        <div class="status-icon-lg" style="background:var(--bg-subtle)">
+        <div class="status-icon-lg bg-subtle">
             <?= icon('ic_fluent_dismiss_circle_24_regular', 32, 'color:var(--text-tertiary)') ?>
         </div>
-        <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2);color:var(--text-primary)">Application Withdrawn</h2>
-        <p style="color:var(--text-secondary);margin-bottom:var(--space-6)">You have voluntarily withdrawn your application.</p>
+        <h2 class="text-2xl fw-semibold mb-2 text-main">Application Withdrawn</h2>
+        <p class="text-secondary mb-6">You have voluntarily withdrawn your application.</p>
 
-        <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
-            <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-4);--bs-gutter-y:var(--space-4)">
+        <div class="bg-subtle rounded p-5 text-start mb-6">
+            <div class="row row-cols-1 row-cols-md-2 gutter-4">
                 <div>
                     <div class="label-caps">Name</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(Auth::user()['name']) ?></div>
+                    <div class="fw-medium text-sm"><?= e(Auth::user()['name']) ?></div>
                 </div>
                 <div>
                     <div class="label-caps">Course Applied</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['course_applied']) ?></div>
+                    <div class="fw-medium text-sm"><?= e($applicant['course_applied']) ?></div>
                 </div>
                 <div>
                     <div class="label-caps">Withdrawn On</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)">
+                    <div class="fw-medium text-sm">
                         <?= $applicant['withdrawn_at'] ? format_date($applicant['withdrawn_at'], 'F j, Y') : '-' ?>
                     </div>
                 </div>
                 <div>
                     <div class="label-caps">Status</div>
-                    <span style="display:inline-flex;align-items:center;gap:var(--space-1);padding:var(--space-1) var(--space-2);border-radius:var(--radius);font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--text-secondary);background:var(--bg-subtle)">Withdrawn</span>
+                    <span class="inline-flex align-items-center gap-1 py-1 px-2 rounded text-xs fw-semibold text-secondary bg-subtle">Withdrawn</span>
                 </div>
             </div>
             <?php if ($applicant['withdrawn_reason']): ?>
-                <div style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border)">
+                <div class="mt-4 pt-4 bd-t">
                     <div class="label-caps">Reason Given</div>
-                    <p style="font-size:var(--text-sm);color:var(--text-secondary)"><?= e($applicant['withdrawn_reason']) ?></p>
+                    <p class="text-sm text-secondary"><?= e($applicant['withdrawn_reason']) ?></p>
                 </div>
             <?php endif; ?>
         </div>
 
-        <p style="font-size:var(--text-sm);color:var(--text-tertiary)">
+        <p class="text-sm text-tertiary">
             If you think this is a mistake, visit the admissions office in person.
         </p>
     </div>
 
 <?php elseif (!$result): ?>
 <!-- ── No result yet ────────────────────────────────────────── -->
-    <div style="text-align:center;padding:var(--space-16);color:var(--text-tertiary)">
+    <div class="text-center text-tertiary" style="padding:var(--space-16)">
         <?= icon('warning-circle:fill', 48, 'color:var(--text-tertiary);margin-bottom:var(--space-4)') ?>
-        <p style="font-weight:var(--weight-medium)">Result not yet released</p>
-        <p style="font-size:var(--text-sm);margin-top:var(--space-1)">You'll be notified once your result is ready.</p>
+        <p class="fw-medium">Result not yet released</p>
+        <p class="text-sm mt-1">You'll be notified once your result is ready.</p>
     </div>
 
 <?php elseif ($result['result'] === 'accepted'): ?>
@@ -150,13 +150,13 @@ ob_start();
   system and the student sees it there. Once confirmed, this page shows
   the Endorsement Slip (no date) that sends the student to Enrollment.
 -->
-    <div class="card" style="padding:var(--space-6)">
-        <div style="text-align:center;margin-bottom:var(--space-6)">
-            <div class="status-icon-lg" style="background:var(--success-bg);display:inline-flex;align-items:center;justify-content:center;margin-bottom:var(--space-4)">
+    <div class="card p-6">
+        <div class="text-center mb-6">
+            <div class="status-icon-lg inline-flex align-items-center justify-content-center mb-4" style="background:var(--success-bg)">
                 <?= icon('ic_fluent_checkmark_circle_24_regular', 32, 'color:var(--success)') ?>
             </div>
-            <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2)">You've been admitted.</h2>
-            <p style="color:var(--text-secondary);margin:0;font-size:var(--text-sm)">
+            <h2 class="text-2xl fw-semibold mb-2">You've been admitted.</h2>
+            <p class="text-secondary m-0 text-sm">
                 <strong><?= e($applicant['course_applied']) ?></strong>
                 <?php if ($applicantCollege): ?>
                     · <?= e($applicantCollege) ?>
@@ -165,28 +165,28 @@ ob_start();
             </p>
         </div>
 
-        <p style="font-size:var(--text-sm);color:var(--text-secondary);text-align:center;margin-bottom:var(--space-6);max-width:520px;margin-left:auto;margin-right:auto">
+        <p class="text-sm text-secondary text-center mb-6 mwpx-520 ms-auto" style="margin-right:auto">
             One step left - confirm your enrollment to receive your visit date from the Registrar, then bring the <strong>original copies</strong> of your documents so we can verify them. After that, you're officially enrolled.
         </p>
 
         <!-- Documents to bring -->
-        <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);margin-bottom:var(--space-5)">
-            <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);font-weight:var(--weight-semibold);margin-bottom:var(--space-1)">Bring the originals of</div>
-            <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-3)">matches what you uploaded</div>
+        <div class="bg-subtle rounded p-5 mb-5">
+            <div class="text-xs text-uppercase text-tertiary fw-semibold mb-1" style="letter-spacing:.06em">Bring the originals of</div>
+            <div class="text-xs text-tertiary mb-3">matches what you uploaded</div>
             <?php if (!empty($myDocs)): ?>
-                <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--space-2)">
+                <ul class="m-0 p-0 flex flex-column gap-2" style="list-style:none">
                     <?php foreach ($myDocs as $d):
                         $slug  = (string)$d['doc_type'];
                         $label = $docLabels[$slug] ?? ucwords(str_replace('_', ' ', $slug));
                     ?>
-                        <li style="display:flex;align-items:flex-start;gap:var(--space-3);background:white;border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-2) var(--space-3)">
+                        <li class="flex align-items-start gap-3 bd rounded py-2 px-3" style="background:white">
                             <?= icon('ic_fluent_document_24_regular', 16, 'color:var(--text-tertiary);flex-shrink:0;margin-top:var(--space-1)') ?>
-                            <span style="font-size:var(--text-sm);line-height:1.4"><?= e($label) ?></span>
+                            <span class="text-sm" style="line-height:1.4"><?= e($label) ?></span>
                         </li>
                     <?php endforeach; ?>
                 </ul>
             <?php else: ?>
-                <p style="font-size:var(--text-sm);color:var(--text-tertiary);margin:0">
+                <p class="text-sm text-tertiary m-0">
                     Bring originals of every document you submitted with your application.
                 </p>
             <?php endif; ?>
@@ -199,9 +199,9 @@ ob_start();
             $handoffSent = $handoff && $handoff['status'] === 'sent';
             $enrollmentSiteUrl = trim((string) getenv('ENROLLMENT_SITE_URL'));
         ?>
-        <div style="text-align:center;margin-bottom:var(--space-5)">
+        <div class="text-center mb-5">
             <?php if (!$isConfirmed): ?>
-                <form method="POST" action="<?= url('/student/result') ?>" style="margin:0">
+                <form method="POST" action="<?= url('/student/result') ?>" class="m-0">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="confirm_enrollment">
                     <button type="submit" class="btn btn-primary"
@@ -210,7 +210,7 @@ ob_start();
                     </button>
                 </form>
             <?php elseif ($handoffSent): ?>
-                <p style="font-size:var(--text-sm);color:var(--success);font-weight:var(--weight-medium);margin:0 0 var(--space-3)">
+                <p class="text-sm text-success fw-medium" style="margin:0 0 var(--space-3)">
                     Enrollment confirmed. Check your email for a link to set your Enrollment password.
                 </p>
                 <?php if ($enrollmentSiteUrl !== ''): ?>
@@ -233,24 +233,24 @@ ob_start();
             // does not need the paper slip; this is the student's copy.
             $endorsementRef = enrollment_applicant_reference((string) $applicant['school_year'], (int) $applicantId);
         ?>
-        <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);margin-bottom:var(--space-5)">
-            <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);font-weight:var(--weight-semibold);margin-bottom:var(--space-3)">Endorsement Slip</div>
-            <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-4);--bs-gutter-y:var(--space-4);margin-bottom:var(--space-3)">
+        <div class="bg-subtle rounded p-5 mb-5">
+            <div class="text-xs text-uppercase text-tertiary fw-semibold mb-3" style="letter-spacing:.06em">Endorsement Slip</div>
+            <div class="row row-cols-1 row-cols-md-2 mb-3 gutter-4">
                 <div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-1)">Name</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(Auth::user()['name']) ?></div>
+                    <div class="text-xs text-tertiary mb-1">Name</div>
+                    <div class="fw-medium text-sm"><?= e(Auth::user()['name']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-1)">Application number</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($endorsementRef ?? '-') ?></div>
+                    <div class="text-xs text-tertiary mb-1">Application number</div>
+                    <div class="fw-medium text-sm"><?= e($endorsementRef ?? '-') ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-1)">Course</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['course_applied']) ?></div>
+                    <div class="text-xs text-tertiary mb-1">Course</div>
+                    <div class="fw-medium text-sm"><?= e($applicant['course_applied']) ?></div>
                 </div>
                 <div>
-                    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-bottom:var(--space-1)">School Year</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['school_year']) ?></div>
+                    <div class="text-xs text-tertiary mb-1">School Year</div>
+                    <div class="fw-medium text-sm"><?= e($applicant['school_year']) ?></div>
                 </div>
             </div>
             <p class="text-secondary-sm">
@@ -259,9 +259,9 @@ ob_start();
         </div>
         <?php endif; ?>
 
-        <p style="font-size:var(--text-xs);color:var(--text-tertiary);text-align:center;margin:0">
+        <p class="text-xs text-tertiary text-center m-0">
             Photocopies and screenshots aren't accepted. Can't make it? Email
-            <a href="mailto:sso@plp.edu.ph" style="color:var(--text-secondary);text-decoration:underline">sso@plp.edu.ph</a>
+            <a href="mailto:sso@plp.edu.ph" class="text-secondary" style="text-decoration:underline">sso@plp.edu.ph</a>
             before your visit date.
         </p>
     </div>
@@ -277,22 +277,22 @@ ob_start();
             <?= icon('ic_fluent_checkmark_circle_24_regular', 32, 'color:var(--' . $cfg['class'] . ')') ?>
         </div>
 
-        <h2 style="font-size:var(--text-2xl);font-weight:var(--weight-semibold);margin-bottom:var(--space-2)"><?= $cfg['title'] ?></h2>
-        <p style="color:var(--text-secondary);margin-bottom:var(--space-6)"><?= $cfg['sub'] ?></p>
+        <h2 class="text-2xl fw-semibold mb-2"><?= $cfg['title'] ?></h2>
+        <p class="text-secondary mb-6"><?= $cfg['sub'] ?></p>
 
-        <div style="background:var(--bg-subtle);border-radius:var(--radius);padding:var(--space-5);text-align:left;margin-bottom:var(--space-6)">
-            <div class="row row-cols-1 row-cols-md-2" style="--bs-gutter-x:var(--space-4);--bs-gutter-y:var(--space-4)">
+        <div class="bg-subtle rounded p-5 text-start mb-6">
+            <div class="row row-cols-1 row-cols-md-2 gutter-4">
                 <div>
                     <div class="label-caps">Name</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e(Auth::user()['name']) ?></div>
+                    <div class="fw-medium text-sm"><?= e(Auth::user()['name']) ?></div>
                 </div>
                 <div>
                     <div class="label-caps">Course Applied</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['course_applied']) ?></div>
+                    <div class="fw-medium text-sm"><?= e($applicant['course_applied']) ?></div>
                 </div>
                 <div>
                     <div class="label-caps">School Year</div>
-                    <div style="font-weight:var(--weight-medium);font-size:var(--text-sm)"><?= e($applicant['school_year']) ?></div>
+                    <div class="fw-medium text-sm"><?= e($applicant['school_year']) ?></div>
                 </div>
                 <div>
                     <div class="label-caps">Result</div>
@@ -300,9 +300,9 @@ ob_start();
                 </div>
             </div>
             <?php if ($result['remarks']): ?>
-                <div style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border)">
+                <div class="mt-4 pt-4 bd-t">
                     <div class="label-caps">Remarks</div>
-                    <p style="font-size:var(--text-sm);color:var(--text-secondary)"><?= e($result['remarks']) ?></p>
+                    <p class="text-sm text-secondary"><?= e($result['remarks']) ?></p>
                 </div>
             <?php endif; ?>
         </div>
@@ -315,25 +315,25 @@ ob_start();
 
         <!-- Course suggestion from staff -->
         <?php if ($suggestion && $suggestion['status'] === 'pending'): ?>
-        <div style="border:1.5px solid var(--warning);background:var(--warning-bg);border-radius:var(--radius);padding:var(--space-5);margin-bottom:var(--space-5)">
-            <div style="display:flex;align-items:flex-start;gap:var(--space-3)">
-                <div style="width:36px;height:36px;border-radius:50%;background:var(--warning-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <div class="rounded p-5 mb-5" style="border:1.5px solid var(--warning);background:var(--warning-bg)">
+            <div class="flex align-items-start gap-3">
+                <div class="rounded-circle flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;background:var(--warning-bg)">
                     <?= icon('lightbulb', 16, 'color:#f59e0b') ?>
                 </div>
-                <div style="flex:1">
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-1)">Course Suggestion from Admissions</div>
-                    <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">
+                <div class="flex-1">
+                    <div class="fw-semibold text-sm mb-1">Course Suggestion from Admissions</div>
+                    <p class="text-sm text-secondary mb-3">
                         Admissions suggested an alternative course:
                     </p>
-                    <div style="background:white;border:1px solid var(--warning);border-radius:var(--radius);padding:var(--space-3) var(--space-4);font-weight:var(--weight-semibold);font-size:var(--text-sm);margin-bottom:var(--space-3)">
+                    <div class="rounded py-3 px-4 fw-semibold text-sm mb-3" style="background:white;border:1px solid var(--warning)">
                         <?= e($suggestion['suggested_course']) ?>
                     </div>
                     <?php if ($suggestion['note']): ?>
-                    <p style="font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:var(--space-3)">
+                    <p class="text-xs text-secondary mb-3">
                         "<?= e($suggestion['note']) ?>"
                     </p>
                     <?php endif; ?>
-                    <p style="font-size:var(--text-xs);color:var(--text-tertiary)">
+                    <p class="text-xs text-tertiary">
                         Visit the admissions office to discuss and update your application.
                     </p>
                 </div>
@@ -360,33 +360,31 @@ ob_start();
             $altCourses = strand_qualified_courses($studentRank, $applicant['course_applied'], $studentStrand);
         ?>
         <?php if (!empty($altCourses)): ?>
-        <div style="border:1.5px solid var(--info);background:var(--info-bg);border-radius:var(--radius);padding:var(--space-5);margin-bottom:var(--space-5)">
-            <div style="display:flex;align-items:flex-start;gap:var(--space-3)">
-                <div style="width:36px;height:36px;border-radius:50%;background:var(--info-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <div class="rounded p-5 mb-5" style="border:1.5px solid var(--info);background:var(--info-bg)">
+            <div class="flex align-items-start gap-3">
+                <div class="rounded-circle flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;background:var(--info-bg)">
                     <?= icon('crosshair', 18, 'color:#6366f1') ?>
                 </div>
-                <div style="flex:1">
-                    <div style="font-weight:var(--weight-semibold);font-size:var(--text-sm);color:var(--info);margin-bottom:var(--space-1)">
+                <div class="flex-1">
+                    <div class="fw-semibold text-sm mb-1" style="color:var(--info)">
                         Good News - Other Doors Are Open For You
                     </div>
-                    <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-3)">
+                    <p class="text-sm text-secondary mb-3">
                         While your score didn't meet the threshold for
                         <strong><?= e($applicant['course_applied']) ?></strong> this time,
                         your results actually qualify you for the following
                         <?= $studentStrand ? '<strong>' . e(SHS_STRANDS[$studentStrand] ?? $studentStrand) . '</strong>-' : '' ?>compatible
                         programs we offer:
                     </p>
-                    <ul style="margin:0 0 var(--space-4) 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--space-2)">
+                    <ul class="p-0 flex flex-column gap-2" style="margin:0 0 var(--space-4) 0;list-style:none">
                         <?php foreach ($altCourses as $ac): ?>
-                        <li style="display:flex;align-items:center;gap:var(--space-3);
-                                   background:white;border:1px solid var(--info);border-radius:var(--radius);
-                                   padding:var(--space-2) var(--space-3)">
+                        <li class="flex align-items-center gap-3 rounded py-2 px-3" style="background:white;border:1px solid var(--info)">
                             <?= icon('check-circle:fill', 14, 'color:#6366f1') ?>
-                            <span style="font-size:var(--text-sm);font-weight:var(--weight-medium)"><?= e($ac) ?></span>
+                            <span class="text-sm fw-medium"><?= e($ac) ?></span>
                         </li>
                         <?php endforeach; ?>
                     </ul>
-                    <div style="background:var(--info-bg);border-radius:var(--radius);padding:var(--space-3);font-size:var(--text-xs);color:var(--info)">
+                    <div class="rounded p-3 text-xs" style="background:var(--info-bg);color:var(--info)">
                         <strong>What to do next:</strong> Visit the admissions office to apply for one of these programs - no re-exam needed.
                     </div>
                 </div>
@@ -394,8 +392,7 @@ ob_start();
         </div>
         <?php else: ?>
         <!-- Rejected with no qualifying alternatives — still be kind -->
-        <div style="border:1px solid var(--border);background:var(--bg-subtle);border-radius:var(--radius);
-                    padding:var(--space-4);margin-bottom:var(--space-5)">
+        <div class="bd bg-subtle rounded p-4 mb-5">
             <p class="text-secondary-sm">
                 We understand this isn't the news you hoped for. There are no qualifying alternatives for your strand and
                 score this cycle. Visit the admissions office to discuss options for the next admission cycle.

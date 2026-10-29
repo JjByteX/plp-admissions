@@ -9,10 +9,10 @@
 // ============================================================
 ?>
 <div data-dark-mode-setting
-     style="display:flex;align-items:center;justify-content:space-between;margin-top:var(--space-5);padding-top:var(--space-5);border-top:1px solid var(--border)">
+     class="flex align-items-center justify-content-between mt-5 pt-5 bd-t">
     <div>
-        <div style="font-size:var(--text-sm);font-weight:var(--weight-medium)">Dark Mode</div>
-        <div style="font-size:var(--text-xs);color:var(--text-tertiary)">Saved to this device</div>
+        <div class="text-sm fw-medium">Dark Mode</div>
+        <div class="text-xs text-tertiary">Saved to this device</div>
     </div>
     <button type="button" class="btn btn-secondary btn-sm" data-dark-mode-btn aria-pressed="false">
         <span data-dark-mode-label>Switch to Dark</span>
