@@ -11,12 +11,19 @@
     const RISKY = ['create_exam','activate_exam','delete_exam','delete_section','add_question','edit_question','delete_question'];
     const MSG = 'Students are taking the exam right now.\n\nThis change applies to them immediately and can change their score. Continue?';
 
-    if (LIVE) {
+    // Exam already has results: adding questions is allowed after a warning.
+    const FROZEN = !!PAGE.frozen;
+    const FROZEN_MSG = 'This exam already has submitted results.\n\nScores already recorded stay as they are, but the new questions will not count for students who already submitted. Continue?';
+    const needsPrompt = act => (LIVE && RISKY.includes(act)) || (FROZEN && act === 'add_question');
+
+    if (LIVE || FROZEN) {
         const origFetch = window.fetch.bind(window);
-        const askLive = () => ui.confirm(MSG, { title: 'Exam in progress', ok: 'Continue' });
+        const askLive = () => (LIVE
+            ? ui.confirm(MSG, { title: 'Exam in progress', ok: 'Continue' })
+            : ui.confirm(FROZEN_MSG, { title: 'Exam has results', ok: 'Continue' }));
         window.fetch = async function (url, opts) {
             const body = opts && opts.body;
-            if (body instanceof FormData && RISKY.includes(body.get('action')) && !body.get('confirm_live')) {
+            if (body instanceof FormData && needsPrompt(body.get('action')) && !body.get('confirm_live')) {
                 if (!await askLive()) {
                     return new Response(JSON.stringify({ ok: false, cancelled: true }), { status: 409 });
                 }
@@ -31,7 +38,7 @@
         function needsLive(form) {
             if (form.dataset.emptySection) return false;   // empty section: nothing to protect
             const act = form.querySelector('input[name="action"]');
-            return !!act && RISKY.includes(act.value) && !form.querySelector('input[name="confirm_live"]');
+            return !!act && needsPrompt(act.value) && !form.querySelector('input[name="confirm_live"]');
         }
         function addLive(form) {
             const h = document.createElement('input');

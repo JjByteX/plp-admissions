@@ -521,6 +521,7 @@ elseif ($selectedExamId) $view = 'editor';
 window.PAGE = <?= json_encode([
     'examId'        => (int)($selectedExam['id'] ?? 0),
     'live'          => !empty($examLive),
+    'frozen'        => !empty($examFrozen),
     'typeLabels'    => array_map(fn($v) => $v['label'], $QUESTION_TYPES),
     'sectionColors' => $SECTION_COLORS,
     'icons'         => [

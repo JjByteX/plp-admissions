@@ -647,12 +647,15 @@ async function saveAiQuestions() {
     if (!examId) { void ui.alert('Select an exam first.'); btn.disabled = false; return; }
     if (!csrf) { void ui.alert('Session expired. Refresh and try again.'); btn.disabled = false; return; }
 
-    // One confirmation for the whole batch when students are taking the exam.
-    if (PAGE.live) {
-        const ok = await ui.confirm(
-            'Students are taking the exam right now.\n\nAdding these questions applies to them immediately and can change their score. Continue?',
-            { title: 'Exam in progress', ok: 'Continue' }
-        );
+    // One warning for the whole batch: live exam, and/or exam that already has results.
+    if (PAGE.live || PAGE.frozen) {
+        const ok = PAGE.live
+            ? await ui.confirm(
+                'Students are taking the exam right now.\n\nAdding these questions applies to them immediately and can change their score. Continue?',
+                { title: 'Exam in progress', ok: 'Continue' })
+            : await ui.confirm(
+                'This exam already has submitted results.\n\nScores already recorded stay as they are, but the new questions will not count for students who already submitted. Continue?',
+                { title: 'Exam has results', ok: 'Continue' });
         if (!ok) { btn.disabled = false; return; }
     }
 
@@ -667,6 +670,12 @@ async function saveAiQuestions() {
             if (await saveAiQuestion(q, sectionId, examId, csrfName, csrf)) saved++;
             btn.textContent = `Saving… (${saved}/${totalQ})`;
         }
+    }
+    // Nothing saved: stay on the preview and say so instead of reloading silently.
+    if (saved === 0) {
+        void ui.alert('No questions could be added. Check the exam is still open for changes, then try again.');
+        btn.disabled = false; btn.textContent = 'Add All to Exam';
+        return;
     }
     window.location.reload();
 }

@@ -87,7 +87,20 @@ if (($action = require_post_action()) !== null) {
             if ((int)$st->fetchColumn() === 0) { $examLocked = false; $live = false; }
         }
 
-        if ($examLocked && $action !== 'edit_question') {
+        // Adding questions to an exam with results is allowed, but only after a
+        // warning: recorded scores stay as they are, new questions are unscored for
+        // students who already submitted.
+        if ($examLocked && $action === 'add_question') {
+            $examLocked = false;
+            if (empty($_POST['confirm_live'])) {
+                $guardMsg = 'This exam already has submitted results. Scores already recorded stay as they are, but the new questions will not count for students who already submitted. Confirm to continue.';
+                $needsConfirm = true;
+            }
+        }
+
+        if ($guardMsg !== null) {
+            // soft warning set above; handled by the response below
+        } elseif ($examLocked && $action !== 'edit_question') {
             $guardMsg = 'This exam already has submitted results, so questions, sections and the exam itself can no longer be added or deleted. Scores already recorded stay as they are. To change the content, create a new exam.';
         } elseif ($live && $action === 'delete_exam') {
             $guardMsg = 'Students are taking this exam right now, so it cannot be deleted.';
