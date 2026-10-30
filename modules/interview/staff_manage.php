@@ -35,19 +35,30 @@ $totalSessions = (int)$totalSessionsStmt->fetchColumn();
 
 // Queue stats for today (across sessions this staff is the interviewer for,
 // falling back to created_by for legacy rows that have no assigned_to).
+// Same visibility as the Queue page: admin sees every session, a dean sees
+// their college, everyone else only the sessions they own.
+$todayScheduled = 0;
 $todayWaiting = 0;
 $todayInProgress = 0;
+$scopeSql    = ' AND COALESCE(s.assigned_to, s.created_by) = ?';
+$scopeParams = [$staffId];
+if ($isAdmin) {
+    $scopeSql = ''; $scopeParams = [];
+} elseif (StaffScope::current()->restricted() && StaffScope::current()->department() !== '') {
+    $scopeSql = ' AND s.department = ?'; $scopeParams = [StaffScope::current()->department()];
+}
 $todayStmt = $db->prepare(
-    "SELECT SUM(CASE WHEN q.status = 'checked_in'  THEN 1 ELSE 0 END) AS waiting,
+    "SELECT SUM(CASE WHEN q.status = 'scheduled'   THEN 1 ELSE 0 END) AS scheduled,
+            SUM(CASE WHEN q.status = 'checked_in'  THEN 1 ELSE 0 END) AS waiting,
             SUM(CASE WHEN q.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress
      FROM   interview_queue q
      JOIN   interview_slots s ON s.id = q.slot_id
-     WHERE  s.slot_date = ?
-       AND  COALESCE(s.assigned_to, s.created_by) = ?"
+     WHERE  s.slot_date = ?" . $scopeSql
 );
-$todayStmt->execute([$today, $staffId]);
+$todayStmt->execute(array_merge([$today], $scopeParams));
 $todayRow = $todayStmt->fetch();
 if ($todayRow) {
+    $todayScheduled  = (int)($todayRow['scheduled'] ?? 0);
     $todayWaiting    = (int)($todayRow['waiting'] ?? 0);
     $todayInProgress = (int)($todayRow['in_progress'] ?? 0);
 }
@@ -104,8 +115,10 @@ $queueTitle    = $queueDisabled
                     Setup required
                 <?php elseif ($todayActive > 0): ?>
                     <?= $todayWaiting ?> waiting · <?= $todayInProgress ?> in progress
+                <?php elseif ($todayScheduled > 0): ?>
+                    <?= $todayScheduled ?> scheduled today · none checked in yet
                 <?php else: ?>
-                    No active interviews
+                    No interviews today
                 <?php endif; ?>
             </div>
         </div>

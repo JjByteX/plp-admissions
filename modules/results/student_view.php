@@ -166,7 +166,7 @@ ob_start();
         </div>
 
         <p class="text-sm text-secondary text-center mb-6 mwpx-520 ms-auto" style="margin-right:auto">
-            One step left - confirm your enrollment to receive your visit date from the Registrar, then bring the <strong>original copies</strong> of your documents so we can verify them. After that, you're officially enrolled.
+            Admissions is done. To continue, press <strong>Continue to Enrollment</strong> below. This tells us you will enroll at PLP and sends your details to the Registrar, who will email you a link to set up your Enrollment account and give you a visit date. On that day, bring the <strong>original copies</strong> of your documents so we can verify them. The Registrar will guide you through the rest of enrollment.
         </p>
 
         <!-- Documents to bring -->
@@ -179,7 +179,7 @@ ob_start();
                         $slug  = (string)$d['doc_type'];
                         $label = $docLabels[$slug] ?? ucwords(str_replace('_', ' ', $slug));
                     ?>
-                        <li class="flex align-items-start gap-3 bd rounded py-2 px-3" style="background:white">
+                        <li class="flex align-items-start gap-3 bd rounded py-2 px-3" style="background:var(--bg-elevated)">
                             <?= icon('ic_fluent_document_24_regular', 16, 'color:var(--text-tertiary);flex-shrink:0;margin-top:var(--space-1)') ?>
                             <span class="text-sm" style="line-height:1.4"><?= e($label) ?></span>
                         </li>
@@ -205,8 +205,8 @@ ob_start();
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="confirm_enrollment">
                     <button type="submit" class="btn btn-primary"
-                            data-confirm="Confirm that you will enroll at PLP? Your details will be sent to the Registrar." data-confirm-ok="Confirm">
-                        Confirm enrollment
+                            data-confirm="Continue to Enrollment? This confirms you will enroll at PLP and sends your details to the Registrar." data-confirm-ok="Continue">
+                        Continue to Enrollment
                     </button>
                 </form>
             <?php elseif ($handoffSent): ?>
@@ -325,7 +325,7 @@ ob_start();
                     <p class="text-sm text-secondary mb-3">
                         Admissions suggested an alternative course:
                     </p>
-                    <div class="rounded py-3 px-4 fw-semibold text-sm mb-3" style="background:white;border:1px solid var(--warning)">
+                    <div class="rounded py-3 px-4 fw-semibold text-sm mb-3" style="background:var(--bg-elevated);border:1px solid var(--warning)">
                         <?= e($suggestion['suggested_course']) ?>
                     </div>
                     <?php if ($suggestion['note']): ?>
@@ -378,7 +378,7 @@ ob_start();
                     </p>
                     <ul class="p-0 flex flex-column gap-2" style="margin:0 0 var(--space-4) 0;list-style:none">
                         <?php foreach ($altCourses as $ac): ?>
-                        <li class="flex align-items-center gap-3 rounded py-2 px-3" style="background:white;border:1px solid var(--info)">
+                        <li class="flex align-items-center gap-3 rounded py-2 px-3" style="background:var(--bg-elevated);border:1px solid var(--info)">
                             <?= icon('check-circle:fill', 14, 'color:#6366f1') ?>
                             <span class="text-sm fw-medium"><?= e($ac) ?></span>
                         </li>
