@@ -606,6 +606,9 @@ async function createAiSection(sec, examId, csrfName, csrf) {
 function buildAiQuestionForm(q, sectionId, examId, csrfName, csrf) {
     const fd = new FormData();
     fd.append('action', 'add_question'); fd.append('exam_id', examId); fd.append(csrfName, csrf);
+    // Live-exam confirmation is asked once in saveAiQuestions(); sending this
+    // flag stops the fetch wrapper in exam-manage.js prompting per question.
+    fd.append('confirm_live', '1');
     fd.append('question_text', q.question_text);
     fd.append('question_type', q.question_type); fd.append('points', q.points); fd.append('is_required', '1');
     fd.append('section_id', sectionId);
@@ -643,6 +646,15 @@ async function saveAiQuestions() {
     const csrfName = csrfInput?.name || '_csrf_token', csrf = csrfInput?.value || '';
     if (!examId) { void ui.alert('Select an exam first.'); btn.disabled = false; return; }
     if (!csrf) { void ui.alert('Session expired. Refresh and try again.'); btn.disabled = false; return; }
+
+    // One confirmation for the whole batch when students are taking the exam.
+    if (PAGE.live) {
+        const ok = await ui.confirm(
+            'Students are taking the exam right now.\n\nAdding these questions applies to them immediately and can change their score. Continue?',
+            { title: 'Exam in progress', ok: 'Continue' }
+        );
+        if (!ok) { btn.disabled = false; return; }
+    }
 
     const totalQ = aiGeneratedSections.reduce((sum, s) => sum + s.questions.length, 0);
     let saved = 0;
