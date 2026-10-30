@@ -211,18 +211,18 @@ ob_start();
                 </form>
             <?php elseif ($handoffSent): ?>
                 <p class="text-sm text-success fw-medium" style="margin:0 0 var(--space-3)">
-                    Enrollment confirmed. Check your email for a link to set your Enrollment password.
+                    Your details were sent to the Registrar. Check your email for a link to set your Enrollment password.
                 </p>
                 <?php if ($enrollmentSiteUrl !== ''): ?>
                     <a href="<?= e($enrollmentSiteUrl) ?>" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Go to Enrollment</a>
                 <?php endif; ?>
             <?php elseif ($handoff && $handoff['status'] === 'rejected'): ?>
                 <p class="text-secondary-sm">
-                    Enrollment confirmed. The Registrar will contact you about your next step.
+                    You have confirmed you will enroll. The Registrar will contact you about your next step.
                 </p>
             <?php else: ?>
                 <p class="text-secondary-sm">
-                    Enrollment confirmed. We are sending your details to the Registrar. You will get an email when it is done.
+                    We are sending your details to the Registrar. You will get an email when it is done.
                 </p>
             <?php endif; ?>
         </div>

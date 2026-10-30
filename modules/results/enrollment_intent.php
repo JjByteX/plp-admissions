@@ -47,7 +47,7 @@ if ($action === 'confirm_enrollment') {
             'enrollment_confirmed',
             enrollment_confirmation_note(enrollment_handoff_state($db, (int) $row['id']))
         );
-        Session::flash('success', 'Your enrollment has been confirmed! Welcome to PLP!');
+        Session::flash('success', 'Congratulations on your admission to PLP! Your details have been sent to the Registrar. Check your email for your next step.');
     }
     redirect('/student/result');
 }

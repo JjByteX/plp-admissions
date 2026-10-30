@@ -142,8 +142,8 @@ function notify_stage_transition(int $applicantId, string $newStatus, string $ex
             '/student/documents',
         ],
         'enrollment_confirmed' => [
-            'Enrollment Confirmed',
-            'You have confirmed your enrollment. Welcome to PLP!' . ($extra ? ' ' . $extra : ''),
+            'Continue to Enrollment',
+            'Congratulations on your admission to PLP! Your details have been sent to the Registrar.' . ($extra ? ' ' . $extra : ''),
             '/student/result',
         ],
     ];
