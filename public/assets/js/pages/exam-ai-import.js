@@ -654,7 +654,7 @@ async function saveAiQuestions() {
                 'Students are taking the exam right now.\n\nAdding these questions applies to them immediately and can change their score. Continue?',
                 { title: 'Exam in progress', ok: 'Continue' })
             : await ui.confirm(
-                'This exam already has submitted results.\n\nScores already recorded stay as they are, but the new questions will not count for students who already submitted. Continue?',
+                'This exam already has submitted results.\n\nOnce added, questions cannot be deleted. Scores already recorded stay as they are, and the new questions will not count for students who already submitted. Students are not notified automatically, so tell them yourself if needed. Continue?',
                 { title: 'Exam has results', ok: 'Continue' });
         if (!ok) { btn.disabled = false; return; }
     }

@@ -93,7 +93,7 @@ if (($action = require_post_action()) !== null) {
         if ($examLocked && $action === 'add_question') {
             $examLocked = false;
             if (empty($_POST['confirm_live'])) {
-                $guardMsg = 'This exam already has submitted results. Scores already recorded stay as they are, but the new questions will not count for students who already submitted. Confirm to continue.';
+                $guardMsg = 'This exam already has submitted results. Once added, questions cannot be deleted. Scores already recorded stay as they are, and the new questions will not count for students who already submitted. Students are not notified automatically, so tell them yourself if needed. Confirm to continue.';
                 $needsConfirm = true;
             }
         }

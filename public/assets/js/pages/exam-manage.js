@@ -13,7 +13,7 @@
 
     // Exam already has results: adding questions is allowed after a warning.
     const FROZEN = !!PAGE.frozen;
-    const FROZEN_MSG = 'This exam already has submitted results.\n\nScores already recorded stay as they are, but the new questions will not count for students who already submitted. Continue?';
+    const FROZEN_MSG = 'This exam already has submitted results.\n\nOnce added, questions cannot be deleted. Scores already recorded stay as they are, and the new questions will not count for students who already submitted. Students are not notified automatically, so tell them yourself if needed. Continue?';
     const needsPrompt = act => (LIVE && RISKY.includes(act)) || (FROZEN && act === 'add_question');
 
     if (LIVE || FROZEN) {
