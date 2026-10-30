@@ -75,9 +75,11 @@ define('SUPABASE_BUCKET_BRANDING',  getenv('SUPABASE_BUCKET_BRANDING')  ?: 'bran
 // -- AI document sorting (local model PC through a Cloudflare Tunnel) --
 // Empty AI_MODEL_URL = AI off; uploads use the category dropdown.
 define('AI_MODEL_URL', getenv('AI_MODEL_URL') ?: '');
-// Capped at 25 s: the Vercel function dies at 60 s, and a dead function shows the applicant an error
-// instead of the "pick the document type" fallback. A bigger value in Vercel is ignored.
-define('AI_TIMEOUT',   max(5, min(25, (int) (getenv('AI_TIMEOUT') ?: 25))));
+// Capped at 25 s in production: the Vercel function dies at 60 s, and a dead function shows the applicant
+// an error instead of the "pick the document type" fallback. A bigger value in Vercel is ignored.
+// Outside production (a slow model on a laptop) it may go up to 50 s, which stays under the 60 s PHP limit
+// in modules/documents/student_upload.php and the 70 s browser wait in student-documents-batch.js.
+define('AI_TIMEOUT',   max(5, min(APP_ENV === 'production' ? 25 : 50, (int) (getenv('AI_TIMEOUT') ?: 25))));
 define('AI_MODEL_KEY', getenv('AI_MODEL_KEY') ?: '');
 
 // -- Roles -------------------------------------------------------

@@ -408,6 +408,48 @@ function ai_decide(?array $parsed, ?float $confidence, array $categories, array 
     return ai_result('passed', $slug, $conf, '', $f, $slots);
 }
 
+// The picture as a data URI for the model, shrunk first. A phone photo can cost thousands of image tokens,
+// which overflows the model's context and makes a CPU-only reply very slow. Scaling the long side down to
+// $maxSide keeps one picture around 1,200 tokens. The original file is sent unchanged when it is already
+// small, when the PHP gd extension is missing (Fedora: sudo dnf install php-gd) or when anything fails.
+function ai_image_data_uri(string $path, string $mime, int $maxSide = 1280): string
+{
+    $original = static fn(): string => 'data:' . $mime . ';base64,' . base64_encode((string)file_get_contents($path));
+
+    if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) {
+        error_log('[ai] php gd extension missing, sending the original picture');
+        return $original();
+    }
+    $info = @getimagesize($path);
+    if (!$info || $info[0] < 1 || $info[1] < 1 || max($info[0], $info[1]) <= $maxSide) {
+        return $original();
+    }
+    [$w, $h] = [(int)$info[0], (int)$info[1]];
+
+    $src = @imagecreatefromstring((string)file_get_contents($path));
+    if ($src === false) {
+        return $original();
+    }
+    $scale = $maxSide / max($w, $h);
+    $nw    = max(1, (int)round($w * $scale));
+    $nh    = max(1, (int)round($h * $scale));
+    $dst   = imagecreatetruecolor($nw, $nh);
+    if ($dst === false) {
+        return $original();
+    }
+    // White behind transparent PNG / WEBP areas, because JPEG has no transparency.
+    imagefill($dst, 0, 0, (int)imagecolorallocate($dst, 255, 255, 255));
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+
+    ob_start();
+    $ok   = imagejpeg($dst, null, 85);
+    $jpeg = (string)ob_get_clean();
+    if (!$ok || $jpeg === '') {
+        return $original();
+    }
+    return 'data:image/jpeg;base64,' . base64_encode($jpeg);
+}
+
 // Classify one file. $applicant needs applicant_type, doc_flags, first_name, middle_name, last_name, birthdate.
 function ai_classify_image(string $path, string $mime, array $applicant, array $opts = []): array
 {
@@ -450,7 +492,7 @@ function ai_classify_image(string $path, string $mime, array $applicant, array $
                 [
                     'type'      => 'image_url',
                     'image_url' => [
-                        'url' => 'data:' . $mime . ';base64,' . base64_encode((string)file_get_contents($path)),
+                        'url' => ai_image_data_uri($path, $mime),
                     ],
                 ],
                 ['type' => 'text', 'text' => ai_build_prompt($categories, $applicant)],
