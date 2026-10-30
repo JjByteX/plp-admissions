@@ -437,12 +437,7 @@ if ($needsPwGate && !$isUnlocked) {
             <?php endif; ?>
 
             <?php if (!$pwValid): ?>
-                <div class="alert alert-warning mb-4 text-start">
-                    <strong>No active code right now.</strong>
-                    The access code has not been issued yet or has expired.
-                    Please wait for your proctor to provide one - they will generate a fresh
-                    code from this room's slot in the Exam Slots page.
-                </div>
+                <div class="alert alert-warning mb-4 text-start"><strong>No code yet.</strong> Please ask your proctor for it.</div>
             <?php endif; ?>
 
             <form method="POST" class="text-start">
