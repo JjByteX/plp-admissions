@@ -402,7 +402,7 @@ ob_start();
             <?php if ($total === 0): ?>
                 <div class="db-empty">No applicants in this range.</div>
             <?php else: ?>
-            <div class="w-100 flex-1 overflow-y-auto" style="min-height:200px;max-height:380px">
+            <div class="w-100 flex-1" style="min-height:200px">
                 <div style="position:relative;width:100%;height:<?= (int)$courseCanvasH ?>px;">
                     <canvas id="chartCourse"></canvas>
                 </div>
