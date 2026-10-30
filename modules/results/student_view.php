@@ -214,7 +214,11 @@ ob_start();
                     Your details were sent to the Registrar. Check your email for a link to set your Enrollment password.
                 </p>
                 <?php if ($enrollmentSiteUrl !== ''): ?>
-                    <a href="<?= e($enrollmentSiteUrl) ?>" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Go to Enrollment</a>
+                    <a href="<?= e(rtrim($enrollmentSiteUrl, '/') . '/login') ?>" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Go to Enrollment sign in</a>
+                    <p class="text-xs text-tertiary" style="margin:var(--space-3) 0 0">
+                        Sign in with the same email you applied with: <strong><?= e(Auth::user()['email'] ?? '') ?></strong>.
+                        Enrollment has its own password, which you set once from the email we sent.
+                    </p>
                 <?php endif; ?>
             <?php elseif ($handoff && $handoff['status'] === 'rejected'): ?>
                 <p class="text-secondary-sm">
