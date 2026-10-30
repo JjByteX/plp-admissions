@@ -29,6 +29,7 @@
         // sent again with confirm_live set. This listener is registered before app.js's
         // initConfirm, so this prompt comes first, then any data-confirm on the form.
         function needsLive(form) {
+            if (form.dataset.emptySection) return false;   // empty section: nothing to protect
             const act = form.querySelector('input[name="action"]');
             return !!act && RISKY.includes(act.value) && !form.querySelector('input[name="confirm_live"]');
         }

@@ -349,7 +349,7 @@ elseif ($selectedExamId) $view = 'editor';
                             <button class="btn-icon" title="Edit section" onclick="openEditSectionModal(<?= $secJson ?>)">
                                 <?= icon('ic_fluent_edit_24_regular', 13) ?>
                             </button>
-                            <form method="POST" style="display:inline"
+                            <form method="POST" style="display:inline"<?= $secQCount === 0 ? ' data-empty-section="1"' : '' ?>
                                   onsubmit="return confirmDeleteSection(this, <?= $secQCount ?>, <?= json_encode($sec['title']) ?>)">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete_section">

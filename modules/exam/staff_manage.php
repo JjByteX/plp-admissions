@@ -79,6 +79,14 @@ if (($action = require_post_action()) !== null) {
                       && exam_has_results($db, $targetExamId);
         $live = exam_in_progress($db, $liveExamId);
 
+        // An empty section holds no questions, so removing it can't affect any
+        // recorded or in-progress score. Never block or prompt for it.
+        if ($action === 'delete_section') {
+            $st = $db->prepare('SELECT COUNT(*) FROM questions WHERE section_id=?');
+            $st->execute([post_int('section_id')]);
+            if ((int)$st->fetchColumn() === 0) { $examLocked = false; $live = false; }
+        }
+
         if ($examLocked && $action !== 'edit_question') {
             $guardMsg = 'This exam already has submitted results, so questions, sections and the exam itself can no longer be added or deleted. Scores already recorded stay as they are. To change the content, create a new exam.';
         } elseif ($live && $action === 'delete_exam') {
