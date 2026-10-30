@@ -342,6 +342,10 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                             <?= icon('gear', 15) ?>
                             Settings
                         </a>
+                        <a href="<?= url('/staff/manual') ?>" class="dropdown-item">
+                            <?= icon('book-open', 15) ?>
+                            User Manual
+                        </a>
                         <div class="dropdown-item theme-toggle-row pointer justify-content-between" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="
                             const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
                             document.documentElement.dataset.theme = t;

@@ -91,6 +91,7 @@ $router->post('/staff/exam/cancel-slot',    'exam/staff_cancel_slot');
 $router->get( '/staff/exam/export-rooms',   'exam/staff_export_rooms');
 $router->get( '/staff/settings',            'settings/staff');
 $router->post('/staff/settings',            'settings/staff');
+$router->get( '/staff/manual',              'manual/index');
 
 // -- Admin -------------------------------------------------------
 $router->get( '/admin/dashboard',  'auth/admin/dashboard');
