@@ -45,7 +45,10 @@ if ($action === 'confirm_enrollment') {
         notify_stage_transition(
             $row['id'],
             'enrollment_confirmed',
-            enrollment_confirmation_note(enrollment_handoff_state($db, (int) $row['id']))
+            enrollment_confirmation_note(
+                enrollment_handoff_state($db, (int) $row['id']),
+                enrollment_shared_login_ready($db, (int) $row['id'])
+            )
         );
         Session::flash('success', 'Congratulations on your admission to PLP! Your details have been sent to the Registrar. Check your email for your next step.');
     }

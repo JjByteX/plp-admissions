@@ -97,6 +97,26 @@ check(str_contains(enrollment_confirmation_note(['status' => 'sent', 'enrollment
 check(str_contains(enrollment_confirmation_note(['status' => 'pending']), 'will email you'), 'a pending send promises the email');
 check(str_contains(enrollment_confirmation_note(null), 'will email you'), 'no outbox row promises the email');
 
+// Same login on both sides: the bcrypt hash is shared, a Google sign-up has none.
+$realHash = password_hash('Demo@12345', PASSWORD_BCRYPT, ['cost' => 4]);
+$shared   = enrollment_shared_password_hash($realHash);
+check($shared !== null && str_starts_with($shared, '$2b$'), 'a bcrypt hash is shared with the $2b$ prefix');
+check($shared !== null && password_verify('Demo@12345', $shared), 'the shared hash still matches the same password');
+check(strlen((string) $shared) === 60, 'the shared hash keeps its length');
+check(enrollment_shared_password_hash('!' . bin2hex(random_bytes(32))) === null, 'a Google sign-up has no hash to share');
+check(enrollment_shared_password_hash('') === null, 'an empty hash is not shared');
+check(enrollment_shared_password_hash(null) === null, 'no hash is not shared');
+check(enrollment_shared_password_hash('Demo@12345') === null, 'a plain password is never passed along as a hash');
+
+// The message says to sign in when the account takes the Admissions password.
+$sharedNote = enrollment_confirmation_note($sentWithVisit, true);
+check($sharedNote === 'Your next step: go to Registrar Office on Monday, November 2, 2026, 9:00 AM to 11:00 AM. Sign in to PLP Enrollment with the same email and password you use here to see what to bring.', 'shared login note carries the visit');
+check(!str_contains($sharedNote, 'email from PLP Enrollment'), 'shared login note sends no email');
+check(str_contains(enrollment_confirmation_note(['status' => 'sent', 'enrollment_result' => 'created'], true), 'same email and password'), 'shared login without a visit says sign in');
+check(str_contains(enrollment_confirmation_note(['status' => 'pending'], true), 'same email and password'), 'a pending shared login says what to sign in with');
+check(!str_contains(enrollment_confirmation_note(['status' => 'pending'], true), 'link to set'), 'a pending shared login does not promise a link');
+check(str_contains(enrollment_confirmation_note(array_merge($sentWithVisit, ['enrollment_result' => 'unchanged']), true), 'Sign in to PLP Enrollment to see what to bring'), 'an existing account note is the same either way');
+
 // Program list check.
 putenv('ENROLLMENT_INTAKE_URL=https://example.test/api/admissions/intake');
 check(enrollment_programs_url() === 'https://example.test/api/admissions/programs', 'programs URL comes from the intake URL');

@@ -17,6 +17,15 @@
 // Enrollment books the visit slot during the call and answers with the date,
 // time and office; they are kept on the outbox row for the confirmation message.
 //
+// Same login on both sides (DEMO SHORTCUT): the payload also carries the
+// applicant's Admissions password HASH (bcrypt, never the password itself,
+// which Admissions does not keep). Enrollment creates the account with the same
+// email and that hash, so the applicant signs in to Enrollment with the same
+// email and password and no set-password email is needed. Applicants who signed
+// up with Google have no password; their payload has no hash and Enrollment
+// falls back to its set-password email. The hash is never logged or stored by
+// this file. Before real use, drop password_hash and let Enrollment invite.
+//
 // Settings (environment): ENROLLMENT_INTAKE_URL, ENROLLMENT_INTAKE_SECRET
 // The secret must equal ADMISSIONS_INTAKE_SECRET in the Enrollment project.
 // ============================================================
@@ -97,6 +106,33 @@ function enrollment_full_name(array $row): string
 }
 
 /**
+ * The bcrypt hash to hand to Enrollment so the applicant keeps the same password,
+ * or null when there is none to share. Google sign-ups carry a random "!..." value
+ * instead of a hash, so they return null. PHP writes "$2y$"; Supabase Auth reads
+ * "$2b$". It is the same algorithm, only the prefix letter differs. Pure.
+ */
+function enrollment_shared_password_hash(?string $hash): ?string
+{
+    if ($hash === null || preg_match('/^\$2[abxy]\$\d{2}\$[.\/A-Za-z0-9]{53}$/', $hash) !== 1) {
+        return null;
+    }
+    return '$2b$' . substr($hash, 4);
+}
+
+/** True when this applicant's account has a password that Enrollment will share. */
+function enrollment_shared_login_ready(PDO $db, int $applicantId): bool
+{
+    try {
+        $stmt = $db->prepare('SELECT u.password_hash FROM applicants a JOIN users u ON u.id = a.user_id WHERE a.id = ?');
+        $stmt->execute([$applicantId]);
+        $hash = $stmt->fetchColumn();
+        return enrollment_shared_password_hash($hash === false ? null : (string) $hash) !== null;
+    } catch (\Throwable) {
+        return false;
+    }
+}
+
+/**
  * Build the payload from live data.
  * Returns [payload, null, null] when ready,
  *         [null, message, 'not_ready'] when the applicant is not accepted and confirmed (nothing is recorded),
@@ -106,7 +142,7 @@ function enrollment_handoff_payload(PDO $db, int $applicantId): array
 {
     $stmt = $db->prepare(
         'SELECT a.id, a.applicant_type, a.course_applied, a.school_year,
-                u.name, u.first_name, u.middle_name, u.last_name, u.suffix, u.email,
+                u.name, u.first_name, u.middle_name, u.last_name, u.suffix, u.email, u.password_hash,
                 ar.result, ar.enrollment_intent, ar.released_at
          FROM applicants a
          JOIN users u ON u.id = a.user_id
@@ -153,7 +189,7 @@ function enrollment_handoff_payload(PDO $db, int $applicantId): array
         $verified = [];
     }
 
-    return [[
+    $payload = [
         'applicant_ref'  => $reference,
         'full_name'      => $fullName,
         'email'          => strtolower(trim((string) $row['email'])),
@@ -162,7 +198,15 @@ function enrollment_handoff_payload(PDO $db, int $applicantId): array
         'admission_type' => enrollment_admission_type((string) $row['applicant_type']),
         'source_name'    => 'PLP Admissions',
         'verified_documents' => $verified,
-    ], null, null];
+    ];
+
+    // Same login on both sides. Left out for Google sign-ups (no password).
+    $sharedHash = enrollment_shared_password_hash($row['password_hash'] !== null ? (string) $row['password_hash'] : null);
+    if ($sharedHash !== null) {
+        $payload['password_hash'] = $sharedHash;
+    }
+
+    return [$payload, null, null];
 }
 
 /**
@@ -233,19 +277,30 @@ function enrollment_visit_from_answer(mixed $json): ?array
 /**
  * The next-step sentence added to the "Enrollment Confirmed" message, so the
  * applicant gets one message with the visit date instead of two.
- * $state is the outbox row (enrollment_handoff_state). Pure, so it can be tested alone.
+ * $state is the outbox row (enrollment_handoff_state). $sharedLogin is true when
+ * Enrollment makes the account with the Admissions password (enrollment_shared_login_ready),
+ * so the message says to sign in instead of waiting for an email. Pure, so it can be tested alone.
  */
-function enrollment_confirmation_note(?array $state): string
+function enrollment_confirmation_note(?array $state, bool $sharedLogin = false): string
 {
+    $sameLogin = 'Sign in to PLP Enrollment with the same email and password you use here';
+
     if ($state === null || ($state['status'] ?? '') !== 'sent') {
-        return 'PLP Enrollment will email you a link to set your password.';
+        return $sharedLogin
+            ? 'Your PLP Enrollment account is being set up. Sign in there with the same email and password you use here.'
+            : 'PLP Enrollment will email you a link to set your password.';
     }
 
-    // A new account gets a set-password email; someone who already has one just signs in.
+    // A new account with the shared password signs in right away; a new account without one
+    // gets a set-password email; someone who already has an account just signs in.
     $created = ($state['enrollment_result'] ?? '') === 'created';
-    $access  = $created
-        ? 'Open the email from PLP Enrollment to set your password and see what to bring.'
-        : 'Sign in to PLP Enrollment to see what to bring.';
+    if (!$created) {
+        $access = 'Sign in to PLP Enrollment to see what to bring.';
+    } elseif ($sharedLogin) {
+        $access = $sameLogin . ' to see what to bring.';
+    } else {
+        $access = 'Open the email from PLP Enrollment to set your password and see what to bring.';
+    }
 
     $day    = DateTime::createFromFormat('Y-m-d', substr((string) ($state['visit_date'] ?? ''), 0, 10));
     $from   = DateTime::createFromFormat('H:i', substr((string) ($state['visit_start_time'] ?? ''), 0, 5));
@@ -256,9 +311,12 @@ function enrollment_confirmation_note(?array $state): string
         return 'Your next step: go to ' . $office . ' on ' . $day->format('l, F j, Y') . ', '
             . $from->format('g:i A') . ' to ' . $to->format('g:i A') . '. ' . $access;
     }
-    return $created
-        ? 'Open the email from PLP Enrollment to set your password. Your visit date will be there once it is set.'
-        : 'Sign in to PLP Enrollment. Your visit date will be there once it is set.';
+    if (!$created) {
+        return 'Sign in to PLP Enrollment. Your visit date will be there once it is set.';
+    }
+    return $sharedLogin
+        ? $sameLogin . '. Your visit date will be there once it is set.'
+        : 'Open the email from PLP Enrollment to set your password. Your visit date will be there once it is set.';
 }
 
 // ----------------------------------------------------------------
