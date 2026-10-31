@@ -81,6 +81,17 @@ function exam_answers_from_draft(string $json): array
     return $out;
 }
 
+/** True when no answer has a value (all empty strings or empty lists). */
+function exam_answers_all_blank(array $answers): bool
+{
+    foreach ($answers as $v) {
+        if (is_array($v) ? count($v) > 0 : trim((string) $v) !== '') {
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * Score answers against questions. No database.
  * Returns [score, savedAnswers] where savedAnswers is the cleaned answer set.
@@ -251,10 +262,16 @@ function finalize_closed_exam_drafts(): int
         $done = 0;
         foreach ($rows as $row) {
             try {
+                $draftAnswers = exam_answers_from_draft((string) $row['answers']);
+                // A draft with no real answer is not a submission. Leave it for staff
+                // instead of recording a score of 0.
+                if (exam_answers_all_blank($draftAnswers)) {
+                    continue;
+                }
                 $res = finalize_exam_result(
                     (int) $row['applicant_id'],
                     (int) $row['exam_id'],
-                    exam_answers_from_draft((string) $row['answers']),
+                    $draftAnswers,
                     EXAM_AUTO_NOTE
                 );
                 if ($res !== null) {

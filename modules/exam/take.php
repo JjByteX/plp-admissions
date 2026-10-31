@@ -535,7 +535,10 @@ $totalPoints = array_sum(array_column($questions, 'points'));
 // ----------------------------------------------------------------
 // POST — submit answers
 // ----------------------------------------------------------------
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Only the exam form itself (it carries exam_form) may submit answers. Any other
+// POST that reaches this point, such as a stale access-code form, must never be
+// scored as an empty submission; it just shows the exam.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['exam_form'])) {
     csrf_check();
 
     $answers = $_POST['answers'] ?? [];

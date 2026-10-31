@@ -86,10 +86,10 @@ function confirmSubmit() {
 
 // ── Countdown timer ──────────────────────────────────────────
 if (EXAM_PAGE.secondsRemaining > 0) {
-let seconds = EXAM_PAGE.secondsRemaining;
+const deadline = Date.now() + EXAM_PAGE.secondsRemaining * 1000;
 const timerEl = document.getElementById('timer');
 const interval = setInterval(() => {
-    seconds--;
+    const seconds = Math.ceil((deadline - Date.now()) / 1000);
     if (seconds <= 0) {
         clearInterval(interval);
         // Offline: do not submit, keep the answers. The save code submits once a save gets through.

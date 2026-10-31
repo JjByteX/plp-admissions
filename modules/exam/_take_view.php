@@ -39,6 +39,7 @@
 
 <form method="POST" id="exam-form">
     <?= csrf_field() ?>
+    <input type="hidden" name="exam_form" value="1">
 
     <!-- Sticky progress bar -->
     <div class="exam-progress" id="exam-progress">
