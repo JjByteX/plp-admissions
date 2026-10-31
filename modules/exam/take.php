@@ -70,6 +70,14 @@ if ($applicant['overall_status'] !== 'exam') {
 // exam before any matching slot existed, or an earlier auto-assign
 // failed for any reason), try again every time they open this page.
 // auto_assign_exam_slot is a no-op when a row already exists.
+// First, if they are booked into a slot that closed today before they
+// started, move them to an open slot (or release the booking so the
+// auto-assign below can pick a new one). Without this they sit in a
+// finished slot and can only reach a closed exam.
+if (function_exists('reassign_ended_exam_slot')) {
+    reassign_ended_exam_slot((int)$applicantId);
+}
+
 if (function_exists('auto_assign_exam_slot')) {
     $hasSlot = $db->prepare('SELECT id FROM applicant_exam_slots WHERE applicant_id = ? LIMIT 1');
     $hasSlot->execute([$applicantId]);

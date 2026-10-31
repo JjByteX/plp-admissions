@@ -32,7 +32,8 @@ if (($action = require_post_action()) !== null) {
 
             'loadSlot' => function (PDO $db, int $id): ?array {
                 $stmt = $db->prepare(
-                    'SELECT id, exam_date, slot_time, room_label, exam_id, capacity, filled
+                    'SELECT id, exam_date, slot_time, room_label, exam_id, capacity, filled,
+                            (CASE WHEN now() > ' . slot_close_sql('exam_slot_schedule') . ' THEN 1 ELSE 0 END) AS ended
                        FROM exam_slot_schedule WHERE id = ? LIMIT 1'
                 );
                 $stmt->execute([$id]);
@@ -46,6 +47,9 @@ if (($action = require_post_action()) !== null) {
             'validateTarget' => function (array $oldSlot, array $newSlot, string $today): ?string {
                 if ((string)$newSlot['exam_date'] < $today) {
                     return 'The replacement slot is already in the past.';
+                }
+                if (!empty($newSlot['ended'])) {
+                    return 'The replacement slot has already ended today.';
                 }
 
                 // Same-exam guard: a multi-exam school can't accidentally

@@ -104,8 +104,11 @@ function auto_assign_exam_slot(int $applicantId): ?int
     // Each query already filters out past slots (date < today, or
     // date = today AND slot_time <= now).
     // ----------------------------------------------------------------
-    $today   = now_date();
-    $nowTime = date('H:i:s');
+    // "Still open" is judged by the database clock through slot_close_sql(),
+    // the same rule the exam page, autosave and finalizer use. The old filter
+    // compared end_time with PHP's clock and so ignored overnight windows and
+    // the no-end_time fallback, which let an already-ended slot through.
+    $openSql = 'now() <= ' . slot_close_sql('s');
 
     // ----------------------------------------------------------------
     // Candidate-slot search.
@@ -125,48 +128,26 @@ function auto_assign_exam_slot(int $applicantId): ?int
     // ----------------------------------------------------------------
     $candidates = [];
     $queries = [];
-    if ($dept !== '' && $activeExamId !== null) {
+    $deptSql = $dept !== ''
+        ? 'LOWER(TRIM(s.department)) = LOWER(TRIM(?))'
+        : "(s.department IS NULL OR s.department = '')";
+    $deptParams = $dept !== '' ? [$dept] : [];
+    $pick = fn(string $extra) =>
+        "SELECT s.id FROM exam_slot_schedule s
+          WHERE {$deptSql}{$extra}
+            AND s.filled < s.capacity
+            AND {$openSql}
+          ORDER BY s.exam_date ASC, s.slot_time ASC";
+    if ($activeExamId !== null) {
         $queries[] = [
-            'sql' => 'SELECT id FROM exam_slot_schedule
-                       WHERE LOWER(TRIM(department)) = LOWER(TRIM(?))
-                         AND exam_id = ?
-                         AND filled < capacity
-                         AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
-                       ORDER BY exam_date ASC, slot_time ASC',
-            'params' => [$dept, $activeExamId, $today, $today, $nowTime],
+            'sql'    => $pick(' AND s.exam_id = ?'),
+            'params' => array_merge($deptParams, [$activeExamId]),
         ];
     }
-    if ($dept !== '') {
-        $queries[] = [
-            'sql' => 'SELECT id FROM exam_slot_schedule
-                       WHERE LOWER(TRIM(department)) = LOWER(TRIM(?))
-                         AND filled < capacity
-                         AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
-                       ORDER BY exam_date ASC, slot_time ASC',
-            'params' => [$dept, $today, $today, $nowTime],
-        ];
-    }
-    if ($dept === '' && $activeExamId !== null) {
-        $queries[] = [
-            'sql' => 'SELECT id FROM exam_slot_schedule
-                       WHERE (department IS NULL OR department = \'\')
-                         AND exam_id = ?
-                         AND filled < capacity
-                         AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
-                       ORDER BY exam_date ASC, slot_time ASC',
-            'params' => [$activeExamId, $today, $today, $nowTime],
-        ];
-    }
-    if ($dept === '') {
-        $queries[] = [
-            'sql' => 'SELECT id FROM exam_slot_schedule
-                       WHERE (department IS NULL OR department = \'\')
-                         AND filled < capacity
-                         AND (exam_date > ? OR (exam_date = ? AND end_time > ?))
-                       ORDER BY exam_date ASC, slot_time ASC',
-            'params' => [$today, $today, $nowTime],
-        ];
-    }
+    $queries[] = [
+        'sql'    => $pick(''),
+        'params' => $deptParams,
+    ];
 
     foreach ($queries as $qi => $q) {
         $stmt = $pdo->prepare($q['sql']);
@@ -189,7 +170,7 @@ function auto_assign_exam_slot(int $applicantId): ?int
             . 'FROM exam_slot_schedule ORDER BY exam_date ASC LIMIT 20'
         )->fetchAll();
         error_log("[auto_assign #{$applicantId}] NO CANDIDATES. All slots in DB: " . json_encode($allSlots));
-        error_log("[auto_assign #{$applicantId}] today=" . now_date() . " now=" . date('H:i:s'));
+        error_log("[auto_assign #{$applicantId}] php now=" . date('Y-m-d H:i:s'));
         return null;
     }
 
@@ -205,19 +186,17 @@ function auto_assign_exam_slot(int $applicantId): ?int
             $pdo->beginTransaction();
 
             $lock = $pdo->prepare(
-                'SELECT id, exam_date, slot_time, end_time, room_label, capacity, filled
-                   FROM exam_slot_schedule
-                  WHERE id = ?
+                'SELECT s.id, s.exam_date, s.slot_time, s.end_time, s.room_label, s.capacity, s.filled,
+                        (CASE WHEN now() > ' . slot_close_sql('s') . ' THEN 1 ELSE 0 END) AS ended
+                   FROM exam_slot_schedule s
+                  WHERE s.id = ?
                   FOR UPDATE'
             );
             $lock->execute([$slotId]);
             $slot = $lock->fetch();
             if (!$slot
                 || (int)$slot['filled'] >= (int)$slot['capacity']
-                || (string)$slot['exam_date'] < $today
-                || ((string)$slot['exam_date'] === $today
-                    && !empty($slot['end_time'])
-                    && (string)$slot['end_time'] <= $nowTime)) {
+                || (int)$slot['ended'] === 1) {
                 $pdo->rollBack();
                 continue;
             }
@@ -291,6 +270,174 @@ function auto_assign_exam_slot(int $applicantId): ?int
 }
 
 /**
+ * FROM / WHERE for "booked into today's exam slot that has already closed,
+ * and never started". Shared by the per-applicant move and the sweep so they
+ * can never disagree.
+ *
+ * "Never started" = at the exam stage, no result, and no saved draft for that
+ * slot. A draft means the student did sit down; the closed-exam sweep in
+ * finalize_closed_exam_drafts() owns that case. The submit grace period is
+ * added so a student who is submitting right at close is not moved.
+ * Only today's slots are touched; earlier dates keep the existing
+ * "Your exam date has passed" + reschedule-request flow.
+ */
+function stranded_exam_booking_sql(): string
+{
+    $grace = exam_submit_grace_seconds();
+    return "FROM applicant_exam_slots aes
+            JOIN exam_slot_schedule s ON s.id = aes.slot_id
+            JOIN applicants a         ON a.id = aes.applicant_id
+           WHERE a.overall_status = 'exam'
+             AND s.exam_date = CURRENT_DATE
+             AND now() > (" . slot_close_sql('s') . " + interval '{$grace} seconds')
+             AND NOT EXISTS (SELECT 1 FROM exam_results r WHERE r.applicant_id = aes.applicant_id)
+             AND NOT EXISTS (SELECT 1 FROM exam_drafts d
+                              WHERE d.applicant_id = aes.applicant_id AND d.slot_id = aes.slot_id)";
+}
+
+/**
+ * If this applicant is booked into a slot that closed today before they
+ * started, move them to the next open slot for the same college, or, when
+ * none exists, release the booking so they show as "Awaiting Slot Assignment"
+ * and backfill_exam_slot_assignments() picks them up as soon as staff add a
+ * slot. They are never left sitting in a finished slot.
+ *
+ * Returns the new slot id when moved, null otherwise (nothing to do, or
+ * released with nowhere to go). Safe to call on every exam page load.
+ */
+function reassign_ended_exam_slot(int $applicantId): ?int
+{
+    if ($applicantId <= 0) {
+        return null;
+    }
+    $pdo = db();
+    if ($pdo->inTransaction()) {
+        return null;    // never nest inside a caller's transaction
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare(
+            'SELECT aes.id AS aes_id, aes.slot_id, s.department, s.exam_id '
+            . stranded_exam_booking_sql()
+            . ' AND aes.applicant_id = ? FOR UPDATE OF aes'
+        );
+        $stmt->execute([$applicantId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            $pdo->rollBack();
+            return null;
+        }
+
+        $oldSlotId = (int)$row['slot_id'];
+        $params    = [$oldSlotId, (string)$row['department']];
+        $examSql   = '';
+        if ($row['exam_id'] !== null) {
+            $examSql  = ' AND (t.exam_id = ? OR t.exam_id IS NULL)';
+            $params[] = (int)$row['exam_id'];
+        }
+
+        // Same college only (the hard rule from auto_assign_exam_slot).
+        $tgt = $pdo->prepare(
+            'SELECT t.id, t.exam_date, t.slot_time, t.room_label
+               FROM exam_slot_schedule t
+              WHERE t.id <> ?
+                AND LOWER(TRIM(t.department)) = LOWER(TRIM(?))' . $examSql . '
+                AND t.filled < t.capacity
+                AND now() <= ' . slot_close_sql('t') . '
+              ORDER BY t.exam_date ASC, t.slot_time ASC
+              LIMIT 1
+              FOR UPDATE OF t'
+        );
+        $tgt->execute($params);
+        $target = $tgt->fetch();
+
+        $pdo->prepare('UPDATE exam_slot_schedule SET filled = GREATEST(filled - 1, 0) WHERE id = ?')
+            ->execute([$oldSlotId]);
+
+        if ($target) {
+            $newSlotId = (int)$target['id'];
+            $pdo->prepare('UPDATE applicant_exam_slots SET slot_id = ?, assigned_at = NOW() WHERE id = ?')
+                ->execute([$newSlotId, (int)$row['aes_id']]);
+            $pdo->prepare('UPDATE exam_slot_schedule SET filled = filled + 1 WHERE id = ?')
+                ->execute([$newSlotId]);
+        } else {
+            $newSlotId = null;
+            $pdo->prepare('DELETE FROM applicant_exam_slots WHERE id = ?')
+                ->execute([(int)$row['aes_id']]);
+        }
+
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log("reassign_ended_exam_slot #{$applicantId} failed: " . $e->getMessage());
+        return null;
+    }
+
+    audit_log(
+        AuditAction::EXAM_SLOT_REASSIGNED_ENDED,
+        $newSlotId
+            ? "Applicant {$applicantId} never started in ended slot {$oldSlotId}; moved to slot {$newSlotId}"
+            : "Applicant {$applicantId} never started in ended slot {$oldSlotId}; no open slot, released to awaiting assignment",
+        'applicant',
+        $applicantId
+    );
+
+    if ($newSlotId) {
+        try {
+            $uStmt = $pdo->prepare('SELECT user_id FROM applicants WHERE id = ?');
+            $uStmt->execute([$applicantId]);
+            $userId = (int)$uStmt->fetchColumn();
+            if ($userId > 0) {
+                $when = date('F j, Y', strtotime((string)$target['exam_date']))
+                      . ' at ' . date('g:i A', strtotime((string)$target['slot_time']));
+                $room = (string)($target['room_label'] ?? '');
+                create_notification(
+                    $userId,
+                    'exam_slot_assigned',
+                    'Exam Slot Reassigned',
+                    "Your earlier exam slot ended before you started, so you were moved to {$when}"
+                        . ($room !== '' ? " in {$room}" : '') . '.',
+                    '/student/exam'
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('exam slot reassigned notification failed: ' . $e->getMessage());
+        }
+    }
+
+    return $newSlotId;
+}
+
+/**
+ * Sweep version of reassign_ended_exam_slot() for every stranded applicant.
+ * Returns how many were moved into another slot.
+ */
+function reassign_ended_slot_applicants(): int
+{
+    $pdo = db();
+    try {
+        $ids = $pdo->query(
+            'SELECT aes.applicant_id ' . stranded_exam_booking_sql() . ' ORDER BY aes.assigned_at ASC, aes.id ASC'
+        )->fetchAll(\PDO::FETCH_COLUMN) ?: [];
+    } catch (\Throwable $e) {
+        error_log('reassign_ended_slot_applicants query failed: ' . $e->getMessage());
+        return 0;
+    }
+
+    $moved = 0;
+    foreach ($ids as $id) {
+        if (reassign_ended_exam_slot((int)$id) !== null) {
+            $moved++;
+        }
+    }
+    return $moved;
+}
+
+/**
  * Backfill exam-slot assignments for every applicant who is at the
  * exam stage but has no slot row yet. Safe to call multiple times.
  *
@@ -299,12 +446,19 @@ function auto_assign_exam_slot(int $applicantId): ?int
  *     matches its department / capacity is picked up immediately).
  *   - As a safety-net after bulk advance-to-exam.
  *
- * Returns the number of applicants who actually got assigned.
+ * Returns the number of applicants who actually got assigned (including
+ * those moved out of an ended slot).
  */
 function backfill_exam_slot_assignments(): int
 {
     $pdo = db();
     $assigned = 0;
+
+    // First rescue anyone booked into a slot that already closed before
+    // they started. Those released with nowhere to go then show up in the
+    // waiting list below and are matched against the slot just created.
+    $assigned += reassign_ended_slot_applicants();
+
     try {
         $stmt = $pdo->query(
             'SELECT a.id

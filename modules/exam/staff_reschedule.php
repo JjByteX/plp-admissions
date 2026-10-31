@@ -111,7 +111,8 @@ if (($action = require_post_action()) !== null) {
             // orgs from accidentally moving a student onto a slot for
             // a different exam.
             $chk = $db->prepare(
-                'SELECT id, exam_date, capacity, filled, exam_id
+                'SELECT id, exam_date, capacity, filled, exam_id,
+                        (CASE WHEN now() > ' . slot_close_sql('exam_slot_schedule') . ' THEN 1 ELSE 0 END) AS ended
                    FROM exam_slot_schedule
                   WHERE id = ? LIMIT 1'
             );
@@ -123,6 +124,7 @@ if (($action = require_post_action()) !== null) {
                         || $candExamId === $oldSlotExamId;
             $valid = $cand
                   && (string)$cand['exam_date'] >= $today
+                  && (int)$cand['ended'] === 0
                   && (int)$cand['filled'] < (int)$cand['capacity']
                   && (int)$cand['id'] !== $oldSlotId
                   && $sameExamOk;
@@ -141,6 +143,7 @@ if (($action = require_post_action()) !== null) {
             $sql = 'SELECT id FROM exam_slot_schedule
                      WHERE exam_date >= ?
                        AND filled < capacity
+                       AND now() <= ' . slot_close_sql('exam_slot_schedule') . '
                        AND id <> ?';
             if ($oldSlotExamId !== null) {
                 $sql .= ' AND (exam_id = ? OR exam_id IS NULL)';

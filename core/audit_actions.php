@@ -57,6 +57,7 @@ final class AuditAction
     public const EXAM_ROOMS_EXPORT_HTML = 'exam_rooms_export_html';
     public const EXAM_SLOT_ADDED = 'exam_slot_added';
     public const EXAM_SLOT_AUTO_ASSIGNED = 'exam_slot_auto_assigned';
+    public const EXAM_SLOT_REASSIGNED_ENDED = 'exam_slot_reassigned_ended';
     public const EXAM_SLOT_CODE_AUTO_GENERATED = 'exam_slot_code_auto_generated';
     public const EXAM_SLOT_CODE_EXTENDED = 'exam_slot_code_extended';
     public const EXAM_SLOT_CODE_GENERATED = 'exam_slot_code_generated';
